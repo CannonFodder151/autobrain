@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: autobrain-backend
+  namespace: autobrain
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: autobrain
+      component: backend
+  template:
+    metadata:
+      labels:
+        app: autobrain
+        component: backend
+    spec:
+      containers:
+        - name: backend
+          image: autobrain-backend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - secretRef:
+                name: autobrain-secrets
+            - configMapRef:
+                name: autobrain-config
+          env:
+            - name: POSTGRES_HOST
+              value: autobrain-postgres
+            - name: REDIS_URL
+              value: redis://autobrain-redis:6379/0
+            - name: MINIO_ENDPOINT
+              value: autobrain-minio:9000
+            - name: AI_LOCAL_BASE_URL
+              value: http://autobrain-ai:8001
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: autobrain-backend
+  namespace: autobrain
+spec:
+  selector:
+    app: autobrain
+    component: backend
+  ports:
+    - port: 8000
+      targetPort: 8000

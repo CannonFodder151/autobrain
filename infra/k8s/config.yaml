@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: autobrain-secrets
+  namespace: autobrain
+type: Opaque
+stringData:
+  # Replace with real values; never commit secrets.
+  secret-key: "replace-me-with-long-random-string"
+  postgres-user: "autobrain"
+  postgres-password: "autobrain"
+  minio-access-key: "autobrain"
+  minio-secret-key: "autobrain"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: autobrain-config
+  namespace: autobrain
+data:
+  environment: "production"
+  ai-router-url: "http://your-9router-instance:port"
+  minio-bucket: "autobrain-assets"
+  postgres-db: "autobrain"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: autobrain-postgres-pvc
+  namespace: autobrain
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi

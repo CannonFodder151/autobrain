@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: autobrain-worker
+  namespace: autobrain
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: autobrain
+      component: worker
+  template:
+    metadata:
+      labels:
+        app: autobrain
+        component: worker
+    spec:
+      containers:
+        - name: worker
+          image: autobrain-worker:latest
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: autobrain-secrets
+            - configMapRef:
+                name: autobrain-config
+          env:
+            - name: POSTGRES_HOST
+              value: autobrain-postgres
+            - name: REDIS_URL
+              value: redis://autobrain-redis:6379/0
+            - name: MINIO_ENDPOINT
+              value: autobrain-minio:9000
+            - name: AI_LOCAL_BASE_URL
+              value: http://autobrain-ai:8001
+          command: ["celery", "-A", "app.workers.celery_app:celery_app", "worker", "-l", "info"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: autobrain-beat
+  namespace: autobrain
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: autobrain
+      component: beat
+  template:
+    metadata:
+      labels:
+        app: autobrain
+        component: beat
+    spec:
+      containers:
+        - name: beat
+          image: autobrain-worker:latest
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: autobrain-secrets
+            - configMapRef:
+                name: autobrain-config
+          env:
+            - name: POSTGRES_HOST
+              value: autobrain-postgres
+            - name: REDIS_URL
+              value: redis://autobrain-redis:6379/0
+            - name: MINIO_ENDPOINT
+              value: autobrain-minio:9000
+            - name: AI_LOCAL_BASE_URL
+              value: http://autobrain-ai:8001
+          command: ["celery", "-A", "app.workers.celery_app:celery_app", "beat", "-l", "info"]
+

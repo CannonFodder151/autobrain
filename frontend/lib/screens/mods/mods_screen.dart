@@ -1,0 +1,121 @@
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
+
+import '../../core/auth_state.dart';
+import '../../core/models.dart';
+import 'add_mod_screen.dart';
+
+class ModsScreen extends StatefulWidget {
+  const ModsScreen({super.key, required this.vehicleId});
+  final String vehicleId;
+
+  @override
+  State<ModsScreen> createState() => _ModsScreenState();
+}
+
+class _ModsScreenState extends State<ModsScreen> {
+  List<Modification> _mods = const [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final api = context.read<AuthState>().api;
+    setState(() => _loading = true);
+    try {
+      final data = await api.get('/vehicles/${widget.vehicleId}/mods') as List;
+      _mods = data
+          .map((e) => Modification.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (_) {}
+    setState(() => _loading = false);
+  }
+
+  Future<void> _export(String fmt) async {
+    final api = context.read<AuthState>().api;
+    try {
+      final bytes = await api.export(
+          '/vehicles/${widget.vehicleId}/mods/export?fmt=$fmt');
+      final dir = await getTemporaryDirectory();
+      final file = await File('${dir.path}/build-sheet.$fmt').writeAsBytes(bytes);
+      await Share.shareXFiles([XFile(file.path)]);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Export failed: $e')));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final total = _mods.fold<double>(0, (a, b) => a + b.cost);
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Modifications'),
+        actions: [
+          PopupMenuButton<String>(
+            onSelected: _export,
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'csv', child: Text('Export CSV')),
+              PopupMenuItem(value: 'pdf', child: Text('Export PDF')),
+            ],
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () async {
+          await Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => AddModScreen(vehicleId: widget.vehicleId),
+            ),
+          );
+          _load();
+        },
+        icon: const Icon(Icons.add),
+        label: const Text('Add mod'),
+      ),
+      body: RefreshIndicator(
+        onRefresh: _load,
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.payments),
+                      title: const Text('Total build spend'),
+                      trailing: Text(
+                        '\$${total.toStringAsFixed(0)}',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  for (final m in _mods)
+                    Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.tune),
+                        title: Text(m.name),
+                        subtitle: Text(
+                          '${m.category}'
+                          '${m.brand != null ? ' · ${m.brand}' : ''}'
+                          '${m.installDate != null ? ' · ${m.installDate}' : ''}',
+                        ),
+                        trailing: Text('\$${m.cost.toStringAsFixed(0)}'),
+                      ),
+                    ),
+                ],
+              ),
+      ),
+    );
+  }
+}

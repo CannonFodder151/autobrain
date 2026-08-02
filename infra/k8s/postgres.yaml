@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: autobrain-postgres
+  namespace: autobrain
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: autobrain
+      component: postgres
+  template:
+    metadata:
+      labels:
+        app: autobrain
+        component: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: autobrain-secrets
+                  key: postgres-user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: autobrain-secrets
+                  key: postgres-password
+            - name: POSTGRES_DB
+              value: autobrain
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "autobrain"]
+            initialDelaySeconds: 5
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: autobrain-postgres-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: autobrain-postgres
+  namespace: autobrain
+spec:
+  selector:
+    app: autobrain
+    component: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
