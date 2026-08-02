@@ -152,19 +152,19 @@ class _SummaryCard extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _v('L total', litres.toStringAsFixed(0)),
-            _v('Avg L/100km',
+            _v(context, 'L total', litres.toStringAsFixed(0)),
+            _v(context, 'Avg L/100km',
                 avgEff?.toStringAsFixed(1) ?? '—'),
-            _v('Cost/km',
+            _v(context, 'Cost/km',
                 costK.isEmpty ? '—' : '\$${(costK.map((l) => l.costPerKm!).reduce((a, b) => a + b) / costK.length).toStringAsFixed(2)}'),
-            _v('Total', '\$${total.toStringAsFixed(0)}'),
+            _v(context, 'Total', '\$${total.toStringAsFixed(0)}'),
           ],
         ),
       ),
     );
   }
 
-  Widget _v(String label, String value) => Column(
+  Widget _v(BuildContext context, String label, String value) => Column(
         children: [
           Text(value, style: Theme.of(context).textTheme.titleMedium),
           Text(label, style: Theme.of(context).textTheme.bodySmall),

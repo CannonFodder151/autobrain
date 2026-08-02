@@ -145,6 +145,7 @@ services:
       - ai
     volumes:
       - ./docker/frontend/nginx-proxy.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./web-dist:/usr/share/nginx/html:ro
 
 volumes:
   postgres-data:

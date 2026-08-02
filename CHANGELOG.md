@@ -6,6 +6,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- Live 9Router integration: OpenAI-compatible router client (`AI_ROUTER_URL`/`AI_ROUTER_MODEL`), per-module strict-JSON prompts, tolerant schemas.
+- Web app delivery: Flutter web build served at `/` behind the proxy nginx.
+- Cross-platform download helpers (browser download on web, share sheet on mobile).
+- Comprehensive README with live URLs, web + mobile build instructions, 9Router config.
 - Initial AutoBrain scaffold.
 - Vehicle management: multiple profiles, rego lookup, timeline events.
 - Maintenance tracking with AI service prediction and PDF/CSV export.

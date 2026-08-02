@@ -35,7 +35,20 @@ Prod runs behind nginx on port 80:
 - `/api/*` → backend
 - `/ws/*`  → backend WebSocket
 - `/ai/*`  → AI gateway
-- `/`      → Flutter web build (mount a build or use the frontend image)
+- `/`      → Flutter web build
+
+### Web app (serve the Flutter build)
+
+```bash
+docker build -f docker/frontend/Dockerfile \
+  --build-arg API_BASE_URL=http://<host>/api/v1 \
+  --build-arg WS_BASE_URL=ws://<host>/ws \
+  -t autobrain-frontend:web .
+docker create --name ab-web autobrain-frontend:web
+docker cp ab-web:/usr/share/nginx/html ./web-dist
+docker rm ab-web
+docker compose -f docker-compose.prod.yml up -d nginx   # mounts ./web-dist
+```
 
 ## Over SSH
 
