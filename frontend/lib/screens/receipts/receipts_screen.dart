@@ -1,10 +1,9 @@
-import 'dart:io';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/auth_state.dart';
+import '../../core/download.dart';
 import '../../core/models.dart';
 
 class ReceiptsScreen extends StatefulWidget {
@@ -43,15 +42,23 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
       type: FileType.custom,
       allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'webp'],
     );
-    if (result == null || result.files.single.path == null) return;
-    final file = File(result.files.single.path!);
-    final bytes = await file.readAsBytes();
+    if (result == null || result.files.isEmpty) return;
+    final picked = result.files.single;
+    final filename = picked.name;
+    final List<int> bytes;
+    if (picked.bytes != null) {
+      bytes = picked.bytes!;
+    } else if (picked.path != null) {
+      bytes = await readLocalFile(picked.path!);
+    } else {
+      return;
+    }
     final api = context.read<AuthState>().api;
     try {
       await api.upload(
         '/vehicles/${widget.vehicleId}/receipts',
         bytes,
-        file.uri.pathSegments.last,
+        filename,
         'application/octet-stream',
       );
       _load();

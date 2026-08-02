@@ -47,8 +47,12 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _loading = false);
   }
 
-  Vehicle? _firstPrimary(List<Vehicle> v) =>
-      v.where((x) => x.isPrimary).firstOrNull ?? (v.isEmpty ? null : v.first);
+  Vehicle? _firstPrimary(List<Vehicle> v) {
+    for (final x in v) {
+      if (x.isPrimary) return x;
+    }
+    return v.isEmpty ? null : v.first;
+  }
 
   @override
   Widget build(BuildContext context) {

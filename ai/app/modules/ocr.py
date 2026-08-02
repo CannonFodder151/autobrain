@@ -1,6 +1,6 @@
 """AI module: OCR + document extraction.
 
-Input:  file bytes metadata + optional raw text preview.
+Input:  PDF text (`content`) or base64 image (`content_base64`) + content type.
 Output: vendor, date, total, tax, line items (parts/labour), warranty,
         next recommended service.
 """
@@ -27,13 +27,17 @@ def _tesseract_text(content_base64: str) -> str:
 
 
 async def run(payload: dict) -> dict:
-    result = await route("ocr", payload)
-    if result is not None and isinstance(result, dict):
-        result.setdefault("model", "9router")
-        return result
-
     text = payload.get("content", "") or ""
     content_type = payload.get("content_type", "")
     if not text and payload.get("content_base64") and content_type in _IMAGE_TYPES:
         text = _tesseract_text(payload["content_base64"])
+
+    # Router path gets only the extracted text — never raw image bytes.
+    router_payload = {
+        k: v for k, v in payload.items() if k != "content_base64"
+    }
+    router_payload["text"] = text
+    result = await route("ocr", router_payload)
+    if result is not None and isinstance(result, dict):
+        return result
     return extract_receipt_fallback(text, content_type)

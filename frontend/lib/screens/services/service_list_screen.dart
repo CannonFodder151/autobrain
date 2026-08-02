@@ -1,10 +1,8 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../../core/auth_state.dart';
+import '../../core/download.dart';
 import '../../core/models.dart';
 import 'add_service_screen.dart';
 import 'service_prediction_screen.dart';
@@ -45,10 +43,7 @@ class _ServiceListScreenState extends State<ServiceListScreen> {
     try {
       final bytes = await api.export(
           '/vehicles/${widget.vehicleId}/services/export?fmt=$fmt');
-      final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/service-history.$fmt');
-      await file.writeAsBytes(bytes);
-      await Share.shareXFiles([XFile(file.path)]);
+      await downloadBytes('service-history.$fmt', bytes);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)

@@ -1,10 +1,8 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../../core/auth_state.dart';
+import '../../core/download.dart';
 import '../../core/models.dart';
 import 'add_mod_screen.dart';
 
@@ -43,9 +41,7 @@ class _ModsScreenState extends State<ModsScreen> {
     try {
       final bytes = await api.export(
           '/vehicles/${widget.vehicleId}/mods/export?fmt=$fmt');
-      final dir = await getTemporaryDirectory();
-      final file = await File('${dir.path}/build-sheet.$fmt').writeAsBytes(bytes);
-      await Share.shareXFiles([XFile(file.path)]);
+      await downloadBytes('build-sheet.$fmt', bytes);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)

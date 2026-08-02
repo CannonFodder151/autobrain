@@ -51,7 +51,7 @@ class ModImpactRequest(BaseModel):
 
 class ModImpactResponse(BaseModel):
     summary: str
-    performance_score: float | None
-    value_impact: float | None
-    reliability_impact: str | None
-    model: str
+    performance_score: float | None = None
+    value_impact: float | None = None
+    reliability_impact: str | None = None
+    model: str = ""

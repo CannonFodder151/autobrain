@@ -15,20 +15,20 @@ class DiagnosticItem(BaseModel):
     cause: str
     confidence: float
     severity: str  # low/medium/high/critical
-    parts_needed: list[str]
-    repair_notes: str | None
-    estimated_cost: float | None
-    cost_range: list[float] | None
+    parts_needed: list[str] = []
+    repair_notes: str | None = None
+    estimated_cost: float | None = None
+    cost_range: list[float] | None = None
 
 
 class DiagnosticResponse(BaseModel):
     summary: str
-    severity: str
-    estimated_cost: float | None
-    cost_range: list[float] | None
-    items: list[DiagnosticItem]
-    parts_needed: list[str]
-    recommended_actions: list[str]
+    severity: str = "medium"
+    estimated_cost: float | None = None
+    cost_range: list[float] | None = None
+    items: list[DiagnosticItem] = []
+    parts_needed: list[str] = []
+    recommended_actions: list[str] = []
     model: str  # which AI path produced it
 
 
