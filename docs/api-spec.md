@@ -28,7 +28,7 @@ Interactive spec: `http://<host>/docs` (OpenAPI).
 |--------|------|-------------|
 | GET/POST | `/vehicles` | List / create |
 | GET/PATCH/DELETE | `/vehicles/{id}` | Detail / update / delete |
-| POST | `/vehicles/rego-lookup` | Plate → VIN, make, model, year, engine |
+| POST | `/vehicles/rego-lookup` | Plate (+state NSW/VIC/QLD/WA/SA/TAS/NT/ACT) → VIN, make, model, year, engine |
 | GET | `/vehicles/{id}/timeline` | Unified event timeline |
 
 ## Services (`/vehicles/{id}/services`)

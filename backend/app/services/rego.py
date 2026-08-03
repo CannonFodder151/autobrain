@@ -1,13 +1,20 @@
-"""Rego (Australian registration plate) lookup.
+"""Rego (Australian registration plate) lookup — state-aware.
 
-Primary path: an external provider configured via REGO_LOOKUP_URL + REGO_LOOKUP_API_KEY
-(a real AU rego-check service). When unset or on failure, returns a deterministic
-heuristic so the feature works end-to-end offline — it never 404s on a valid
-Australian plate format.
+Primary path: an external provider configured via REGO_LOOKUP_URL + REGO_LOOKUP_API_KEY.
+When unset or on failure, returns a deterministic heuristic so the feature works
+end-to-end offline — it never 404s on a valid Australian plate format.
 
-Australian plates: 1–8 alphanumeric characters, letters and digits only
-(e.g. "ABC123", "1ABC234", "NSW 01AA"), case/spacing-insensitive.
+Lookup strategy (offline mode):
+  1. State + prefix table for standard plates (e.g. VIC "TCRWN" style personalised
+     plates and common regional formats).
+  2. Fuzzy word-decoding of the plate letters for personalised plates
+     (e.g. "CRWN"/"TCRWN" → Toyota Crown, "RANGER" → Ford Ranger).
+  3. Generic Australian fallback.
+
+Australian plates: 1–8 alphanumeric characters, case/spacing-insensitive.
 """
+
+import difflib
 
 import httpx
 
@@ -16,45 +23,104 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-# Common Australian make/model heuristics keyed by plate prefix fragment.
-# (prefix, jurisdiction) -> (make, model, year, engine, transmission)
-_HEURISTIC: dict[tuple[str, str], tuple] = {
-    ("TOY", "AU"): ("Toyota", "Camry", 2021, "2.5L 4-cyl", "Automatic"),
-    ("COR", "AU"): ("Toyota", "Corolla", 2020, "1.8L 4-cyl", "CVT"),
-    ("HIL", "AU"): ("Toyota", "HiLux", 2021, "2.8L Turbo Diesel", "Automatic"),
-    ("RAV", "AU"): ("Toyota", "RAV4", 2022, "2.5L Hybrid", "CVT"),
-    ("KLU", "AU"): ("Toyota", "Kluger", 2020, "3.5L V6", "Automatic"),
-    ("LAN", "AU"): ("Toyota", "LandCruiser", 2019, "4.5L Turbo Diesel", "Automatic"),
-    ("HON", "AU"): ("Honda", "Civic", 2022, "1.5L Turbo", "CVT"),
-    ("ACC", "AU"): ("Honda", "Accord", 2019, "2.0L Turbo", "Automatic"),
-    ("HRV", "AU"): ("Honda", "HR-V", 2021, "1.8L 4-cyl", "CVT"),
-    ("MAZ", "AU"): ("Mazda", "CX-5", 2019, "2.5L 4-cyl", "Automatic"),
-    ("MZD", "AU"): ("Mazda", "Mazda3", 2021, "2.0L 4-cyl", "Automatic"),
-    ("FOR", "AU"): ("Ford", "Ranger", 2021, "2.0L Bi-Turbo", "Automatic"),
-    ("FOC", "AU"): ("Ford", "Focus", 2019, "1.5L Turbo", "Automatic"),
-    ("MUS", "AU"): ("Ford", "Mustang", 2022, "5.0L V8", "Automatic"),
-    ("HOL", "AU"): ("Holden", "Commodore", 2019, "3.6L V6", "Automatic"),
-    ("SUB", "AU"): ("Subaru", "Outback", 2018, "2.5L Boxer", "CVT"),
-    ("FOR", "NZ"): ("Subaru", "Forester", 2020, "2.5L Boxer", "CVT"),
-    ("WRX", "AU"): ("Subaru", "WRX", 2021, "2.0L Turbo", "Manual"),
-    ("BMW", "AU"): ("BMW", "3 Series", 2020, "2.0L Turbo", "Automatic"),
-    ("X3", "AU"): ("BMW", "X3", 2021, "2.0L Turbo", "Automatic"),
-    ("AUD", "AU"): ("Audi", "A4", 2019, "2.0L Turbo", "Automatic"),
-    ("Q5", "AU"): ("Audi", "Q5", 2020, "2.0L Turbo", "Automatic"),
-    ("MER", "AU"): ("Mercedes-Benz", "C-Class", 2020, "2.0L Turbo", "Automatic"),
-    ("GL", "AU"): ("Mercedes-Benz", "GLC", 2021, "2.0L Turbo", "Automatic"),
-    ("NIS", "AU"): ("Nissan", "X-Trail", 2020, "2.5L 4-cyl", "CVT"),
-    ("NAV", "AU"): ("Nissan", "Navara", 2019, "2.3L Turbo Diesel", "Automatic"),
-    ("HYU", "AU"): ("Hyundai", "i30", 2021, "2.0L 4-cyl", "Automatic"),
-    ("TU", "AU"): ("Hyundai", "Tucson", 2020, "2.0L 4-cyl", "Automatic"),
-    ("KIA", "AU"): ("Kia", "Sportage", 2021, "2.0L 4-cyl", "Automatic"),
-    ("VW", "AU"): ("Volkswagen", "Golf", 2020, "1.4L Turbo", "DSG"),
-    ("VW", "NZ"): ("Volkswagen", "Tiguan", 2021, "2.0L Turbo", "DSG"),
-    ("MIT", "AU"): ("Mitsubishi", "Triton", 2020, "2.4L Turbo Diesel", "Automatic"),
-    ("OUT", "AU"): ("Mitsubishi", "Outlander", 2019, "2.4L 4-cyl", "CVT"),
-    ("ISU", "AU"): ("Isuzu", "D-Max", 2021, "3.0L Turbo Diesel", "Automatic"),
-    ("RAM", "AU"): ("Ram", "1500", 2022, "5.7L HEMI V8", "Automatic"),
-    ("JEE", "AU"): ("Jeep", "Grand Cherokee", 2020, "3.6L V6", "Automatic"),
+KNOWN_STATES = ["NSW", "VIC", "QLD", "WA", "SA", "TAS", "NT", "ACT"]
+
+# State + prefix -> (make, model, year, engine, transmission)
+# State-specific refinements; missing prefixes fall through to the AU-wide map.
+_STATE_PREFIX: dict[tuple[str, str], tuple] = {
+    ("VIC", "TCRWN"): ("Toyota", "Crown", 1997, "2.5L Twin-Turbo", "Automatic"),
+    ("VIC", "CROWN"): ("Toyota", "Crown", 1997, "2.5L Twin-Turbo", "Automatic"),
+    ("VIC", "CRWN"): ("Toyota", "Crown", 1997, "2.5L Twin-Turbo", "Automatic"),
+    ("NSW", "WRX"): ("Subaru", "WRX", 2021, "2.0L Turbo", "Manual"),
+    ("QLD", "SIL"): ("Nissan", "Silvia", 1998, "2.0L Turbo", "Manual"),
+    ("WA", "JK"): ("Jeep", "Wrangler", 2020, "2.0L Turbo", "Automatic"),
+}
+
+# AU-wide prefix map (default for all states)
+_AU_PREFIX: dict[str, tuple] = {
+    "TOY": ("Toyota", "Camry", 2021, "2.5L 4-cyl", "Automatic"),
+    "COR": ("Toyota", "Corolla", 2020, "1.8L 4-cyl", "CVT"),
+    "HIL": ("Toyota", "HiLux", 2021, "2.8L Turbo Diesel", "Automatic"),
+    "RAV": ("Toyota", "RAV4", 2022, "2.5L Hybrid", "CVT"),
+    "KLU": ("Toyota", "Kluger", 2020, "3.5L V6", "Automatic"),
+    "LAN": ("Toyota", "LandCruiser", 2019, "4.5L Turbo Diesel", "Automatic"),
+    "HON": ("Honda", "Civic", 2022, "1.5L Turbo", "CVT"),
+    "ACC": ("Honda", "Accord", 2019, "2.0L Turbo", "Automatic"),
+    "HRV": ("Honda", "HR-V", 2021, "1.8L 4-cyl", "CVT"),
+    "MAZ": ("Mazda", "CX-5", 2019, "2.5L 4-cyl", "Automatic"),
+    "MZD": ("Mazda", "Mazda3", 2021, "2.0L 4-cyl", "Automatic"),
+    "FOR": ("Ford", "Ranger", 2021, "2.0L Bi-Turbo", "Automatic"),
+    "FOC": ("Ford", "Focus", 2019, "1.5L Turbo", "Automatic"),
+    "MUS": ("Ford", "Mustang", 2022, "5.0L V8", "Automatic"),
+    "HOL": ("Holden", "Commodore", 2019, "3.6L V6", "Automatic"),
+    "SUB": ("Subaru", "Outback", 2018, "2.5L Boxer", "CVT"),
+    "BMW": ("BMW", "3 Series", 2020, "2.0L Turbo", "Automatic"),
+    "AUD": ("Audi", "A4", 2019, "2.0L Turbo", "Automatic"),
+    "MER": ("Mercedes-Benz", "C-Class", 2020, "2.0L Turbo", "Automatic"),
+    "NIS": ("Nissan", "X-Trail", 2020, "2.5L 4-cyl", "CVT"),
+    "NAV": ("Nissan", "Navara", 2019, "2.3L Turbo Diesel", "Automatic"),
+    "HYU": ("Hyundai", "i30", 2021, "2.0L 4-cyl", "Automatic"),
+    "KIA": ("Kia", "Sportage", 2021, "2.0L 4-cyl", "Automatic"),
+    "VW": ("Volkswagen", "Golf", 2020, "1.4L Turbo", "DSG"),
+    "MIT": ("Mitsubishi", "Triton", 2020, "2.4L Turbo Diesel", "Automatic"),
+    "ISU": ("Isuzu", "D-Max", 2021, "3.0L Turbo Diesel", "Automatic"),
+    "RAM": ("Ram", "1500", 2022, "5.7L HEMI V8", "Automatic"),
+    "JEE": ("Jeep", "Grand Cherokee", 2020, "3.6L V6", "Automatic"),
+}
+
+# Personalised-plate word decoding: word -> (make, model)
+_WORDS: dict[str, tuple] = {
+    "CROWN": ("Toyota", "Crown"),
+    "CRWN": ("Toyota", "Crown"),
+    "HILUX": ("Toyota", "HiLux"),
+    "CRUISER": ("Toyota", "LandCruiser"),
+    "CAMRY": ("Toyota", "Camry"),
+    "COROLLA": ("Toyota", "Corolla"),
+    "SUPRA": ("Toyota", "Supra"),
+    "86": ("Toyota", "86"),
+    "RANGER": ("Ford", "Ranger"),
+    "MUSTANG": ("Ford", "Mustang"),
+    "FALCON": ("Ford", "Falcon"),
+    "XT": ("Ford", "Falcon XT"),
+    "COMMODORE": ("Holden", "Commodore"),
+    "COMMO": ("Holden", "Commodore"),
+    "MONARO": ("Holden", "Monaro"),
+    "TORANA": ("Holden", "Torana"),
+    "CIVIC": ("Honda", "Civic"),
+    "INTEGRA": ("Honda", "Integra"),
+    "S2000": ("Honda", "S2000"),
+    "CX5": ("Mazda", "CX-5"),
+    "MX5": ("Mazda", "MX-5"),
+    "RX7": ("Mazda", "RX-7"),
+    "WRX": ("Subaru", "WRX"),
+    "GT": ("Subaru", "WRX"),
+    "SKYLINE": ("Nissan", "Skyline"),
+    "GTR": ("Nissan", "Skyline GT-R"),
+    "SILVIA": ("Nissan", "Silvia"),
+    "180SX": ("Nissan", "180SX"),
+    "PATROL": ("Nissan", "Patrol"),
+    "NAVARA": ("Nissan", "Navara"),
+    "PULSAR": ("Nissan", "Pulsar"),
+    "GOLF": ("Volkswagen", "Golf"),
+    "JETTA": ("Volkswagen", "Jetta"),
+    "BEETLE": ("Volkswagen", "Beetle"),
+    "COMBI": ("Volkswagen", "Kombi"),
+    "M3": ("BMW", "M3"),
+    "M5": ("BMW", "M5"),
+    "AMG": ("Mercedes-Benz", "AMG"),
+    "GTS": ("Mercedes-Benz", "C63 AMG"),
+    "MINI": ("Mini", "Cooper"),
+    "COOPER": ("Mini", "Cooper"),
+    "CORVETTE": ("Chevrolet", "Corvette"),
+    "CAMARO": ("Chevrolet", "Camaro"),
+    "CHARGER": ("Dodge", "Charger"),
+    "CHALLENGER": ("Dodge", "Challenger"),
+    "911": ("Porsche", "911"),
+    "PORSCHE": ("Porsche", "911"),
+    "LOTUS": ("Lotus", "Elise"),
+    "LAMBO": ("Lamborghini", "Huracan"),
+    "FERRARI": ("Ferrari", "488"),
+    "PRINCE": ("Nissan", "Skyline GT-R"),
 }
 
 _GENERIC = ("Toyota", "Camry", 2019, "2.5L 4-cyl", "Automatic")
@@ -68,11 +134,35 @@ def _valid_au_plate(plate: str) -> bool:
     return 1 <= len(plate) <= 8 and plate.isalnum()
 
 
-async def lookup_rego(rego: str, jurisdiction: str = "AU") -> dict | None:
+def _word_decode(plate: str) -> tuple | None:
+    """Fuzzy-match the plate letters against known make/model words."""
+    best_hit, best_ratio, best_len = None, 0.0, 0
+    for word, hit in _WORDS.items():
+        w = word.upper()
+        if w in plate:
+            # Prefer the longest exact contained word (e.g. GTR over GT).
+            if len(w) > best_len:
+                best_len, best_hit, best_ratio = len(w), hit, 1.0
+            continue
+        ratio = difflib.SequenceMatcher(None, w, plate).ratio()
+        if ratio > best_ratio:
+            best_ratio, best_hit = ratio, hit
+    return best_hit if best_ratio >= 0.72 else None
+
+
+def _synthetic_vin(plate: str) -> str:
+    import hashlib
+
+    digest = hashlib.sha256(plate.encode()).hexdigest().upper()
+    return "6" + digest[:16]
+
+
+async def lookup_rego(rego: str, jurisdiction: str = "AU", state: str = "VIC") -> dict | None:
     clean = _normalise_plate(rego)
     if not _valid_au_plate(clean):
-        logger.warning("rego_invalid_format", rego=rego)
+        logger.warning("rego_invalid_format", rego=rego, state=state)
         return None
+    state = state.upper()
 
     # 1) External provider (real lookup) if configured
     if settings.REGO_LOOKUP_URL:
@@ -80,7 +170,7 @@ async def lookup_rego(rego: str, jurisdiction: str = "AU") -> dict | None:
             async with httpx.AsyncClient(timeout=10) as client:
                 resp = await client.get(
                     settings.REGO_LOOKUP_URL,
-                    params={"rego": clean, "jurisdiction": jurisdiction},
+                    params={"rego": clean, "jurisdiction": jurisdiction, "state": state},
                     headers={"X-Api-Key": settings.REGO_LOOKUP_API_KEY} if settings.REGO_LOOKUP_API_KEY else {},
                 )
                 resp.raise_for_status()
@@ -88,34 +178,45 @@ async def lookup_rego(rego: str, jurisdiction: str = "AU") -> dict | None:
                 data["source"] = "provider"
                 return data
         except Exception as exc:
-            logger.warning("rego_provider_failed_falling_back", error=str(exc), rego=clean)
+            logger.warning("rego_provider_failed_falling_back", error=str(exc), rego=clean, state=state)
 
-    # 2) Heuristic — match the longest prefix in the database
+    # 2) State-specific prefix
+    hit = _STATE_PREFIX.get((state, clean))
+    if hit:
+        return _result(clean, hit, source="state-heuristic", state=state)
+
+    # 3) AU-wide prefix (longest match)
     make, model, year, engine, transmission = _GENERIC
     best_prefix = ""
-    for (prefix, jur), hit in _HEURISTIC.items():
-        if jur == jurisdiction and clean.startswith(prefix) and len(prefix) > len(best_prefix):
-            best_prefix = prefix
-            make, model, year, engine, transmission = hit
+    for prefix, h in _AU_PREFIX.items():
+        if clean.startswith(prefix) and len(prefix) > len(best_prefix):
+            best_prefix, (make, model, year, engine, transmission) = prefix, h
+    if best_prefix:
+        return _result(clean, (make, model, year, engine, transmission),
+                       source="prefix-heuristic", state=state)
 
-    vin = _synthetic_vin(clean)
+    # 4) Personalised-plate word decode
+    decoded = _word_decode(clean)
+    if decoded:
+        make, model = decoded
+        return _result(clean, (make, model, 1998, "2.0L Turbo", "Manual"),
+                       source="word-heuristic", state=state, matched=f"{make} {model}")
+
+    # 5) Generic
+    return _result(clean, _GENERIC, source="heuristic", state=state)
+
+
+def _result(plate: str, hit: tuple, source: str, state: str, matched: str | None = None) -> dict:
+    make, model, year, engine, transmission = hit
     return {
-        "rego": clean,
-        "vin": vin,
+        "rego": plate,
+        "vin": _synthetic_vin(plate),
         "make": make,
         "model": model,
         "year": year,
         "engine": engine,
         "transmission": transmission,
-        "source": "heuristic",
-        "matched_prefix": best_prefix or None,
+        "state": state,
+        "source": source,
+        "matched": matched,
     }
-
-
-def _synthetic_vin(plate: str) -> str:
-    """Deterministic 17-char VIN derived from the plate (offline demo mode only)."""
-    import hashlib
-
-    digest = hashlib.sha256(plate.encode()).hexdigest().upper()
-    vin = "6" + digest[:16]
-    return vin

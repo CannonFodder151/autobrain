@@ -18,6 +18,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - SMTP email notifications (account welcome, MFA changes, password changes) via `SMTP_*` env config.
 - Self-service password reset (request link → TOTP-free JWT reset token → new password) with email delivery.
 - App logo asset (`frontend/assets/logo.png`) used in login + app bar.
+- State-aware Australian rego lookup (NSW/VIC/QLD/WA/SA/TAS/NT/ACT) with personalised-plate word decoding (e.g. TCRWN/VIC → Toyota Crown).
 
 ### Removed
 - GitHub Actions CI/CD workflows.

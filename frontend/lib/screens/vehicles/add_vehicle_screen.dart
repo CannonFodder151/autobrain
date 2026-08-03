@@ -21,6 +21,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
   final _transmission = TextEditingController();
   final _odometer = TextEditingController();
   int? _year;
+  String _state = 'VIC';
   bool _busy = false;
   bool _isPrimary = false;
   bool _lookingUp = false;
@@ -47,6 +48,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
       final r = await api.post('/vehicles/rego-lookup', {
         'rego': _rego.text.trim(),
         'jurisdiction': 'AU',
+        'state': _state,
       }) as Map<String, dynamic>;
       setState(() {
         _vin.text = (r['vin'] as String?) ?? '';
@@ -116,6 +118,25 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                     child: TextFormField(
                       controller: _rego,
                       decoration: const InputDecoration(labelText: 'Rego'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 110,
+                    child: DropdownButtonFormField<String>(
+                      value: _state,
+                      decoration: const InputDecoration(labelText: 'State'),
+                      items: const [
+                        DropdownMenuItem(value: 'NSW', child: Text('NSW')),
+                        DropdownMenuItem(value: 'VIC', child: Text('VIC')),
+                        DropdownMenuItem(value: 'QLD', child: Text('QLD')),
+                        DropdownMenuItem(value: 'WA', child: Text('WA')),
+                        DropdownMenuItem(value: 'SA', child: Text('SA')),
+                        DropdownMenuItem(value: 'TAS', child: Text('TAS')),
+                        DropdownMenuItem(value: 'NT', child: Text('NT')),
+                        DropdownMenuItem(value: 'ACT', child: Text('ACT')),
+                      ],
+                      onChanged: (v) => setState(() => _state = v ?? 'VIC'),
                     ),
                   ),
                   const SizedBox(width: 8),

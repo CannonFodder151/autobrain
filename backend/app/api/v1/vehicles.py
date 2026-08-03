@@ -98,8 +98,8 @@ async def delete_vehicle(
 
 @router.post("/rego-lookup", response_model=RegoLookupResponse)
 async def rego_lookup(payload: RegoLookupRequest) -> RegoLookupResponse:
-    """Populate vehicle details from a registration plate."""
-    result = await lookup_rego(payload.rego, payload.jurisdiction)
+    """Populate vehicle details from an Australian registration plate + state."""
+    result = await lookup_rego(payload.rego, payload.jurisdiction, payload.state)
     if not result:
         raise HTTPException(status_code=404, detail="No registration data found for this plate")
     return RegoLookupResponse(**result)

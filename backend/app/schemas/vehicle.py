@@ -6,8 +6,9 @@ from pydantic import BaseModel, Field
 
 
 class RegoLookupRequest(BaseModel):
-    rego: str = Field(min_length=2, max_length=20)
+    rego: str = Field(min_length=1, max_length=20)
     jurisdiction: str = Field(default="AU", max_length=4)
+    state: str = Field(default="VIC", max_length=4)  # NSW/VIC/QLD/WA/SA/TAS/NT/ACT
 
 
 class RegoLookupResponse(BaseModel):
@@ -18,7 +19,9 @@ class RegoLookupResponse(BaseModel):
     year: int | None = None
     engine: str | None = None
     transmission: str | None = None
+    state: str | None = None
     source: str = "unknown"
+    matched: str | None = None
 
 
 class VehicleCreate(BaseModel):
