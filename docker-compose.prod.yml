@@ -1,5 +1,14 @@
-# AutoBrain production stack.
-# Usage: cp .env.example .env && docker compose -f docker-compose.prod.yml up -d --build
+# AutoBrain production stack — pulls prebuilt images from Docker Hub.
+# Env values come from .env (see .env.example). Image namespace/tag from
+# DOCKERHUB_USERNAME / IMAGE_TAG.
+#
+# First time:
+#   cp .env.example .env           # fill in values incl. DOCKERHUB_USERNAME
+#   docker login                   # your app.docker.com account
+#   ./scripts/publish-images.sh    # build + push once
+#   docker compose -f docker-compose.prod.yml up -d
+# Updates:
+#   ./scripts/publish-images.sh && docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d
 
 services:
   postgres:
@@ -57,10 +66,7 @@ services:
       "
 
   backend:
-    build:
-      context: ./backend
-      dockerfile: ../docker/backend/Dockerfile
-    image: autobrain-backend:prod
+    image: ${DOCKERHUB_USERNAME:?Set DOCKERHUB_USERNAME in .env}/autobrain-backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file: .env
     environment:
@@ -80,10 +86,7 @@ services:
       - "8000"
 
   worker:
-    build:
-      context: .
-      dockerfile: docker/worker/Dockerfile
-    image: autobrain-worker:prod
+    image: ${DOCKERHUB_USERNAME}/autobrain-worker:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file: .env
     environment:
@@ -103,10 +106,7 @@ services:
     command: ["celery", "-A", "app.workers.celery_app:celery_app", "worker", "-l", "info", "--concurrency=2"]
 
   beat:
-    build:
-      context: .
-      dockerfile: docker/worker/Dockerfile
-    image: autobrain-worker:prod
+    image: ${DOCKERHUB_USERNAME}/autobrain-worker:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file: .env
     environment:
@@ -124,10 +124,7 @@ services:
     command: ["celery", "-A", "app.workers.celery_app:celery_app", "beat", "-l", "info"]
 
   ai:
-    build:
-      context: ./ai
-      dockerfile: ../docker/ai/Dockerfile
-    image: autobrain-ai:prod
+    image: ${DOCKERHUB_USERNAME}/autobrain-ai:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file: .env
     environment:
@@ -135,20 +132,16 @@ services:
     expose:
       - "8001"
 
-  nginx:
-    image: nginx:1.27-alpine
+  frontend:
+    image: ${DOCKERHUB_USERNAME}/autobrain-frontend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     ports:
       - "80:80"
     depends_on:
       - backend
       - ai
-    volumes:
-      - ./docker/frontend/nginx-proxy.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./web-dist:/usr/share/nginx/html:ro
 
 volumes:
   postgres-data:
   redis-data:
   minio-data:
-

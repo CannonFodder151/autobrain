@@ -18,8 +18,8 @@ tar --exclude='.git' --exclude='node_modules' --exclude='.venv' \
 echo "==> Ensuring .env exists on remote"
 ssh $SSH_ARGS "$HOST" "test -f $REMOTE_DIR/.env || cp $REMOTE_DIR/.env.example $REMOTE_DIR/.env"
 
-echo "==> Building and starting production stack"
-ssh $SSH_ARGS "$HOST" "cd $REMOTE_DIR && docker compose -f docker-compose.prod.yml up -d --build"
+echo "==> Pulling images and starting production stack"
+ssh $SSH_ARGS "$HOST" "cd $REMOTE_DIR && docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d"
 
 echo "==> Checking health"
 sleep 10
