@@ -9,6 +9,7 @@ from app.api.v1 import (
     diagnostics,
     fuel,
     mods,
+    notifications,
     parts,
     receipts,
     services,
@@ -28,3 +29,4 @@ api_router.include_router(receipts.router)
 api_router.include_router(parts.router)
 api_router.include_router(valuation.router)
 api_router.include_router(analytics.router)
+api_router.include_router(notifications.router)

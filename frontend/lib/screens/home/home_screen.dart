@@ -10,6 +10,7 @@ import '../analytics/analytics_screen.dart';
 import '../diagnostics/diagnostics_screen.dart';
 import '../fuel/fuel_screen.dart';
 import '../mods/mods_screen.dart';
+import '../notifications/notifications_screen.dart';
 import '../parts/parts_screen.dart';
 import '../receipts/receipts_screen.dart';
 import '../services/service_list_screen.dart';
@@ -273,6 +274,8 @@ class _FeatureGrid extends StatelessWidget {
           ValuationScreen(vehicleId: vehicle.id)),
       _Feature('Analytics', Icons.insights, const Color(0xFFCA8A04),
           AnalyticsScreen(vehicleId: vehicle.id)),
+      _Feature('Notifications', Icons.notifications_active,
+          const Color(0xFF0E7490), NotificationsScreen(vehicleId: vehicle.id)),
     ];
     return GridView.count(
       crossAxisCount: 3,

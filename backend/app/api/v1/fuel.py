@@ -70,6 +70,8 @@ async def add_fuel(
     )
     await db.commit()
     await db.refresh(log)
+    from app.workers.tasks import check_due_notifications
+    check_due_notifications.delay(vehicle_id)
     return log
 
 

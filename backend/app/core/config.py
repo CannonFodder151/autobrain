@@ -73,6 +73,10 @@ class Settings(BaseSettings):
     LOGIN_MAX_ATTEMPTS: int = 5  # failed logins allowed per IP before lockout
     LOGIN_WINDOW_SECONDS: int = 3 * 60 * 60  # lockout window (3 hours)
 
+    # Push notifications (Firebase Cloud Messaging). Optional — push alerts are
+    # skipped when unset; email/discord still work.
+    FCM_SERVER_KEY: str = ""
+
     # SMTP (email notifications + self-service password reset)
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587

@@ -142,6 +142,9 @@ async def create_service(
     await _ensure_completed_event(db, record)
     await db.commit()
     await db.refresh(record)
+    if record.next_due_km or record.next_due_date:
+        from app.workers.tasks import check_due_notifications
+        check_due_notifications.delay(vehicle_id)
     return record
 
 
@@ -228,6 +231,9 @@ async def update_service(
     await _ensure_completed_event(db, record)
     await db.commit()
     await db.refresh(record)
+    if record.next_due_km or record.next_due_date:
+        from app.workers.tasks import check_due_notifications
+        check_due_notifications.delay(vehicle_id)
     return record
 
 

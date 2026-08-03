@@ -22,6 +22,10 @@ celery_app.conf.update(
         "refresh-valuations-daily": {
             "task": "app.workers.tasks.refresh_valuations",
             "schedule": 60 * 60 * 24,
-        }
+        },
+        "daily-notification-checks": {
+            "task": "app.workers.tasks.run_daily_notification_checks",
+            "schedule": 60 * 60 * 6,
+        },
     },
 )

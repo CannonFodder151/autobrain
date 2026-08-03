@@ -149,6 +149,27 @@ def suggest_reorders() -> None:
     _run(_suggest())
 
 
+@shared_task
+def check_due_notifications(vehicle_id: str) -> None:
+    """Re-evaluate service-due / fuel-gap notifications for a vehicle."""
+    async def _check():
+        from app.services.notify import check_vehicle_notifications
+        from sqlalchemy import select as sa_select
+
+        async with SessionLocal() as db:
+            await check_vehicle_notifications(db, vehicle_id)
+
+    _run(_check())
+
+
+@shared_task
+def run_daily_notification_checks() -> None:
+    """Daily sweep: evaluate due notifications across all vehicles."""
+    from app.services.notify import run_due_checks
+
+    run_due_checks()
+
+
 def _pdf_text(data: bytes) -> str:
     """Extract text from a PDF for downstream OCR/AI extraction."""
     try:

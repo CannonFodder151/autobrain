@@ -114,3 +114,21 @@ def test_pdf_export_builds() -> None:
     pdf = export_service_history_pdf([R()], "Test Vehicle")
     assert pdf[:4] == b"%PDF"
     assert len(pdf) > 1000
+
+
+def test_notification_preference_defaults() -> None:
+    from app.schemas.notification import NotificationPreferenceIn
+
+    p = NotificationPreferenceIn(service_due_days=14, service_due_km=250)
+    assert p.service_due_days == 14
+    assert p.service_due_km == 250
+    assert p.fuel_gap_km is None
+
+
+def test_due_badge_formatting() -> None:
+    from app.services.notify import _due_badge_html
+
+    assert _due_badge_html("days", 3) == "3 days"
+    assert _due_badge_html("days", 1) == "1 day"
+    assert _due_badge_html("km", 500.0) == "500 km"
+    assert _due_badge_html("km", None) == "now"

@@ -9,6 +9,7 @@ from app.models.mod import Modification
 from app.models.part import Part, PartMovement
 from app.models.receipt import Receipt, ExtractedItem
 from app.models.valuation import ValuationSnapshot
+from app.models.notification import NotificationPreference, NotificationDelivery
 
 __all__ = [
     "User",
@@ -24,4 +25,6 @@ __all__ = [
     "Receipt",
     "ExtractedItem",
     "ValuationSnapshot",
+    "NotificationPreference",
+    "NotificationDelivery",
 ]
