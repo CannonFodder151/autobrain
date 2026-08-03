@@ -16,6 +16,7 @@ class DiagnosticItem(BaseModel):
     confidence: float
     severity: str  # low/medium/high/critical
     parts_needed: list[str] = []
+    parts: list[dict] = []  # [{"name": str, "part_number": str|None}]
     repair_notes: str | None = None
     estimated_cost: float | None = None
     cost_range: list[float] | None = None

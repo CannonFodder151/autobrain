@@ -56,6 +56,39 @@ _PART_COSTS: dict[str, float] = {
 
 _LABOUR = 120.0  # $/hr default
 
+_PART_NUMBERS: dict[str, str] = {
+    "ignition coil": "DENSO 90919-02247",
+    "spark plugs": "NGK BKR6EIX",
+    "brake pads": "BENDIX DB1479",
+    "brake rotors": "DBA 2852",
+    "oil filter": "RYCO Z89A",
+    "air filter": "RYCO A1528",
+    "fuel pump": "BOSCH 0580314052",
+    "alternator": "BOSCH 0986043770",
+    "battery": "CENTURY 55D23L",
+    "starter": "DENSO 428000-3630",
+    "timing belt": "GATES KTB320",
+    "water pump": "GMB EAA146",
+    "shock absorber": "KYB 341240",
+    "tyres": "MICHELIN PRIMACY 4",
+    "catalytic converter": "WALKER 17350",
+    "o2 sensor": "DENSO 234-4505",
+    "maf sensor": "DENSO 197-6030",
+    "egr valve": "DELPHI EG14658",
+    "purge valve": "STANDARD VAP110",
+    "thermostat": "TAMA 3151-85",
+    "radiator": "NISSENS 65017",
+    "cv joint": "GKN 307004",
+    "wheel bearing": "TIMKEN 513084",
+}
+
+
+def _parts_with_numbers(parts: list[str]) -> list[dict]:
+    return [
+        {"name": p, "part_number": _PART_NUMBERS.get(p.lower().strip())}
+        for p in parts
+    ]
+
 
 def diagnose_fallback(symptoms: str, vehicle: dict | None = None, obd_codes: list[str] | None = None) -> dict:
     obd_codes = obd_codes or []
@@ -101,6 +134,7 @@ def _diag_item(cause, note, confidence, severity, parts, cost) -> dict:
     return {
         "cause": cause, "confidence": confidence, "severity": severity,
         "parts_needed": parts,
+        "parts": _parts_with_numbers(parts),
         "repair_notes": note,
         "estimated_cost": cost,
         "cost_range": [round(cost * 0.8, 0), round(cost * 1.4, 0)] if cost else None,

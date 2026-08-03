@@ -68,6 +68,35 @@ class TimelineEvent {
       );
 }
 
+class ServiceItem {
+  final String id;
+  final String name;
+  final int quantity;
+  final double unitCost;
+  final String kind;
+  final String? partNo;
+
+  const ServiceItem({
+    required this.id,
+    required this.name,
+    this.quantity = 1,
+    this.unitCost = 0,
+    this.kind = 'item',
+    this.partNo,
+  });
+
+  double get total => quantity * unitCost;
+
+  factory ServiceItem.fromJson(Map<String, dynamic> j) => ServiceItem(
+        id: j['id'] as String,
+        name: j['name'] as String,
+        quantity: (j['quantity'] as num?)?.toInt() ?? 1,
+        unitCost: (j['unit_cost'] as num?)?.toDouble() ?? 0,
+        kind: j['kind'] as String? ?? 'item',
+        partNo: j['part_no'] as String?,
+      );
+}
+
 class ServiceRecord {
   final String id;
   final String serviceDate;
@@ -77,6 +106,10 @@ class ServiceRecord {
   final double cost;
   final int? nextDueKm;
   final String? nextDueDate;
+  final String status; // scheduled/completed
+  final String? completedDate;
+  final List<String> steps;
+  final List<ServiceItem> items;
 
   const ServiceRecord({
     required this.id,
@@ -89,7 +122,13 @@ class ServiceRecord {
     this.cost = 0,
     this.nextDueKm,
     this.nextDueDate,
+    this.status = 'completed',
+    this.completedDate,
+    this.steps = const [],
+    this.items = const [],
   });
+
+  bool get isScheduled => status == 'scheduled';
 
   factory ServiceRecord.fromJson(Map<String, dynamic> j) => ServiceRecord(
         id: j['id'] as String,
@@ -102,6 +141,12 @@ class ServiceRecord {
         cost: (j['cost'] as num?)?.toDouble() ?? 0,
         nextDueKm: j['next_due_km'] as int?,
         nextDueDate: j['next_due_date'] as String?,
+        status: j['status'] as String? ?? 'completed',
+        completedDate: j['completed_date'] as String?,
+        steps: ((j['steps'] as List?) ?? []).map((e) => e.toString()).toList(),
+        items: ((j['items'] as List?) ?? [])
+            .map((e) => ServiceItem.fromJson(e as Map<String, dynamic>))
+            .toList(),
       );
 }
 
@@ -360,7 +405,7 @@ class MonthlySpend {
 
 class ServicePrediction {
   final String serviceType;
-  final int intervalKm, dueInKm;
+  final int intervalKm, dueInKm, nextDueKm;
   final String nextDueDate;
   final double confidence;
   final String reason;
@@ -372,6 +417,7 @@ class ServicePrediction {
     required this.nextDueDate,
     required this.confidence,
     required this.reason,
+    this.nextDueKm = 0,
   });
 
   factory ServicePrediction.fromJson(Map<String, dynamic> j) =>
@@ -382,5 +428,6 @@ class ServicePrediction {
         nextDueDate: j['next_due_date'] as String,
         confidence: (j['confidence'] as num).toDouble(),
         reason: j['reason'] as String,
+        nextDueKm: (j['next_due_km'] as num?)?.toInt() ?? 0,
       );
 }

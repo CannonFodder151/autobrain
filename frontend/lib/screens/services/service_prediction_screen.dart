@@ -51,6 +51,33 @@ class _ServicePredictionScreenState extends State<ServicePredictionScreen> {
     }
   }
 
+  Future<void> _schedule(ServicePrediction p) async {
+    try {
+      final api = context.read<AuthState>().api;
+      await api.post('/vehicles/${widget.vehicleId}/services', {
+        'service_date': p.nextDueDate,
+        'odometer_km': p.nextDueKm,
+        'service_type': p.serviceType,
+        'cost': 0.0,
+        'status': 'scheduled',
+        'description': p.reason,
+        'steps': const [],
+        'items': const [],
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Added to Upcoming services')),
+        );
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -151,6 +178,12 @@ class _ServicePredictionScreenState extends State<ServicePredictionScreen> {
                           const Divider(),
                           Text(_result!.reason,
                               style: Theme.of(context).textTheme.bodySmall),
+                          const SizedBox(height: 12),
+                          FilledButton.tonalIcon(
+                            onPressed: () => _schedule(_result!),
+                            icon: const Icon(Icons.schedule, size: 18),
+                            label: const Text('Add as scheduled service'),
+                          ),
                         ],
                       ),
                     ),

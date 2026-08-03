@@ -1,8 +1,9 @@
 """Service schemas."""
 
+import json
 from datetime import date, datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ServiceItemIn(BaseModel):
@@ -10,8 +11,23 @@ class ServiceItemIn(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     quantity: int = 1
     unit_cost: float = 0.0
+    kind: str = "item"  # part/labour/item
+    part_no: str | None = None
     labour_hours: float | None = None
     labour_rate: float | None = None
+
+
+class ServiceItemOut(BaseModel):
+    id: str
+    name: str
+    quantity: int
+    unit_cost: float
+    kind: str
+    part_no: str | None
+    labour_hours: float | None
+    labour_rate: float | None
+
+    model_config = {"from_attributes": True}
 
 
 class ServiceCreate(BaseModel):
@@ -23,6 +39,8 @@ class ServiceCreate(BaseModel):
     cost: float = 0.0
     currency: str = "AUD"
     notes: str | None = None
+    status: str = Field(default="completed", pattern="^(scheduled|completed)$")
+    steps: list[str] = []
     items: list[ServiceItemIn] = []
 
 
@@ -35,6 +53,10 @@ class ServiceUpdate(BaseModel):
     cost: float | None = None
     currency: str | None = None
     notes: str | None = None
+    status: str | None = Field(default=None, pattern="^(scheduled|completed)$")
+    completed_date: date | None = None
+    steps: list[str] | None = None
+    items: list[ServiceItemIn] | None = None
 
 
 class ServiceOut(BaseModel):
@@ -51,7 +73,21 @@ class ServiceOut(BaseModel):
     ai_prediction: str | None
     next_due_km: int | None
     next_due_date: date | None
+    status: str
+    completed_date: date | None
+    steps: list[str] = []
+    items: list[ServiceItemOut] = []
     created_at: datetime
+
+    @field_validator("steps", mode="before")
+    @classmethod
+    def _parse_steps(cls, v):
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except Exception:
+                return []
+        return v or []
 
     model_config = {"from_attributes": True}
 

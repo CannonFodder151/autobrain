@@ -29,7 +29,10 @@ async def valuate(
 ) -> ValuationResponse:
     vehicle = await _get_owned_vehicle(db, vehicle_id, user)
     services = list((await db.scalars(
-        select(ServiceRecord).where(ServiceRecord.vehicle_id == vehicle_id)
+        select(ServiceRecord).where(
+            ServiceRecord.vehicle_id == vehicle_id,
+            ServiceRecord.status == "completed",
+        )
     )).all())
     mods = list((await db.scalars(
         select(Modification).where(Modification.vehicle_id == vehicle_id)

@@ -31,7 +31,17 @@ async def analytics(
         select(FuelLog).where(FuelLog.vehicle_id == vehicle_id).order_by(FuelLog.fill_date)
     )).all())
     services = list((await db.scalars(
-        select(ServiceRecord).where(ServiceRecord.vehicle_id == vehicle_id)
+        # Only completed services count towards spend / TCO / cost-per-km.
+        select(ServiceRecord).where(
+            ServiceRecord.vehicle_id == vehicle_id,
+            ServiceRecord.status == "completed",
+        )
+    )).all())
+    scheduled = list((await db.scalars(
+        select(ServiceRecord).where(
+            ServiceRecord.vehicle_id == vehicle_id,
+            ServiceRecord.status == "scheduled",
+        ).order_by(ServiceRecord.service_date)
     )).all())
     mods = list((await db.scalars(
         select(Modification).where(Modification.vehicle_id == vehicle_id)
@@ -64,7 +74,7 @@ async def analytics(
     avg_monthly = (fuel_total + service_total + mod_total) / n_months
     forecast = CostForecast(
         next_12_months=round(avg_monthly * 12, 2),
-        predicted_services=_predicted_services(services, fuel),
+        predicted_services=_predicted_services(scheduled),
         confidence=0.7,
         basis=f"Average of {n_months} tracked month(s)",
     )
@@ -90,16 +100,16 @@ async def analytics(
     )
 
 
-def _predicted_services(services: list, fuel: list) -> list[dict]:
+def _predicted_services(scheduled: list) -> list[dict]:
     out = []
-    for s in services:
-        if s.next_due_km or s.next_due_date:
-            out.append({
-                "service_type": s.service_type,
-                "next_due_km": s.next_due_km,
-                "next_due_date": str(s.next_due_date) if s.next_due_date else None,
-                "estimated_cost": s.cost,
-            })
+    for s in scheduled:
+        out.append({
+            "service_type": s.service_type,
+            "scheduled_date": str(s.service_date),
+            "odometer_km": s.odometer_km,
+            "estimated_cost": s.cost,
+            "status": s.status,
+        })
     return out
 
 

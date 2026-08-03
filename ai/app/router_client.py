@@ -31,9 +31,13 @@ _SYSTEM_PROMPTS: dict[str, str] = {
         '{"summary": string, "severity": "low"|"medium"|"high"|"critical", '
         '"estimated_cost": number|null, "cost_range": [number, number]|null, '
         '"items": [{"cause": string, "confidence": number (0-1), "severity": string, '
-        '"parts_needed": [string], "repair_notes": string, '
+        '"parts_needed": [string], '
+        '"parts": [{"name": string, "part_number": string|null}], '
+        '"repair_notes": string, '
         '"estimated_cost": number|null}], '
         '"parts_needed": [string], "recommended_actions": [string]}'
+        "For each part include a real-world part number when you can identify one "
+        "(e.g. NGK BKR6EIX, RYCO Z89A); otherwise null."
     ),
     "service-prediction": (
         "You are an automotive maintenance scheduler. Using the manufacturer "

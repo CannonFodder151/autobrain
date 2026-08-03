@@ -1,4 +1,10 @@
-"""Maintenance service records."""
+"""Maintenance service records.
+
+Status model:
+  - "scheduled": a future/planned service (from AI diagnostics or predictions).
+    Not counted in spend/analytics and excluded from reports until completed.
+  - "completed": a finished service that counts towards totals.
+"""
 
 import uuid
 from datetime import date, datetime
@@ -29,7 +35,14 @@ class ServiceRecord(Base):
     ai_prediction: Mapped[str | None] = mapped_column(Text)
     next_due_km: Mapped[int | None] = mapped_column(Integer)
     next_due_date: Mapped[date | None] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(String(20), default="completed", nullable=False, index=True)
+    completed_date: Mapped[date | None] = mapped_column(Date)
+    steps: Mapped[str | None] = mapped_column(Text)  # JSON list of work steps
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    items: Mapped[list["ServiceItem"]] = relationship(
+        back_populates="service", cascade="all, delete-orphan", lazy="selectin"
+    )
 
 
 class ServiceItem(Base):
@@ -41,5 +54,9 @@ class ServiceItem(Base):
     name: Mapped[str] = mapped_column(String(255))
     quantity: Mapped[int] = mapped_column(Integer, default=1)
     unit_cost: Mapped[float] = mapped_column(Float, default=0.0)
+    kind: Mapped[str] = mapped_column(String(20), default="item", nullable=False)  # part/labour/item
+    part_no: Mapped[str | None] = mapped_column(String(120))
     labour_hours: Mapped[float | None] = mapped_column(Float)
     labour_rate: Mapped[float | None] = mapped_column(Float)
+
+    service: Mapped["ServiceRecord"] = relationship(back_populates="items")

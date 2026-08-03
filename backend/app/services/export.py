@@ -9,23 +9,41 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 
+def _items_text(r) -> str:
+    if not getattr(r, "items", None):
+        return ""
+    parts = []
+    for it in r.items:
+        label = it.name
+        if it.part_no:
+            label += f" [{it.part_no}]"
+        if it.quantity and it.quantity != 1:
+            label += f" x{it.quantity}"
+        parts.append(label)
+    return "; ".join(parts)
+
+
 def export_service_history_csv(records: list, label: str) -> bytes:
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(["AutoBrain Service History", label])
     writer.writerow([])
-    writer.writerow(["Date", "Odometer (km)", "Type", "Workshop", "Cost", "Currency", "Notes"])
+    writer.writerow(["Date", "Odometer (km)", "Type", "Workshop", "Cost", "Currency", "Items", "Notes"])
     for r in records:
-        writer.writerow([r.service_date, r.odometer_km, r.service_type, r.workshop or "", r.cost, r.currency, (r.notes or "")])
+        writer.writerow(
+            [r.service_date, r.odometer_km, r.service_type, r.workshop or "",
+             r.cost, r.currency, _items_text(r), (r.notes or "")]
+        )
     return buf.getvalue().encode("utf-8")
 
 
 def export_service_history_pdf(records: list, label: str) -> bytes:
     return _pdf_table(
         title=f"Service History — {label}",
-        header=["Date", "Odometer (km)", "Type", "Workshop", "Cost"],
+        header=["Date", "Odometer (km)", "Type", "Workshop", "Cost", "Items"],
         rows=[
-            [str(r.service_date), str(r.odometer_km), r.service_type, r.workshop or "", f"{r.cost:,.2f} {r.currency}"]
+            [str(r.service_date), str(r.odometer_km), r.service_type,
+             r.workshop or "", f"{r.cost:,.2f} {r.currency}", _items_text(r)]
             for r in records
         ],
     )

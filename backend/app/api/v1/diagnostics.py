@@ -11,7 +11,7 @@ from app.api.deps import get_current_user
 from app.api.v1.vehicles import add_event, _get_owned_vehicle
 from app.db.session import get_db
 from app.models.diagnostic import Diagnostic
-from app.models.service import ServiceRecord
+from app.models.service import ServiceItem, ServiceRecord
 from app.models.user import User
 from app.schemas.diagnostic import (
     AddToServiceRequest,
@@ -78,30 +78,49 @@ async def add_to_service(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Diagnostic:
-    await _get_owned_vehicle(db, vehicle_id, user)
+    vehicle = await _get_owned_vehicle(db, vehicle_id, user)
     diag = await db.get(Diagnostic, diagnostic_id)
     if not diag or diag.vehicle_id != vehicle_id:
         raise HTTPException(status_code=404, detail="Diagnostic not found")
     if diag.added_to_service:
         raise HTTPException(status_code=409, detail="Already added to a service")
+
+    ai = json.loads(diag.ai_response) if diag.ai_response else {}
+    steps = ai.get("recommended_actions", []) or []
+    parts: list[dict] = []
+    for item in ai.get("items", []):
+        for p in item.get("parts", []) or []:
+            if p.get("name") and p not in parts:
+                parts.append(p)
+    if not parts:
+        parts = [{"name": n, "part_number": None} for n in (ai.get("parts_needed", []) or [])]
+
+    # A queued diagnostic becomes a FUTURE (scheduled) service.
     service = ServiceRecord(
         vehicle_id=vehicle_id,
         service_date=(payload.service_date.date() if payload.service_date else date.today()),
-        odometer_km=0,
+        odometer_km=vehicle.odometer_km or 0,
         service_type="repair",
         description=f"From diagnostic: {diag.summary or diag.symptoms[:200]}",
         cost=diag.estimated_cost or 0.0,
         notes=payload.notes,
+        status="scheduled",
+        steps=json.dumps(steps) if steps else None,
     )
     db.add(service)
     await db.flush()
+    for p in parts:
+        db.add(
+            ServiceItem(
+                service_id=service.id,
+                name=p.get("name", "Part"),
+                quantity=1,
+                kind="part",
+                part_no=p.get("part_number"),
+            )
+        )
     diag.added_to_service = True
     diag.linked_service_id = service.id
-    await add_event(
-        db, vehicle_id, "service",
-        f"Repair queued from diagnostic: {diag.summary or 'diagnostic'}",
-        service.service_date, service.odometer_km, service.cost, service.id,
-    )
     await db.commit()
     await db.refresh(diag)
     return diag
