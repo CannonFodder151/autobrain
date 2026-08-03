@@ -19,6 +19,10 @@ class RegoLookupResponse(BaseModel):
     year: int | None = None
     engine: str | None = None
     transmission: str | None = None
+    body_type: str | None = None
+    colour: str | None = None
+    expiry_date: str | None = None
+    description: str | None = None
     state: str | None = None
     source: str = "unknown"
     matched: str | None = None

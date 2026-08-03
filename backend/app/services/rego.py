@@ -157,6 +157,88 @@ def _synthetic_vin(plate: str) -> str:
     return "6" + digest[:16]
 
 
+def _dig(obj, key: str):
+    """Depth-first search for a key (case-insensitive) in nested JSON."""
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if str(k).lower() == key.lower():
+                return v
+            found = _dig(v, key)
+            if found is not None:
+                return found
+    elif isinstance(obj, list):
+        for item in obj:
+            found = _dig(item, key)
+            if found is not None:
+                return found
+    return None
+
+
+def _first(data, aliases: list[str]):
+    for alias in aliases:
+        val = _dig(data, alias)
+        if val not in (None, "", "N/A", "n/a", "-"):
+            return val
+    return None
+
+
+def _to_int(value) -> int | None:
+    if value is None:
+        return None
+    digits = "".join(ch for ch in str(value) if ch.isdigit())[:4]
+    return int(digits) if digits else None
+
+
+def _map_provider(data, plate: str, state: str) -> dict | None:
+    """Map a plateapi.com.au (or similar) response onto our schema.
+
+    Field names vary by provider, so every field is resolved by alias with a
+    depth-first search. plateapi wraps the vehicle payload under `vehicle`.
+    The free tier returns a production-year *range* (no VIN) — that's mapped to
+    a representative year and VIN is left blank rather than fabricated.
+    """
+    # Explicit failure flags
+    success = _first(data, ["success", "ok"])
+    if isinstance(success, bool) and not success:
+        return None
+    if isinstance(success, str) and success.lower() in ("false", "error", "failed"):
+        return None
+    error = _first(data, ["error", "message", "error_message", "detail"])
+    if isinstance(error, str) and error and "not found" in error.lower():
+        return None
+
+    vehicle = data.get("vehicle") if isinstance(data, dict) else None
+    if not isinstance(vehicle, dict):
+        vehicle = data
+
+    def get(*aliases: str):
+        return _first(vehicle, list(aliases)) or _first(data, list(aliases))
+
+    year = _to_int(get("lowest_year", "year", "manufacture_year", "model_year", "build_year"))
+    if year is None:
+        year = _to_int(get("highest_year"))
+
+    vin = get("vin", "chassis", "vin_number", "chassis_number", "vin_chassis", "vehicle_vin")
+    description = get("description", "detailed_description", "vehicle_description")
+
+    return {
+        "rego": str(get("registration_number", "registration_no", "rego", "plate", "registration") or plate),
+        "vin": str(vin) if vin else None,
+        "make": str(get("make", "manufacturer", "brand") or ""),
+        "model": str(get("model", "series", "variant", "model_name") or ""),
+        "year": year,
+        "engine": str(get("engine", "engine_number", "engine_no", "engine_size") or ""),
+        "transmission": str(get("transmission", "gearbox", "transmission_type") or ""),
+        "body_type": str(get("body", "body_type", "body_style", "body_type_description") or ""),
+        "colour": str(get("colour", "color", "vehicle_colour") or ""),
+        "expiry_date": str(get("expiry_date", "registration_expiry", "rego_expiry") or ""),
+        "description": str(description) if description else None,
+        "state": state,
+        "source": "provider",
+        "matched": "plateapi",
+    }
+
+
 async def lookup_rego(rego: str, jurisdiction: str = "AU", state: str = "VIC") -> dict | None:
     clean = _normalise_plate(rego)
     if not _valid_au_plate(clean):
@@ -164,19 +246,24 @@ async def lookup_rego(rego: str, jurisdiction: str = "AU", state: str = "VIC") -
         return None
     state = state.upper()
 
-    # 1) External provider (real lookup) if configured
+    # 1) External provider (real lookup) — plateapi.com.au compatible.
+    #    Configure REGO_LOOKUP_URL + REGO_LOOKUP_API_KEY in .env (never hardcode).
     if settings.REGO_LOOKUP_URL:
         try:
-            async with httpx.AsyncClient(timeout=10) as client:
+            async with httpx.AsyncClient(timeout=20) as client:
                 resp = await client.get(
                     settings.REGO_LOOKUP_URL,
-                    params={"rego": clean, "jurisdiction": jurisdiction, "state": state},
-                    headers={"X-Api-Key": settings.REGO_LOOKUP_API_KEY} if settings.REGO_LOOKUP_API_KEY else {},
+                    params={"plate": clean, "state": state, "detailed": "true"},
+                    headers={"X-API-Key": settings.REGO_LOOKUP_API_KEY} if settings.REGO_LOOKUP_API_KEY else {},
                 )
-                resp.raise_for_status()
                 data = resp.json()
-                data["source"] = "provider"
-                return data
+            logger.info("rego_provider_raw", rego=clean, state=state, status=resp.status_code, raw=data)
+            mapped = _map_provider(data, clean, state)
+            if mapped is not None:
+                return mapped
+            if resp.status_code >= 400:
+                logger.warning("rego_provider_rejected", rego=clean, state=state, status=resp.status_code)
+                return None  # provider says the plate is unknown — don't guess
         except Exception as exc:
             logger.warning("rego_provider_failed_falling_back", error=str(exc), rego=clean, state=state)
 

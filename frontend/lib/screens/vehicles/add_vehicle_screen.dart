@@ -57,7 +57,21 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
         _engine.text = (r['engine'] as String?) ?? '';
         _transmission.text = (r['transmission'] as String?) ?? '';
         _year = r['year'] as int?;
-        _lookupInfo = 'Populated from ${r['source'] ?? 'lookup'}';
+        final extra = <String>[];
+        if (r['body_type'] != null && (r['body_type'] as String).isNotEmpty) {
+          extra.add(r['body_type'] as String);
+        }
+        if (r['colour'] != null && (r['colour'] as String).isNotEmpty) {
+          extra.add(r['colour'] as String);
+        }
+        final src = (r['source'] as String?) ?? 'unknown';
+        final matched = (r['matched'] as String?) ?? '';
+        final desc = (r['description'] as String?) ?? '';
+        _lookupInfo =
+            '${src == 'provider' ? 'Live registry data' : 'Best guess ($src)'}'
+            '${extra.isEmpty ? '' : ' · ${extra.join(', ')}'}'
+            '${desc.isEmpty ? '' : ' · $desc'}'
+            '${matched.isEmpty ? '' : ' · $matched'}';
       });
     } catch (e) {
       setState(() => _lookupInfo = 'Lookup failed: $e');

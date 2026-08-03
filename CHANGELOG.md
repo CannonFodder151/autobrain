@@ -19,6 +19,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Self-service password reset (request link → TOTP-free JWT reset token → new password) with email delivery.
 - App logo asset (`frontend/assets/logo.png`) used in login + app bar.
 - State-aware Australian rego lookup (NSW/VIC/QLD/WA/SA/TAS/NT/ACT) with personalised-plate word decoding (e.g. TCRWN/VIC → Toyota Crown).
+- plateapi.com.au provider integration (env-configured `REGO_LOOKUP_URL`/`REGO_LOOKUP_API_KEY`, never hardcoded) with tolerant response mapping incl. year-range + description.
 
 ### Removed
 - GitHub Actions CI/CD workflows.

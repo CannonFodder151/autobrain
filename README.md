@@ -141,10 +141,10 @@ flutter build ios --release   # requires macOS + Xcode
 
 ## Australian rego lookup
 
-Rego lookup accepts any valid Australian plate (1–8 alphanumeric characters) and auto-fills VIN, make, model, year and engine. Two sources:
+Rego lookup accepts any valid Australian plate + state (NSW/VIC/QLD/WA/SA/TAS/NT/ACT) and auto-fills VIN, make, model, year and engine. Two sources:
 
-1. **Provider** — set `REGO_LOOKUP_URL` + `REGO_LOOKUP_API_KEY` to a real AU rego-check API for live data.
-2. **Offline heuristic** — when no provider is configured the app returns a best-effort result (with `source: "heuristic"`) so the feature never 404s on a valid plate.
+1. **plateapi.com.au (real registry data)** — set `REGO_LOOKUP_URL=https://api.plateapi.com.au/api/v1/lookup` and `REGO_LOOKUP_API_KEY` in `.env` (key is never hardcoded or committed). Requests use `?plate=…&state=…` with `X-API-Key`. The free tier is **20 lookups/month**; lookups run only on demand (when you tap Lookup). The free tier returns make/model/engine + production-year range (no VIN).
+2. **Offline heuristic** — when no provider is configured, or the provider is unreachable, the app returns a best-effort guess (`source: heuristic`) so the feature never 404s on a valid plate.
 
 ## Deployment (production on a Linux host)
 
