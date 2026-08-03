@@ -66,6 +66,15 @@ class MfaSetupResponse(BaseModel):
     qr_data_url: str
 
 
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str
+    new_password: str = Field(min_length=8, max_length=128)
+
+
 # --- Admin user management ---
 class AdminUserUpdate(BaseModel):
     display_name: str | None = Field(default=None, max_length=120)

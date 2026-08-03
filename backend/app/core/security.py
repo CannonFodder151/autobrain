@@ -39,6 +39,16 @@ def create_mfa_token(subject: str | int) -> str:
     )
 
 
+def create_password_reset_token(subject: str | int) -> str:
+    """Short-lived token that authorises a password reset (30 min)."""
+    expire = datetime.now(timezone.utc) + timedelta(minutes=30)
+    return jwt.encode(
+        {"sub": str(subject), "exp": expire, "type": "password_reset"},
+        settings.SECRET_KEY,
+        algorithm=settings.ALGORITHM,
+    )
+
+
 def create_refresh_token(subject: str | int) -> str:
     expire = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     return jwt.encode(

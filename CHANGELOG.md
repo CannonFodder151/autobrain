@@ -15,6 +15,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - No self-signup: account creation restricted to administrators.
 - Australian rego lookup: expanded AU plate heuristics (never 404s on a valid plate), optional provider hook.
 - Modern Material 3 UI overhaul (login, home dashboard, feature grid, settings, admin screens).
+- SMTP email notifications (account welcome, MFA changes, password changes) via `SMTP_*` env config.
+- Self-service password reset (request link → TOTP-free JWT reset token → new password) with email delivery.
+- App logo asset (`frontend/assets/logo.png`) used in login + app bar.
 
 ### Removed
 - GitHub Actions CI/CD workflows.

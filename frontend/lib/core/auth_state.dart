@@ -82,6 +82,27 @@ class AuthState extends ChangeNotifier {
     }
   }
 
+  /// Requests a password-reset email (always succeeds; server hides existence).
+  Future<void> requestPasswordReset(String email) async {
+    await _anonymous().post(
+      '/auth/password-reset/request',
+      {'email': email},
+    );
+  }
+
+  /// Confirms a password reset with the emailed token.
+  Future<bool> confirmPasswordReset(String token, String newPassword) async {
+    try {
+      await _anonymous().post(
+        '/auth/password-reset/confirm',
+        {'token': token, 'new_password': newPassword},
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> logout() async {
     _token = null;
     _role = null;

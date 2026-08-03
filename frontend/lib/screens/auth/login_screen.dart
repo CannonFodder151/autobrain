@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/auth_state.dart';
+import 'reset_password.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -80,7 +81,7 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       shape: BoxShape.circle,
@@ -92,8 +93,14 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ],
                     ),
-                    child: const Icon(Icons.directions_car,
-                        size: 44, color: Color(0xFF0B6B6A)),
+                    child: ClipOval(
+                      child: Image.asset(
+                        'assets/logo.png',
+                        width: 72,
+                        height: 72,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 20),
                   const Text(
@@ -188,6 +195,17 @@ class _LoginScreenState extends State<LoginScreen> {
                                   )
                                 : Text(_mfaStep ? 'Verify & sign in' : 'Sign in'),
                           ),
+                          if (!_mfaStep) ...[
+                            const SizedBox(height: 8),
+                            TextButton(
+                              onPressed: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const ForgotPasswordScreen(),
+                                ),
+                              ),
+                              child: const Text('Forgot password?'),
+                            ),
+                          ],
                         ],
                       ),
                     ),

@@ -10,9 +10,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_admin
+from app.core.config import settings
 from app.core.security import (
     create_access_token,
     create_mfa_token,
+    create_password_reset_token,
     create_refresh_token,
     decode_token,
     hash_password,
@@ -25,12 +27,15 @@ from app.schemas.auth import (
     MfaCodeRequest,
     MfaSetupResponse,
     MfaVerifyRequest,
+    PasswordResetConfirm,
+    PasswordResetRequest,
     RefreshRequest,
     TokenPair,
     UserCreate,
     UserLogin,
     UserOut,
 )
+from app.services import email as mail
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -114,6 +119,10 @@ async def mfa_enable(
     user.mfa_enabled = True
     await db.commit()
     await db.refresh(user)
+    await mail.send_security_alert(
+        user.email, user.display_name,
+        "Two-factor authentication (MFA) was enabled on your account.",
+    )
     return user
 
 
@@ -129,6 +138,42 @@ async def mfa_disable(
     user.mfa_secret = None
     await db.commit()
     await db.refresh(user)
+    await mail.send_security_alert(
+        user.email, user.display_name,
+        "Two-factor authentication (MFA) was disabled on your account.",
+    )
+    return user
+
+
+# --- self-service password reset ---
+@router.post("/password-reset/request", status_code=200)
+async def request_password_reset(
+    payload: PasswordResetRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Send a password-reset email. Always returns 200 (do not reveal account existence)."""
+    user = await db.scalar(select(User).where(User.email == payload.email.lower()))
+    if user and user.is_active:
+        token = create_password_reset_token(user.id)
+        await mail.send_password_reset(user.email, user.display_name, token, settings.APP_BASE_URL)
+    return {"message": "If that email exists, a reset link has been sent."}
+
+
+@router.post("/password-reset/confirm", response_model=UserOut)
+async def confirm_password_reset(
+    payload: PasswordResetConfirm,
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    data = decode_token(payload.token)
+    if not data or data.get("type") != "password_reset":
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+    user = await db.get(User, data.get("sub"))
+    if not user or not user.is_active:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+    user.hashed_password = hash_password(payload.new_password)
+    await db.commit()
+    await db.refresh(user)
+    await mail.send_password_changed(user.email, user.display_name)
     return user
 
 

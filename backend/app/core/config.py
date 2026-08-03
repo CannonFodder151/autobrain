@@ -62,6 +62,17 @@ class Settings(BaseSettings):
     ADMIN_DISPLAY_NAME: str = "AutoBrain Admin"
     ADMIN_INITIAL_PASSWORD: str = ""
 
+    # SMTP (email notifications + self-service password reset)
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_USE_TLS: bool = True  # STARTTLS (TLS on connect when False → SSL)
+    SMTP_FROM_EMAIL: str = "noreply@nathanmartina.com"
+    SMTP_FROM_NAME: str = "AutoBrain"
+    # Public base URL used to build password-reset links (no trailing slash)
+    APP_BASE_URL: str = "http://10.0.3.39"
+
     @property
     def sqlalchemy_database_uri(self) -> str:
         if self.DATABASE_URL:

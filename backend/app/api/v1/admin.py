@@ -5,10 +5,12 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_admin
+from app.core.config import settings
 from app.core.security import hash_password
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.auth import AdminUserUpdate, UserAdminOut, UserCreate
+from app.services import email as mail
 
 router = APIRouter(prefix="/admin/users", tags=["admin"], dependencies=[Depends(require_admin)])
 
@@ -44,6 +46,7 @@ async def create_user(
     db.add(user)
     await db.commit()
     await db.refresh(user)
+    await mail.send_welcome(user.email, user.display_name, settings.APP_BASE_URL)
     return user
 
 

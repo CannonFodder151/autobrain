@@ -61,7 +61,16 @@ class _HomeScreenState extends State<HomeScreen> {
     final auth = context.read<AuthState>();
     return Scaffold(
       appBar: AppBar(
-        title: const Text('AutoBrain'),
+        title: Row(
+          children: [
+            ClipOval(
+              child: Image.asset('assets/logo.png',
+                  width: 32, height: 32, fit: BoxFit.cover),
+            ),
+            const SizedBox(width: 10),
+            const Text('AutoBrain'),
+          ],
+        ),
         actions: [
           PopupMenuButton<String>(
             onSelected: (v) {
