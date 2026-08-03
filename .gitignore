@@ -18,6 +18,7 @@ htmlcov/
 *.key
 *.p12
 secrets/
+artifacts/
 
 # Flutter / Dart
 frontend/.dart_tool/

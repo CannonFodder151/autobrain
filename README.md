@@ -113,7 +113,7 @@ To confirm routing is live: `curl http://<host>/ai/health` → `"router_enabled"
 
 ## Web app
 
-The Flutter app builds for iOS, Android **and** web. The web build is produced by:
+The web app is built from the Flutter frontend and served behind nginx:
 
 ```bash
 docker build -f docker/frontend/Dockerfile \
@@ -131,24 +131,7 @@ docker rm ab-web
 docker compose -f docker-compose.prod.yml up -d nginx   # mounts ./web-dist
 ```
 
-## Mobile app (iOS/Android)
-
-```bash
-cd frontend
-flutter pub get
-
-# regenerate platform boilerplate once (org/app id)
-flutter create . --platforms=android,ios --org com.autobrain
-
-# point at your backend, then build
-flutter build apk --release \
-  --dart-define=API_BASE_URL=https://default.autobrainservice.app/api/v1 \
-  --dart-define=WS_BASE_URL=wss://default.autobrainservice.app/ws
-
-flutter build ios --release   # requires macOS + Xcode
-```
-
-`lib/` layout: `core/` (API client, auth, offline SQLite cache, models), `screens/` (all 12 feature screens), `widgets/`.
+> The native iOS/Android apps are distributed through the App Store and Google Play — see the website for links.
 
 ## Security & access
 

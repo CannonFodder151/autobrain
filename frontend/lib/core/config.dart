@@ -1,10 +1,12 @@
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Runtime configuration.
 ///
-/// The base URLs are compiled in via --dart-define as defaults, then overridden
-/// at runtime from the server picker (stored in SharedPreferences) so a single
-/// APK can target the hosted subscription or any self-hosted server.
+/// The base URLs are compiled in via --dart-define as defaults. On mobile the
+/// user can override them at runtime via the server picker (stored in
+/// SharedPreferences) so a single APK can target the hosted subscription or
+/// any self-hosted server. On web/desktop the compiled URL is always used.
 class AppConfig {
   static const String _defaultApiBase = String.fromEnvironment(
     'API_BASE_URL',
@@ -17,14 +19,24 @@ class AppConfig {
 
   static const String _prefsKey = 'server_config';
 
-  /// Whether the user has chosen a server yet.
+  /// Whether a server has been resolved yet (picker only runs on mobile).
   static bool serverConfigured = false;
 
   static String apiBase = _defaultApiBase;
   static String wsBase = _defaultWsBase;
 
+  static bool get _isMobile =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
+
   /// Loads a saved server selection (called once at startup).
   static Future<void> load() async {
+    // Web and desktop always use the compiled base URL — no picker.
+    if (!_isMobile) {
+      serverConfigured = true;
+      return;
+    }
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString(_prefsKey);
     if (saved != null && saved.isNotEmpty) {
