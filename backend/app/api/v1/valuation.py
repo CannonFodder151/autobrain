@@ -1,12 +1,13 @@
 ﻿"""Resale value estimation routes."""
 
 import json
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_ai
+from app.api.deps import get_current_user
 from app.api.v1.vehicles import _get_owned_vehicle
 from app.db.session import get_db
 from app.models.fuel import FuelLog
@@ -25,9 +26,40 @@ async def valuate(
     vehicle_id: str,
     payload: ValuationRequest,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_ai),
+    user: User = Depends(get_current_user),
 ) -> ValuationResponse:
     vehicle = await _get_owned_vehicle(db, vehicle_id, user)
+
+    # Demo accounts get a realistic sample valuation instead of an AI call.
+    if user.role == "demo":
+        today = date.today()
+        return ValuationResponse(
+            estimated_value=24500.0,
+            low=21800.0,
+            high=27900.0,
+            currency="AUD",
+            factors={
+                "base_value": 28000.0,
+                "odometer_adjustment": -3200.0,
+                "condition_adjustment": 900.0,
+                "mods_adjustment": 1300.0,
+                "service_history_adjustment": -1500.0,
+                "notes": "Sample valuation shown on the demo account. "
+                         "The AI valuation engine runs on real accounts.",
+            },
+            recommendations=[
+                "Recent full service history adds confidence to the estimate.",
+                "Addressing the worn brake pads would lift the value slightly.",
+                "Maintain the service log — buyers pay more for documented cars.",
+            ],
+            trend=[
+                {"date": str(today - timedelta(days=2 * 365)), "value": 21000.0},
+                {"date": str(today - timedelta(days=365)), "value": 22500.0},
+                {"date": str(today), "value": 24500.0},
+            ],
+            model="demo-sample",
+        )
+
     services = list((await db.scalars(
         select(ServiceRecord).where(
             ServiceRecord.vehicle_id == vehicle_id,
