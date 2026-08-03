@@ -142,17 +142,19 @@ async def _clear_primary(db: AsyncSession, user: User) -> None:
 
 
 async def _sync_odometer_from_fuel(db: AsyncSession, vehicle: Vehicle) -> Vehicle:
-    """Current odometer = most recent reading logged against fuel fills.
+    """Backfill odometer from fuel logs only when the vehicle has none set.
 
-    Fuel is logged far more often than services, so its latest odometer is
-    treated as the source of truth for the vehicle's current odometer.
+    Manual edits to `odometer_km` are authoritative and are never overridden by
+    fuel data (a user may correct the clock after a gap in logging).
     """
+    if vehicle.odometer_km:
+        return vehicle
     latest = await db.scalar(
         select(FuelLog)
         .where(FuelLog.vehicle_id == vehicle.id)
         .order_by(FuelLog.odometer_km.desc())
     )
-    if latest and latest.odometer_km > (vehicle.odometer_km or 0):
+    if latest and latest.odometer_km > 0:
         vehicle.odometer_km = latest.odometer_km
     return vehicle
 

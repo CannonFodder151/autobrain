@@ -128,13 +128,27 @@ class _FactorTable extends StatelessWidget {
               const SizedBox(height: 8),
               for (final e in factors.entries)
                 Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  padding: const EdgeInsets.symmetric(vertical: 4),
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(_pretty(e.key)),
-                      Text(e.value.toString(),
-                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          _pretty(e.key),
+                          softWrap: true,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 3,
+                        child: Text(
+                          e.value.toString(),
+                          softWrap: true,
+                          textAlign: TextAlign.end,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
                     ],
                   ),
                 ),

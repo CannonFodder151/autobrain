@@ -205,12 +205,19 @@ class _Row extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
+        padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label),
-            Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+            Expanded(flex: 2, child: Text(label, softWrap: true)),
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 3,
+              child: Text(value,
+                  softWrap: true,
+                  textAlign: TextAlign.end,
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+            ),
           ],
         ),
       );

@@ -22,7 +22,40 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/vehicles/{vehicle_id}/receipts", tags=["receipts"])
 
 ALLOWED_TYPES = {"application/pdf", "image/jpeg", "image/png", "image/webp", "image/heic"}
+ALLOWED_EXTS = {"pdf", "jpg", "jpeg", "png", "webp", "heic", "heif"}
 MAX_BYTES = 15 * 1024 * 1024
+
+
+def _ext(filename: str | None) -> str:
+    if not filename or "." not in filename:
+        return "bin"
+    return filename.rsplit(".", 1)[-1].lower()
+
+
+def _resolve_type(filename: str | None, content_type: str | None, data: bytes) -> str:
+    """Best-effort MIME detection: magic bytes > content-type > extension."""
+    if data[:8] == b"%PDF-":
+        return "application/pdf"
+    if data[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    ext = _ext(filename)
+    if content_type in ALLOWED_TYPES:
+        return content_type
+    if content_type and content_type.startswith("image/"):
+        return "image/jpeg" if "jpeg" in content_type else "image/png"
+    mime_by_ext = {
+        "pdf": "application/pdf", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+        "png": "image/png", "webp": "image/webp", "heic": "image/heic", "heif": "image/heic",
+    }
+    if ext in mime_by_ext:
+        return mime_by_ext[ext]
+    if content_type == "application/octet-stream":
+        return "application/pdf" if ext == "pdf" else "image/png"
+    return content_type or "application/octet-stream"
 
 
 @router.post("", response_model=ReceiptOut, status_code=201)
@@ -33,19 +66,24 @@ async def upload_receipt(
     user: User = Depends(require_write),
 ) -> Receipt:
     await _get_owned_vehicle(db, vehicle_id, user)
-    if file.content_type not in ALLOWED_TYPES:
-        raise HTTPException(status_code=415, detail=f"Unsupported type: {file.content_type}")
     data = await file.read()
     if len(data) > MAX_BYTES:
         raise HTTPException(status_code=413, detail="File too large (max 15MB)")
+    content_type = _resolve_type(file.filename, file.content_type, data)
+    if content_type not in ALLOWED_TYPES:
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported file type: {file.filename or file.content_type}. "
+            "Supported: PDF, JPG, PNG, WEBP, HEIC.",
+        )
     await ensure_bucket()
-    key = f"receipts/{vehicle_id}/{Receipt.__tablename__}_upload_{_rand()}.{_ext(file.content_type)}"
-    url = await upload_object(key, data, file.content_type)
+    key = f"receipts/{vehicle_id}/{Receipt.__tablename__}_upload_{_rand()}.{_ext(file.filename)}"
+    url = await upload_object(key, data, content_type)
     receipt = Receipt(
         vehicle_id=vehicle_id,
         file_key=key,
         original_name=file.filename,
-        content_type=file.content_type,
+        content_type=content_type,
         ocr_status="pending",
     )
     db.add(receipt)
@@ -136,11 +174,6 @@ async def apply_receipt_to_service(
 def _rand() -> str:
     import uuid
     return str(uuid.uuid4())[:8]
-
-
-def _ext(content_type: str) -> str:
-    return {"application/pdf": "pdf", "image/jpeg": "jpg", "image/png": "png",
-            "image/webp": "webp", "image/heic": "heic"}.get(content_type, "bin")
 
 
 def _today():

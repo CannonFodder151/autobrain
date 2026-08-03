@@ -86,3 +86,31 @@ def test_login_schema_handles_mfa_setup_flag() -> None:
     assert r.mfa_setup_required is True
     assert r.mfa_required is False
     assert r.mfa_token == "t"
+
+
+def test_receipt_type_sniffing() -> None:
+    from app.api.v1.receipts import _resolve_type
+
+    assert _resolve_type("scan.pdf", "application/octet-stream", b"%PDF-1.4 ...") == "application/pdf"
+    assert _resolve_type("photo.jpg", "application/octet-stream", b"\xff\xd8\xff\xe0") == "image/jpeg"
+    assert _resolve_type("photo.png", "application/octet-stream", b"\x89PNG\r\n\x1a\n") == "image/png"
+    assert _resolve_type("scan.png", "image/png", b"\x00\x01\x02") == "image/png"
+    assert _resolve_type("scan.bin", "application/octet-stream", b"\x00\x01\x02") == "image/png"
+
+
+def test_pdf_export_builds() -> None:
+    from app.services.export import export_service_history_pdf
+
+    class R:
+        service_date = "2026-01-01"
+        odometer_km = 1000
+        service_type = "scheduled"
+        workshop = "Long Workshop Name That Wraps Across Multiple Lines In The PDF"
+        cost = 120.5
+        currency = "AUD"
+        items = []
+        notes = None
+
+    pdf = export_service_history_pdf([R()], "Test Vehicle")
+    assert pdf[:4] == b"%PDF"
+    assert len(pdf) > 1000

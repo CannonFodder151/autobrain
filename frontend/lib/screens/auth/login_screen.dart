@@ -257,7 +257,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 prefixIcon: Icon(Icons.mail_outline),
                               ),
                               keyboardType: TextInputType.emailAddress,
-                              autofillHints: const [AutofillHints.username, AutofillHints.email],
+                              autofillHints: const [AutofillHints.username],
                               textInputAction: TextInputAction.next,
                               validator: (v) => v == null || !v.contains('@')
                                   ? 'Valid email required'

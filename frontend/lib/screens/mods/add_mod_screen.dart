@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/auth_state.dart';
+import '../../core/models.dart';
 
 class AddModScreen extends StatefulWidget {
-  const AddModScreen({super.key, required this.vehicleId});
+  const AddModScreen({super.key, required this.vehicleId, this.mod});
   final String vehicleId;
+  final Modification? mod;
 
   @override
   State<AddModScreen> createState() => _AddModScreenState();
@@ -13,18 +15,27 @@ class AddModScreen extends StatefulWidget {
 
 class _AddModScreenState extends State<AddModScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _name = TextEditingController();
-  final _brand = TextEditingController();
-  final _cost = TextEditingController();
-  final _date = TextEditingController();
-  final _notes = TextEditingController();
-  String _category = 'performance';
+  late final TextEditingController _name;
+  late final TextEditingController _brand;
+  late final TextEditingController _cost;
+  late final TextEditingController _date;
+  late final TextEditingController _notes;
+  late String _category;
   bool _busy = false;
+
+  bool get _isEdit => widget.mod != null;
 
   @override
   void initState() {
     super.initState();
-    _date.text = DateTime.now().toString().substring(0, 10);
+    final m = widget.mod;
+    _name = TextEditingController(text: m?.name ?? '');
+    _brand = TextEditingController(text: m?.brand ?? '');
+    _cost = TextEditingController(text: m != null ? '${m.cost}' : '');
+    _date = TextEditingController(
+        text: m?.installDate ?? DateTime.now().toString().substring(0, 10));
+    _notes = TextEditingController(text: m?.notes ?? '');
+    _category = m?.category ?? 'performance';
   }
 
   @override
@@ -40,14 +51,19 @@ class _AddModScreenState extends State<AddModScreen> {
     setState(() => _busy = true);
     try {
       final api = context.read<AuthState>().api;
-      await api.post('/vehicles/${widget.vehicleId}/mods', {
+      final body = {
         'name': _name.text,
         'category': _category,
         'brand': _brand.text.isEmpty ? null : _brand.text,
         'cost': double.tryParse(_cost.text) ?? 0.0,
         'install_date': _date.text,
         'notes': _notes.text.isEmpty ? null : _notes.text,
-      });
+      };
+      if (_isEdit) {
+        await api.patch('/vehicles/${widget.vehicleId}/mods/${widget.mod!.id}', body);
+      } else {
+        await api.post('/vehicles/${widget.vehicleId}/mods', body);
+      }
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) {
@@ -62,7 +78,7 @@ class _AddModScreenState extends State<AddModScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Add modification')),
+      appBar: AppBar(title: Text(_isEdit ? 'Edit modification' : 'Add modification')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Form(
@@ -128,7 +144,7 @@ class _AddModScreenState extends State<AddModScreen> {
               const SizedBox(height: 20),
               FilledButton(
                 onPressed: _busy ? null : _submit,
-                child: const Text('Save mod'),
+                child: Text(_isEdit ? 'Save changes' : 'Save mod'),
               ),
             ],
           ),

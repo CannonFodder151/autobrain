@@ -73,11 +73,17 @@ def export_build_sheet_pdf(mods: list, label: str) -> bytes:
 
 def _pdf_table(title: str, header: list[str], rows: list[list]) -> bytes:
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4)
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=28, rightMargin=28, topMargin=28, bottomMargin=28)
     styles = getSampleStyleSheet()
     story = [Paragraph(title, styles["Title"]), Spacer(1, 12)]
-    data = [header] + rows
-    table = Table(data, repeatRows=1)
+
+    def cell(text: str) -> Paragraph:
+        # Paragraphs wrap text and stay within the page; escape XML specials.
+        safe = str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        return Paragraph(safe, styles["BodyText"])
+
+    data = [[cell(h) for h in header]] + [[cell(c) for c in row] for row in rows]
+    table = Table(data, repeatRows=1, colWidths=None)
     table.setStyle(
         TableStyle(
             [
@@ -86,6 +92,11 @@ def _pdf_table(title: str, header: list[str], rows: list[list]) -> bytes:
                 ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
                 ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
                 ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f3f4f6")]),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
             ]
         )
     )
