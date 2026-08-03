@@ -29,6 +29,16 @@ def create_access_token(subject: str | int, expires_minutes: int | None = None) 
     )
 
 
+def create_mfa_token(subject: str | int) -> str:
+    """Short-lived token granting a login in progress (MFA step only)."""
+    expire = datetime.now(timezone.utc) + timedelta(minutes=5)
+    return jwt.encode(
+        {"sub": str(subject), "exp": expire, "type": "mfa"},
+        settings.SECRET_KEY,
+        algorithm=settings.ALGORITHM,
+    )
+
+
 def create_refresh_token(subject: str | int) -> str:
     expire = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     return jwt.encode(

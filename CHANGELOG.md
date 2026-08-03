@@ -10,6 +10,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Web app delivery: Flutter web build served at `/` behind the proxy nginx.
 - Cross-platform download helpers (browser download on web, share sheet on mobile).
 - Comprehensive README with live URLs, web + mobile build instructions, 9Router config.
+- TOTP multi-factor authentication (setup QR, enable/disable, MFA-gated login).
+- Role-based access (admin/user) with admin user management and seeded bootstrap admin.
+- No self-signup: account creation restricted to administrators.
+- Australian rego lookup: expanded AU plate heuristics (never 404s on a valid plate), optional provider hook.
+- Modern Material 3 UI overhaul (login, home dashboard, feature grid, settings, admin screens).
+
+### Removed
+- GitHub Actions CI/CD workflows.
 - Initial AutoBrain scaffold.
 - Vehicle management: multiple profiles, rego lookup, timeline events.
 - Maintenance tracking with AI service prediction and PDF/CSV export.

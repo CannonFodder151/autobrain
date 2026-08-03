@@ -17,7 +17,7 @@ AI-powered car enthusiast companion. Manage vehicles, track maintenance & fuel, 
 
 ## Features
 
-- **Vehicle management** — multiple profiles, rego lookup → VIN/make/model/year/engine, unified timeline.
+- **Vehicle management** — multiple profiles, Australian rego lookup → VIN/make/model/year/engine, unified timeline.
 - **Maintenance tracking** — service logs, AI next-service prediction, PDF/CSV export.
 - **Fuel tracker** — L/100km, cost/km, efficiency & cost graphs, AI insights.
 - **AI diagnostics** — symptoms + OBD codes → causes, severity, parts, cost estimate; add to next service.
@@ -26,6 +26,7 @@ AI-powered car enthusiast companion. Manage vehicles, track maintenance & fuel, 
 - **Parts inventory** — quantities, usage tracking, AI reorder suggestions.
 - **Resale value estimator** — value range, trend, recommendations.
 - **Analytics** — spend, total cost of ownership, cost/km, 12-month forecast.
+- **Security** — TOTP multi-factor authentication, role-based access (admin/user), admin-only user provisioning (no self signup).
 
 ## Architecture
 
@@ -131,6 +132,20 @@ flutter build ios --release   # requires macOS + Xcode
 
 `lib/` layout: `core/` (API client, auth, offline SQLite cache, models), `screens/` (all 12 feature screens), `widgets/`.
 
+## Security & access
+
+- **No self signup.** Accounts are provisioned by an administrator only (`/api/v1/admin/users`, or the in-app "User administration" screen). Anonymous registration returns `401`.
+- **Roles.** `admin` (manages users + all data) and `user`. Admin endpoints return `403` for non-admins.
+- **MFA (TOTP).** Any user can enable two-factor auth from *Settings & security* (scan the QR with Google Authenticator / Authy / 1Password). Login then requires a 6-digit code; the backend never issues a full session without it.
+- **Bootstrap admin.** On first boot the app creates the admin account from `ADMIN_EMAIL` / `ADMIN_INITIAL_PASSWORD` in `.env` (see `.env.example`). Rotate the password after first login.
+
+## Australian rego lookup
+
+Rego lookup accepts any valid Australian plate (1–8 alphanumeric characters) and auto-fills VIN, make, model, year and engine. Two sources:
+
+1. **Provider** — set `REGO_LOOKUP_URL` + `REGO_LOOKUP_API_KEY` to a real AU rego-check API for live data.
+2. **Offline heuristic** — when no provider is configured the app returns a best-effort result (with `source: "heuristic"`) so the feature never 404s on a valid plate.
+
 ## Deployment (production on a Linux host)
 
 ```bash
@@ -138,7 +153,7 @@ sudo ./scripts/setup-server.sh <user>   # installs docker + compose
 ./scripts/deploy.sh <user>@<host>        # syncs repo, builds, starts prod stack
 ```
 
-`docker-compose.prod.yml` runs: postgres, redis, minio, backend, worker, beat, ai, nginx (web + reverse proxy). First boot applies migrations automatically (`python -m app.db.bootstrap`; Alembic, falling back to `create_all`).
+`docker-compose.prod.yml` runs: postgres, redis, minio, backend, worker, beat, ai, nginx (web + reverse proxy). First boot applies migrations automatically (`python -m app.db.bootstrap`; Alembic, falling back to `create_all`) and seeds the admin account from `ADMIN_EMAIL`/`ADMIN_INITIAL_PASSWORD`.
 
 Kubernetes manifests: `infra/k8s/`. systemd units: `infra/systemd/`.
 
@@ -152,7 +167,7 @@ cd frontend && flutter test            # Dart model tests
 
 ## Documentation
 
-Full docs are maintained in the Outline wiki (AutoBrain collection) and mirrored in [`docs/`](docs/README.md): system overview, module breakdown, API spec, database schema, AI model descriptions, 9Router integration, deployment guide, developer onboarding, versioning, CI/CD, security, backup strategy, monitoring, infrastructure diagrams, container architecture.
+Full docs are maintained in the Outline wiki (AutoBrain collection) and mirrored in [`docs/`](docs/README.md): system overview, module breakdown, API spec, database schema, AI model descriptions, 9Router integration, deployment guide, developer onboarding, versioning, security, backup strategy, monitoring, infrastructure diagrams, container architecture.
 
 ## Repository layout
 
@@ -165,7 +180,6 @@ Full docs are maintained in the Outline wiki (AutoBrain collection) and mirrored
 /scripts    deploy, server setup, backup
 /docs       Markdown mirrors of the wiki
 /tests      backend + ai tests
-.github/    CI and CD workflows
 ```
 
 ## License

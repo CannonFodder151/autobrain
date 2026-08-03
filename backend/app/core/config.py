@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     MARKET_DATA_URL: str = ""
     MARKET_DATA_API_KEY: str = ""
 
+    # Bootstrap admin account (created on first boot if missing)
+    ADMIN_EMAIL: str = ""
+    ADMIN_DISPLAY_NAME: str = "AutoBrain Admin"
+    ADMIN_INITIAL_PASSWORD: str = ""
+
     @property
     def sqlalchemy_database_uri(self) -> str:
         if self.DATABASE_URL:

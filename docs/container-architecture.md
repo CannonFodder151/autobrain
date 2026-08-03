@@ -25,7 +25,5 @@ reads configuration exclusively from environment variables.
 
 ## Upgrade path
 
-- Push to main → CI validates → CD rebuilds prod images (`--build`) and
-  re-ups. `docker compose up -d` is zero-downtime for backend/ai since
-  nginx routes to running containers.
+- Deploys are run manually from the repo: `docker compose -f docker-compose.prod.yml build && up -d`, or via `scripts/deploy.sh`. `docker compose up -d` is zero-downtime for backend/ai since nginx routes to running containers.
 - DB migrations run inside the backend container on boot (`app.db.bootstrap`).

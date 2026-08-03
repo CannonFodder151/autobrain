@@ -6,10 +6,22 @@ Interactive spec: `http://<host>/docs` (OpenAPI).
 ## Auth
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/auth/register` | Register, returns token pair |
-| POST | `/auth/login` | Login |
+| POST | `/auth/login` | Login; returns `token_pair` or `{mfa_required, mfa_token}` when MFA enabled |
+| POST | `/auth/mfa/verify` | Complete login with TOTP code (`mfa_token` + `code`) |
 | POST | `/auth/refresh` | Refresh tokens |
-| GET | `/auth/me` | Current user |
+| GET | `/auth/me` | Current user (includes `role`, `mfa_enabled`) |
+| POST | `/auth/register` | **Admin-only** — create a user account (no self signup) |
+| GET | `/auth/mfa/setup` | Generate TOTP secret + QR (persists pending secret) |
+| POST | `/auth/mfa/enable` | Verify code, enable MFA |
+| POST | `/auth/mfa/disable` | Verify code, disable MFA |
+
+## Admin users (admin role only)
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/admin/users?q=` | List/search users |
+| POST | `/admin/users` | Create user |
+| PATCH | `/admin/users/{id}` | Update name/role/active/password |
+| DELETE | `/admin/users/{id}` | Delete user |
 
 ## Vehicles
 | Method | Path | Description |

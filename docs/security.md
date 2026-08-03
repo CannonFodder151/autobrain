@@ -2,10 +2,23 @@
 
 ## Authentication & sessions
 
-- Passwords hashed with bcrypt (`passlib`).
-- JWT access tokens (15-min default; configurable) + refresh tokens (30 days).
+- Passwords hashed with bcrypt (`passlib`), pinned `bcrypt==4.0.1` for compatibility.
+- JWT access tokens (7-day default; configurable) + refresh tokens (30 days).
 - Refresh tokens are validated for type; invalid tokens are rejected.
 - All `/api/v1/*` routes except auth require a bearer token.
+
+## Multi-factor authentication (MFA)
+
+- TOTP (RFC 6238) via `pyotp`; setup returns a secret + QR (data URL).
+- Login with MFA enabled returns `{mfa_required, mfa_token}`; the full session is only issued after `/auth/mfa/verify` with a valid 6-digit code.
+- MFA tokens are short-lived (5 min) and type-flagged; they cannot be exchanged for access tokens alone.
+
+## Roles & provisioning
+
+- Two roles: `admin` and `user`.
+- **No self signup** — `/auth/register` and `/admin/users` require the admin role (403 otherwise; anonymous → 401).
+- The bootstrap admin is created from `ADMIN_EMAIL` / `ADMIN_INITIAL_PASSWORD` on first boot; rotate after first login.
+- Deleting the last admin or your own account is blocked.
 
 ## Environment & secrets
 

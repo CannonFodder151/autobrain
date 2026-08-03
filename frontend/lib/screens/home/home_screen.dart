@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/auth_state.dart';
 import '../../core/models.dart';
 import '../../widgets/vehicle_selector.dart';
+import '../admin/admin_screen.dart';
 import '../analytics/analytics_screen.dart';
 import '../diagnostics/diagnostics_screen.dart';
 import '../fuel/fuel_screen.dart';
@@ -11,6 +12,7 @@ import '../mods/mods_screen.dart';
 import '../parts/parts_screen.dart';
 import '../receipts/receipts_screen.dart';
 import '../services/service_list_screen.dart';
+import '../settings/settings_screen.dart';
 import '../valuation/valuation_screen.dart';
 import '../vehicles/vehicle_list_screen.dart';
 import '../vehicles/vehicle_timeline_screen.dart';
@@ -56,13 +58,33 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.read<AuthState>();
     return Scaffold(
       appBar: AppBar(
         title: const Text('AutoBrain'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () => context.read<AuthState>().logout(),
+          PopupMenuButton<String>(
+            onSelected: (v) {
+              switch (v) {
+                case 'settings':
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                  );
+                case 'admin':
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const AdminScreen()),
+                  );
+                case 'logout':
+                  auth.logout();
+              }
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'settings', child: Text('Settings & security')),
+              if (auth.isAdmin)
+                const PopupMenuItem(value: 'admin', child: Text('User administration')),
+              const PopupMenuDivider(),
+              const PopupMenuItem(value: 'logout', child: Text('Sign out')),
+            ],
           ),
         ],
       ),
@@ -71,8 +93,10 @@ class _HomeScreenState extends State<HomeScreen> {
         child: _loading
             ? const Center(child: CircularProgressIndicator())
             : ListView(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                 children: [
+                  if (_selected != null) _HeroCard(vehicle: _selected!),
+                  const SizedBox(height: 12),
                   VehicleSelector(
                     vehicles: _vehicles,
                     selected: _selected,
@@ -88,16 +112,18 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   if (_selected == null)
                     const Padding(
-                      padding: EdgeInsets.only(top: 32),
-                      child: Text(
-                        'Add a vehicle to get started.',
-                        textAlign: TextAlign.center,
+                      padding: EdgeInsets.only(top: 40),
+                      child: Center(
+                        child: Text('Add a vehicle to get started.',
+                            style: TextStyle(color: Colors.grey)),
                       ),
                     ),
                   if (_selected != null) ...[
-                    const SizedBox(height: 8),
-                    _QuickStats(vehicle: _selected!),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 20),
+                    Text('Features',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 10),
                     _FeatureGrid(vehicle: _selected!),
                   ],
                 ],
@@ -107,39 +133,92 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class _QuickStats extends StatelessWidget {
-  const _QuickStats({required this.vehicle});
+class _HeroCard extends StatelessWidget {
+  const _HeroCard({required this.vehicle});
   final Vehicle vehicle;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _Stat(label: 'Odometer', value: '${vehicle.odometerKm ?? 0} km'),
-            _Stat(label: 'Rego', value: vehicle.rego ?? '—'),
-            _Stat(label: 'Condition', value: vehicle.condition),
-          ],
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [scheme.primary, scheme.primary.withValues(alpha: 0.7), scheme.secondary],
         ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(vehicle.nickname,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800)),
+                const SizedBox(height: 2),
+                Text(
+                  '${vehicle.make ?? ''} ${vehicle.model ?? ''}'
+                  '${vehicle.year != null ? ' · ${vehicle.year}' : ''}'.trim(),
+                  style: const TextStyle(color: Colors.white70),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    _HeroStat(
+                        icon: Icons.speed,
+                        label: 'Odometer',
+                        value: '${vehicle.odometerKm ?? 0} km'),
+                    const SizedBox(width: 20),
+                    _HeroStat(
+                        icon: Icons.confirmation_number_outlined,
+                        label: 'Rego',
+                        value: vehicle.rego ?? '—'),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.18),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.directions_car, size: 40, color: Colors.white),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _Stat extends StatelessWidget {
-  const _Stat({required this.label, required this.value});
+class _HeroStat extends StatelessWidget {
+  const _HeroStat({required this.icon, required this.label, required this.value});
+  final IconData icon;
   final String label;
   final String value;
 
   @override
-  Widget build(BuildContext context) => Column(
+  Widget build(BuildContext context) => Row(
         children: [
-          Text(value,
-              style: Theme.of(context).textTheme.titleMedium),
-          Text(label, style: Theme.of(context).textTheme.bodySmall),
+          Icon(icon, size: 18, color: Colors.white),
+          const SizedBox(width: 6),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(value,
+                  style: const TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.w700)),
+              Text(label, style: const TextStyle(color: Colors.white60, fontSize: 11)),
+            ],
+          ),
         ],
       );
 }
@@ -151,49 +230,86 @@ class _FeatureGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = [
-      _Feature('Timeline', Icons.timeline, VehicleTimelineScreen(vehicleId: vehicle.id)),
-      _Feature('Services', Icons.build, ServiceListScreen(vehicleId: vehicle.id)),
-      _Feature('Fuel', Icons.local_gas_station, FuelScreen(vehicleId: vehicle.id)),
-      _Feature('Diagnostics', Icons.medical_services, DiagnosticsScreen(vehicleId: vehicle.id)),
-      _Feature('Mods', Icons.tune, ModsScreen(vehicleId: vehicle.id)),
-      _Feature('Receipts', Icons.receipt_long, ReceiptsScreen(vehicleId: vehicle.id)),
-      _Feature('Parts', Icons.inventory_2, PartsScreen(vehicleId: vehicle.id)),
-      _Feature('Valuation', Icons.sell, ValuationScreen(vehicleId: vehicle.id)),
-      _Feature('Analytics', Icons.insights, AnalyticsScreen(vehicleId: vehicle.id)),
+      _Feature('Timeline', Icons.timeline, const Color(0xFF0B6B6A),
+          VehicleTimelineScreen(vehicleId: vehicle.id)),
+      _Feature('Services', Icons.build, const Color(0xFF2563EB),
+          ServiceListScreen(vehicleId: vehicle.id)),
+      _Feature('Fuel', Icons.local_gas_station, const Color(0xFF16A34A),
+          FuelScreen(vehicleId: vehicle.id)),
+      _Feature('Diagnostics', Icons.medical_services, const Color(0xFFEA580C),
+          DiagnosticsScreen(vehicleId: vehicle.id)),
+      _Feature('Mods', Icons.tune, const Color(0xFF7C3AED),
+          ModsScreen(vehicleId: vehicle.id)),
+      _Feature('Receipts', Icons.receipt_long, const Color(0xFFDB2777),
+          ReceiptsScreen(vehicleId: vehicle.id)),
+      _Feature('Parts', Icons.inventory_2, const Color(0xFF0891B2),
+          PartsScreen(vehicleId: vehicle.id)),
+      _Feature('Valuation', Icons.sell, const Color(0xFF059669),
+          ValuationScreen(vehicleId: vehicle.id)),
+      _Feature('Analytics', Icons.insights, const Color(0xFFCA8A04),
+          AnalyticsScreen(vehicleId: vehicle.id)),
     ];
     return GridView.count(
-      crossAxisCount: 2,
+      crossAxisCount: 3,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      childAspectRatio: 1.6,
       mainAxisSpacing: 12,
       crossAxisSpacing: 12,
+      childAspectRatio: 0.92,
       children: [
         for (final f in items)
-          Card(
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => f.screen),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(f.icon, size: 28),
-                  const SizedBox(height: 8),
-                  Text(f.label),
-                ],
-              ),
-            ),
-          ),
+          _FeatureTile(feature: f),
       ],
     );
   }
 }
 
+class _FeatureTile extends StatelessWidget {
+  const _FeatureTile({required this.feature});
+  final _Feature feature;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Theme.of(context).colorScheme.surface,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => feature.screen),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: feature.color.withValues(alpha: 0.14),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(feature.icon, color: feature.color, size: 24),
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Text(feature.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w600)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _Feature {
-  const _Feature(this.label, this.icon, this.screen);
+  const _Feature(this.label, this.icon, this.color, this.screen);
   final String label;
   final IconData icon;
+  final Color color;
   final Widget screen;
 }

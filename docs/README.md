@@ -14,8 +14,7 @@ below are mirrors kept in-repo for offline reading and PR review.
 | [deployment-guide.md](deployment-guide.md) | Docker, systemd, k8s deployment |
 | [developer-onboarding.md](developer-onboarding.md) | Getting started for devs |
 | [versioning.md](versioning.md) | Versioning strategy |
-| [cicd.md](cicd.md) | CI/CD pipeline |
-| [security.md](security.md) | Security considerations |
+| [security.md](security.md) | Security considerations (MFA, roles, admin provisioning) |
 | [backup-strategy.md](backup-strategy.md) | Data backup & restore |
 | [monitoring.md](monitoring.md) | Logging and monitoring |
 | [infrastructure-diagrams.md](infrastructure-diagrams.md) | Network / container diagrams |
