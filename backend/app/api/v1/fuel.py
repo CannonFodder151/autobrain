@@ -36,7 +36,7 @@ async def add_fuel(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> FuelLog:
-    await _get_owned_vehicle(db, vehicle_id, user)
+    vehicle = await _get_owned_vehicle(db, vehicle_id, user)
     total = payload.total_cost if payload.total_cost else round(payload.litres * payload.price_per_litre, 2)
     log = FuelLog(
         vehicle_id=vehicle_id,
@@ -56,6 +56,8 @@ async def add_fuel(
             log.cost_per_km = round(total / distance, 4)
     db.add(log)
     await db.flush()
+    if vehicle.odometer_km is None or payload.odometer_km > vehicle.odometer_km:
+        vehicle.odometer_km = payload.odometer_km
     await add_event(
         db,
         vehicle_id,

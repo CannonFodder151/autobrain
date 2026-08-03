@@ -13,6 +13,7 @@ from app.api.deps import get_current_user
 from app.api.v1.vehicles import add_event, _get_owned_vehicle
 from app.core.logging import get_logger
 from app.db.session import get_db
+from app.models.part import Part, PartMovement
 from app.models.service import ServiceItem, ServiceRecord
 from app.models.user import User
 from app.models.vehicle import VehicleEvent
@@ -60,6 +61,47 @@ async def _ensure_completed_event(db: AsyncSession, record: ServiceRecord) -> No
         )
 
 
+async def _reconcile_part_stock(
+    db: AsyncSession, vehicle_id: str, service_id: str, items, deduct: bool
+) -> None:
+    """Keep parts inventory in sync with a completed service.
+
+    Reverses any prior stock movements recorded against this service (so the
+    operation is idempotent across edits), then — when the service is
+    completed — deducts the used quantities and logs a PartMovement per part.
+    """
+    prev = list((await db.scalars(
+        select(PartMovement).where(PartMovement.service_id == service_id)
+    )).all())
+    for mv in prev:
+        part = await db.get(Part, mv.part_id)
+        if part:
+            part.quantity -= mv.delta  # undo: delta is negative for a deduction
+    if prev:
+        await db.execute(
+            PartMovement.__table__.delete().where(PartMovement.service_id == service_id)
+        )
+
+    if not deduct:
+        return
+
+    used: dict[str, int] = {}
+    for it in items:
+        part_id = it.part_id
+        if part_id:
+            used[part_id] = used.get(part_id, 0) + int(it.quantity or 1)
+    for part_id, qty in used.items():
+        part = await db.get(Part, part_id)
+        if not part or part.vehicle_id != vehicle_id:
+            raise HTTPException(status_code=400, detail="Part not found")
+        if part.quantity < qty:
+            raise HTTPException(status_code=400, detail=f"Insufficient stock for {part.name}")
+        part.quantity -= qty
+        db.add(
+            PartMovement(part_id=part_id, delta=-qty, reason="service", service_id=service_id)
+        )
+
+
 @router.get("", response_model=list[ServiceOut])
 async def list_services(
     vehicle_id: str,
@@ -96,6 +138,7 @@ async def create_service(
     for item in payload.items:
         db.add(ServiceItem(service_id=record.id, **item.model_dump()))
     await db.flush()
+    await _reconcile_part_stock(db, vehicle_id, record.id, payload.items, record.status == "completed")
     await _ensure_completed_event(db, record)
     await db.commit()
     await db.refresh(record)
@@ -178,6 +221,10 @@ async def update_service(
             db.add(ServiceItem(service_id=record.id, **item))
 
     await db.flush()
+    fresh_items = list((await db.scalars(
+        select(ServiceItem).where(ServiceItem.service_id == record.id)
+    )).all())
+    await _reconcile_part_stock(db, vehicle_id, record.id, fresh_items, record.status == "completed")
     await _ensure_completed_event(db, record)
     await db.commit()
     await db.refresh(record)
@@ -193,16 +240,49 @@ async def delete_service(
 ) -> None:
     await _get_owned_vehicle(db, vehicle_id, user)
     record = await _service_or_404(db, vehicle_id, service_id)
+    await _reconcile_part_stock(db, vehicle_id, service_id, [], deduct=False)
     await db.delete(record)
     await db.commit()
 
 
 @router.post("/predict", response_model=ServicePredictionResponse)
 async def predict(
+    vehicle_id: str,
     payload: ServicePredictionRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> ServicePredictionResponse:
-    """AI service prediction using history + odometer + make/model schedule."""
-    result = await predict_service(payload.model_dump())
+    """AI service prediction using ALL past services + odometer + schedule.
+
+    The full completed-service history is sent to the AI so the estimate is
+    derived from how this vehicle is actually maintained, not just the last
+    service or a generic manufacturer schedule.
+    """
+    vehicle = await _get_owned_vehicle(db, vehicle_id, user)
+    history = list((await db.scalars(
+        select(ServiceRecord)
+        .where(
+            ServiceRecord.vehicle_id == vehicle_id,
+            ServiceRecord.status == "completed",
+        )
+        .order_by(ServiceRecord.service_date)
+    )).all())
+    data = payload.model_dump()
+    data["make"] = data["make"] or vehicle.make or ""
+    data["model"] = data["model"] or vehicle.model or ""
+    data["year"] = data["year"] or vehicle.year or date.today().year
+    if not data.get("odometer_km"):
+        data["odometer_km"] = vehicle.odometer_km or 0
+    data["service_history"] = [
+        {
+            "service_date": s.service_date.isoformat(),
+            "odometer_km": s.odometer_km,
+            "service_type": s.service_type,
+            "description": s.description,
+        }
+        for s in history
+    ]
+    result = await predict_service(data)
     if not result:
         raise HTTPException(status_code=503, detail="Prediction engine unavailable")
     return ServicePredictionResponse(**result)

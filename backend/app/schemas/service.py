@@ -24,6 +24,7 @@ class ServiceItemOut(BaseModel):
     unit_cost: float
     kind: str
     part_no: str | None
+    part_id: str | None
     labour_hours: float | None
     labour_rate: float | None
 

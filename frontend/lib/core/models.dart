@@ -75,6 +75,7 @@ class ServiceItem {
   final double unitCost;
   final String kind;
   final String? partNo;
+  final String? partId;
 
   const ServiceItem({
     required this.id,
@@ -83,6 +84,7 @@ class ServiceItem {
     this.unitCost = 0,
     this.kind = 'item',
     this.partNo,
+    this.partId,
   });
 
   double get total => quantity * unitCost;
@@ -94,6 +96,7 @@ class ServiceItem {
         unitCost: (j['unit_cost'] as num?)?.toDouble() ?? 0,
         kind: j['kind'] as String? ?? 'item',
         partNo: j['part_no'] as String?,
+        partId: j['part_id'] as String?,
       );
 }
 

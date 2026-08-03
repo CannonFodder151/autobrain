@@ -40,9 +40,11 @@ _SYSTEM_PROMPTS: dict[str, str] = {
         "(e.g. NGK BKR6EIX, RYCO Z89A); otherwise null."
     ),
     "service-prediction": (
-        "You are an automotive maintenance scheduler. Using the manufacturer "
-        "service interval for the given make/model and service type, plus the "
-        "current odometer and last service, compute the next service due. "
+        "You are an automotive maintenance scheduler. Use the manufacturer "
+        "service interval for the given make/model and service type, cross-"
+        "checked against the vehicle's actual service_history (a list of past "
+        "completed services with service_date/odometer_km/service_type) to "
+        "derive realistic intervals, plus the current odometer. "
         "Today's date is " + date.today().isoformat() + ". "
         'Return STRICT JSON: {"service_type": string, "interval_km": int, '
         '"interval_months": int, "due_in_km": int, "due_in_days": int, '

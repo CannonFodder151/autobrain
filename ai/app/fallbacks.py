@@ -183,6 +183,8 @@ _MAKE_MULT: dict[str, float] = {
 def predict_service_fallback(payload: dict) -> dict:
     make = (payload.get("make") or "").lower()
     service_type = payload.get("service_type", "oil_change")
+    history = [h for h in (payload.get("service_history") or []) if isinstance(h, dict)]
+
     interval_km, interval_months = _SCHEDULE.get(service_type, _SCHEDULE["scheduled"])
     interval_km = int(interval_km * _MAKE_MULT.get(make, 1.0))
 
@@ -191,8 +193,27 @@ def predict_service_fallback(payload: dict) -> dict:
     last_days = payload.get("last_service_days_ago")
 
     basis = []
-    next_km = last_km + interval_km if last_km else ((odo // interval_km) + 1) * interval_km
-    due_in_km = max(next_km - odo, 0)
+    if history:
+        # Prefer services of the same type, else the most recent service overall.
+        same = [h for h in history if (h.get("service_type") or "") == service_type]
+        refs = same or history
+        last = refs[-1]
+        last_km = last_km or last.get("odometer_km")
+        # Measured interval from consecutive same-type services.
+        points = sorted({int(h.get("odometer_km") or 0) for h in same if h.get("odometer_km")})
+        if len(points) >= 2:
+            gaps = [b - a for a, b in zip(points, points[1:])]
+            measured = round(sum(gaps) / len(gaps))
+            if measured > 0:
+                interval_km = int(measured * _MAKE_MULT.get(make, 1.0))
+        if last.get("service_date"):
+            try:
+                last_days = last_days or max(
+                    (date.today() - date.fromisoformat(last["service_date"])).days, 0
+                )
+            except ValueError:
+                pass
+        basis.append("history-based")
 
     if last_days is not None:
         due_date = date.today() + timedelta(days=max(interval_months * 30 - last_days, 0))
@@ -203,10 +224,14 @@ def predict_service_fallback(payload: dict) -> dict:
         due_in_days = interval_months * 30
         basis.append("calendar-based")
 
-    confidence = 0.8 if last_km or last_days is not None else 0.6
+    next_km = last_km + interval_km if last_km else ((odo // interval_km) + 1) * interval_km
+    due_in_km = max(next_km - odo, 0)
+
+    confidence = 0.85 if history else (0.8 if last_km or last_days is not None else 0.6)
     reason = (
-        f"Manufacturer interval for {service_type.replace('_', ' ')} on "
-        f"{make or 'this vehicle'} is ~{interval_km:,} km / {interval_months} months. "
+        f"Based on {len(history)} past service record(s) ({' + '.join(basis)}), "
+        f"{service_type.replace('_', ' ')} on {make or 'this vehicle'} is due every "
+        f"~{interval_km:,} km / {interval_months} months. "
         f"Next due at {next_km:,} km (in {due_in_km:,} km) or {due_date.isoformat()}."
     )
     return {

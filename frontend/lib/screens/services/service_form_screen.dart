@@ -26,11 +26,12 @@ const _commonItems = [
 ];
 
 class _DraftItem {
-  _DraftItem(this.name, this.partNo, this.qty, this.unitCost);
+  _DraftItem(this.name, this.partNo, this.qty, this.unitCost, {this.partId});
   String name;
   String? partNo;
   int qty;
   double unitCost;
+  String? partId;
 }
 
 /// Create or edit a service record. Handles both past (completed) and
@@ -56,6 +57,7 @@ class _ServiceFormScreenState extends State<ServiceFormScreen> {
   bool _statusCompleted = true;
   final Map<String, _DraftItem> _selectedCommon = {};
   final List<_DraftItem> _customItems = [];
+  List<Part> _inventory = const [];
   bool _busy = false;
 
   bool get _isEdit => widget.service != null;
@@ -74,10 +76,23 @@ class _ServiceFormScreenState extends State<ServiceFormScreen> {
     if (s != null) {
       for (final it in s.items) {
         if (it.kind == 'part' || it.kind == 'item') {
-          _selectedCommon[it.name] = _DraftItem(it.name, it.partNo, it.quantity, it.unitCost);
+          _selectedCommon[it.name] =
+              _DraftItem(it.name, it.partNo, it.quantity, it.unitCost,
+                  partId: it.partId);
         }
       }
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadInventory());
+  }
+
+  Future<void> _loadInventory() async {
+    try {
+      final api = context.read<AuthState>().api;
+      final data =
+          await api.get('/vehicles/${widget.vehicleId}/parts') as List;
+      _inventory =
+          data.map((e) => Part.fromJson(e as Map<String, dynamic>)).toList();
+    } catch (_) {}
   }
 
   @override
@@ -105,10 +120,11 @@ class _ServiceFormScreenState extends State<ServiceFormScreen> {
       for (final it in _customItems)
         {
           'name': it.name,
+          'part_id': it.partId,
           'part_no': it.partNo,
           'quantity': it.qty,
           'unit_cost': it.unitCost,
-          'kind': 'item',
+          'kind': it.partId != null ? 'part' : 'item',
         },
     ];
     return items;
@@ -291,6 +307,36 @@ class _ServiceFormScreenState extends State<ServiceFormScreen> {
                   onRemove: () => setState(() => _customItems.removeAt(i)),
                   onChanged: () => setState(() {}),
                 ),
+              if (_inventory.any((p) => p.quantity > 0 &&
+                  !_customItems.any((it) => it.partId == p.id))) ...[
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: null,
+                  decoration: const InputDecoration(
+                    labelText: 'Add from parts inventory',
+                    helperText: 'Stock is deducted when the service is completed',
+                  ),
+                  items: [
+                    for (final p in _inventory)
+                      if (p.quantity > 0 &&
+                          !_customItems.any((it) => it.partId == p.id))
+                        DropdownMenuItem(
+                          value: p.id,
+                          child:
+                              Text('${p.name} — ${p.quantity} in stock'),
+                        ),
+                  ],
+                  onChanged: (id) {
+                    if (id == null) return;
+                    final part =
+                        _inventory.firstWhere((p) => p.id == id);
+                    setState(() {
+                      _customItems.add(_DraftItem(part.name, part.sku, 1,
+                          part.unitCost, partId: part.id));
+                    });
+                  },
+                ),
+              ],
               const SizedBox(height: 20),
               Text('Work steps',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),

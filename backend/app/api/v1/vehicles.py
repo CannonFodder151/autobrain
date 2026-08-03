@@ -38,10 +38,12 @@ async def _get_owned_vehicle(db: AsyncSession, vehicle_id: str, user: User) -> V
 async def list_vehicles(
     db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
 ) -> list[Vehicle]:
-    rows = await db.scalars(
+    rows = list((await db.scalars(
         select(Vehicle).where(Vehicle.user_id == user.id).order_by(Vehicle.created_at.desc())
-    )
-    return list(rows)
+    )).all())
+    for v in rows:
+        await _sync_odometer_from_fuel(db, v)
+    return rows
 
 
 @router.post("", response_model=VehicleOut, status_code=201)
@@ -65,7 +67,8 @@ async def get_vehicle(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Vehicle:
-    return await _get_owned_vehicle(db, vehicle_id, user)
+    vehicle = await _get_owned_vehicle(db, vehicle_id, user)
+    return await _sync_odometer_from_fuel(db, vehicle)
 
 
 @router.patch("/{vehicle_id}", response_model=VehicleOut)
@@ -126,6 +129,22 @@ async def _clear_primary(db: AsyncSession, user: User) -> None:
         .where(Vehicle.user_id == user.id)
         .values(is_primary=False)
     )
+
+
+async def _sync_odometer_from_fuel(db: AsyncSession, vehicle: Vehicle) -> Vehicle:
+    """Current odometer = most recent reading logged against fuel fills.
+
+    Fuel is logged far more often than services, so its latest odometer is
+    treated as the source of truth for the vehicle's current odometer.
+    """
+    latest = await db.scalar(
+        select(FuelLog)
+        .where(FuelLog.vehicle_id == vehicle.id)
+        .order_by(FuelLog.odometer_km.desc())
+    )
+    if latest and latest.odometer_km > (vehicle.odometer_km or 0):
+        vehicle.odometer_km = latest.odometer_km
+    return vehicle
 
 
 # --- event materialisation (called by other routers after writes) ---
