@@ -7,7 +7,7 @@ import json
 import logging
 
 from celery import shared_task
-from PyPDF2 import PdfReader
+from pypdf import PdfReader
 
 from app.core.storage import get_object
 from app.db.session import SessionLocal
