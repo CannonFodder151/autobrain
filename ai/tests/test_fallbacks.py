@@ -62,5 +62,8 @@ def test_receipt_extraction() -> None:
 
 @pytest.mark.asyncio
 async def test_module_router_disabled_uses_fallback() -> None:
+    # Force the router-disabled path regardless of the container env,
+    # so the test never calls a live router and never burns API quota.
+    os.environ["AI_ROUTER_URL"] = "http://your-9router-instance:port"
     out = await modules.diagnostics.run({"symptoms": "car won't start"})
     assert out["model"] == "rule-based-fallback"

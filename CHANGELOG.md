@@ -20,6 +20,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - App logo asset (`frontend/assets/logo.png`) used in login + app bar.
 - State-aware Australian rego lookup (NSW/VIC/QLD/WA/SA/TAS/NT/ACT) with personalised-plate word decoding (e.g. TCRWN/VIC → Toyota Crown).
 - plateapi.com.au provider integration (env-configured `REGO_LOOKUP_URL`/`REGO_LOOKUP_API_KEY`, never hardcoded) with tolerant response mapping incl. year-range + description.
+- Services overhaul: scheduled/completed status, upcoming vs history sections, expandable editable service cards, mark-completed checkbox, common-item checklist + unlimited free-form extra items, work steps, AI diagnostic → scheduled service with steps + parts (incl. part numbers), reports include items and exclude future services, analytics/TCO exclude scheduled until completed.
 
 ### Removed
 - GitHub Actions CI/CD workflows.
