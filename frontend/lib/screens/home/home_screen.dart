@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/auth_state.dart';
 import '../../core/models.dart';
@@ -56,6 +57,13 @@ class _HomeScreenState extends State<HomeScreen> {
     return v.isEmpty ? null : v.first;
   }
 
+  void _showDownload() {
+    showDialog<void>(
+      context: context,
+      builder: (_) => const DownloadAppDialog(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthState>();
@@ -84,6 +92,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const SettingsScreen()),
                   );
+                case 'download':
+                  _showDownload();
                 case 'admin':
                   Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const AdminScreen()),
@@ -94,6 +104,7 @@ class _HomeScreenState extends State<HomeScreen> {
             },
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'settings', child: Text('Settings & security')),
+              const PopupMenuItem(value: 'download', child: Text('Get the mobile app')),
               if (auth.isAdmin)
                 const PopupMenuItem(value: 'admin', child: Text('User administration')),
               const PopupMenuDivider(),
@@ -326,4 +337,58 @@ class _Feature {
   final IconData icon;
   final Color color;
   final Widget screen;
+}
+
+/// Offers the downloadable iOS/Android apps to a logged-in user.
+class DownloadAppDialog extends StatelessWidget {
+  const DownloadAppDialog({super.key});
+
+  static const _androidUrl = 'https://autobrainservice.app/downloads/autobrain.apk';
+  static const _iosUrl = 'https://apps.apple.com/app/autobrain';
+
+  Future<void> _open(BuildContext context, String url) async {
+    final ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open the link.')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return AlertDialog(
+      title: const Text('Get the AutoBrain app'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Install AutoBrain on your phone for the full experience — offline cache, '
+            'push notifications and faster access.',
+            style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 14),
+          ),
+          const SizedBox(height: 18),
+          FilledButton.tonalIcon(
+            onPressed: () => _open(context, _androidUrl),
+            icon: const Icon(Icons.android),
+            label: const Text('Download for Android (.apk)'),
+          ),
+          const SizedBox(height: 10),
+          FilledButton.tonalIcon(
+            onPressed: () => _open(context, _iosUrl),
+            icon: const Icon(Icons.apple),
+            label: const Text('Get on the App Store'),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
+    );
+  }
 }

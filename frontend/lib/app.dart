@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'core/auth_state.dart';
+import 'core/config.dart';
 import 'core/theme.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/reset_password.dart';
+import 'screens/auth/server_setup_screen.dart';
 import 'screens/home/home_screen.dart';
 
 class AutoBrainApp extends StatelessWidget {
@@ -29,6 +31,8 @@ class AutoBrainApp extends StatelessWidget {
     Widget home;
     if (resetToken != null) {
       home = ResetPasswordScreen(token: resetToken);
+    } else if (!AppConfig.serverConfigured) {
+      home = const ServerSetupScreen();
     } else {
       home = auth.isLoggedIn ? const HomeScreen() : const LoginScreen();
     }

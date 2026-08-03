@@ -7,8 +7,9 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api_client.dart';
+import 'config.dart';
 
-enum LoginOutcome { ok, mfaRequired, failed }
+enum LoginOutcome { ok, mfaRequired, mfaSetupRequired, failed }
 
 class AuthState extends ChangeNotifier {
   AuthState() {
@@ -41,6 +42,7 @@ class AuthState extends ChangeNotifier {
 
   Future<void> _restore() async {
     final prefs = await SharedPreferences.getInstance();
+    await AppConfig.load();
     _token = prefs.getString('auth_token');
     _role = prefs.getString('auth_role');
     _darkMode = prefs.getBool('dark_mode') ?? true;
@@ -49,6 +51,19 @@ class AuthState extends ChangeNotifier {
       _refreshProfile();
       notifyListeners();
     }
+  }
+
+  /// Called after the user picks a server — resets any session and rebuilds
+  /// the client against the new base URL.
+  Future<void> serverChanged() async {
+    _token = null;
+    _role = null;
+    _userId = null;
+    _client = null;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('auth_token');
+    await prefs.remove('auth_role');
+    notifyListeners();
   }
 
   Future<void> _refreshProfile() async {
@@ -68,6 +83,10 @@ class AuthState extends ChangeNotifier {
         '/auth/login',
         {'email': email, 'password': password},
       ) as Map<String, dynamic>;
+      if (data['mfa_setup_required'] == true && data['mfa_token'] != null) {
+        _mfaToken = data['mfa_token'] as String;
+        return LoginOutcome.mfaSetupRequired;
+      }
       if (data['mfa_required'] == true && data['mfa_token'] != null) {
         _mfaToken = data['mfa_token'] as String;
         return LoginOutcome.mfaRequired;
@@ -84,6 +103,32 @@ class AuthState extends ChangeNotifier {
     try {
       final data = await _anonymous().post(
         '/auth/mfa/verify',
+        {'mfa_token': mfaToken, 'code': code},
+      ) as Map<String, dynamic>;
+      await _persist(data);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Starts MFA enrolment during a login in progress (enforced-MFA flow).
+  Future<Map<String, dynamic>?> startMfaSetup(String mfaToken) async {
+    try {
+      return await _anonymous().post(
+        '/auth/mfa/setup-session',
+        {'mfa_token': mfaToken},
+      ) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Completes MFA enrolment, returning true once the session is established.
+  Future<bool> completeMfaSetup(String mfaToken, String code) async {
+    try {
+      final data = await _anonymous().post(
+        '/auth/mfa/complete-setup',
         {'mfa_token': mfaToken, 'code': code},
       ) as Map<String, dynamic>;
       await _persist(data);

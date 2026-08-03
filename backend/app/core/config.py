@@ -68,6 +68,11 @@ class Settings(BaseSettings):
     DEMO_PASSWORD: str = "demo"
     DEMO_DISPLAY_NAME: str = "Demo Garage"
 
+    # Security hardening
+    MFA_ENFORCED: bool = False  # force MFA setup for all accounts except demo
+    LOGIN_MAX_ATTEMPTS: int = 5  # failed logins allowed per IP before lockout
+    LOGIN_WINDOW_SECONDS: int = 3 * 60 * 60  # lockout window (3 hours)
+
     # SMTP (email notifications + self-service password reset)
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587

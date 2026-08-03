@@ -38,60 +38,71 @@ class _AdminScreenState extends State<AdminScreen> {
     final password = TextEditingController();
     final maxVehicles = TextEditingController(text: '1');
     String role = 'user';
+    var sendInvite = false;
     final api = context.read<AuthState>().api;
     final created = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Create user'),
-        content: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: email,
-                decoration: const InputDecoration(labelText: 'Email'),
-                validator: (v) => v == null || !v.contains('@') ? 'Valid email' : null,
-              ),
-              TextFormField(
-                controller: name,
-                decoration: const InputDecoration(labelText: 'Display name'),
-                validator: (v) => v == null || v.isEmpty ? 'Required' : null,
-              ),
-              TextFormField(
-                controller: password,
-                decoration: const InputDecoration(labelText: 'Password'),
-                obscureText: true,
-                validator: (v) => v == null || v.length < 8 ? 'Min 8 chars' : null,
-              ),
-              DropdownButtonFormField<String>(
-                value: role,
-                items: const [
-                  DropdownMenuItem(value: 'user', child: Text('User')),
-                  DropdownMenuItem(value: 'admin', child: Text('Admin')),
-                ],
-                onChanged: (v) => role = v ?? 'user',
-              ),
-              TextFormField(
-                controller: maxVehicles,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Max vehicles',
-                  helperText: 'Vehicle limit for this user (default 1)',
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Create user'),
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: email,
+                  decoration: const InputDecoration(labelText: 'Email'),
+                  validator: (v) => v == null || !v.contains('@') ? 'Valid email' : null,
                 ),
-              ),
-            ],
+                TextFormField(
+                  controller: name,
+                  decoration: const InputDecoration(labelText: 'Display name'),
+                  validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                ),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Email user an invite'),
+                  subtitle: const Text('No password needed — user sets it from the email link'),
+                  value: sendInvite,
+                  onChanged: (v) => setDialogState(() => sendInvite = v ?? false),
+                ),
+                if (!sendInvite)
+                  TextFormField(
+                    controller: password,
+                    decoration: const InputDecoration(labelText: 'Password'),
+                    obscureText: true,
+                    validator: (v) => v == null || v.length < 8 ? 'Min 8 chars' : null,
+                  ),
+                DropdownButtonFormField<String>(
+                  value: role,
+                  items: const [
+                    DropdownMenuItem(value: 'user', child: Text('User')),
+                    DropdownMenuItem(value: 'admin', child: Text('Admin')),
+                  ],
+                  onChanged: (v) => role = v ?? 'user',
+                ),
+                TextFormField(
+                  controller: maxVehicles,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Max vehicles',
+                    helperText: 'Vehicle limit for this user (default 1)',
+                  ),
+                ),
+              ],
+            ),
           ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () {
+                if (formKey.currentState!.validate()) Navigator.pop(ctx, true);
+              },
+              child: const Text('Create'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () {
-              if (formKey.currentState!.validate()) Navigator.pop(ctx, true);
-            },
-            child: const Text('Create'),
-          ),
-        ],
       ),
     );
     if (created == true) {
@@ -99,7 +110,7 @@ class _AdminScreenState extends State<AdminScreen> {
         await api.post('/admin/users', {
           'email': email.text,
           'display_name': name.text,
-          'password': password.text,
+          if (sendInvite) ...{'send_invite': true} else 'password': password.text,
           'role': role,
           'max_vehicles': int.tryParse(maxVehicles.text) ?? 1,
         });

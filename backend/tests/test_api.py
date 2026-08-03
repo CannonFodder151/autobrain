@@ -57,6 +57,12 @@ def test_vehicle_limit_defaults() -> None:
     assert u.max_vehicles == 5
 
 
+def test_user_create_invite_allows_no_password() -> None:
+    invite = UserCreate(email="invite@example.com", display_name="I", send_invite=True)
+    assert invite.password is None
+    assert invite.send_invite is True
+
+
 def test_vehicle_schema_accepts_limit() -> None:
     assert VehicleCreate(nickname="R34").is_primary is False
 
@@ -71,3 +77,12 @@ async def test_demo_role_is_read_only() -> None:
     with pytest.raises(HTTPException) as exc:
         await require_ai(user=demo)
     assert exc.value.status_code == 403
+
+
+def test_login_schema_handles_mfa_setup_flag() -> None:
+    from app.schemas.auth import LoginResult
+
+    r = LoginResult(mfa_setup_required=True, mfa_token="t")
+    assert r.mfa_setup_required is True
+    assert r.mfa_required is False
+    assert r.mfa_token == "t"

@@ -8,9 +8,10 @@ from pydantic import BaseModel, EmailStr, Field
 class UserCreate(BaseModel):
     email: EmailStr
     display_name: str = Field(min_length=1, max_length=120)
-    password: str = Field(min_length=8, max_length=128)
+    password: str | None = Field(default=None, min_length=8, max_length=128)
     role: str = Field(default="user", pattern="^(admin|user)$")
     max_vehicles: int = Field(default=1, ge=1, le=1000)
+    send_invite: bool = False  # email a create-account link instead of setting a password
 
 
 class UserLogin(BaseModel):
@@ -46,6 +47,7 @@ class MfaRequired(BaseModel):
 class LoginResult(BaseModel):
     token_pair: TokenPair | None = None
     mfa_required: bool = False
+    mfa_setup_required: bool = False
     mfa_token: str | None = None
 
 
@@ -56,6 +58,10 @@ class RefreshRequest(BaseModel):
 class MfaVerifyRequest(BaseModel):
     mfa_token: str
     code: str = Field(min_length=6, max_length=10)
+
+
+class MfaSetupSessionRequest(BaseModel):
+    mfa_token: str
 
 
 class MfaCodeRequest(BaseModel):

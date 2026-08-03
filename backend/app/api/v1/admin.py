@@ -1,12 +1,14 @@
 """Admin user management routes (admin role only)."""
 
+import secrets
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_admin
 from app.core.config import settings
-from app.core.security import hash_password
+from app.core.security import create_invite_token, hash_password
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.auth import AdminUserUpdate, UserAdminOut, UserCreate
@@ -37,17 +39,24 @@ async def create_user(
     existing = await db.scalar(select(User).where(User.email == payload.email.lower()))
     if existing:
         raise HTTPException(status_code=409, detail="Email already registered")
+    if not payload.send_invite and not payload.password:
+        raise HTTPException(status_code=422, detail="Password required (or enable email invite)")
+    hashed = hash_password(payload.password) if payload.password else hash_password(secrets.token_urlsafe(32))
     user = User(
         email=payload.email.lower(),
         display_name=payload.display_name,
-        hashed_password=hash_password(payload.password),
+        hashed_password=hashed,
         role=payload.role,
         max_vehicles=payload.max_vehicles,
     )
     db.add(user)
     await db.commit()
     await db.refresh(user)
-    await mail.send_welcome(user.email, user.display_name, settings.APP_BASE_URL)
+    if payload.send_invite:
+        token = create_invite_token(user.id, days=7)
+        await mail.send_account_invite(user.email, user.display_name, token, settings.APP_BASE_URL, expiry_days=7)
+    else:
+        await mail.send_welcome(user.email, user.display_name, settings.APP_BASE_URL)
     return user
 
 

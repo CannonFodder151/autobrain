@@ -9,6 +9,22 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/auth_state.dart';
+import 'login_screen.dart';
+import 'reset_password_web.dart' if (dart.library.io) 'reset_password_io.dart';
+
+/// Returns to the login screen from the reset/invite flow.
+///
+/// The reset screen is the *initial* route on web (opened directly from the
+/// email link), so `Navigator.pop` has nothing to pop — we must navigate
+/// explicitly and clear the `?token=` from the URL, otherwise the app stays on
+/// the reset screen until the tab is closed.
+void goToLogin(BuildContext context) {
+  clearUrlToken();
+  Navigator.of(context).pushAndRemoveUntil(
+    MaterialPageRoute(builder: (_) => const LoginScreen()),
+    (route) => false,
+  );
+}
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -74,7 +90,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                           ),
                           const SizedBox(height: 16),
                           TextButton(
-                            onPressed: () => Navigator.pop(context),
+                            onPressed: () => goToLogin(context),
                             child: const Text('Back to sign in'),
                           ),
                         ],
@@ -187,7 +203,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                           const Text('You can now sign in with your new password.'),
                           const SizedBox(height: 16),
                           TextButton(
-                            onPressed: () => Navigator.pop(context),
+                            onPressed: () => goToLogin(context),
                             child: const Text('Back to sign in'),
                           ),
                         ],

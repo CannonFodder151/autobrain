@@ -49,6 +49,16 @@ def create_password_reset_token(subject: str | int) -> str:
     )
 
 
+def create_invite_token(subject: str | int, days: int = 7) -> str:
+    """Long-lived token authorising an invited user to set their password (7 days)."""
+    expire = datetime.now(timezone.utc) + timedelta(days=days)
+    return jwt.encode(
+        {"sub": str(subject), "exp": expire, "type": "invite"},
+        settings.SECRET_KEY,
+        algorithm=settings.ALGORITHM,
+    )
+
+
 def create_refresh_token(subject: str | int) -> str:
     expire = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     return jwt.encode(

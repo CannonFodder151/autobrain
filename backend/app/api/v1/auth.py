@@ -2,10 +2,14 @@
 
 import base64
 import io
+import secrets
+import time
+import uuid
+from collections import defaultdict, deque
 
 import pyotp
 import qrcode
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +17,7 @@ from app.api.deps import get_current_user, require_admin
 from app.core.config import settings
 from app.core.security import (
     create_access_token,
+    create_invite_token,
     create_mfa_token,
     create_password_reset_token,
     create_refresh_token,
@@ -26,6 +31,7 @@ from app.schemas.auth import (
     LoginResult,
     MfaCodeRequest,
     MfaSetupResponse,
+    MfaSetupSessionRequest,
     MfaVerifyRequest,
     PasswordResetConfirm,
     PasswordResetRequest,
@@ -42,26 +48,78 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 MFA_ISSUER = "AutoBrain"
 
+# --- brute-force protection: failed logins per IP ---
+_login_failures: dict[str, deque[float]] = defaultdict(deque)
+
+
+def _client_ip(request: Request) -> str:
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _check_rate_limit(ip: str) -> None:
+    now = time.monotonic()
+    q = _login_failures[ip]
+    while q and now - q[0] > settings.LOGIN_WINDOW_SECONDS:
+        q.popleft()
+    if len(q) >= settings.LOGIN_MAX_ATTEMPTS:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many failed login attempts. Try again in 3 hours.",
+        )
+
+
+def _record_failure(ip: str) -> None:
+    _login_failures[ip].append(time.monotonic())
+
+
+def _clear_failures(ip: str) -> None:
+    _login_failures.pop(ip, None)
+
 
 # --- login / MFA ---
 @router.post("/login", response_model=LoginResult)
-async def login(payload: UserLogin, db: AsyncSession = Depends(get_db)) -> LoginResult:
+async def login(
+    payload: UserLogin,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> LoginResult:
+    ip = _client_ip(request)
+    _check_rate_limit(ip)
     user = await db.scalar(select(User).where(User.email == payload.email.lower()))
     if not user or not verify_password(payload.password, user.hashed_password):
+        _record_failure(ip)
         raise HTTPException(status_code=401, detail="Invalid email or password")
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account is disabled")
+
+    # MFA enforcement: every non-demo account must have MFA enabled.
+    if settings.MFA_ENFORCED and user.role != "demo" and not user.mfa_enabled:
+        return LoginResult(
+            mfa_setup_required=True,
+            mfa_token=create_mfa_token(user.id),
+        )
 
     if user.mfa_enabled:
         if not payload.totp_code:
             return LoginResult(mfa_required=True, mfa_token=create_mfa_token(user.id))
         if not _verify_totp(user.mfa_secret, payload.totp_code):
+            _record_failure(ip)
             raise HTTPException(status_code=401, detail="Invalid MFA code")
+    _clear_failures(ip)
     return LoginResult(token_pair=_token_pair(user))
 
 
 @router.post("/mfa/verify", response_model=TokenPair)
-async def mfa_verify(payload: MfaVerifyRequest, db: AsyncSession = Depends(get_db)) -> TokenPair:
+async def mfa_verify(
+    payload: MfaVerifyRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> TokenPair:
+    ip = _client_ip(request)
+    _check_rate_limit(ip)
     data = decode_token(payload.mfa_token)
     if not data or data.get("type") != "mfa":
         raise HTTPException(status_code=401, detail="Invalid or expired MFA session")
@@ -69,7 +127,66 @@ async def mfa_verify(payload: MfaVerifyRequest, db: AsyncSession = Depends(get_d
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="Invalid or expired MFA session")
     if not user.mfa_enabled or not _verify_totp(user.mfa_secret, payload.code):
+        _record_failure(ip)
         raise HTTPException(status_code=401, detail="Invalid MFA code")
+    _clear_failures(ip)
+    return _token_pair(user)
+
+
+@router.post("/mfa/setup-session", response_model=MfaSetupResponse)
+async def mfa_setup_session(
+    payload: MfaSetupSessionRequest,
+    db: AsyncSession = Depends(get_db),
+) -> MfaSetupResponse:
+    """Enrol a user for MFA during a login in progress (enforced-MFA flow)."""
+    data = decode_token(payload.mfa_token)
+    if not data or data.get("type") != "mfa":
+        raise HTTPException(status_code=401, detail="Invalid or expired MFA session")
+    user = await db.get(User, data.get("sub"))
+    if not user or not user.is_active:
+        raise HTTPException(status_code=401, detail="Invalid or expired MFA session")
+    if user.role == "demo":
+        raise HTTPException(status_code=403, detail="Demo accounts cannot set up MFA")
+    secret = pyotp.random_base32()
+    totp = pyotp.TOTP(secret)
+    otpauth_url = totp.provisioning_uri(name=user.email, issuer_name=MFA_ISSUER)
+    qr = qrcode.make(otpauth_url)
+    buf = io.BytesIO()
+    qr.save(buf, format="PNG")
+    data_url = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+    user.mfa_secret = secret
+    user.mfa_enabled = False
+    await db.commit()
+    return MfaSetupResponse(secret=secret, otpauth_url=otpauth_url, qr_data_url=data_url)
+
+
+@router.post("/mfa/complete-setup", response_model=TokenPair)
+async def mfa_complete_setup(
+    payload: MfaVerifyRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> TokenPair:
+    """Activate MFA after a login-in-progress setup session, completing login."""
+    ip = _client_ip(request)
+    _check_rate_limit(ip)
+    data = decode_token(payload.mfa_token)
+    if not data or data.get("type") != "mfa":
+        raise HTTPException(status_code=401, detail="Invalid or expired MFA session")
+    user = await db.get(User, data.get("sub"))
+    if not user or not user.is_active:
+        raise HTTPException(status_code=401, detail="Invalid or expired MFA session")
+    if user.role == "demo":
+        raise HTTPException(status_code=403, detail="Demo accounts cannot set up MFA")
+    if not user.mfa_secret or not _verify_totp(user.mfa_secret, payload.code):
+        _record_failure(ip)
+        raise HTTPException(status_code=400, detail="Invalid MFA code")
+    _clear_failures(ip)
+    user.mfa_enabled = True
+    await db.commit()
+    await mail.send_security_alert(
+        user.email, user.display_name,
+        "Two-factor authentication (MFA) was enabled on your account.",
+    )
     return _token_pair(user)
 
 
@@ -178,7 +295,7 @@ async def confirm_password_reset(
     db: AsyncSession = Depends(get_db),
 ) -> User:
     data = decode_token(payload.token)
-    if not data or data.get("type") != "password_reset":
+    if not data or data.get("type") not in ("password_reset", "invite"):
         raise HTTPException(status_code=400, detail="Invalid or expired reset token")
     user = await db.get(User, data.get("sub"))
     if not user or not user.is_active:
@@ -201,16 +318,24 @@ async def admin_create_user(
     existing = await db.scalar(select(User).where(User.email == payload.email.lower()))
     if existing:
         raise HTTPException(status_code=409, detail="Email already registered")
+    if not payload.send_invite and not payload.password:
+        raise HTTPException(status_code=422, detail="Password required (or enable email invite)")
+    hashed = hash_password(payload.password) if payload.password else hash_password(secrets.token_urlsafe(32))
     user = User(
         email=payload.email.lower(),
         display_name=payload.display_name,
-        hashed_password=hash_password(payload.password),
+        hashed_password=hashed,
         role=payload.role,
         max_vehicles=payload.max_vehicles,
     )
     db.add(user)
     await db.commit()
     await db.refresh(user)
+    if payload.send_invite:
+        token = create_invite_token(user.id, days=7)
+        await mail.send_account_invite(user.email, user.display_name, token, settings.APP_BASE_URL, expiry_days=7)
+    else:
+        await mail.send_welcome(user.email, user.display_name, settings.APP_BASE_URL)
     return _token_pair(user)
 
 

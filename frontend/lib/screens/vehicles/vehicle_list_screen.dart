@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/auth_state.dart';
 import '../../core/models.dart';
 import 'add_vehicle_screen.dart';
+import 'edit_vehicle_screen.dart';
 
 class VehicleListScreen extends StatefulWidget {
   const VehicleListScreen({super.key});
@@ -59,6 +60,13 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
     }
   }
 
+  Future<void> _edit(Vehicle v) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => EditVehicleScreen(vehicle: v)),
+    );
+    _load();
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDemo = context.watch<AuthState>().isDemo;
@@ -90,10 +98,26 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
                         '${v.make ?? ''} ${v.model ?? ''} ${v.year ?? ''}'
                         '${v.rego != null ? ' · ${v.rego}' : ''}'.trim(),
                       ),
-                      trailing: v.isPrimary
-                          ? const Icon(Icons.star, color: Colors.amber)
-                          : null,
-                      onTap: () => _delete(v),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (v.isPrimary)
+                            const Icon(Icons.star, color: Colors.amber),
+                          PopupMenuButton<String>(
+                            onSelected: (action) {
+                              if (action == 'edit') _edit(v);
+                              if (action == 'delete') _delete(v);
+                            },
+                            itemBuilder: (_) => const [
+                              PopupMenuItem(
+                                  value: 'edit', child: Text('Edit details')),
+                              PopupMenuItem(
+                                  value: 'delete', child: Text('Delete')),
+                            ],
+                          ),
+                        ],
+                      ),
+                      onTap: () => _edit(v),
                     ),
                   ),
               ],

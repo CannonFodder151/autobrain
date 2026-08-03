@@ -23,4 +23,4 @@ COPY --from=build /build/build/web /usr/share/nginx/html
 COPY docker/frontend/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
 HEALTHCHECK --interval=15s --timeout=5s --retries=5 \
-    CMD wget -qO- http://localhost/ || exit 1
+    CMD wget -qO- http://127.0.0.1/ || exit 1

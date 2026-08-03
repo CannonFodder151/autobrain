@@ -58,11 +58,28 @@ async def send_email(to_email: str, subject: str, html: str, text: str) -> bool:
 
 
 def _branding(body: str) -> str:
+    """Wrap content in the AutoBrain brand (dark site theme)."""
     return (
-        f"<div style=\"font-family:Arial,Helvetica,sans-serif;color:#111;max-width:560px;margin:auto;"
-        f"padding:24px\"><div style=\"font-size:22px;font-weight:800;color:#0B6B6A;margin-bottom:16px\">"
-        f"AutoBrain</div>{body}"
-        f"<p style=\"color:#888;font-size:12px;margin-top:32px\">Sent by AutoBrain — AI-powered car companion.</p></div>"
+        f'<div style="background:#050505;padding:32px 16px">'
+        f'<div style="font-family:Segoe UI,Arial,Helvetica,sans-serif;max-width:560px;margin:auto;'
+        f'background:#0B0F16;border:1px solid #00B7FF33;border-radius:16px;padding:28px">'
+        f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;'
+        f'border-bottom:1px solid #00B7FF2E;padding-bottom:16px">'
+        f'<span style="font-size:22px;font-weight:800;color:#F5F7FA;letter-spacing:.5px">Auto'
+        f'<span style="color:#00B7FF">Brain</span></span></div>'
+        f'{body}'
+        f'<p style="color:#9CA3AF;font-size:12px;margin-top:28px;border-top:1px solid #00B7FF2E;'
+        f'padding-top:14px">Sent by AutoBrain — AI-powered car companion. '
+        f'<a href="https://autobrainservice.app" style="color:#00B7FF;text-decoration:none">autobrainservice.app</a></p>'
+        f'</div></div>'
+    )
+
+
+def _button(link: str, label: str) -> str:
+    return (
+        f'<a href="{link}" style="display:inline-block;background:linear-gradient(135deg,#00B7FF,#1A4DFF);'
+        f'color:#050505;font-weight:700;padding:13px 26px;border-radius:10px;text-decoration:none">'
+        f'{label}</a>'
     )
 
 
@@ -74,8 +91,9 @@ async def send_welcome(to_email: str, display_name: str, app_url: str) -> None:
         "For security, use the password reset option if you were not given credentials."
     )
     html = _branding(
-        f"<p>Hi <b>{display_name}</b>,</p><p>Your AutoBrain account has been created.</p>"
-        f"<p><a href=\"{app_url}\" style=\"color:#0B6B6A\">Log in to AutoBrain</a></p>"
+        f'<p style="color:#F5F7FA">Hi <b>{display_name}</b>,</p>'
+        f'<p style="color:#E5ECF5">Your AutoBrain account has been created.</p>'
+        f'<p>{_button(app_url, "Log in to AutoBrain")}</p>'
     )
     await send_email(to_email, subject, html, text)
 
@@ -89,12 +107,30 @@ async def send_password_reset(to_email: str, display_name: str, token: str, app_
         "If you didn't request this, you can safely ignore this email."
     )
     html = _branding(
-        f"<p>Hi <b>{display_name}</b>,</p>"
-        f"<p>We received a request to reset your AutoBrain password.</p>"
-        f"<p><a href=\"{link}\" style=\"display:inline-block;background:#0B6B6A;color:#fff;"
-        f"padding:12px 20px;border-radius:10px;text-decoration:none\">Reset password</a></p>"
-        f"<p style=\"color:#888;font-size:12px\">Link expires in 30 minutes. If you didn't request "
-        f"this, you can safely ignore this email.</p>"
+        f'<p style="color:#F5F7FA">Hi <b>{display_name}</b>,</p>'
+        f'<p style="color:#E5ECF5">We received a request to reset your AutoBrain password.</p>'
+        f'<p>{_button(link, "Reset password")}</p>'
+        f'<p style="color:#9CA3AF;font-size:12px">Link expires in 30 minutes. If you didn\'t request '
+        f'this, you can safely ignore this email.</p>'
+    )
+    await send_email(to_email, subject, html, text)
+
+
+async def send_account_invite(to_email: str, display_name: str, token: str, app_url: str, expiry_days: int = 7) -> None:
+    link = f"{app_url}/reset-password?token={token}"
+    subject = "Your AutoBrain account is ready"
+    text = (
+        f"Hi {display_name},\n\nYour AutoBrain account has been created.\n"
+        f"Set your password to activate it:\n{link}\n\n"
+        f"The link expires in {expiry_days} days. If you didn't expect this, you can safely ignore this email."
+    )
+    html = _branding(
+        f'<p style="color:#F5F7FA">Hi <b>{display_name}</b>,</p>'
+        f'<p style="color:#E5ECF5">An administrator created an AutoBrain account for you.</p>'
+        f'<p style="color:#E5ECF5">Set your password to activate it:</p>'
+        f'<p>{_button(link, "Create account")}</p>'
+        f'<p style="color:#9CA3AF;font-size:12px">Link expires in {expiry_days} days. If you didn\'t '
+        f'expect this, you can safely ignore this email.</p>'
     )
     await send_email(to_email, subject, html, text)
 
@@ -102,7 +138,20 @@ async def send_password_reset(to_email: str, display_name: str, token: str, app_
 async def send_password_changed(to_email: str, display_name: str) -> None:
     subject = "Your AutoBrain password was changed"
     text = f"Hi {display_name},\n\nYour AutoBrain password was successfully changed."
-    html = _branding(f"<p>Hi <b>{display_name}</b>,</p><p>Your AutoBrain password was successfully changed.</p>")
+    html = _branding(
+        f'<p style="color:#F5F7FA">Hi <b>{display_name}</b>,</p>'
+        f'<p style="color:#E5ECF5">Your AutoBrain password was successfully changed.</p>'
+    )
+    await send_email(to_email, subject, html, text)
+
+
+async def send_security_alert(to_email: str, display_name: str, event: str) -> None:
+    subject = "AutoBrain security update"
+    text = f"Hi {display_name},\n\n{event}"
+    html = _branding(
+        f'<p style="color:#F5F7FA">Hi <b>{display_name}</b>,</p>'
+        f'<p style="color:#E5ECF5">{event}</p>'
+    )
     await send_email(to_email, subject, html, text)
 
 

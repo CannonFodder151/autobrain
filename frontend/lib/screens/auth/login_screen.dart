@@ -1,7 +1,11 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/auth_state.dart';
+import '../../core/config.dart';
 import 'reset_password.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -18,8 +22,24 @@ class _LoginScreenState extends State<LoginScreen> {
   final _code = TextEditingController();
   bool _busy = false;
   bool _mfaStep = false;
+  bool _mfaSetupStep = false;
   String? _mfaToken;
+  String? _mfaQr;
+  String? _mfaSecret;
   String? _error;
+
+  bool get _isDemo =>
+      AppConfig.apiBase.contains('demo.autobrainservice.app');
+
+  @override
+  void initState() {
+    super.initState();
+    if (_isDemo) {
+      // Demo build auto-fills the read-only demo account.
+      _email.text = 'demo@autobrainservice.app';
+      _password.text = 'demo';
+    }
+  }
 
   @override
   void dispose() {
@@ -36,6 +56,16 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = null;
     });
     final auth = context.read<AuthState>();
+    if (_mfaSetupStep) {
+      final ok = await auth.completeMfaSetup(_mfaToken!, _code.text.trim());
+      if (!ok && mounted) {
+        setState(() {
+          _busy = false;
+          _error = 'Invalid verification code';
+        });
+      }
+      return;
+    }
     if (_mfaStep) {
       final ok = await auth.verifyMfa(_mfaToken!, _code.text.trim());
       if (!ok && mounted) {
@@ -48,7 +78,24 @@ class _LoginScreenState extends State<LoginScreen> {
     }
     final outcome = await auth.login(_email.text, _password.text);
     if (!mounted) return;
-    if (outcome == LoginOutcome.mfaRequired) {
+    if (outcome == LoginOutcome.mfaSetupRequired) {
+      _mfaToken = auth.mfaTokenHint;
+      final setup = await auth.startMfaSetup(_mfaToken!);
+      if (!mounted) return;
+      if (setup == null) {
+        setState(() {
+          _busy = false;
+          _error = 'Could not start MFA setup. Contact your administrator.';
+        });
+        return;
+      }
+      setState(() {
+        _mfaSetupStep = true;
+        _mfaQr = setup['qr_data_url'] as String?;
+        _mfaSecret = setup['secret'] as String?;
+        _busy = false;
+      });
+    } else if (outcome == LoginOutcome.mfaRequired) {
       setState(() {
         _mfaStep = true;
         _mfaToken = auth.mfaTokenHint;
@@ -113,7 +160,11 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    _mfaStep ? 'Enter your verification code' : 'Your garage, your data, AI-powered.',
+                    _mfaSetupStep
+                        ? 'Enable two-factor authentication'
+                        : _mfaStep
+                            ? 'Enter your verification code'
+                            : 'Your garage, your data, AI-powered.',
                     style: const TextStyle(color: Colors.white70, fontSize: 15),
                   ),
                   const SizedBox(height: 32),
@@ -131,36 +182,42 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ],
                     ),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (!_mfaStep) ...[
-                            TextFormField(
-                              controller: _email,
-                              decoration: const InputDecoration(
-                                labelText: 'Email',
-                                prefixIcon: Icon(Icons.mail_outline),
+                    child: AutofillGroup(
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                          if (_mfaSetupStep) ...[
+                            if (_mfaQr != null)
+                              Center(
+                                child: Image.memory(
+                                  _dataUriBytes(_mfaQr!),
+                                  width: 200,
+                                  height: 200,
+                                  gaplessPlayback: true,
+                                  fit: BoxFit.contain,
+                                ),
                               ),
-                              keyboardType: TextInputType.emailAddress,
-                              validator: (v) => v == null || !v.contains('@')
-                                  ? 'Valid email required'
-                                  : null,
+                            const SizedBox(height: 12),
+                            Text(
+                              'Scan with Google Authenticator, Authy or 1Password, then enter the 6-digit code.',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
                             ),
+                            if (_mfaSecret != null) ...[
+                              const SizedBox(height: 6),
+                              SelectableText(
+                                'Secret: $_mfaSecret',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
                             const SizedBox(height: 14),
-                            TextFormField(
-                              controller: _password,
-                              decoration: const InputDecoration(
-                                labelText: 'Password',
-                                prefixIcon: Icon(Icons.lock_outline),
-                              ),
-                              obscureText: true,
-                              onFieldSubmitted: (_) => _submit(),
-                              validator: (v) =>
-                                  v == null || v.isEmpty ? 'Password required' : null,
-                            ),
-                          ] else ...[
                             TextFormField(
                               controller: _code,
                               decoration: const InputDecoration(
@@ -175,6 +232,50 @@ class _LoginScreenState extends State<LoginScreen> {
                                   v == null || v.trim().length < 6
                                       ? 'Enter your 6-digit code'
                                       : null,
+                            ),
+                          ] else if (_mfaStep) ...[
+                            TextFormField(
+                              controller: _code,
+                              decoration: const InputDecoration(
+                                labelText: '6-digit code',
+                                prefixIcon: Icon(Icons.verified_user_outlined),
+                              ),
+                              keyboardType: TextInputType.number,
+                              maxLength: 6,
+                              autofocus: true,
+                              onFieldSubmitted: (_) => _submit(),
+                              validator: (v) =>
+                                  v == null || v.trim().length < 6
+                                      ? 'Enter your 6-digit code'
+                                      : null,
+                            ),
+                          ] else ...[
+                            TextFormField(
+                              controller: _email,
+                              decoration: const InputDecoration(
+                                labelText: 'Email',
+                                prefixIcon: Icon(Icons.mail_outline),
+                              ),
+                              keyboardType: TextInputType.emailAddress,
+                              autofillHints: const [AutofillHints.username, AutofillHints.email],
+                              textInputAction: TextInputAction.next,
+                              validator: (v) => v == null || !v.contains('@')
+                                  ? 'Valid email required'
+                                  : null,
+                            ),
+                            const SizedBox(height: 14),
+                            TextFormField(
+                              controller: _password,
+                              decoration: const InputDecoration(
+                                labelText: 'Password',
+                                prefixIcon: Icon(Icons.lock_outline),
+                              ),
+                              obscureText: true,
+                              autofillHints: const [AutofillHints.password],
+                              textInputAction: TextInputAction.done,
+                              onFieldSubmitted: (_) => _submit(),
+                              validator: (v) =>
+                                  v == null || v.isEmpty ? 'Password required' : null,
                             ),
                           ],
                           if (_error != null) ...[
@@ -193,9 +294,13 @@ class _LoginScreenState extends State<LoginScreen> {
                                     child: CircularProgressIndicator(
                                         strokeWidth: 2, color: Colors.white),
                                   )
-                                : Text(_mfaStep ? 'Verify & sign in' : 'Sign in'),
+                                : Text(_mfaSetupStep
+                                    ? 'Enable MFA & sign in'
+                                    : _mfaStep
+                                        ? 'Verify & sign in'
+                                        : 'Sign in'),
                           ),
-                          if (!_mfaStep) ...[
+                          if (!_mfaStep && !_mfaSetupStep) ...[
                             const SizedBox(height: 8),
                             TextButton(
                               onPressed: () => Navigator.of(context).push(
@@ -206,15 +311,17 @@ class _LoginScreenState extends State<LoginScreen> {
                               child: const Text('Forgot password?'),
                             ),
                           ],
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                  if (_mfaStep) ...[
+                  if (_mfaStep || _mfaSetupStep) ...[
                     const SizedBox(height: 16),
                     TextButton(
                       onPressed: () => setState(() {
                         _mfaStep = false;
+                        _mfaSetupStep = false;
                         _code.clear();
                         _error = null;
                       }),
@@ -233,5 +340,11 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       ),
     );
+  }
+
+  static Uint8List _dataUriBytes(String dataUri) {
+    final comma = dataUri.indexOf(',');
+    final b64 = dataUri.substring(comma + 1);
+    return base64Decode(b64);
   }
 }
