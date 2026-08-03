@@ -4,14 +4,20 @@ AI-powered car enthusiast companion. Manage vehicles, track maintenance & fuel, 
 
 ![stack](https://img.shields.io/badge/stack-FastAPI%20%7C%20Flutter%20%7C%20PostgreSQL%20%7C%20Redis%20%7C%20MinIO%20%7C%20Celery-0D9488)
 
+## Try it / get it
+
+- **Website & hosted service** — <https://autobrainservice.app> (sales: sales@autobrainservice.app)
+- **Live app** — <https://default.autobrainservice.app/>
+- **Source** — this repository (MIT)
+
 ## Live deployment
 
 | Service | URL |
 |---------|-----|
-| **Web app** | http://10.0.3.39/ |
-| API (OpenAPI docs) | http://10.0.3.39/api/v1 and http://10.0.3.39/docs |
-| AI gateway health | http://10.0.3.39/ai/health |
-| MinIO console | http://10.0.3.39:9001 |
+| **Website** | https://autobrainservice.app |
+| **Web app** | https://default.autobrainservice.app/ |
+| API (OpenAPI docs) | https://default.autobrainservice.app/api/v1 and https://default.autobrainservice.app/docs |
+| AI gateway health | https://default.autobrainservice.app/ai/health |
 
 > Everything is served from one host behind nginx: `/` → Flutter web app, `/api/*` → backend, `/ws/*` → WebSocket, `/ai/*` → AI gateway. Same-origin means no CORS config is needed.
 
@@ -124,8 +130,8 @@ flutter create . --platforms=android,ios --org com.autobrain
 
 # point at your backend, then build
 flutter build apk --release \
-  --dart-define=API_BASE_URL=http://10.0.3.39/api/v1 \
-  --dart-define=WS_BASE_URL=ws://10.0.3.39/ws
+  --dart-define=API_BASE_URL=https://default.autobrainservice.app/api/v1 \
+  --dart-define=WS_BASE_URL=wss://default.autobrainservice.app/ws
 
 flutter build ios --release   # requires macOS + Xcode
 ```
