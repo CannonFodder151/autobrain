@@ -1,14 +1,12 @@
-# AutoBrain production stack — pulls prebuilt images from Docker Hub.
-# Env values come from .env (see .env.example). Image namespace/tag from
-# DOCKERHUB_USERNAME / IMAGE_TAG.
+# AutoBrain production stack.
+# Builds from source and tags with ${DOCKERHUB_USERNAME} so images can be
+# pushed to Docker Hub (scripts/publish-images.sh) or run locally.
 #
 # First time:
-#   cp .env.example .env           # fill in values incl. DOCKERHUB_USERNAME
-#   docker login                   # your app.docker.com account
-#   ./scripts/publish-images.sh    # build + push once
-#   docker compose -f docker-compose.prod.yml up -d
+#   cp .env.example .env           # fill in values
+#   ./scripts/deploy.sh user@host  # or: docker compose -f docker-compose.prod.yml up -d --build
 # Updates:
-#   ./scripts/publish-images.sh && docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d
+#   ./scripts/deploy.sh user@host
 
 services:
   postgres:
@@ -66,7 +64,10 @@ services:
       "
 
   backend:
-    image: ${DOCKERHUB_USERNAME:?Set DOCKERHUB_USERNAME in .env}/autobrain-backend:${IMAGE_TAG:-latest}
+    build:
+      context: ./backend
+      dockerfile: ../docker/backend/Dockerfile
+    image: ${DOCKERHUB_USERNAME:-autobrain}/autobrain-backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file: .env
     environment:
@@ -86,7 +87,10 @@ services:
       - "8000"
 
   worker:
-    image: ${DOCKERHUB_USERNAME}/autobrain-worker:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: docker/worker/Dockerfile
+    image: ${DOCKERHUB_USERNAME:-autobrain}/autobrain-worker:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file: .env
     environment:
@@ -106,7 +110,10 @@ services:
     command: ["celery", "-A", "app.workers.celery_app:celery_app", "worker", "-l", "info", "--concurrency=2"]
 
   beat:
-    image: ${DOCKERHUB_USERNAME}/autobrain-worker:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: docker/worker/Dockerfile
+    image: ${DOCKERHUB_USERNAME:-autobrain}/autobrain-worker:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file: .env
     environment:
@@ -124,7 +131,10 @@ services:
     command: ["celery", "-A", "app.workers.celery_app:celery_app", "beat", "-l", "info"]
 
   ai:
-    image: ${DOCKERHUB_USERNAME}/autobrain-ai:${IMAGE_TAG:-latest}
+    build:
+      context: ./ai
+      dockerfile: ../docker/ai/Dockerfile
+    image: ${DOCKERHUB_USERNAME:-autobrain}/autobrain-ai:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file: .env
     environment:
@@ -133,7 +143,13 @@ services:
       - "8001"
 
   frontend:
-    image: ${DOCKERHUB_USERNAME}/autobrain-frontend:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: docker/frontend/Dockerfile
+      args:
+        API_BASE_URL: ${API_BASE_URL:-http://localhost:8000/api/v1}
+        WS_BASE_URL: ${WS_BASE_URL:-ws://localhost:8000/ws}
+    image: ${DOCKERHUB_USERNAME:-autobrain}/autobrain-frontend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     ports:
       - "80:80"
