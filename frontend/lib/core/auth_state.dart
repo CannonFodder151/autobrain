@@ -19,12 +19,22 @@ class AuthState extends ChangeNotifier {
   String? _role;
   String? _userId;
   String? _mfaToken;
+  bool _darkMode = true;
   String? get token => _token;
   String? get role => _role;
   String? get userId => _userId;
   String? get mfaTokenHint => _mfaToken;
+  bool get darkMode => _darkMode;
   bool get isLoggedIn => _token != null;
   bool get isAdmin => _role == 'admin';
+  bool get isDemo => _role == 'demo';
+
+  Future<void> toggleThemeMode() async {
+    _darkMode = !_darkMode;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('dark_mode', _darkMode);
+    notifyListeners();
+  }
 
   ApiClient? _client;
   ApiClient get api => _client!;
@@ -33,6 +43,7 @@ class AuthState extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     _token = prefs.getString('auth_token');
     _role = prefs.getString('auth_role');
+    _darkMode = prefs.getBool('dark_mode') ?? true;
     if (_token != null) {
       _client = ApiClient(_token);
       _refreshProfile();

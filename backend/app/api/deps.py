@@ -37,3 +37,23 @@ async def require_admin(user: User = Depends(get_current_user)) -> User:
     if user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin privileges required")
     return user
+
+
+async def require_write(user: User = Depends(get_current_user)) -> User:
+    """Demo accounts are read-only: reject any mutating request."""
+    if user.role == "demo":
+        raise HTTPException(
+            status_code=403,
+            detail="This is a read-only demo account. Sign up or self-host to make changes.",
+        )
+    return user
+
+
+async def require_ai(user: User = Depends(get_current_user)) -> User:
+    """Demo accounts cannot call AI features."""
+    if user.role == "demo":
+        raise HTTPException(
+            status_code=403,
+            detail="AI features are disabled on the demo account.",
+        )
+    return user

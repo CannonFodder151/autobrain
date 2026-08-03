@@ -6,7 +6,7 @@ import io
 import pyotp
 import qrcode
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_admin
@@ -34,6 +34,7 @@ from app.schemas.auth import (
     UserCreate,
     UserLogin,
     UserOut,
+    UserWithVehicleCount,
 )
 from app.services import email as mail
 
@@ -83,9 +84,21 @@ async def refresh(payload: RefreshRequest, db: AsyncSession = Depends(get_db)) -
     return _token_pair(user)
 
 
-@router.get("/me", response_model=UserOut)
-async def me(current: User = Depends(get_current_user)) -> User:
-    return current
+@router.get("/me", response_model=UserWithVehicleCount)
+async def me(
+    current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> UserWithVehicleCount:
+    from app.models.vehicle import Vehicle
+
+    count = await db.scalar(
+        select(func.count()).select_from(Vehicle).where(Vehicle.user_id == current.id)
+    )
+    count = count or 0
+    remaining = max(current.max_vehicles - count, 0)
+    return UserWithVehicleCount.model_validate(
+        current, update={"vehicle_count": count, "vehicles_remaining": remaining}
+    )
 
 
 # --- MFA management (self-service, authenticated) ---
@@ -193,6 +206,7 @@ async def admin_create_user(
         display_name=payload.display_name,
         hashed_password=hash_password(payload.password),
         role=payload.role,
+        max_vehicles=payload.max_vehicles,
     )
     db.add(user)
     await db.commit()

@@ -1,20 +1,39 @@
 import 'package:flutter/material.dart';
 
+/// AutoBrain brand theme.
+///
+/// Dark-first futuristic automotive styling: near-black surfaces, electric
+/// blue primary (#00B7FF), frosted cards, 16px rounded corners.
 class AppTheme {
-  static const seed = Color(0xFF0B6B6A);
-  static const accent = Color(0xFFFF6B35);
-  static const surfaceDark = Color(0xFF0E1116);
+  // Brand palette
+  static const bgDark = Color(0xFF050505);
+  static const surfaceDark = Color(0xFF0B0F16);
+  static const cardDark = Color(0xFF11151D);
+  static const primaryBlue = Color(0xFF00B7FF);
+  static const accentBlue = Color(0xFF007BFF);
+  static const secondaryBlue = Color(0xFF1A4DFF);
+  static const white = Color(0xFFF5F7FA);
+  static const grayText = Color(0xFF9CA3AF);
 
-  static ThemeData light() => _base(Brightness.light, const Color(0xFFF6F7F9));
+  static const lightScaffold = Color(0xFFF5F7FA);
 
-  static ThemeData dark() => _base(Brightness.dark, surfaceDark);
+  static ThemeData light() =>
+      _base(Brightness.light, lightScaffold, isDark: false);
 
-  static ThemeData _base(Brightness brightness, Color scaffold) {
+  static ThemeData dark() =>
+      _base(Brightness.dark, surfaceDark, isDark: true);
+
+  static ThemeData _base(Brightness brightness, Color scaffold,
+      {required bool isDark}) {
     final scheme = ColorScheme.fromSeed(
-      seedColor: seed,
+      seedColor: primaryBlue,
       brightness: brightness,
-      secondary: accent,
+      primary: isDark ? primaryBlue : accentBlue,
+      secondary: secondaryBlue,
+      surface: isDark ? surfaceDark : lightScaffold,
+      error: const Color(0xFFEF4444),
     );
+    final card = isDark ? cardDark : Colors.white;
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
@@ -27,36 +46,47 @@ class AppTheme {
         titleTextStyle: TextStyle(
           fontSize: 20,
           fontWeight: FontWeight.w700,
+          letterSpacing: 0.2,
           color: scheme.onSurface,
         ),
+        iconTheme: IconThemeData(color: isDark ? primaryBlue : accentBlue),
       ),
       cardTheme: CardThemeData(
         elevation: 0,
-        color: brightness == Brightness.light
-            ? Colors.white
-            : const Color(0xFF171B22),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        color: card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: isDark
+                ? primaryBlue.withValues(alpha: 0.25)
+                : accentBlue.withValues(alpha: 0.20),
+          ),
+        ),
         margin: EdgeInsets.zero,
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           minimumSize: const Size(0, 52),
+          backgroundColor: isDark ? primaryBlue : accentBlue,
+          foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: brightness == Brightness.light
-            ? const Color(0xFFF0F2F5)
-            : const Color(0xFF1C212A),
+        fillColor: isDark ? const Color(0xFF1C212A) : const Color(0xFFF0F2F5),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide.none,
+          borderSide: BorderSide(
+            color: isDark
+                ? primaryBlue.withValues(alpha: 0.18)
+                : accentBlue.withValues(alpha: 0.18),
+          ),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
@@ -67,6 +97,9 @@ class AppTheme {
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      dividerTheme: DividerThemeData(
+        color: (isDark ? primaryBlue : accentBlue).withValues(alpha: 0.15),
       ),
     );
   }

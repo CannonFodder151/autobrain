@@ -62,6 +62,12 @@ class Settings(BaseSettings):
     ADMIN_DISPLAY_NAME: str = "AutoBrain Admin"
     ADMIN_INITIAL_PASSWORD: str = ""
 
+    # Demo mode: seeds a read-only demo account + sample data. No AI, no writes.
+    DEMO_MODE: bool = False
+    DEMO_EMAIL: str = "demo@autobrainservice.app"
+    DEMO_PASSWORD: str = "demo"
+    DEMO_DISPLAY_NAME: str = "Demo Garage"
+
     # SMTP (email notifications + self-service password reset)
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587

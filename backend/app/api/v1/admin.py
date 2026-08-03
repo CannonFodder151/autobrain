@@ -42,6 +42,7 @@ async def create_user(
         display_name=payload.display_name,
         hashed_password=hash_password(payload.password),
         role=payload.role,
+        max_vehicles=payload.max_vehicles,
     )
     db.add(user)
     await db.commit()

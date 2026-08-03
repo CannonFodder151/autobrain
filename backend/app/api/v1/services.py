@@ -1,4 +1,4 @@
-"""Service routes: CRUD (with items/status), AI prediction, PDF/CSV export."""
+﻿"""Service routes: CRUD (with items/status), AI prediction, PDF/CSV export."""
 
 import json
 from datetime import date
@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_ai, require_write
 from app.api.v1.vehicles import add_event, _get_owned_vehicle
 from app.core.logging import get_logger
 from app.db.session import get_db
@@ -67,8 +67,8 @@ async def _reconcile_part_stock(
     """Keep parts inventory in sync with a completed service.
 
     Reverses any prior stock movements recorded against this service (so the
-    operation is idempotent across edits), then — when the service is
-    completed — deducts the used quantities and logs a PartMovement per part.
+    operation is idempotent across edits), then â€” when the service is
+    completed â€” deducts the used quantities and logs a PartMovement per part.
     """
     prev = list((await db.scalars(
         select(PartMovement).where(PartMovement.service_id == service_id)
@@ -123,7 +123,7 @@ async def create_service(
     vehicle_id: str,
     payload: ServiceCreate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_write),
 ) -> ServiceRecord:
     await _get_owned_vehicle(db, vehicle_id, user)
     data = payload.model_dump(exclude={"items", "steps"})
@@ -196,7 +196,7 @@ async def update_service(
     service_id: str,
     payload: ServiceUpdate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_write),
 ) -> ServiceRecord:
     await _get_owned_vehicle(db, vehicle_id, user)
     record = await _service_or_404(db, vehicle_id, service_id)
@@ -236,7 +236,7 @@ async def delete_service(
     vehicle_id: str,
     service_id: str,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_write),
 ) -> None:
     await _get_owned_vehicle(db, vehicle_id, user)
     record = await _service_or_404(db, vehicle_id, service_id)
@@ -250,7 +250,7 @@ async def predict(
     vehicle_id: str,
     payload: ServicePredictionRequest,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_ai),
 ) -> ServicePredictionResponse:
     """AI service prediction using ALL past services + odometer + schedule.
 
@@ -286,3 +286,4 @@ async def predict(
     if not result:
         raise HTTPException(status_code=503, detail="Prediction engine unavailable")
     return ServicePredictionResponse(**result)
+

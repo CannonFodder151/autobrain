@@ -1,4 +1,4 @@
-"""Modification tracker routes."""
+﻿"""Modification tracker routes."""
 
 import json
 
@@ -7,7 +7,7 @@ from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_ai, require_write
 from app.api.v1.vehicles import add_event, _get_owned_vehicle
 from app.db.session import get_db
 from app.models.mod import Modification
@@ -45,7 +45,7 @@ async def create_mod(
     vehicle_id: str,
     payload: ModCreate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_write),
 ) -> Modification:
     await _get_owned_vehicle(db, vehicle_id, user)
     mod = Modification(vehicle_id=vehicle_id, **payload.model_dump())
@@ -68,7 +68,7 @@ async def update_mod(
     mod_id: str,
     payload: ModUpdate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_write),
 ) -> Modification:
     await _get_owned_vehicle(db, vehicle_id, user)
     mod = await db.get(Modification, mod_id)
@@ -86,7 +86,7 @@ async def delete_mod(
     vehicle_id: str,
     mod_id: str,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_write),
 ) -> None:
     await _get_owned_vehicle(db, vehicle_id, user)
     mod = await db.get(Modification, mod_id)
@@ -97,7 +97,10 @@ async def delete_mod(
 
 
 @router.post("/impact", response_model=ModImpactResponse)
-async def get_impact(payload: ModImpactRequest) -> ModImpactResponse:
+async def get_impact(
+    payload: ModImpactRequest,
+    _user: User = Depends(require_ai),
+) -> ModImpactResponse:
     """AI summary of a modification's impact on performance and value."""
     result = await mod_impact(payload.model_dump())
     if not result:

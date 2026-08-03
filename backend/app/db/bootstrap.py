@@ -21,6 +21,12 @@ async def _seed_admin() -> None:
     await seed_admin()
 
 
+async def _seed_demo() -> None:
+    from app.db.seed import seed_demo
+
+    await seed_demo()
+
+
 def bootstrap() -> None:
     base = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     migrated = False
@@ -49,6 +55,7 @@ def bootstrap() -> None:
             await init_db()
             logger.info("create_all_fallback_done")
         await _seed_admin()
+        await _seed_demo()
 
     asyncio.run(_run())
 

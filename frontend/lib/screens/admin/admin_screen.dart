@@ -36,6 +36,7 @@ class _AdminScreenState extends State<AdminScreen> {
     final email = TextEditingController();
     final name = TextEditingController();
     final password = TextEditingController();
+    final maxVehicles = TextEditingController(text: '1');
     String role = 'user';
     final api = context.read<AuthState>().api;
     final created = await showDialog<bool>(
@@ -71,6 +72,14 @@ class _AdminScreenState extends State<AdminScreen> {
                 ],
                 onChanged: (v) => role = v ?? 'user',
               ),
+              TextFormField(
+                controller: maxVehicles,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Max vehicles',
+                  helperText: 'Vehicle limit for this user (default 1)',
+                ),
+              ),
             ],
           ),
         ),
@@ -92,6 +101,7 @@ class _AdminScreenState extends State<AdminScreen> {
           'display_name': name.text,
           'password': password.text,
           'role': role,
+          'max_vehicles': int.tryParse(maxVehicles.text) ?? 1,
         });
         _load();
       } catch (e) {
@@ -112,6 +122,36 @@ class _AdminScreenState extends State<AdminScreen> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
       }
     }
+  }
+
+  Future<void> _setLimit(Map<String, dynamic> u) async {
+    final controller = TextEditingController(
+        text: (u['max_vehicles'] ?? 1).toString());
+    final saved = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Vehicle limit'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'Max vehicles',
+            helperText: 'How many vehicles this user may add',
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () {
+              final v = int.tryParse(controller.text);
+              if (v != null && v >= 1) Navigator.pop(ctx, v);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (saved != null) _update(u, {'max_vehicles': saved});
   }
 
   Future<void> _delete(Map<String, dynamic> u) async {
@@ -179,7 +219,8 @@ class _AdminScreenState extends State<AdminScreen> {
                               ),
                               title: Text(u['display_name']),
                               subtitle: Text(
-                                '${u['email']}${u['mfa_enabled'] == true ? ' · MFA ✓' : ''}',
+                                '${u['email']} · ${u['max_vehicles'] ?? 1} vehicle limit'
+                                '${u['mfa_enabled'] == true ? ' · MFA ✓' : ''}',
                               ),
                               trailing: PopupMenuButton<String>(
                                 onSelected: (v) {
@@ -188,11 +229,16 @@ class _AdminScreenState extends State<AdminScreen> {
                                       _update(u, {'is_active': !active});
                                     case 'toggle_role':
                                       _update(u, {'role': isAdmin ? 'user' : 'admin'});
+                                    case 'limit':
+                                      _setLimit(u);
                                     case 'delete':
                                       _delete(u);
                                   }
                                 },
                                 itemBuilder: (_) => [
+                                  PopupMenuItem(
+                                      value: 'limit',
+                                      child: const Text('Set vehicle limit')),
                                   PopupMenuItem(
                                       value: 'toggle_active',
                                       child: Text(active ? 'Disable account' : 'Enable account')),

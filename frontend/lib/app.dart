@@ -38,6 +38,7 @@ class AutoBrainApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
+      themeMode: auth.darkMode ? ThemeMode.dark : ThemeMode.light,
       home: home,
     );
   }

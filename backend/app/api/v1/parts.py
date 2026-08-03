@@ -1,10 +1,10 @@
-"""Parts inventory routes."""
+﻿"""Parts inventory routes."""
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_write
 from app.api.v1.vehicles import _get_owned_vehicle
 from app.db.session import get_db
 from app.models.part import Part, PartMovement
@@ -38,7 +38,7 @@ async def create_part(
     vehicle_id: str,
     payload: PartCreate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_write),
 ) -> Part:
     await _get_owned_vehicle(db, vehicle_id, user)
     part = Part(vehicle_id=vehicle_id, **payload.model_dump())
@@ -56,7 +56,7 @@ async def update_part(
     part_id: str,
     payload: PartUpdate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_write),
 ) -> Part:
     await _get_owned_vehicle(db, vehicle_id, user)
     part = await db.get(Part, part_id)
@@ -75,7 +75,7 @@ async def add_movement(
     part_id: str,
     payload: PartMovementCreate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_write),
 ) -> Part:
     await _get_owned_vehicle(db, vehicle_id, user)
     part = await db.get(Part, part_id)
@@ -100,7 +100,7 @@ async def delete_part(
     vehicle_id: str,
     part_id: str,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_write),
 ) -> None:
     await _get_owned_vehicle(db, vehicle_id, user)
     part = await db.get(Part, part_id)
@@ -137,3 +137,4 @@ async def reorder_suggestions(
             )
         )
     return suggestions
+

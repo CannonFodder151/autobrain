@@ -9,10 +9,15 @@ import asyncio  # noqa: E402
 import uuid  # noqa: E402
 
 import pytest  # noqa: E402
+from fastapi import HTTPException  # noqa: E402
 from httpx import AsyncClient, ASGITransport  # noqa: E402
 
+from app.api.deps import require_ai, require_write  # noqa: E402
 from app.core.security import create_access_token, hash_password, verify_password  # noqa: E402
 from app.main import app  # noqa: E402
+from app.models.user import User  # noqa: E402
+from app.schemas.auth import AdminUserUpdate, UserCreate  # noqa: E402
+from app.schemas.vehicle import VehicleCreate  # noqa: E402
 
 
 def test_password_hashing() -> None:
@@ -42,3 +47,27 @@ async def test_unauthorized_rejected() -> None:
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.get("/api/v1/vehicles")
     assert resp.status_code == 401
+
+
+def test_vehicle_limit_defaults() -> None:
+    assert UserCreate(
+        email="u@example.com", display_name="U", password="hunter22"
+    ).max_vehicles == 1
+    u = AdminUserUpdate(max_vehicles=5)
+    assert u.max_vehicles == 5
+
+
+def test_vehicle_schema_accepts_limit() -> None:
+    assert VehicleCreate(nickname="R34").is_primary is False
+
+
+@pytest.mark.asyncio
+async def test_demo_role_is_read_only() -> None:
+    demo = User(id=str(uuid.uuid4()), email="demo@x", display_name="D",
+                hashed_password="x", role="demo")
+    with pytest.raises(HTTPException) as exc:
+        await require_write(user=demo)
+    assert exc.value.status_code == 403
+    with pytest.raises(HTTPException) as exc:
+        await require_ai(user=demo)
+    assert exc.value.status_code == 403

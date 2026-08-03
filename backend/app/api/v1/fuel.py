@@ -1,10 +1,10 @@
-"""Fuel tracker routes."""
+﻿"""Fuel tracker routes."""
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_write
 from app.api.v1.vehicles import add_event, _get_owned_vehicle
 from app.db.session import get_db
 from app.models.fuel import FuelLog
@@ -34,7 +34,7 @@ async def add_fuel(
     vehicle_id: str,
     payload: FuelLogCreate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_write),
 ) -> FuelLog:
     vehicle = await _get_owned_vehicle(db, vehicle_id, user)
     total = payload.total_cost if payload.total_cost else round(payload.litres * payload.price_per_litre, 2)
@@ -78,7 +78,7 @@ async def delete_fuel(
     vehicle_id: str,
     fuel_id: str,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_write),
 ) -> None:
     await _get_owned_vehicle(db, vehicle_id, user)
     log = await db.get(FuelLog, fuel_id)
@@ -132,3 +132,4 @@ async def fuel_stats(
         last_log=FuelLogOut.model_validate(last) if last else None,
         series=series,
     )
+

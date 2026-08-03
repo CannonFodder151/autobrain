@@ -1,10 +1,10 @@
 """Vehicle routes: CRUD, rego lookup, timeline."""
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_write
 from app.core.logging import get_logger
 from app.db.session import get_db
 from app.models.service import ServiceRecord
@@ -50,8 +50,18 @@ async def list_vehicles(
 async def create_vehicle(
     payload: VehicleCreate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_write),
 ) -> Vehicle:
+    count = await db.scalar(
+        select(func.count()).select_from(Vehicle).where(Vehicle.user_id == user.id)
+    )
+    if (count or 0) >= user.max_vehicles:
+        remaining = max(user.max_vehicles - (count or 0), 0)
+        raise HTTPException(
+            status_code=403,
+            detail=f"Vehicle limit reached ({user.max_vehicles}). "
+            f"You have {remaining} slot(s) left on this account.",
+        )
     if payload.is_primary:
         await _clear_primary(db, user)
     vehicle = Vehicle(user_id=user.id, **payload.model_dump())
@@ -76,7 +86,7 @@ async def update_vehicle(
     vehicle_id: str,
     payload: VehicleUpdate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_write),
 ) -> Vehicle:
     vehicle = await _get_owned_vehicle(db, vehicle_id, user)
     if payload.is_primary:
@@ -92,7 +102,7 @@ async def update_vehicle(
 async def delete_vehicle(
     vehicle_id: str,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_write),
 ) -> None:
     vehicle = await _get_owned_vehicle(db, vehicle_id, user)
     await db.delete(vehicle)

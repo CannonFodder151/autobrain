@@ -1,4 +1,4 @@
-"""Receipt & parts scanner routes (OCR + AI extraction)."""
+﻿"""Receipt & parts scanner routes (OCR + AI extraction)."""
 
 import json
 
@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_write
 from app.api.v1.vehicles import _get_owned_vehicle
 from app.core.logging import get_logger
 from app.core.storage import ensure_bucket, upload_object
@@ -30,7 +30,7 @@ async def upload_receipt(
     vehicle_id: str,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_write),
 ) -> Receipt:
     await _get_owned_vehicle(db, vehicle_id, user)
     if file.content_type not in ALLOWED_TYPES:
@@ -74,7 +74,7 @@ async def apply_receipt_to_service(
     receipt_id: str,
     payload: ApplyToServiceRequest,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_write),
 ) -> Receipt:
     await _get_owned_vehicle(db, vehicle_id, user)
     receipt = await db.get(Receipt, receipt_id)
@@ -146,3 +146,4 @@ def _ext(content_type: str) -> str:
 def _today():
     from datetime import date
     return date.today()
+

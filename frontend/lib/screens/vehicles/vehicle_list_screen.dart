@@ -61,18 +61,21 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDemo = context.watch<AuthState>().isDemo;
     return Scaffold(
       appBar: AppBar(title: const Text('Vehicles')),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          await Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const AddVehicleScreen()),
-          );
-          _load();
-        },
-        icon: const Icon(Icons.add),
-        label: const Text('Add vehicle'),
-      ),
+      floatingActionButton: isDemo
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const AddVehicleScreen()),
+                );
+                _load();
+              },
+              icon: const Icon(Icons.add),
+              label: const Text('Add vehicle'),
+            ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(

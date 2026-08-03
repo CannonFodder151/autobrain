@@ -10,6 +10,7 @@ class UserCreate(BaseModel):
     display_name: str = Field(min_length=1, max_length=120)
     password: str = Field(min_length=8, max_length=128)
     role: str = Field(default="user", pattern="^(admin|user)$")
+    max_vehicles: int = Field(default=1, ge=1, le=1000)
 
 
 class UserLogin(BaseModel):
@@ -25,6 +26,7 @@ class UserOut(BaseModel):
     role: str
     is_active: bool
     mfa_enabled: bool
+    max_vehicles: int = 1
 
     model_config = {"from_attributes": True}
 
@@ -81,6 +83,7 @@ class AdminUserUpdate(BaseModel):
     role: str | None = Field(default=None, pattern="^(admin|user)$")
     is_active: bool | None = None
     password: str | None = Field(default=None, min_length=8, max_length=128)
+    max_vehicles: int | None = Field(default=None, ge=1, le=1000)
 
 
 class UserAdminOut(BaseModel):
@@ -90,6 +93,12 @@ class UserAdminOut(BaseModel):
     role: str
     is_active: bool
     mfa_enabled: bool
+    max_vehicles: int = 1
     created_at: datetime | None = None
 
     model_config = {"from_attributes": True}
+
+
+class UserWithVehicleCount(UserOut):
+    vehicle_count: int = 0
+    vehicles_remaining: int = 0

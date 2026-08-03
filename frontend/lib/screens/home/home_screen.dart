@@ -58,7 +58,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.read<AuthState>();
+    final auth = context.watch<AuthState>();
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -72,6 +72,11 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: Icon(auth.darkMode ? Icons.light_mode : Icons.dark_mode),
+            tooltip: auth.darkMode ? 'Switch to light mode' : 'Switch to dark mode',
+            onPressed: auth.toggleThemeMode,
+          ),
           PopupMenuButton<String>(
             onSelected: (v) {
               switch (v) {

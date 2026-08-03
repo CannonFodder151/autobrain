@@ -26,6 +26,31 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
   bool _isPrimary = false;
   bool _lookingUp = false;
   String? _lookupInfo;
+  int? _maxVehicles;
+  int? _vehicleCount;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadQuota();
+  }
+
+  Future<void> _loadQuota() async {
+    try {
+      final api = context.read<AuthState>().api;
+      final me = await api.get('/auth/me') as Map<String, dynamic>;
+      setState(() {
+        _maxVehicles = me['max_vehicles'] as int?;
+        _vehicleCount = me['vehicle_count'] as int?;
+      });
+    } catch (_) {}
+  }
+
+  int get _remaining =>
+      (_maxVehicles ?? 0) - (_vehicleCount ?? 0);
+
+  bool get _atLimit =>
+      _maxVehicles != null && _vehicleCount != null && _remaining <= 0;
 
   @override
   void dispose() {
@@ -81,6 +106,13 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
   }
 
   Future<void> _submit() async {
+    if (_atLimit) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Vehicle limit reached — no slots left on this account.')));
+      }
+      return;
+    }
     if (!_formKey.currentState!.validate()) return;
     setState(() => _busy = true);
     try {
@@ -120,6 +152,43 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (_maxVehicles != null)
+                Card(
+                  color: _atLimit
+                      ? Theme.of(context).colorScheme.errorContainer
+                      : Theme.of(context).colorScheme.surfaceContainerHighest,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _atLimit
+                              ? Icons.block
+                              : Icons.directions_car,
+                          color: _atLimit
+                              ? Theme.of(context).colorScheme.error
+                              : Theme.of(context).colorScheme.primary,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            _atLimit
+                                ? 'No vehicle slots left (limit $_maxVehicles). '
+                                    'Ask an administrator to raise your limit.'
+                                : '$_remaining of $_maxVehicles vehicle '
+                                    'slot${_remaining == 1 ? '' : 's'} remaining',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: _atLimit
+                                    ? Theme.of(context).colorScheme.error
+                                    : null),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 12),
               TextFormField(
                 controller: _nickname,
                 decoration: const InputDecoration(labelText: 'Nickname'),
@@ -243,7 +312,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
               ),
               const SizedBox(height: 20),
               FilledButton(
-                onPressed: _busy ? null : _submit,
+                onPressed: _busy || _atLimit ? null : _submit,
                 child: const Text('Save vehicle'),
               ),
             ],

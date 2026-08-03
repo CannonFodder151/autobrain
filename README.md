@@ -4,9 +4,20 @@ AI-powered car enthusiast companion. Manage vehicles, track maintenance & fuel, 
 
 ![stack](https://img.shields.io/badge/stack-FastAPI%20%7C%20Flutter%20%7C%20PostgreSQL%20%7C%20Redis%20%7C%20MinIO%20%7C%20Celery-0D9488)
 
+<div align="center" style="margin:24px 0">
+
+[![Try AutoBrain](https://img.shields.io/badge/Try%20AutoBrain-Explore%20the%20Website-%2300B7FF?style=for-the-badge&labelColor=%23050505)](https://autobrainservice.app)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Open%20the%20App-%23007BFF?style=for-the-badge&labelColor=%23050505)](https://demo.autobrainservice.app)
+[![Self-Host](https://img.shields.io/badge/Self%20Host-Get%20Started-%231A4DFF?style=for-the-badge&labelColor=%23050505)](https://autobrainservice.app/#selfhost)
+
+</div>
+
+**demo@autobrainservice.app / `demo`** — read-only sample garage with 2 vehicles, services, fuel, parts & mods. AI and write features are disabled.
+
 ## Try it / get it
 
 - **Website & hosted service** — <https://autobrainservice.app> (sales: sales@autobrainservice.app)
+- **Live demo** — <https://demo.autobrainservice.app> (login: `demo@autobrainservice.app` / `demo`)
 - **Live app** — <https://default.autobrainservice.app/>
 - **Source** — this repository (MIT)
 
@@ -15,6 +26,7 @@ AI-powered car enthusiast companion. Manage vehicles, track maintenance & fuel, 
 | Service | URL |
 |---------|-----|
 | **Website** | https://autobrainservice.app |
+| **Live demo** | https://demo.autobrainservice.app |
 | **Web app** | https://default.autobrainservice.app/ |
 | API (OpenAPI docs) | https://default.autobrainservice.app/api/v1 and https://default.autobrainservice.app/docs |
 | AI gateway health | https://default.autobrainservice.app/ai/health |
@@ -152,14 +164,49 @@ Rego lookup accepts any valid Australian plate + state (NSW/VIC/QLD/WA/SA/TAS/NT
 1. **plateapi.com.au (real registry data)** — set `REGO_LOOKUP_URL=https://api.plateapi.com.au/api/v1/lookup` and `REGO_LOOKUP_API_KEY` in `.env` (key is never hardcoded or committed). Requests use `?plate=…&state=…` with `X-API-Key`. The free tier is **20 lookups/month**; lookups run only on demand (when you tap Lookup). The free tier returns make/model/engine + production-year range (no VIN).
 2. **Offline heuristic** — when no provider is configured, or the provider is unreachable, the app returns a best-effort guess (`source: heuristic`) so the feature never 404s on a valid plate.
 
-## Deployment (production on a Linux host)
+## Deployment (production)
+
+The production stack runs from **pre-built Docker Hub images** — no build step on the host.
+
+### 1. Publish images
+
+```bash
+DOCKERHUB_USERNAME=cannonfodder151 ./scripts/publish-images.sh   # builds + pushes all 4 images
+```
+
+Images: `cannonfodder151/autobrain-{backend,worker,ai,frontend}:latest` and `cannonfodder151/autobrain-frontend-demo:latest`.
+
+### 2. Deploy the stack (docker compose on a Linux host)
+
+```bash
+git clone https://github.com/CannonFodder151/autobrain.git
+cd autobrain
+cp .env.example .env                       # fill SECRET_KEY, ADMIN_*, SMTP_*, AI_ROUTER_URL
+DOCKERHUB_USERNAME=cannonfodder151 IMAGE_TAG=latest \
+  docker compose -f docker-compose.prod.yml up -d
+```
+
+Or point the same `docker-compose.prod.yml` at a **Portainer** environment and let it pull the published images. First boot applies migrations automatically (`python -m app.db.bootstrap`; Alembic, falling back to `create_all`) and seeds the admin account from `ADMIN_EMAIL`/`ADMIN_INITIAL_PASSWORD`.
+
+### 3. Optional: run the read-only demo
+
+Set `DEMO_MODE=true` (plus `DEMO_EMAIL`/`DEMO_PASSWORD`) to seed a read-only demo account with sample data. The demo role is enforced server-side: every write endpoint returns `403` and every AI module is disabled.
+
+```bash
+DEMO_MODE=true DEMO_EMAIL=demo@example.com DEMO_PASSWORD=demo \
+  docker compose -f docker-compose.prod.yml up -d backend
+```
+
+> Demo deployment in production: `cannonfodder151/autobrain-frontend-demo:latest` is a frontend build pointed at the demo API URL, exposed on port 8089 (see the AutoBrain deployment guide for the full stack file).
+
+## Manual / bare-metal deployment
 
 ```bash
 sudo ./scripts/setup-server.sh <user>   # installs docker + compose
 ./scripts/deploy.sh <user>@<host>        # syncs repo, builds, starts prod stack
 ```
 
-`docker-compose.prod.yml` runs: postgres, redis, minio, backend, worker, beat, ai, nginx (web + reverse proxy). First boot applies migrations automatically (`python -m app.db.bootstrap`; Alembic, falling back to `create_all`) and seeds the admin account from `ADMIN_EMAIL`/`ADMIN_INITIAL_PASSWORD`.
+`docker-compose.prod.yml` runs: postgres, redis, minio, backend, worker, beat, ai, nginx (web + reverse proxy).
 
 Kubernetes manifests: `infra/k8s/`. systemd units: `infra/systemd/`.
 

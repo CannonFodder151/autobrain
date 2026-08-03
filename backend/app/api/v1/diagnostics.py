@@ -1,4 +1,4 @@
-"""AI diagnostics routes."""
+﻿"""AI diagnostics routes."""
 
 import json
 from datetime import date
@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_ai, require_write
 from app.api.v1.vehicles import add_event, _get_owned_vehicle
 from app.db.session import get_db
 from app.models.diagnostic import Diagnostic
@@ -29,7 +29,7 @@ async def diagnose(
     vehicle_id: str,
     payload: DiagnosticRequest,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_ai),
 ) -> DiagnosticResponse:
     vehicle = await _get_owned_vehicle(db, vehicle_id, user)
     context = payload.vehicle_context or {}
@@ -76,7 +76,7 @@ async def add_to_service(
     diagnostic_id: str,
     payload: AddToServiceRequest,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_write),
 ) -> Diagnostic:
     vehicle = await _get_owned_vehicle(db, vehicle_id, user)
     diag = await db.get(Diagnostic, diagnostic_id)
@@ -124,3 +124,4 @@ async def add_to_service(
     await db.commit()
     await db.refresh(diag)
     return diag
+
