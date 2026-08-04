@@ -119,8 +119,9 @@ class _LogbookScreenState extends State<LogbookScreen> {
   Future<void> _tripDialog(LogEntry? existing) async {
     final isEdit = existing != null;
     final isComplete = existing?.isComplete ?? false;
-    final dateCtrl =
-        TextEditingController(text: (existing?.startedAt ?? '').substring(0, 10));
+    final existingStart = existing?.startedAt ?? '';
+    final dateCtrl = TextEditingController(
+        text: existingStart.length >= 10 ? existingStart.substring(0, 10) : '');
     final timeCtrl = TextEditingController();
     final odoStart = TextEditingController(
         text: existing?.startOdometerKm?.toString() ?? '');
@@ -132,8 +133,8 @@ class _LogbookScreenState extends State<LogbookScreen> {
     final reasonCtrl = TextEditingController(text: existing?.reason ?? '');
     var purpose = existing?.purpose ?? 'private';
 
-    if (existing?.startedAt != null && existing!.startedAt!.length >= 16) {
-      timeCtrl.text = existing.startedAt!.substring(11, 16);
+    if (existingStart.length >= 16) {
+      timeCtrl.text = existingStart.substring(11, 16);
     }
     if (!isEdit) {
       final now = DateTime.now();
@@ -319,8 +320,9 @@ class _LogbookScreenState extends State<LogbookScreen> {
             FilledButton(
               onPressed: () async {
                 if (!formKey.currentState!.validate()) return;
+                final time = timeCtrl.text.trim().isEmpty ? '00:00' : timeCtrl.text.trim();
                 final startedAt =
-                    DateTime.tryParse('${dateCtrl.text} ${timeCtrl.text}');
+                    DateTime.tryParse('${dateCtrl.text.trim()} $time');
                 if (startedAt == null) {
                   ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
                       content: Text('Invalid start date/time')));
@@ -328,20 +330,21 @@ class _LogbookScreenState extends State<LogbookScreen> {
                 }
                 final api = context.read<AuthState>().api;
                 try {
+                  final startOdo = int.tryParse(odoStart.text.trim());
+                  final endOdo = isEdit ? int.tryParse(odoEnd.text.trim()) : null;
                   final body = <String, dynamic>{
                     'started_at': startedAt.toUtc().toIso8601String(),
                     'purpose': purpose,
-                    if (odoStart.text.isNotEmpty)
-                      'start_odometer_km': int.parse(odoStart.text),
-                    if (locStart.text.isNotEmpty)
-                      'start_location': locStart.text,
+                    if (startOdo != null) 'start_odometer_km': startOdo,
+                    if (locStart.text.trim().isNotEmpty)
+                      'start_location': locStart.text.trim(),
                     if (lat != null) 'start_lat': lat,
                     if (lng != null) 'start_lng': lng,
-                    if (reasonCtrl.text.isNotEmpty) 'reason': reasonCtrl.text,
-                    if (isEdit && odoEnd.text.isNotEmpty)
-                      'end_odometer_km': int.parse(odoEnd.text),
-                    if (isEdit && locEnd.text.isNotEmpty)
-                      'end_location': locEnd.text,
+                    if (reasonCtrl.text.trim().isNotEmpty)
+                      'reason': reasonCtrl.text.trim(),
+                    if (isEdit && endOdo != null) 'end_odometer_km': endOdo,
+                    if (isEdit && locEnd.text.trim().isNotEmpty)
+                      'end_location': locEnd.text.trim(),
                     if (isEdit) 'status': 'completed',
                   };
                   if (isEdit) {

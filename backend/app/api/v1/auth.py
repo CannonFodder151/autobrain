@@ -225,9 +225,9 @@ async def update_settings(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> User:
-    """Self-service account settings. A user may toggle their own free-account
-    tier and OBD Bluetooth auto-connect; OBD access itself is admin-granted."""
-    allowed = {"free_account", "obd_auto_connect"}
+    """Self-service account settings. Account tier (free/paid) and OBD access
+    are admin-managed; users may only toggle OBD Bluetooth auto-connect."""
+    allowed = {"obd_auto_connect"}
     for key, value in payload.items():
         if key not in allowed or not isinstance(value, bool):
             continue

@@ -250,41 +250,34 @@ class _LoginScreenState extends State<LoginScreen> {
                                       : null,
                             ),
                           ] else ...[
-                            AutofillGroup(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  TextFormField(
-                                    controller: _email,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Email',
-                                      prefixIcon: Icon(Icons.mail_outline),
-                                    ),
-                                    keyboardType: TextInputType.emailAddress,
-                                    autofillHints: const [AutofillHints.username],
-                                    textInputAction: TextInputAction.next,
-                                    validator: (v) => v == null || !v.contains('@')
-                                        ? 'Valid email required'
-                                        : null,
-                                  ),
-                                  const SizedBox(height: 14),
-                                  TextFormField(
-                                    controller: _password,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Password',
-                                      prefixIcon: Icon(Icons.lock_outline),
-                                    ),
-                                    obscureText: true,
-                                    autocorrect: false,
-                                    enableSuggestions: false,
-                                    autofillHints: const [AutofillHints.password],
-                                    textInputAction: TextInputAction.done,
-                                    onFieldSubmitted: (_) => _submit(),
-                                    validator: (v) =>
-                                        v == null || v.isEmpty ? 'Password required' : null,
-                                  ),
-                                ],
+                            TextFormField(
+                              controller: _email,
+                              decoration: const InputDecoration(
+                                labelText: 'Email',
+                                prefixIcon: Icon(Icons.mail_outline),
                               ),
+                              keyboardType: TextInputType.emailAddress,
+                              autofillHints: const [AutofillHints.username],
+                              textInputAction: TextInputAction.next,
+                              validator: (v) => v == null || !v.contains('@')
+                                  ? 'Valid email required'
+                                  : null,
+                            ),
+                            const SizedBox(height: 14),
+                            TextFormField(
+                              controller: _password,
+                              decoration: const InputDecoration(
+                                labelText: 'Password',
+                                prefixIcon: Icon(Icons.lock_outline),
+                              ),
+                              obscureText: true,
+                              autocorrect: false,
+                              enableSuggestions: false,
+                              autofillHints: const [AutofillHints.password],
+                              textInputAction: TextInputAction.done,
+                              onFieldSubmitted: (_) => _submit(),
+                              validator: (v) =>
+                                  v == null || v.isEmpty ? 'Password required' : null,
                             ),
                           ],
                           if (_error != null) ...[

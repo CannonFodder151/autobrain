@@ -22,6 +22,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _mfaEnabled = false;
   String? _error;
 
+  bool get _aiEnabled => !((_profile?['free_account'] as bool?) ?? false);
+  bool get _obdEnabled => (_profile?['obd_enabled'] as bool?) ?? false;
+
+  Widget _chip(bool on) => Chip(
+        label: Text(on ? 'Enabled' : 'Disabled'),
+        visualDensity: VisualDensity.compact,
+        backgroundColor:
+            on ? Colors.green.withValues(alpha: 0.15) : Colors.grey.withValues(alpha: 0.15),
+        side: BorderSide(
+          color: on ? Colors.green : Colors.grey,
+          width: 1,
+        ),
+        labelStyle: TextStyle(
+            color: on ? Colors.green.shade700 : Colors.grey, fontSize: 12),
+      );
+
   @override
   void initState() {
     super.initState();
@@ -95,22 +111,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       });
     } catch (e) {
       setState(() => _error = 'Invalid code — try again');
-    } finally {
-      setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _toggleFree(bool v) async {
-    final api = context.read<AuthState>().api;
-    setState(() => _busy = true);
-    try {
-      await api.patch('/auth/settings', {'free_account': v});
-      await _load();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$e')));
-      }
     } finally {
       setState(() => _busy = false);
     }
@@ -269,21 +269,57 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   style: TextStyle(color: Colors.red.shade600)),
             ),
           const SizedBox(height: 16),
-          Text('Account plan & data',
+          Text('Account features',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
           Card(
             child: Column(
               children: [
-                SwitchListTile(
-                  title: const Text('Free account'),
-                  subtitle: const Text(
-                      'Free tier disables AI features, file exports and rego '
-                      'lookup. Upgrade to enable them.'),
-                  value: (_profile?['free_account'] as bool?) ?? false,
-                  onChanged: _toggleFree,
+                ListTile(
+                  leading: Icon(_aiEnabled ? Icons.auto_awesome : Icons.auto_awesome_outlined,
+                      color: _aiEnabled ? Colors.green : Colors.grey),
+                  title: const Text('AI features'),
+                  subtitle: Text(
+                      _aiEnabled
+                          ? 'Enabled — diagnostics, predictions, OCR, valuation'
+                          : 'Disabled on this account'),
+                  trailing: _chip(_aiEnabled),
                 ),
                 const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.directions_car),
+                  title: const Text('Maximum cars'),
+                  subtitle: Text('${(_profile?['max_vehicles'] as int?) ?? 1} '
+                      'vehicle slot${(_profile?['max_vehicles'] as int? ?? 1) == 1 ? '' : 's'}'),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: Icon(_obdEnabled ? Icons.settings_input_component : Icons.settings_input_component_outlined,
+                      color: _obdEnabled ? Colors.green : Colors.grey),
+                  title: const Text('OBD features'),
+                  subtitle: Text(
+                      _obdEnabled
+                          ? 'Enabled — Bluetooth adapter + fault codes'
+                          : 'Disabled on this account'),
+                  trailing: _chip(_obdEnabled),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.verified_user_outlined),
+                  title: const Text('Exports & rego lookup'),
+                  subtitle: Text(
+                      _aiEnabled
+                          ? 'Enabled — CSV/PDF exports, profile backup, rego lookup'
+                          : 'Disabled on this account'),
+                  trailing: _chip(_aiEnabled),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            child: Column(
+              children: [
                 ListTile(
                   leading: const Icon(Icons.download),
                   title: const Text('Export my data'),
