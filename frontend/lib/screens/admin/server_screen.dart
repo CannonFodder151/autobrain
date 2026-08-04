@@ -1,6 +1,7 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/auth_state.dart';
 import '../../core/download.dart';
@@ -141,20 +142,30 @@ class _ServerScreenState extends State<ServerScreen> {
                     'Repository: ${v?['repo'] ?? '—'}',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
+                  if (v != null && v['commit_message'] != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        'Latest commit: ${v['commit_message']}',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 12),
-          const Card(
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: Text(
-                'Changelog: changes are tracked in CHANGELOG.md in the repo and '
-                'published to the wiki. The version above is compared against the '
-                'latest GitHub release — release the new version when the build '
-                'passes and a changelog entry is added.',
-              ),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.history),
+              title: const Text('Changelog'),
+              subtitle: const Text(
+                  'What changed in each release — view CHANGELOG.md on GitHub'),
+              trailing: const Icon(Icons.open_in_new),
+              onTap: () => _openUrl(
+                  'https://github.com/${(v?['repo'] ?? 'CannonFodder151/autobrain')}/blob/main/CHANGELOG.md'),
             ),
           ),
           const SizedBox(height: 16),
@@ -202,23 +213,34 @@ class _ServerScreenState extends State<ServerScreen> {
     );
   }
 
+  Future<void> _openUrl(String url) async {
+    final ok = await launchUrl(Uri.parse(url),
+        mode: LaunchMode.externalApplication);
+    if (!ok && mounted) _snack('Could not open link');
+  }
+
   Widget _statusRow(BuildContext context, Map<String, dynamic> v) {
     final latest = v['latest_version']?.toString();
     final upToDate = v['up_to_date'];
     final reachable = v['reachable'] == true;
+    final repoVersion = v['repo_version']?.toString();
     String text;
     Color color;
     if (!reachable) {
       text = "GitHub unreachable — can't check for updates";
       color = Colors.grey;
     } else if (upToDate == null) {
-      text = 'No releases found on GitHub';
+      text = 'Checking GitHub…';
       color = Colors.grey;
     } else if (upToDate == true) {
-      text = 'Up to date (latest: $latest)';
+      text = repoVersion != null
+          ? 'Up to date (v$repoVersion)'
+          : 'Up to date (latest: $latest)';
       color = Colors.green;
     } else {
-      text = 'Update available: $latest';
+      text = repoVersion != null
+          ? 'Update available: v$repoVersion (running v${v['version']})'
+          : 'Update available: $latest';
       color = Colors.orange;
     }
     return Row(

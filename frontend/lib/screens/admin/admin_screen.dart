@@ -415,19 +415,24 @@ class _VersionBanner extends StatelessWidget {
     final latest = version['latest_version']?.toString();
     final upToDate = version['up_to_date'];
     final reachable = version['reachable'] == true;
+    final repoVersion = version['repo_version']?.toString();
     String statusText;
     Color statusColor;
     if (!reachable) {
       statusText = "GitHub unreachable — can't check for updates";
       statusColor = Colors.grey;
     } else if (upToDate == null) {
-      statusText = 'No releases found on GitHub';
+      statusText = 'Checking GitHub…';
       statusColor = Colors.grey;
     } else if (upToDate == true) {
-      statusText = 'Up to date (latest: $latest)';
+      statusText = repoVersion != null
+          ? 'Up to date (v$repoVersion)'
+          : 'Up to date (latest: $latest)';
       statusColor = Colors.green;
     } else {
-      statusText = 'Update available: $latest';
+      statusText = repoVersion != null
+          ? 'Update available: v$repoVersion'
+          : 'Update available: $latest';
       statusColor = Colors.orange;
     }
     return Container(
