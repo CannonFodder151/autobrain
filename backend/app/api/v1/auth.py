@@ -215,7 +215,20 @@ async def me(
     count = count or 0
     remaining = max(current.max_vehicles - count, 0)
     return UserWithVehicleCount.model_validate(
-        current, update={"vehicle_count": count, "vehicles_remaining": remaining}
+        {
+            "id": current.id,
+            "email": current.email,
+            "display_name": current.display_name,
+            "role": current.role,
+            "is_active": current.is_active,
+            "mfa_enabled": current.mfa_enabled,
+            "max_vehicles": current.max_vehicles,
+            "free_account": current.free_account,
+            "obd_enabled": current.obd_enabled,
+            "obd_auto_connect": current.obd_auto_connect,
+            "vehicle_count": count,
+            "vehicles_remaining": remaining,
+        }
     )
 
 
@@ -383,10 +396,14 @@ async def import_profile(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_write),
 ) -> dict:
-    """Import an exported profile (new account) on this server."""
+    """Restore an exported profile onto the logged-in account.
+
+    Wipes the current user's vehicles + records and replaces them with the
+    profile's data. Account identity (email/password) is unchanged.
+    """
     import json as _json
 
-    from app.services.backup import import_user
+    from app.services.backup import restore_user_data
 
     raw = await file.read()
     if len(raw) > 100 * 1024 * 1024:
@@ -398,10 +415,10 @@ async def import_profile(
     if data.get("app") != "autobrain" or data.get("kind") != "profile":
         raise HTTPException(status_code=400, detail="Not an AutoBrain profile export file")
     try:
-        imported_id = await import_user(db, data)
+        await restore_user_data(db, user.id, data)
     except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc))
-    return {"message": "Profile imported", "user_id": imported_id}
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"message": "Profile restored — your vehicles and records were replaced"}
 
 
 # --- helpers ---

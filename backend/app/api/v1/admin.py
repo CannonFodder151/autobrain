@@ -151,5 +151,57 @@ async def delete_user(
     )
     if user.role == "admin" and admin_count <= 1:
         raise HTTPException(status_code=400, detail="Cannot delete the last admin")
-    await db.delete(user)
-    await db.commit()
+    from app.services.backup import delete_user_complete
+
+    await delete_user_complete(db, user.id)
+
+
+@router.get("/{user_id}/backup")
+async def backup_user(
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Download a single user's profile (all their vehicles + records)."""
+    from app.services.backup import dump_backup, serialize_user
+
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    data = await serialize_user(db, user_id)
+    content = dump_backup(data)
+    stamp = user.email.split("@")[0].replace(".", "-")
+    return Response(
+        content=content,
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="autobrain-user-{stamp}.json"'},
+    )
+
+
+@router.post("/{user_id}/restore")
+async def restore_user(
+    user_id: str,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Restore/override a user's data from an uploaded profile export."""
+    import json as _json
+
+    from app.services.backup import restore_user_data
+
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    raw = await file.read()
+    if len(raw) > 100 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File too large")
+    try:
+        data = _json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, _json.JSONDecodeError):
+        raise HTTPException(status_code=400, detail="Not a valid AutoBrain export file")
+    if data.get("app") != "autobrain" or data.get("kind") != "profile":
+        raise HTTPException(status_code=400, detail="Not an AutoBrain profile export file")
+    try:
+        await restore_user_data(db, user_id, data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"message": f"User {user.email} restored"}

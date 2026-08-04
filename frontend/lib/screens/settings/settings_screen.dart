@@ -159,12 +159,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await api.upload('/auth/import', bytes, picked.name, 'application/json');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Profile imported. Sign in with the imported account.')));
+            content: Text('Profile restored — your vehicles and records were replaced.')));
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Import failed: $e')));
+            .showSnackBar(SnackBar(content: Text('Restore failed: $e')));
       }
     }
   }
@@ -299,8 +299,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ListTile(
                   leading: const Icon(Icons.directions_car),
                   title: const Text('Maximum cars'),
-                  subtitle: Text('$_vehiclesUsed car${_vehiclesUsed == 1 ? '' : 's'} used '
-                      'of $_maxVehicles'),
                   trailing: _countChip(_vehiclesUsed, _maxVehicles),
                 ),
                 const Divider(height: 1),
@@ -342,9 +340,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 ListTile(
                   leading: const Icon(Icons.upload_file),
-                  title: const Text('Import a profile'),
+                  title: const Text('Restore your profile'),
                   subtitle: const Text(
-                      'Load a previously exported profile onto this server'),
+                      'Replace this account\'s vehicles and records from an '
+                      'exported profile (overrides current data)'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: _import,
                 ),

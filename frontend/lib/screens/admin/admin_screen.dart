@@ -1,7 +1,9 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/auth_state.dart';
+import '../../core/download.dart';
 import 'server_screen.dart';
 
 class AdminScreen extends StatefulWidget {
@@ -217,6 +219,69 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
+  Future<void> _backupUser(Map<String, dynamic> u) async {
+    final api = context.read<AuthState>().api;
+    try {
+      final bytes = await api.export('/admin/users/${u['id']}/backup');
+      await downloadBytes('autobrain-user.json', bytes);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Backup failed: $e')));
+      }
+    }
+  }
+
+  Future<void> _restoreUser(Map<String, dynamic> u) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Restore ${u['email']}?'),
+        content: const Text(
+            'Replaces this user\'s vehicles and records with the profile file. '
+            'The account itself stays.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Restore'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['json'],
+    );
+    if (result == null || result.files.isEmpty) return;
+    final picked = result.files.single;
+    final List<int> bytes;
+    if (picked.bytes != null) {
+      bytes = picked.bytes!;
+    } else if (picked.path != null) {
+      bytes = await readLocalFile(picked.path!);
+    } else {
+      return;
+    }
+    final api = context.read<AuthState>().api;
+    try {
+      await api.upload(
+          '/admin/users/${u['id']}/restore', bytes, picked.name, 'application/json');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('User profile restored.')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Restore failed: $e')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -291,6 +356,10 @@ class _AdminScreenState extends State<AdminScreen> {
                                       _update(u, {'obd_enabled': !obd});
                                     case 'limit':
                                       _setLimit(u);
+                                    case 'backup':
+                                      _backupUser(u);
+                                    case 'restore':
+                                      _restoreUser(u);
                                     case 'delete':
                                       _delete(u);
                                   }
@@ -299,6 +368,12 @@ class _AdminScreenState extends State<AdminScreen> {
                                   PopupMenuItem(
                                       value: 'limit',
                                       child: const Text('Set vehicle limit')),
+                                  PopupMenuItem(
+                                      value: 'backup',
+                                      child: const Text('Backup user')),
+                                  PopupMenuItem(
+                                      value: 'restore',
+                                      child: const Text('Restore user')),
                                   PopupMenuItem(
                                       value: 'toggle_free',
                                       child: Text(free

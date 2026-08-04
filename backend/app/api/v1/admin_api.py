@@ -115,5 +115,6 @@ async def delete_user(
     )
     if user.role == "admin" and admin_count <= 1:
         raise HTTPException(status_code=400, detail="Cannot delete the last admin")
-    await db.delete(user)
-    await db.commit()
+    from app.services.backup import delete_user_complete
+
+    await delete_user_complete(db, user.id)
