@@ -1,101 +1,136 @@
-# API Specification
+# AutoBrain API Specification
 
-Base URL: `/api/v1`. Auth: `Authorization: Bearer <token>` (JWT).
-Interactive spec: `http://<host>/docs` (OpenAPI).
+Base URL: `/api/v1`. Auth: `Authorization: Bearer <token>` (JWT). Interactive spec: `http://<host>/docs` (OpenAPI).
+
+Access tiers: `role` ∈ `admin | user | demo`; `free_account` (per-user) disables **AI features, file exports and rego lookup** (403 on those endpoints). Demo accounts are read-only.
 
 ## Auth
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/auth/login` | Login; returns `token_pair` or `{mfa_required, mfa_token}` when MFA enabled |
-| POST | `/auth/mfa/verify` | Complete login with TOTP code (`mfa_token` + `code`) |
-| POST | `/auth/refresh` | Refresh tokens |
-| GET | `/auth/me` | Current user (includes `role`, `mfa_enabled`) |
-| POST | `/auth/register` | **Admin-only** — create a user account (no self signup) |
-| GET | `/auth/mfa/setup` | Generate TOTP secret + QR (persists pending secret) |
-| POST | `/auth/mfa/enable` | Verify code, enable MFA |
-| POST | `/auth/mfa/disable` | Verify code, disable MFA |
 
-## Admin users (admin role only)
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/admin/users?q=` | List/search users |
-| POST | `/admin/users` | Create user |
-| PATCH | `/admin/users/{id}` | Update name/role/active/password |
+| POST   | `/auth/login` | Login; returns `token_pair` or `{mfa_required, mfa_token}` when MFA enabled |
+| POST   | `/auth/mfa/verify` | Complete login with TOTP code |
+| POST   | `/auth/refresh` | Refresh tokens |
+| GET    | `/auth/me` | Current user (role, mfa_enabled, free_account, obd_enabled, obd_auto_connect, vehicle_count) |
+| PATCH  | `/auth/settings` | Self-service toggles: `free_account`, `obd_auto_connect` |
+| GET    | `/auth/export` | Export your whole profile (user + vehicles + records) as JSON. Paid only. |
+| POST   | `/auth/import` | Import an exported profile (creates a new account on this server) |
+| GET    | `/auth/mfa/setup` | Generate TOTP secret + QR |
+| POST   | `/auth/mfa/enable` / `/auth/mfa/disable` | Verify code, enable/disable MFA |
+| POST   | `/auth/password-reset/request` / `/confirm` | Email reset link / confirm |
+| POST   | `/auth/register` | **Admin-only** — create a user account |
+
+## Admin users & server (admin role only)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | `/admin/users?q=` | List/search users |
+| POST   | `/admin/users` | Create user (incl. free_account, obd_enabled, max_vehicles) |
+| PATCH  | `/admin/users/{id}` | Update role/active/password/quota/free_account/obd_enabled |
 | DELETE | `/admin/users/{id}` | Delete user |
+| GET    | `/admin/version` | Server version + GitHub latest-release check (up_to_date) |
+| GET    | `/admin/backup` | Download full JSON database snapshot |
+| POST   | `/admin/restore` | Upload a backup to wipe & restore the database (DANGEROUS) |
+
+## Admin API (machine-to-machine, `X-Admin-API-Key` header, `ADMIN_API_KEY` env)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | `/admin-api/users` | List users |
+| POST   | `/admin-api/users` | Create user (role, quota, free_account, obd_enabled, password/invite) |
+| PATCH  | `/admin-api/users/{id}` | Update permissions (role, max_vehicles, free_account, obd_enabled, is_active, password) |
+| POST   | `/admin-api/users/{id}/disable` | Disable an account |
+| DELETE | `/admin-api/users/{id}` | Delete a user |
 
 ## Vehicles
+
 | Method | Path | Description |
 |--------|------|-------------|
-| GET/POST | `/vehicles` | List / create |
+| GET/POST | `/vehicles` | List / create (payload incl. `club_reg`) |
 | GET/PATCH/DELETE | `/vehicles/{id}` | Detail / update / delete |
-| POST | `/vehicles/rego-lookup` | Plate (+state NSW/VIC/QLD/WA/SA/TAS/NT/ACT) → VIN, make, model, year, engine |
-| GET | `/vehicles/{id}/timeline` | Unified event timeline |
+| POST   | `/vehicles/rego-lookup` | Plate + state → VIN, make, model, year, engine. **Paid only.** |
+| GET    | `/vehicles/{id}/timeline` | Unified event timeline |
+
+`club_reg: bool` — club-registered vehicles disable the ATO logbook feature.
 
 ## Services (`/vehicles/{id}/services`)
+
 | Method | Path | Description |
 |--------|------|-------------|
 | GET/POST | `` | List / create |
-| GET/PATCH/DELETE | `/{service_id}` | Detail / update / delete |
-| POST | `/predict` | AI next-service prediction |
-| GET | `/export?fmt=csv|pdf` | Export history |
+| GET/PATCH/DELETE | `/{service_id}` | Detail / edit (items replace + status) / delete |
+| POST   | `/predict` | AI next-service prediction |
+| GET    | `/export?fmt=csv\|pdf` | Export completed history. **Paid only.** |
+
+Completing a scheduled service created from a diagnostic auto-resolves (green-tick) that diagnostic.
 
 ## Fuel (`/vehicles/{id}/fuel`)
+
 | Method | Path | Description |
 |--------|------|-------------|
-| GET/POST | `` | List / add fill-up |
-| DELETE | `/{fuel_id}` | Delete |
-| GET | `/stats` | Totals, averages, series |
+| GET/POST | `` | List / add fill-up (updates vehicle odometer unless a newer logbook trip exists) |
+| PATCH/DELETE | `/{fuel_id}` | Edit / delete a fill-up |
+| GET    | `/stats` | Totals, averages, series |
+| GET    | `/export?fy=` | CSV export per Australian financial year. **Paid only.** |
+| POST   | `/receipt?ai=true\|false` | Fuel receipt photo. `ai=true` OCR-fills litres & price/L then user enters odometer; `ai=false` stores photo only. |
+
+## Logbook (`/vehicles/{id}/logbook`) — ATO claiming, non-club-reg vehicles only
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST   | `` | Start a trip (time/date, GPS location, odometer, work/private, reason) |
+| GET    | `?fy=` | List trips per financial year |
+| GET    | `/stats?fy=` | Trip / distance / work % totals |
+| PATCH  | `/{entry_id}` | Edit trip; set end time/date/odometer to complete (updates the vehicle odometer) |
+| DELETE | `/{entry_id}` | Delete a trip |
+| GET    | `/export?fy=` | ATO logbook CSV per financial year |
+| POST   | `/odometer-photo` | OCR a dashboard photo → odometer reading (AI, paid) |
+
+## OBD-II (`/vehicles/{id}/obd`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | `/settings` | `{enabled, auto_connect}` (access is admin-granted) |
+| POST   | `/vin` | Auto-populate the VIN if missing |
+| GET/POST | `/codes` | List / add fault codes |
+| PATCH/DELETE | `/codes/{code_id}` | Update (resolve) / delete a code |
+
+Code entries can be pushed into the diagnostic AI tool.
 
 ## Diagnostics (`/vehicles/{id}/diagnostics`)
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `` | Run AI diagnosis (symptoms + OBD codes) |
-| GET | `` | List |
-| POST | `/{diagnostic_id}/add-to-service` | Queue as a service |
 
-## Mods (`/vehicles/{id}/mods`)
 | Method | Path | Description |
 |--------|------|-------------|
-| GET/POST | `` | List / create |
-| PATCH/DELETE | `/{mod_id}` | Update / delete |
-| POST | `/impact` | AI performance/value impact |
-| GET | `/export?fmt=csv|pdf` | Build sheet |
+| POST   | `` | Run AI diagnosis (symptoms + OBD codes). AI & paid only. |
+| GET    | `` | List (incl. `status`: open/resolved) |
+| POST   | `/{id}/add-to-service` | Queue as a scheduled service |
+| POST   | `/{id}/resolve` | Mark resolved once fixed |
+| DELETE | `/{id}` | Delete a diagnostic |
 
-## Receipts (`/vehicles/{id}/receipts`)
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `` | Upload (multipart) → async OCR |
-| GET | `` | List |
-| POST | `/{receipt_id}/apply-to-service` | Add items to service + inventory |
+A diagnostic auto-flips to `resolved` when its linked service is completed.
 
-## Parts (`/vehicles/{id}/parts`)
-| Method | Path | Description |
-|--------|------|-------------|
-| GET/POST | `` | List / create |
-| PATCH/DELETE | `/{part_id}` | Update / delete |
-| POST | `/{part_id}/movement` | Stock in/out |
-| GET | `/reorder-suggestions` | AI reorder list |
+## Mods, Receipts, Parts, Valuation, Analytics, Notifications
 
-## Valuation (`/vehicles/{id}/valuation`)
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `` | Estimate resale value (stores snapshot) |
-| GET | `/history` | Value snapshots |
-
-## Analytics (`/vehicles/{id}/analytics`)
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `` | Spend, TCO, cost/km, forecast, insights |
+- **Mods** (`/vehicles/{id}/mods`): GET/POST, PATCH/DELETE `/{mod_id}`, POST `/impact` (AI), GET `/export?fmt=csv|pdf` (paid).
+- **Receipts** (`/vehicles/{id}/receipts`): POST (multipart → async OCR), GET, POST `/{id}/apply-to-service`.
+- **Parts** (`/vehicles/{id}/parts`): GET/POST, PATCH/DELETE `/{id}`, POST `/{id}/movement`, GET `/reorder-suggestions` (AI).
+- **Valuation** (`/vehicles/{id}/valuation`): POST (AI — disabled on free accounts), GET `/history`.
+- **Analytics** (`/vehicles/{id}/analytics`): GET (spend, TCO, cost/km, forecast, insights).
+- **Notifications** (`/vehicles/{id}/notifications`): GET/PATCH preferences, POST `/test`.
 
 ## System
+
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/health` | Liveness |
-| WS | `/ws/{user_id}` | Live push (receipt.processed, etc.) |
+| GET    | `/health` | Liveness |
+| WS     | `/ws/{user_id}` | Live push (receipt.processed, etc.) |
 
 ## AI gateway (port 8001)
+
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/health` | Liveness + router status |
-| GET | `/v1/modules` | List modules |
-| POST | `/v1/{module}` | Infer (module ∈ diagnostics, service-prediction, ocr, resale, mod-impact) |
+| GET    | `/health` | Liveness + router status |
+| GET    | `/v1/modules` | List modules |
+| POST   | `/v1/{module}` | Infer — `diagnostics`, `service-prediction`, `ocr`, `fuel-ocr`, `odometer`, `resale`, `mod-impact` |
+
+All modules are deterministic (temperature 0) and validate/clamp numeric output (`resale` clamps low ≤ estimated ≤ high).

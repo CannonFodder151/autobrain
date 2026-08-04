@@ -12,6 +12,8 @@ class UserCreate(BaseModel):
     role: str = Field(default="user", pattern="^(admin|user)$")
     max_vehicles: int = Field(default=1, ge=1, le=1000)
     send_invite: bool = False  # email a create-account link instead of setting a password
+    free_account: bool = False
+    obd_enabled: bool = False
 
 
 class UserLogin(BaseModel):
@@ -28,6 +30,9 @@ class UserOut(BaseModel):
     is_active: bool
     mfa_enabled: bool
     max_vehicles: int = 1
+    free_account: bool = False
+    obd_enabled: bool = False
+    obd_auto_connect: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -90,6 +95,9 @@ class AdminUserUpdate(BaseModel):
     is_active: bool | None = None
     password: str | None = Field(default=None, min_length=8, max_length=128)
     max_vehicles: int | None = Field(default=None, ge=1, le=1000)
+    free_account: bool | None = None
+    obd_enabled: bool | None = None
+    obd_auto_connect: bool | None = None
 
 
 class UserAdminOut(BaseModel):
@@ -100,6 +108,9 @@ class UserAdminOut(BaseModel):
     is_active: bool
     mfa_enabled: bool
     max_vehicles: int = 1
+    free_account: bool = False
+    obd_enabled: bool = False
+    obd_auto_connect: bool = False
     created_at: datetime | None = None
 
     model_config = {"from_attributes": True}

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/auth_state.dart';
+import 'server_screen.dart';
 
 class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key});
@@ -14,11 +15,23 @@ class _AdminScreenState extends State<AdminScreen> {
   List<Map<String, dynamic>> _users = const [];
   bool _loading = true;
   String _query = '';
+  Map<String, dynamic>? _version;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _loadVersion();
+  }
+
+  Future<void> _loadVersion() async {
+    try {
+      final data = await context
+          .read<AuthState>()
+          .api
+          .get('/admin/version') as Map<String, dynamic>;
+      if (mounted) setState(() => _version = data);
+    } catch (_) {}
   }
 
   Future<void> _load() async {
@@ -39,6 +52,8 @@ class _AdminScreenState extends State<AdminScreen> {
     final maxVehicles = TextEditingController(text: '1');
     String role = 'user';
     var sendInvite = false;
+    var freeAccount = false;
+    var obdEnabled = false;
     final api = context.read<AuthState>().api;
     final created = await showDialog<bool>(
       context: context,
@@ -90,6 +105,19 @@ class _AdminScreenState extends State<AdminScreen> {
                     helperText: 'Vehicle limit for this user (default 1)',
                   ),
                 ),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Free account'),
+                  subtitle: const Text('Disables AI, exports and rego lookup'),
+                  value: freeAccount,
+                  onChanged: (v) => setDialogState(() => freeAccount = v ?? false),
+                ),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Grant OBD access'),
+                  value: obdEnabled,
+                  onChanged: (v) => setDialogState(() => obdEnabled = v ?? false),
+                ),
               ],
             ),
           ),
@@ -113,6 +141,8 @@ class _AdminScreenState extends State<AdminScreen> {
           if (sendInvite) ...{'send_invite': true} else 'password': password.text,
           'role': role,
           'max_vehicles': int.tryParse(maxVehicles.text) ?? 1,
+          'free_account': freeAccount,
+          'obd_enabled': obdEnabled,
         });
         _load();
       } catch (e) {
@@ -193,11 +223,22 @@ class _AdminScreenState extends State<AdminScreen> {
       appBar: AppBar(
         title: const Text('User administration'),
         actions: [
+          IconButton(
+            tooltip: 'Server: version, backup & restore',
+            icon: const Icon(Icons.dns),
+            onPressed: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ServerScreen()),
+              );
+              _loadVersion();
+            },
+          ),
           IconButton(onPressed: _create, icon: const Icon(Icons.person_add_alt)),
         ],
       ),
       body: Column(
         children: [
+          if (_version != null) _VersionBanner(version: _version!),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
             child: TextField(
@@ -223,6 +264,8 @@ class _AdminScreenState extends State<AdminScreen> {
                           final u = _users[i];
                           final isAdmin = u['role'] == 'admin';
                           final active = u['is_active'] == true;
+                          final free = u['free_account'] == true;
+                          final obd = u['obd_enabled'] == true;
                           return Card(
                             child: ListTile(
                               leading: CircleAvatar(
@@ -231,6 +274,8 @@ class _AdminScreenState extends State<AdminScreen> {
                               title: Text(u['display_name']),
                               subtitle: Text(
                                 '${u['email']} · ${u['max_vehicles'] ?? 1} vehicle limit'
+                                '${free ? ' · FREE' : ''}'
+                                '${obd ? ' · OBD' : ''}'
                                 '${u['mfa_enabled'] == true ? ' · MFA ✓' : ''}',
                               ),
                               trailing: PopupMenuButton<String>(
@@ -240,6 +285,10 @@ class _AdminScreenState extends State<AdminScreen> {
                                       _update(u, {'is_active': !active});
                                     case 'toggle_role':
                                       _update(u, {'role': isAdmin ? 'user' : 'admin'});
+                                    case 'toggle_free':
+                                      _update(u, {'free_account': !free});
+                                    case 'toggle_obd':
+                                      _update(u, {'obd_enabled': !obd});
                                     case 'limit':
                                       _setLimit(u);
                                     case 'delete':
@@ -250,6 +299,16 @@ class _AdminScreenState extends State<AdminScreen> {
                                   PopupMenuItem(
                                       value: 'limit',
                                       child: const Text('Set vehicle limit')),
+                                  PopupMenuItem(
+                                      value: 'toggle_free',
+                                      child: Text(free
+                                          ? 'Upgrade to paid account'
+                                          : 'Set as free account')),
+                                  PopupMenuItem(
+                                      value: 'toggle_obd',
+                                      child: Text(obd
+                                          ? 'Revoke OBD access'
+                                          : 'Grant OBD access')),
                                   PopupMenuItem(
                                       value: 'toggle_active',
                                       child: Text(active ? 'Disable account' : 'Enable account')),
@@ -264,6 +323,51 @@ class _AdminScreenState extends State<AdminScreen> {
                           );
                         },
                       ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _VersionBanner extends StatelessWidget {
+  const _VersionBanner({required this.version});
+  final Map<String, dynamic> version;
+
+  @override
+  Widget build(BuildContext context) {
+    final current = version['version']?.toString() ?? '?';
+    final latest = version['latest_version']?.toString();
+    final upToDate = version['up_to_date'];
+    final reachable = version['reachable'] == true;
+    String statusText;
+    Color statusColor;
+    if (!reachable) {
+      statusText = "GitHub unreachable — can't check for updates";
+      statusColor = Colors.grey;
+    } else if (upToDate == null) {
+      statusText = 'No releases found on GitHub';
+      statusColor = Colors.grey;
+    } else if (upToDate == true) {
+      statusText = 'Up to date (latest: $latest)';
+      statusColor = Colors.green;
+    } else {
+      statusText = 'Update available: $latest';
+      statusColor = Colors.orange;
+    }
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      color: statusColor.withValues(alpha: 0.12),
+      child: Row(
+        children: [
+          Icon(Icons.info_outline, color: statusColor, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Server v$current · $statusText',
+              style: TextStyle(color: statusColor, fontWeight: FontWeight.w600),
+            ),
           ),
         ],
       ),

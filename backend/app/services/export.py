@@ -1,4 +1,5 @@
-"""PDF and CSV export helpers for service history and build sheets."""
+"""PDF and CSV export helpers for service history, build sheets, logbooks
+and fuel, plus user-profile JSON export/import."""
 
 import csv
 import io
@@ -103,3 +104,50 @@ def _pdf_table(title: str, header: list[str], rows: list[list]) -> bytes:
     story.append(table)
     doc.build(story)
     return buf.getvalue()
+
+
+def export_logbook_csv(entries: list, fy: int) -> bytes:
+    """ATO logbook CSV for an Australian financial year (ends 30 June)."""
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([f"AutoBrain Logbook — FY{fy-1}/{str(fy)[2:]}"])
+    writer.writerow(["Trip", "Start time", "End time", "Start odo", "End odo",
+                     "Distance (km)", "Purpose", "Reason", "Start location", "End location"])
+    for i, e in enumerate(entries, 1):
+        writer.writerow([
+            i,
+            e.started_at.strftime("%Y-%m-%d %H:%M") if e.started_at else "",
+            e.ended_at.strftime("%Y-%m-%d %H:%M") if e.ended_at else "",
+            e.start_odometer_km or "", e.end_odometer_km or "",
+            e.distance_km or "", e.purpose, e.reason or "",
+            e.start_location or "", e.end_location or "",
+        ])
+    return buf.getvalue().encode("utf-8")
+
+
+def export_fuel_csv(logs: list, fy: int) -> bytes:
+    """Fuel CSV for a financial year (fuel tax / reimbursement records)."""
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([f"AutoBrain Fuel — FY{fy-1}/{str(fy)[2:]}"])
+    writer.writerow(["Date", "Odometer (km)", "Litres", "Price/L", "Total cost",
+                     "Full tank", "Distance (km)", "L/100km", "Notes"])
+    for l in logs:
+        writer.writerow([
+            l.fill_date, l.odometer_km, l.litres, l.price_per_litre, l.total_cost,
+            "yes" if l.is_full_tank else "no", l.distance_km or "",
+            l.l_per_100km or "", l.notes or "",
+        ])
+    return buf.getvalue().encode("utf-8")
+
+
+def export_user_profile(user: dict, vehicles: list) -> dict:
+    """Serialize a full user profile (user + all vehicles + their data) as JSON."""
+    return {"app": "autobrain", "version": 1, "user": user, "vehicles": vehicles}
+
+
+def parse_user_profile(data: dict) -> tuple[dict, list]:
+    """Split an exported profile back into (user dict, vehicles list)."""
+    if not isinstance(data, dict) or data.get("app") != "autobrain":
+        raise ValueError("Not an AutoBrain export file")
+    return data.get("user", {}), data.get("vehicles", []) or []

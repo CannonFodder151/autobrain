@@ -1,7 +1,7 @@
 ﻿"""AI diagnostics routes."""
 
 import json
-from datetime import date
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -22,6 +22,19 @@ from app.schemas.diagnostic import (
 from app.services.ai_client import run_diagnostics
 
 router = APIRouter(prefix="/vehicles/{vehicle_id}/diagnostics", tags=["diagnostics"])
+
+
+async def _auto_resolve(db: AsyncSession, diagnostic_id: str | None) -> None:
+    """Mark a diagnostic resolved when its linked service is completed."""
+    if not diagnostic_id:
+        return
+    diag = await db.get(Diagnostic, diagnostic_id)
+    if not diag or diag.status == "resolved":
+        return
+    service = await db.get(ServiceRecord, diag.linked_service_id) if diag.linked_service_id else None
+    if service and service.status == "completed":
+        diag.status = "resolved"
+        diag.resolved_at = datetime.now(timezone.utc)
 
 
 @router.post("", response_model=DiagnosticResponse)
@@ -124,4 +137,39 @@ async def add_to_service(
     await db.commit()
     await db.refresh(diag)
     return diag
+
+
+@router.post("/{diagnostic_id}/resolve", response_model=DiagnosticOut)
+async def resolve_diagnostic(
+    vehicle_id: str,
+    diagnostic_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_write),
+) -> Diagnostic:
+    """Mark a diagnostic as resolved once the issue is fixed."""
+    await _get_owned_vehicle(db, vehicle_id, user)
+    diag = await db.get(Diagnostic, diagnostic_id)
+    if not diag or diag.vehicle_id != vehicle_id:
+        raise HTTPException(status_code=404, detail="Diagnostic not found")
+    diag.status = "resolved"
+    diag.resolved_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(diag)
+    return diag
+
+
+@router.delete("/{diagnostic_id}", status_code=204)
+async def delete_diagnostic(
+    vehicle_id: str,
+    diagnostic_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_write),
+) -> None:
+    """Delete a diagnostic once the issue is resolved."""
+    await _get_owned_vehicle(db, vehicle_id, user)
+    diag = await db.get(Diagnostic, diagnostic_id)
+    if not diag or diag.vehicle_id != vehicle_id:
+        raise HTTPException(status_code=404, detail="Diagnostic not found")
+    await db.delete(diag)
+    await db.commit()
 

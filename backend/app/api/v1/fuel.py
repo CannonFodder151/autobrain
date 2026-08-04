@@ -1,17 +1,54 @@
 ﻿"""Fuel tracker routes."""
 
-from fastapi import APIRouter, Depends, HTTPException
+import base64
+import uuid
+from datetime import date, datetime, timezone
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_write
+from app.api.deps import get_current_user, require_ai, require_paid, require_write
 from app.api.v1.vehicles import add_event, _get_owned_vehicle
+from app.core.storage import ensure_bucket, upload_object
 from app.db.session import get_db
 from app.models.fuel import FuelLog
+from app.models.receipt import Receipt
 from app.models.user import User
-from app.schemas.fuel import FuelLogCreate, FuelLogOut, FuelStats
+from app.schemas.fuel import (
+    FuelLogCreate,
+    FuelLogOut,
+    FuelLogUpdate,
+    FuelStats,
+    FuelReceiptResult,
+)
+from app.services.ai_client import extract_fuel_receipt
+from app.services.export import export_fuel_csv
+from app.services.odometer import sync_odometer
 
 router = APIRouter(prefix="/vehicles/{vehicle_id}/fuel", tags=["fuel"])
+
+ALLOWED_RECEIPT_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic", "application/pdf"}
+MAX_BYTES = 15 * 1024 * 1024
+
+
+def _current_fy() -> int:
+    today = datetime.now(timezone.utc)
+    return today.year + (1 if today.month >= 7 else 0)
+
+
+def _compute_efficiency(prev: FuelLog | None, log: FuelLog, total: float) -> None:
+    if prev and log.is_full_tank and prev.is_full_tank:
+        distance = log.odometer_km - prev.odometer_km
+        if distance > 0:
+            log.distance_km = distance
+            log.l_per_100km = round(log.litres / distance * 100, 2)
+            log.cost_per_km = round(total / distance, 4)
+
+
+def _ref_time(log: FuelLog) -> datetime:
+    return datetime.combine(log.fill_date, datetime.min.time())
 
 
 @router.get("", response_model=list[FuelLogOut])
@@ -48,16 +85,10 @@ async def add_fuel(
         .where(FuelLog.vehicle_id == vehicle_id, FuelLog.odometer_km < payload.odometer_km)
         .order_by(FuelLog.odometer_km.desc())
     )
-    if prev and payload.is_full_tank and prev.is_full_tank:
-        distance = payload.odometer_km - prev.odometer_km
-        if distance > 0:
-            log.distance_km = distance
-            log.l_per_100km = round(payload.litres / distance * 100, 2)
-            log.cost_per_km = round(total / distance, 4)
+    _compute_efficiency(prev, log, total)
     db.add(log)
     await db.flush()
-    if vehicle.odometer_km is None or payload.odometer_km > vehicle.odometer_km:
-        vehicle.odometer_km = payload.odometer_km
+    await sync_odometer(db, vehicle, payload.odometer_km, _ref_time(log))
     await add_event(
         db,
         vehicle_id,
@@ -72,6 +103,45 @@ async def add_fuel(
     await db.refresh(log)
     from app.workers.tasks import check_due_notifications
     check_due_notifications.delay(vehicle_id)
+    return log
+
+
+@router.patch("/{fuel_id}", response_model=FuelLogOut)
+async def update_fuel(
+    vehicle_id: str,
+    fuel_id: str,
+    payload: FuelLogUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_write),
+) -> FuelLog:
+    await _get_owned_vehicle(db, vehicle_id, user)
+    log = await db.get(FuelLog, fuel_id)
+    if not log or log.vehicle_id != vehicle_id:
+        raise HTTPException(status_code=404, detail="Fuel log not found")
+    data = payload.model_dump(exclude_unset=True)
+    if "total_cost" in data and data["total_cost"] is None:
+        data.pop("total_cost")
+    if data.get("total_cost") is None:
+        data["total_cost"] = round(
+            data.get("litres", log.litres) * data.get("price_per_litre", log.price_per_litre), 2
+        )
+    for key, value in data.items():
+        setattr(log, key, value)
+    if log.odometer_km <= 0:
+        raise HTTPException(status_code=422, detail="odometer_km must be positive")
+    prev = await db.scalar(
+        select(FuelLog)
+        .where(FuelLog.vehicle_id == vehicle_id, FuelLog.odometer_km < log.odometer_km)
+        .order_by(FuelLog.odometer_km.desc())
+    )
+    log.distance_km = None
+    log.l_per_100km = None
+    log.cost_per_km = None
+    _compute_efficiency(prev, log, log.total_cost)
+    await db.flush()
+    await sync_odometer(db, await _get_owned_vehicle(db, vehicle_id, user), log.odometer_km, _ref_time(log))
+    await db.commit()
+    await db.refresh(log)
     return log
 
 
@@ -133,5 +203,98 @@ async def fuel_stats(
         avg_cost_per_km=round(sum(x.cost_per_km for x in costk) / len(costk), 4) if costk else None,
         last_log=FuelLogOut.model_validate(last) if last else None,
         series=series,
+    )
+
+
+@router.get("/export")
+async def export_fuel_year(
+    vehicle_id: str,
+    fy: int | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_paid),
+) -> Response:
+    """Export fuel records for an Australian financial year (tax purposes)."""
+    vehicle = await _get_owned_vehicle(db, vehicle_id, user)
+    fy = fy or _current_fy()
+    start = datetime(fy - 1, 7, 1)
+    end = datetime(fy, 6, 30, 23, 59, 59)
+    logs = list((await db.scalars(
+        select(FuelLog).where(
+            FuelLog.vehicle_id == vehicle_id,
+            FuelLog.fill_date >= start.date(),
+            FuelLog.fill_date <= end.date(),
+        ).order_by(FuelLog.fill_date)
+    )).all())
+    content = export_fuel_csv(logs, fy)
+    label = vehicle.nickname.replace(" ", "-")
+    return Response(
+        content=content,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="fuel-{label}-FY{fy-1}-{str(fy)[2:]}.csv"'},
+    )
+
+
+@router.post("/receipt", response_model=FuelReceiptResult, status_code=201)
+async def upload_fuel_receipt(
+    vehicle_id: str,
+    file: UploadFile = File(...),
+    ai: bool = Query(default=True),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_write),
+) -> FuelReceiptResult:
+    """Upload a fuel receipt photo.
+
+    With ai=true (paid accounts) the receipt is OCR'd to fill litres and
+    price-per-litre. ai=false just stores the photo — the user fills the
+    values manually.
+    """
+    await _get_owned_vehicle(db, vehicle_id, user)
+    data = await file.read()
+    if len(data) > MAX_BYTES:
+        raise HTTPException(status_code=413, detail="File too large (max 15MB)")
+    ext = (file.filename or "receipt").rsplit(".", 1)[-1].lower()
+    content_type = file.content_type or ("application/pdf" if ext == "pdf" else "image/jpeg")
+    if content_type not in ALLOWED_RECEIPT_TYPES and ext != "bin":
+        raise HTTPException(status_code=415, detail="Unsupported receipt file type")
+    await ensure_bucket()
+    key = f"fuel-receipts/{vehicle_id}/receipt_{uuid.uuid4().hex[:8]}.{ext}"
+    url = await upload_object(key, data, content_type)
+    receipt = Receipt(
+        vehicle_id=vehicle_id,
+        file_key=key,
+        original_name=file.filename,
+        content_type=content_type,
+        ocr_status="done" if not ai else "pending",
+    )
+    db.add(receipt)
+    await db.commit()
+    await db.refresh(receipt)
+
+    parsed: dict = {}
+    if ai:
+        parsed = await extract_fuel_receipt({
+            "content": "",
+            "content_base64": base64.b64encode(data).decode() if content_type != "application/pdf" else "",
+            "content_type": content_type,
+            "filename": file.filename,
+            "vehicle_id": vehicle_id,
+        }) or {}
+        if parsed:
+            receipt.ocr_status = "done"
+            receipt.vendor = parsed.get("vendor")
+            receipt.total = parsed.get("total_cost")
+            receipt.invoice_date = parsed.get("date")
+            await db.commit()
+
+    return FuelReceiptResult(
+        receipt_id=receipt.id,
+        file_url=url,
+        vendor=parsed.get("vendor"),
+        date=parsed.get("date"),
+        litres=parsed.get("litres"),
+        price_per_litre=parsed.get("price_per_litre"),
+        total_cost=parsed.get("total_cost"),
+        currency=parsed.get("currency", "AUD"),
+        ai_used=bool(ai and parsed),
     )
 

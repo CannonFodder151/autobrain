@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/auth_state.dart';
+import '../../core/download.dart';
 import '../../core/models.dart';
 import 'add_fuel_screen.dart';
 
@@ -45,20 +46,64 @@ class _FuelScreenState extends State<FuelScreen> {
     ];
   }
 
+  Future<void> _openAdd({FuelLog? existing}) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AddFuelScreen(
+          vehicleId: widget.vehicleId,
+          existing: existing,
+        ),
+      ),
+    );
+    _load();
+  }
+
+  Future<void> _delete(FuelLog l) async {
+    final api = context.read<AuthState>().api;
+    try {
+      await api.delete('/vehicles/${widget.vehicleId}/fuel/${l.id}');
+      _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
+  }
+
+  Future<void> _exportYear() async {
+    final api = context.read<AuthState>().api;
+    final now = DateTime.now();
+    final fy = now.month >= 7 ? now.year + 1 : now.year;
+    try {
+      final bytes = await api.export(
+          '/vehicles/${widget.vehicleId}/fuel/export?fy=$fy');
+      final stamp = '$fy';
+      await downloadBytes('fuel-FY$stamp.csv', bytes);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Export failed: $e')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final spots = _efficiencySpots();
     return Scaffold(
-      appBar: AppBar(title: const Text('Fuel tracker')),
+      appBar: AppBar(
+        title: const Text('Fuel tracker'),
+        actions: [
+          IconButton(
+            tooltip: 'Export financial year (tax)',
+            icon: const Icon(Icons.download_outlined),
+            onPressed: _exportYear,
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          await Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => AddFuelScreen(vehicleId: widget.vehicleId),
-            ),
-          );
-          _load();
-        },
+        onPressed: () => _openAdd(),
         icon: const Icon(Icons.add),
         label: const Text('Add fill-up'),
       ),
@@ -120,10 +165,26 @@ class _FuelScreenState extends State<FuelScreen> {
                         subtitle: Text(
                           '${l.odometerKm} km'
                           '${l.lPer100km != null ? ' · ${l.lPer100km!.toStringAsFixed(1)} L/100km' : ''}'
-                          '${l.costPerKm != null ? ' · \$${l.costPerKm!.toStringAsFixed(2)}/km' : ''}',
+                          '${l.costPerKm != null ? ' · \$${l.costPerKm!.toStringAsFixed(2)}/km' : ''}'
+                          '${l.notes != null ? ' · ${l.notes}' : ''}',
                         ),
-                        trailing: Text(
-                            '\$${l.totalCost.toStringAsFixed(2)}'),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('\$${l.totalCost.toStringAsFixed(2)}'),
+                            PopupMenuButton<String>(
+                              onSelected: (v) {
+                                if (v == 'edit') _openAdd(existing: l);
+                                if (v == 'delete') _delete(l);
+                              },
+                              itemBuilder: (_) => const [
+                                PopupMenuItem(value: 'edit', child: Text('Edit')),
+                                PopupMenuItem(
+                                    value: 'delete', child: Text('Delete')),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                 ],

@@ -9,11 +9,12 @@ from collections import defaultdict, deque
 
 import pyotp
 import qrcode
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_admin
+from app.api.deps import get_current_user, require_admin, require_paid, require_write
 from app.core.config import settings
 from app.core.security import (
     create_access_token,
@@ -218,6 +219,24 @@ async def me(
     )
 
 
+@router.patch("/settings", response_model=UserOut)
+async def update_settings(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> User:
+    """Self-service account settings. A user may toggle their own free-account
+    tier and OBD Bluetooth auto-connect; OBD access itself is admin-granted."""
+    allowed = {"free_account", "obd_auto_connect"}
+    for key, value in payload.items():
+        if key not in allowed or not isinstance(value, bool):
+            continue
+        setattr(user, key, value)
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
 # --- MFA management (self-service, authenticated) ---
 @router.get("/mfa/setup", response_model=MfaSetupResponse)
 async def mfa_setup(
@@ -337,6 +356,52 @@ async def admin_create_user(
     else:
         await mail.send_welcome(user.email, user.display_name, settings.APP_BASE_URL)
     return _token_pair(user)
+
+
+# --- profile data portability (export / import own data) ---
+@router.get("/export")
+async def export_profile(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_paid),
+) -> Response:
+    """Export the whole account (user + vehicles + all records) as JSON."""
+    from app.services.backup import dump_backup, serialize_user
+
+    data = await serialize_user(db, user.id)
+    content = dump_backup(data)
+    stamp = time.strftime("%Y%m%d")
+    return Response(
+        content=content,
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="autobrain-profile-{stamp}.json"'},
+    )
+
+
+@router.post("/import")
+async def import_profile(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_write),
+) -> dict:
+    """Import an exported profile (new account) on this server."""
+    import json as _json
+
+    from app.services.backup import import_user
+
+    raw = await file.read()
+    if len(raw) > 100 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File too large")
+    try:
+        data = _json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, _json.JSONDecodeError):
+        raise HTTPException(status_code=400, detail="Not a valid AutoBrain export file")
+    if data.get("app") != "autobrain" or data.get("kind") != "profile":
+        raise HTTPException(status_code=400, detail="Not an AutoBrain profile export file")
+    try:
+        imported_id = await import_user(db, data)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return {"message": "Profile imported", "user_id": imported_id}
 
 
 # --- helpers ---

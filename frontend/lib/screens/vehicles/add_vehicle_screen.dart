@@ -24,6 +24,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
   String _state = 'VIC';
   bool _busy = false;
   bool _isPrimary = false;
+  bool _clubReg = false;
   bool _lookingUp = false;
   String? _lookupInfo;
   int? _maxVehicles;
@@ -129,6 +130,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
         'odometer_km': int.tryParse(_odometer.text) ?? 0,
         'condition': 'good',
         'is_primary': _isPrimary,
+        'club_reg': _clubReg,
       });
       if (mounted) Navigator.pop(context);
     } catch (e) {
@@ -309,6 +311,15 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                 title: const Text('Set as primary vehicle'),
                 value: _isPrimary,
                 onChanged: (v) => setState(() => _isPrimary = v ?? false),
+              ),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Club registration'),
+                subtitle: const Text(
+                    'Club-registered vehicles are not used for ATO logbook '
+                    'claims, so the logbook feature is disabled.'),
+                value: _clubReg,
+                onChanged: (v) => setState(() => _clubReg = v ?? false),
               ),
               const SizedBox(height: 20),
               FilledButton(

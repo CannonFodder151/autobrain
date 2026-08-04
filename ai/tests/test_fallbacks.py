@@ -67,3 +67,32 @@ async def test_module_router_disabled_uses_fallback() -> None:
     os.environ["AI_ROUTER_URL"] = "http://your-9router-instance:port"
     out = await modules.diagnostics.run({"symptoms": "car won't start"})
     assert out["model"] == "rule-based-fallback"
+
+
+def test_fuel_receipt_fallback() -> None:
+    from app.modules.fuel_ocr import _fuel_receipt_fallback
+
+    out = _fuel_receipt_fallback("Shell\n98 Premium\n45.20L @ 2.09\nTotal 94.47")
+    assert out["litres"] == 45.2
+    assert out["price_per_litre"] == 2.09
+    assert out["total_cost"] == 94.47
+    assert out["vendor"] == "Shell"
+
+
+def test_odometer_fallback() -> None:
+    from app.modules.odometer import _odometer_fallback, _clamp
+
+    out = _odometer_fallback("odometer 123456 km")
+    assert out["odometer_km"] == 123456
+    clamped = _clamp({"odometer_km": "88000", "confidence": 0.9})
+    assert clamped["odometer_km"] == 88000
+    assert clamped["confidence"] == 0.9
+
+
+def test_resale_validate_clamps() -> None:
+    from app.modules.resale import _validate
+
+    out = _validate({"estimated_value": 30000, "low": 50000, "high": 60000, "currency": "AUD"})
+    assert out["low"] <= out["estimated_value"] <= out["high"]
+    assert out["low"] == 27000.0  # 10% below the estimate when the range is invalid
+    assert out["currency"] == "AUD"

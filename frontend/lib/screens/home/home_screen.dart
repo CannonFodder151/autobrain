@@ -9,8 +9,10 @@ import '../admin/admin_screen.dart';
 import '../analytics/analytics_screen.dart';
 import '../diagnostics/diagnostics_screen.dart';
 import '../fuel/fuel_screen.dart';
+import '../logbook/logbook_screen.dart';
 import '../mods/mods_screen.dart';
 import '../notifications/notifications_screen.dart';
+import '../obd/obd_screen.dart';
 import '../parts/parts_screen.dart';
 import '../receipts/receipts_screen.dart';
 import '../services/service_list_screen.dart';
@@ -262,6 +264,9 @@ class _FeatureGrid extends StatelessWidget {
           ServiceListScreen(vehicleId: vehicle.id)),
       _Feature('Fuel', Icons.local_gas_station, const Color(0xFF16A34A),
           FuelScreen(vehicleId: vehicle.id)),
+      if (!vehicle.clubReg)
+        _Feature('Logbook', Icons.book, const Color(0xFF0D9488),
+            LogbookScreen(vehicleId: vehicle.id)),
       _Feature('Diagnostics', Icons.medical_services, const Color(0xFFEA580C),
           DiagnosticsScreen(vehicleId: vehicle.id)),
       _Feature('Mods', Icons.tune, const Color(0xFF7C3AED),
@@ -276,6 +281,8 @@ class _FeatureGrid extends StatelessWidget {
           AnalyticsScreen(vehicleId: vehicle.id)),
       _Feature('Notifications', Icons.notifications_active,
           const Color(0xFF0E7490), NotificationsScreen(vehicleId: vehicle.id)),
+      _Feature('OBD', Icons.settings_input_component, const Color(0xFF334155),
+          ObdScreen(vehicleId: vehicle.id)),
     ];
     return GridView.count(
       crossAxisCount: 3,

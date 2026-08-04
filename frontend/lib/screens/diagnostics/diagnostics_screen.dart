@@ -50,6 +50,34 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
     }
   }
 
+  Future<void> _resolve(Diagnostic d) async {
+    final api = context.read<AuthState>().api;
+    try {
+      await api.post(
+          '/vehicles/${widget.vehicleId}/diagnostics/${d.id}/resolve');
+      _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
+  }
+
+  Future<void> _delete(Diagnostic d) async {
+    final api = context.read<AuthState>().api;
+    try {
+      await api.delete(
+          '/vehicles/${widget.vehicleId}/diagnostics/${d.id}');
+      _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
+  }
+
   Color _severityColor(String? s) => switch (s) {
         'critical' => Colors.red,
         'high' => Colors.orange,
@@ -84,6 +112,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                     itemCount: _items.length,
                     itemBuilder: (context, i) {
                       final d = _items[i];
+                      final resolved = d.isResolved;
                       return Card(
                         child: Padding(
                           padding: const EdgeInsets.all(16),
@@ -92,11 +121,15 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                             children: [
                               Row(
                                 children: [
-                                  CircleAvatar(
-                                    radius: 6,
-                                    backgroundColor:
-                                        _severityColor(d.severity),
-                                  ),
+                                  if (resolved)
+                                    const Icon(Icons.check_circle,
+                                        color: Colors.green)
+                                  else
+                                    CircleAvatar(
+                                      radius: 6,
+                                      backgroundColor:
+                                          _severityColor(d.severity),
+                                    ),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
@@ -106,8 +139,31 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                                           .titleMedium,
                                     ),
                                   ),
+                                  PopupMenuButton<String>(
+                                    onSelected: (v) {
+                                      if (v == 'resolve' && !resolved) {
+                                        _resolve(d);
+                                      }
+                                      if (v == 'delete') _delete(d);
+                                    },
+                                    itemBuilder: (_) => [
+                                      if (!resolved)
+                                        const PopupMenuItem(
+                                            value: 'resolve',
+                                            child: Text('Mark resolved')),
+                                      const PopupMenuItem(
+                                          value: 'delete',
+                                          child: Text('Delete')),
+                                    ],
+                                  ),
                                 ],
                               ),
+                              if (resolved) ...[
+                                const SizedBox(height: 6),
+                                const Text('Resolved',
+                                    style:
+                                        TextStyle(color: Colors.green)),
+                              ],
                               if (d.estimatedCost != null) ...[
                                 const SizedBox(height: 8),
                                 Text(
@@ -118,24 +174,25 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                                       ?.copyWith(fontWeight: FontWeight.bold),
                                 ),
                               ],
-                              if (!d.addedToService) ...[
-                                const SizedBox(height: 8),
-                                Align(
-                                  alignment: Alignment.centerRight,
-                                  child: OutlinedButton.icon(
-                                    onPressed: () => _addToService(d),
-                                    icon: const Icon(Icons.build, size: 16),
-                                    label: const Text('Add to next service'),
+                              if (!resolved && !d.addedToService) ...[
+                                  const SizedBox(height: 8),
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: OutlinedButton.icon(
+                                      onPressed: () => _addToService(d),
+                                      icon: const Icon(Icons.build, size: 16),
+                                      label:
+                                          const Text('Add to next service'),
+                                    ),
                                   ),
-                                ),
-                              ] else
-                                const Padding(
-                                  padding: EdgeInsets.only(top: 8),
-                                  child: Text(
-                                    'Added to service',
-                                    style: TextStyle(color: Colors.green),
+                                ] else if (!resolved)
+                                  const Padding(
+                                    padding: EdgeInsets.only(top: 8),
+                                    child: Text(
+                                      'Added to service',
+                                      style: TextStyle(color: Colors.green),
+                                    ),
                                   ),
-                                ),
                             ],
                           ),
                         ),

@@ -4,8 +4,9 @@ import 'package:provider/provider.dart';
 import '../../core/auth_state.dart';
 
 class AddDiagnosticScreen extends StatefulWidget {
-  const AddDiagnosticScreen({super.key, required this.vehicleId});
+  const AddDiagnosticScreen({super.key, required this.vehicleId, this.initialCodes = const []});
   final String vehicleId;
+  final List<String> initialCodes;
 
   @override
   State<AddDiagnosticScreen> createState() => _AddDiagnosticScreenState();
@@ -13,9 +14,15 @@ class AddDiagnosticScreen extends StatefulWidget {
 
 class _AddDiagnosticScreenState extends State<AddDiagnosticScreen> {
   final _symptoms = TextEditingController();
-  final _obd = TextEditingController();
+  late final TextEditingController _obd;
   bool _busy = false;
   Map<String, dynamic>? _result;
+
+  @override
+  void initState() {
+    super.initState();
+    _obd = TextEditingController(text: widget.initialCodes.join(', '));
+  }
 
   @override
   void dispose() {

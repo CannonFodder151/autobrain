@@ -42,6 +42,14 @@ async def extract_receipt(payload: dict) -> dict | None:
     return await _call("ocr", payload)
 
 
+async def extract_fuel_receipt(payload: dict) -> dict | None:
+    return await _call("fuel-ocr", payload)
+
+
+async def read_odometer(payload: dict) -> dict | None:
+    return await _call("odometer", payload)
+
+
 async def estimate_value(payload: dict) -> dict | None:
     return await _call("resale", payload)
 

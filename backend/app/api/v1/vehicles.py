@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_write
+from app.api.deps import get_current_user, require_paid, require_write
 from app.core.logging import get_logger
 from app.db.session import get_db
 from app.models.service import ServiceRecord
@@ -110,7 +110,10 @@ async def delete_vehicle(
 
 
 @router.post("/rego-lookup", response_model=RegoLookupResponse)
-async def rego_lookup(payload: RegoLookupRequest) -> RegoLookupResponse:
+async def rego_lookup(
+    payload: RegoLookupRequest,
+    _user: User = Depends(require_paid),
+) -> RegoLookupResponse:
     """Populate vehicle details from an Australian registration plate + state."""
     result = await lookup_rego(payload.rego, payload.jurisdiction, payload.state)
     if not result:

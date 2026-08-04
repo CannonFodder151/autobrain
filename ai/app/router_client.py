@@ -79,7 +79,24 @@ _SYSTEM_PROMPTS: dict[str, str] = {
         '"reliability_impact": "None"|"Minor"|"Medium"|"High", '
         '"model": "9router"}'
     ),
+    "fuel-ocr": (
+        "You are a fuel station receipt OCR extractor. From the receipt text "
+        "extract the fuel purchase. "
+        'Return STRICT JSON: {"vendor": string|null, "date": string|null '
+        '(ISO YYYY-MM-DD), "litres": number|null, "price_per_litre": number|null, '
+        '"total_cost": number|null, "currency": "AUD", "notes": string|null}'
+    ),
+    "odometer": (
+        "You are an odometer-reading OCR engine. The user photographed a car "
+        "dashboard; read the odometer value shown. "
+        'Return STRICT JSON: {"odometer_km": int|null, "confidence": number (0-1)}. '
+        "If the reading is not clearly visible, return odometer_km null with low confidence."
+    ),
 }
+
+# Sampling temperature per module. All modules default to 0 (deterministic);
+# stable resale estimates depend on this.
+_TEMPERATURES: dict[str, float] = {}
 
 
 def router_url() -> str:
@@ -127,6 +144,7 @@ async def route(module: str, payload: dict) -> dict | None:
     body = {
         "model": router_model(),
         "stream": False,
+        "temperature": _TEMPERATURES.get(module, 0.0),
         "messages": [
             {"role": "system", "content": _SYSTEM_PROMPTS.get(module, "Return STRICT JSON.")},
             {"role": "user", "content": json.dumps(payload)},

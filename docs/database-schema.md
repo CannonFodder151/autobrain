@@ -1,72 +1,83 @@
-# Database Schema (PostgreSQL)
+# AutoBrain Database Schema
 
-Managed by SQLAlchemy models (`backend/app/models/`) and Alembic
-(`backend/alembic/`).
+Managed by SQLAlchemy models (`backend/app/models/`) and Alembic migrations (`backend/alembic/`). Head revision `c3d4e5f6a7b8`.
 
 ## users
-| Column | Type | Notes |
-|--------|------|-------|
-| id | varchar(36) PK | uuid |
-| email | varchar(255) UNIQUE | |
-| display_name | varchar(120) | |
-| hashed_password | varchar(255) | bcrypt |
-| is_active | bool | |
-| created_at / updated_at | timestamptz | |
+
+id (PK), email (unique), display_name, hashed_password (bcrypt), role (admin/user/demo), max_vehicles, is_active, free_account, obd_enabled, obd_auto_connect, mfa_secret, mfa_enabled, created_at, updated_at.
+
+`free_account` disables AI, exports and rego lookup. `obd_enabled` / `obd_auto_connect` control OBD-II access (admin-granted).
 
 ## vehicles
-| Column | Type | Notes |
-|--------|------|-------|
-| id | varchar(36) PK | |
-| user_id | FK → users | index |
-| nickname | varchar(120) | |
-| rego | varchar(20) | index |
-| vin | varchar(17) | |
-| make / model / engine / transmission | varchar | |
-| year | int | |
-| odometer_km | int | |
-| condition | varchar(20) | excellent/good/fair/poor |
-| is_primary | bool | |
 
-## vehicle_events (unified timeline)
-id, vehicle_id FK, event_type (service/fuel/mod/diagnostic), title,
-occurred_on date, odometer_km, amount, source_id.
+id (PK), user_id (FK), nickname, rego, vin, make, model, engine, transmission, year, odometer_km, condition, is_primary, club_reg, created_at, updated_at.
+
+`club_reg` (bool) — club-registered vehicles disable the ATO logbook feature.
+
+## vehicle_events
+
+id, vehicle_id (FK), event_type (service/fuel/mod/diagnostic), title, occurred_on, odometer_km, amount, source_id, created_at.
 
 ## service_records
-id, vehicle_id FK, service_date, odometer_km, service_type, description,
-workshop, cost, currency, notes, ai_prediction, next_due_km, next_due_date.
+
+id, vehicle_id (FK), service_date, odometer_km, service_type, description, workshop, cost, currency, notes, ai_prediction, status (completed/scheduled), completed_date, next_due_km, next_due_date, steps (JSON), created_at.
 
 ## service_items
-id, service_id FK, part_id FK (nullable), name, quantity, unit_cost,
-labour_hours, labour_rate.
+
+id, service_id (FK), part_id (FK, nullable), name, quantity, unit_cost, kind (part/labour/item), part_no, labour_hours, labour_rate.
 
 ## fuel_logs
-id, vehicle_id FK, fill_date, odometer_km, litres, price_per_litre,
-total_cost, is_full_tank, notes, distance_km, l_per_100km, cost_per_km.
+
+id, vehicle_id (FK), fill_date, odometer_km, litres, price_per_litre, total_cost, is_full_tank, notes, distance_km, l_per_100km, cost_per_km, receipt_id (FK receipts), created_at.
+
+Adding/editing a fill-up bumps the vehicle odometer unless a **newer** logbook trip governs.
 
 ## diagnostics
-id, vehicle_id FK, symptoms, ai_response (JSON), summary, severity,
-estimated_cost, parts_needed (JSON), added_to_service, linked_service_id FK.
+
+id, vehicle_id (FK), symptoms, ai_response (JSON), summary, severity, estimated_cost, parts_needed (JSON), added_to_service, linked_service_id (FK), status (open/resolved), resolved_at, created_at.
+
+Auto-resolves to `resolved` when the linked scheduled service is completed (green tick).
 
 ## modifications
-id, vehicle_id FK, name, category, brand, cost, install_date, odometer_km,
-notes, photo_keys (JSON), ai_impact (JSON).
+
+id, vehicle_id (FK), name, category, brand, cost, install_date, odometer_km, notes, photo_keys (JSON), ai_impact (JSON), created_at.
 
 ## parts
-id, vehicle_id FK, name, sku, category, quantity, min_quantity, unit_cost,
-supplier, location, notes, warranty_months, ai_reorder_suggestion.
+
+id, vehicle_id (FK), name, sku, category, quantity, min_quantity, unit_cost, supplier, location, notes, warranty_months, ai_reorder_suggestion, created_at, updated_at.
 
 ## part_movements
-id, part_id FK, delta (in/out), reason, service_id FK, created_at.
+
+id, part_id (FK), delta, reason, service_id (FK), created_at.
 
 ## receipts
-id, vehicle_id FK, file_key (MinIO), original_name, content_type,
-ocr_status (pending/processing/done/failed), extracted (JSON), vendor,
-total, tax, currency, invoice_date.
+
+id, vehicle_id (FK), file_key (MinIO), original_name, content_type, ocr_status (pending/processing/done/failed), extracted (JSON), vendor, total, tax, currency, invoice_date, created_at.
 
 ## extracted_items
-id, receipt_id FK, kind (part/labour), name, quantity, unit_cost,
-warranty_months, applied_to_service.
+
+id, receipt_id (FK), kind (part/labour), name, quantity, unit_cost, warranty_months, applied_to_service, created_at.
 
 ## valuation_snapshots
-id, vehicle_id FK, estimated_value, low, high, currency, factors (JSON),
-recommendations (JSON), created_at.
+
+id, vehicle_id (FK), estimated_value, low, high, currency, factors (JSON), recommendations (JSON), created_at.
+
+## notification_preferences
+
+id, user_id (FK), vehicle_id (FK), push/email/discord_enabled, service_due_days, service_due_km, fuel_gap_km, discord_webhook_url, fcm_token, created_at, updated_at. UNIQUE(user_id, vehicle_id).
+
+## notification_deliveries
+
+id, vehicle_id (FK), kind, channels, sent_at. UNIQUE(vehicle_id, kind).
+
+## logbook_entries
+
+id, vehicle_id (FK), started_at, ended_at, start_odometer_km, end_odometer_km, distance_km, purpose (work/private), reason, start_location, end_location, start_lat, start_lng, end_lat, end_lng, start_photo_key, end_photo_key, status (in_progress/completed), created_at.
+
+ATO logbook trips for non-club-reg vehicles. Completing a trip updates the vehicle odometer.
+
+## obd_codes
+
+id, vehicle_id (FK), code, description, source (obd/manual), is_resolved, created_at.
+
+Fault codes captured from a Bluetooth OBD2 adapter; pushed into the diagnostic AI tool.

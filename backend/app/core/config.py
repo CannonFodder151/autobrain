@@ -88,6 +88,18 @@ class Settings(BaseSettings):
     # Public base URL used to build password-reset links (no trailing slash)
     APP_BASE_URL: str = "http://10.0.3.39"
 
+    # Versioning + GitHub release checking
+    APP_VERSION: str = "0.1.0"  # mirror frontend/pubspec.yaml version
+    GITHUB_REPO: str = "CannonFodder151/autobrain"
+    GITHUB_TOKEN: str = ""  # optional, raises the GitHub API rate limit for release checks
+
+    # Scheduled backup (daily). When set, beats stores a full JSON snapshot to MinIO.
+    BACKUP_ENABLED: bool = True
+    BACKUP_RETENTION_DAYS: int = 14
+
+    # Admin API key: enables machine-to-machine user management via X-Admin-API-Key.
+    ADMIN_API_KEY: str = ""  # leave empty to disable the /admin-api endpoints
+
     @property
     def sqlalchemy_database_uri(self) -> str:
         if self.DATABASE_URL:

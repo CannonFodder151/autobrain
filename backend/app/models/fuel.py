@@ -28,4 +28,5 @@ class FuelLog(Base):
     distance_km: Mapped[float | None] = mapped_column(Float)  # since previous log
     l_per_100km: Mapped[float | None] = mapped_column(Float)
     cost_per_km: Mapped[float | None] = mapped_column(Float)
+    receipt_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("receipts.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

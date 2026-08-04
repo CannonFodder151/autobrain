@@ -1,7 +1,7 @@
 ﻿"""Service routes: CRUD (with items/status), AI prediction, PDF/CSV export."""
 
 import json
-from datetime import date
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_current_user, require_ai, require_write
+from app.api.deps import get_current_user, require_ai, require_paid, require_write
 from app.api.v1.vehicles import add_event, _get_owned_vehicle
 from app.core.logging import get_logger
 from app.db.session import get_db
@@ -59,6 +59,20 @@ async def _ensure_completed_event(db: AsyncSession, record: ServiceRecord) -> No
             record.completed_date or record.service_date,
             record.odometer_km, record.cost, record.id,
         )
+
+
+async def _resolve_linked_diagnostics(db: AsyncSession, record: ServiceRecord) -> None:
+    """Green-tick diagnostics whose scheduled repair service is now completed."""
+    if record.status != "completed":
+        return
+    from app.models.diagnostic import Diagnostic
+
+    diags = list((await db.scalars(
+        select(Diagnostic).where(Diagnostic.linked_service_id == record.id, Diagnostic.status != "resolved")
+    )).all())
+    for diag in diags:
+        diag.status = "resolved"
+        diag.resolved_at = datetime.now(timezone.utc)
 
 
 async def _reconcile_part_stock(
@@ -140,6 +154,7 @@ async def create_service(
     await db.flush()
     await _reconcile_part_stock(db, vehicle_id, record.id, payload.items, record.status == "completed")
     await _ensure_completed_event(db, record)
+    await _resolve_linked_diagnostics(db, record)
     await db.commit()
     await db.refresh(record)
     if record.next_due_km or record.next_due_date:
@@ -153,7 +168,7 @@ async def export(
     vehicle_id: str,
     fmt: str = Query("csv", pattern="^(csv|pdf)$"),
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_paid),
 ) -> Response:
     vehicle = await _get_owned_vehicle(db, vehicle_id, user)
     rows = await db.scalars(
@@ -229,6 +244,7 @@ async def update_service(
     )).all())
     await _reconcile_part_stock(db, vehicle_id, record.id, fresh_items, record.status == "completed")
     await _ensure_completed_event(db, record)
+    await _resolve_linked_diagnostics(db, record)
     await db.commit()
     await db.refresh(record)
     if record.next_due_km or record.next_due_date:

@@ -26,4 +26,6 @@ class Diagnostic(Base):
     parts_needed: Mapped[dict | None] = mapped_column(Text)
     added_to_service: Mapped[bool] = mapped_column(default=False)
     linked_service_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("service_records.id"))
+    status: Mapped[str] = mapped_column(String(20), default="open")  # open/resolved
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

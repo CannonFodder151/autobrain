@@ -7,7 +7,7 @@ class Vehicle {
   final String? rego, vin, make, model, engine, transmission;
   final int? year, odometerKm;
   final String condition;
-  final bool isPrimary;
+  final bool isPrimary, clubReg;
 
   const Vehicle({
     required this.id,
@@ -22,6 +22,7 @@ class Vehicle {
     this.odometerKm,
     this.condition = 'good',
     this.isPrimary = false,
+    this.clubReg = false,
   });
 
   String get displayName => '$nickname'
@@ -40,6 +41,7 @@ class Vehicle {
         odometerKm: j['odometer_km'] as int?,
         condition: (j['condition'] as String?) ?? 'good',
         isPrimary: (j['is_primary'] as bool?) ?? false,
+        clubReg: (j['club_reg'] as bool?) ?? false,
       );
 }
 
@@ -160,6 +162,7 @@ class FuelLog {
   final double litres, pricePerLitre, totalCost;
   final bool isFullTank;
   final double? lPer100km, costPerKm;
+  final String? notes, receiptId;
 
   const FuelLog({
     required this.id,
@@ -171,6 +174,8 @@ class FuelLog {
     this.isFullTank = true,
     this.lPer100km,
     this.costPerKm,
+    this.notes,
+    this.receiptId,
   });
 
   factory FuelLog.fromJson(Map<String, dynamic> j) => FuelLog(
@@ -183,6 +188,8 @@ class FuelLog {
         isFullTank: (j['is_full_tank'] as bool?) ?? true,
         lPer100km: (j['l_per_100km'] as num?)?.toDouble(),
         costPerKm: (j['cost_per_km'] as num?)?.toDouble(),
+        notes: j['notes'] as String?,
+        receiptId: j['receipt_id'] as String?,
       );
 }
 
@@ -191,6 +198,8 @@ class Diagnostic {
   final String? summary, severity;
   final double? estimatedCost;
   final bool addedToService;
+  final String status; // open/resolved
+  final String? linkedServiceId;
 
   const Diagnostic({
     required this.id,
@@ -199,7 +208,11 @@ class Diagnostic {
     this.severity,
     this.estimatedCost,
     this.addedToService = false,
+    this.status = 'open',
+    this.linkedServiceId,
   });
+
+  bool get isResolved => status == 'resolved';
 
   factory Diagnostic.fromJson(Map<String, dynamic> j) => Diagnostic(
         id: j['id'] as String,
@@ -208,6 +221,81 @@ class Diagnostic {
         severity: j['severity'] as String?,
         estimatedCost: (j['estimated_cost'] as num?)?.toDouble(),
         addedToService: (j['added_to_service'] as bool?) ?? false,
+        status: j['status'] as String? ?? 'open',
+        linkedServiceId: j['linked_service_id'] as String?,
+      );
+}
+
+class LogEntry {
+  final String id;
+  final String? startedAt, endedAt;
+  final int? startOdometerKm, endOdometerKm;
+  final double? distanceKm;
+  final String purpose; // work/private
+  final String? reason;
+  final String? startLocation, endLocation;
+  final double? startLat, startLng, endLat, endLng;
+  final String status; // in_progress/completed
+
+  const LogEntry({
+    required this.id,
+    this.startedAt,
+    this.endedAt,
+    this.startOdometerKm,
+    this.endOdometerKm,
+    this.distanceKm,
+    this.purpose = 'private',
+    this.reason,
+    this.startLocation,
+    this.endLocation,
+    this.startLat,
+    this.startLng,
+    this.endLat,
+    this.endLng,
+    this.status = 'in_progress',
+  });
+
+  bool get isComplete => status == 'completed';
+
+  factory LogEntry.fromJson(Map<String, dynamic> j) => LogEntry(
+        id: j['id'] as String,
+        startedAt: j['started_at'] as String?,
+        endedAt: j['ended_at'] as String?,
+        startOdometerKm: j['start_odometer_km'] as int?,
+        endOdometerKm: j['end_odometer_km'] as int?,
+        distanceKm: (j['distance_km'] as num?)?.toDouble(),
+        purpose: j['purpose'] as String? ?? 'private',
+        reason: j['reason'] as String?,
+        startLocation: j['start_location'] as String?,
+        endLocation: j['end_location'] as String?,
+        startLat: (j['start_lat'] as num?)?.toDouble(),
+        startLng: (j['start_lng'] as num?)?.toDouble(),
+        endLat: (j['end_lat'] as num?)?.toDouble(),
+        endLng: (j['end_lng'] as num?)?.toDouble(),
+        status: j['status'] as String? ?? 'in_progress',
+      );
+}
+
+class ObdCode {
+  final String id, code;
+  final String? description;
+  final bool isResolved;
+  final String source;
+
+  const ObdCode({
+    required this.id,
+    required this.code,
+    this.description,
+    this.isResolved = false,
+    this.source = 'obd',
+  });
+
+  factory ObdCode.fromJson(Map<String, dynamic> j) => ObdCode(
+        id: j['id'] as String,
+        code: j['code'] as String,
+        description: j['description'] as String?,
+        isResolved: (j['is_resolved'] as bool?) ?? false,
+        source: j['source'] as String? ?? 'obd',
       );
 }
 

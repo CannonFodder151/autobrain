@@ -40,6 +40,7 @@ class VehicleCreate(BaseModel):
     odometer_km: int | None = 0
     condition: str = "good"
     is_primary: bool = False
+    club_reg: bool = False
 
 
 class VehicleUpdate(BaseModel):
@@ -54,6 +55,7 @@ class VehicleUpdate(BaseModel):
     odometer_km: int | None = None
     condition: str | None = None
     is_primary: bool | None = None
+    club_reg: bool | None = None
 
 
 class VehicleOut(BaseModel):
@@ -69,6 +71,7 @@ class VehicleOut(BaseModel):
     odometer_km: int | None
     condition: str
     is_primary: bool
+    club_reg: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}

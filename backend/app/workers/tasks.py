@@ -170,6 +170,47 @@ def run_daily_notification_checks() -> None:
     run_due_checks()
 
 
+@shared_task
+def scheduled_backup() -> None:
+    """Daily full-DB snapshot stored to MinIO. Admin backup safety-net."""
+    import io as _io
+    from datetime import datetime, timezone
+
+    from app.core.config import settings
+    from app.core.storage import get_minio
+    from app.services.backup import dump_backup, serialize_all
+
+    async def _run():
+        async with SessionLocal() as db:
+            data = await serialize_all(db)
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+            key = f"backups/autobrain-backup-{stamp}.json"
+            payload = dump_backup(data)
+            get_minio().put_object(
+                settings.MINIO_BUCKET, key, _io.BytesIO(payload),
+                length=len(payload), content_type="application/json",
+            )
+            await _prune_backups()
+            logger.info("scheduled_backup_done", key=key)
+
+    async def _prune_backups():
+        from datetime import timedelta
+
+        from app.core.config import settings
+        from app.core.storage import get_minio
+
+        client = get_minio()
+        cutoff = datetime.now(timezone.utc) - timedelta(days=settings.BACKUP_RETENTION_DAYS)
+        try:
+            for obj in client.list_objects(settings.MINIO_BUCKET, prefix="backups/"):
+                if obj.last_modified and obj.last_modified.replace(tzinfo=timezone.utc) < cutoff:
+                    client.remove_object(settings.MINIO_BUCKET, obj.object_name)
+        except Exception:
+            logger.exception("backup_prune_failed")
+
+    _run(_run())
+
+
 def _pdf_text(data: bytes) -> str:
     """Extract text from a PDF for downstream OCR/AI extraction."""
     try:

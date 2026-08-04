@@ -11,6 +11,7 @@ below are mirrors kept in-repo for offline reading and PR review.
 | [database-schema.md](database-schema.md) | PostgreSQL schema |
 | [ai-models.md](ai-models.md) | AI module descriptions |
 | [ai-router-integration.md](ai-router-integration.md) | 9Router / AI_ROUTER_URL integration |
+| [obd-integration.md](obd-integration.md) | OBD-II port roadmap & next steps |
 | [deployment-guide.md](deployment-guide.md) | Docker, systemd, k8s deployment |
 | [developer-onboarding.md](developer-onboarding.md) | Getting started for devs |
 | [versioning.md](versioning.md) | Versioning strategy |

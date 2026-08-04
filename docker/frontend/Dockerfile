@@ -6,14 +6,18 @@ ARG FLUTTER_IMAGE=ghcr.io/cirruslabs/flutter:stable
 
 FROM ${FLUTTER_IMAGE} AS build
 
+# Required on hosted builds (Azure/cloud): the runtime base URL must point at
+# the public host, NOT localhost, or the app silently talks to the container.
+# CI should pass --build-arg API_BASE_URL / WS_BASE_URL explicitly.
 ARG API_BASE_URL=http://localhost:8000/api/v1
 ARG WS_BASE_URL=ws://localhost:8000/ws
 
 WORKDIR /build
-COPY frontend/pubspec.yaml ./
+# Copy the lockfile too so `pub get` resolves the exact pinned dependency set
+# (hermetic builds, no surprise transitive upgrades on hosted builders).
+COPY frontend/pubspec.yaml frontend/pubspec.lock ./
 RUN flutter pub get
 COPY frontend ./
-RUN dart run build_runner build --delete-conflicting-outputs 2>/dev/null || true
 RUN flutter build web \
     --dart-define=API_BASE_URL=${API_BASE_URL} \
     --dart-define=WS_BASE_URL=${WS_BASE_URL}

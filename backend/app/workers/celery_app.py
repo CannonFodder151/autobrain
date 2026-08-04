@@ -27,5 +27,9 @@ celery_app.conf.update(
             "task": "app.workers.tasks.run_daily_notification_checks",
             "schedule": 60 * 60 * 6,
         },
+        "scheduled-backup": {
+            "task": "app.workers.tasks.scheduled_backup",
+            "schedule": 60 * 60 * 24,
+        },
     },
 )

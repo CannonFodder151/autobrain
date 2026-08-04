@@ -6,21 +6,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- ATO logbook: per-trip logging for non-club-reg vehicles (start/end time, GPS, odometer, work/private, reason), edit/complete trips, per-financial-year CSV export, and dashboard-photo odometer OCR (AI). Completing a trip updates the vehicle odometer.
+- Club registration selector on vehicles — club-registered vehicles disable the logbook feature.
+- Fuel: edit/delete fill-ups, fuel-receipt photo upload (AI parse of litres/price-per-litre, or plain upload without AI), and per-financial-year CSV export for tax purposes. Fuel always updates the odometer unless a newer logbook trip governs.
+- Free account tier (`free_account` per user): disables all AI features, file exports and rego lookup (403 server-side).
+- Server version in admin settings with GitHub latest-release check (up to date / update available).
+- Diagnostics: resolve + delete once fixed; a diagnostic auto-flips to resolved (green tick) when its linked scheduled service is completed.
+- Profile export/import: download your whole account as JSON and import it on any server.
+- Admin backup & restore: full JSON database snapshot download, wipe-and-restore endpoint, and a scheduled daily backup (Celery beat → MinIO) with retention.
+- Admin API key (`ADMIN_API_KEY` + `X-Admin-API-Key`): create users, set permissions (role, vehicle quota, free/paid account, OBD access), list, disable and delete users machine-to-machine.
+- OBD-II seam: fault-code library with save/pull-to-AI-diagnostics, VIN auto-fill, admin-gated per-account access, Bluetooth auto-connect setting, and a "work in progress" UI for the live adapter features.
+- AI gateway: new `fuel-ocr` and `odometer` modules; all modules run at temperature 0 with validated/clamped numeric output (resale low ≤ est ≤ high) for stable estimates.
+- Azure/cloud web build fix: hermetic `pub get` (pubspec.lock copied) and removed the vestigial `build_runner` step.
 - Live 9Router integration: OpenAI-compatible router client (`AI_ROUTER_URL`/`AI_ROUTER_MODEL`), per-module strict-JSON prompts, tolerant schemas.
 - Web app delivery: Flutter web build served at `/` behind the proxy nginx.
-- Cross-platform download helpers (browser download on web, share sheet on mobile).
-- Comprehensive README with live URLs, web + mobile build instructions, 9Router config.
-- TOTP multi-factor authentication (setup QR, enable/disable, MFA-gated login).
-- Role-based access (admin/user) with admin user management and seeded bootstrap admin.
-- No self-signup: account creation restricted to administrators.
-- Australian rego lookup: expanded AU plate heuristics (never 404s on a valid plate), optional provider hook.
-- Modern Material 3 UI overhaul (login, home dashboard, feature grid, settings, admin screens).
-- SMTP email notifications (account welcome, MFA changes, password changes) via `SMTP_*` env config.
-- Self-service password reset (request link → TOTP-free JWT reset token → new password) with email delivery.
-- App logo asset (`frontend/assets/logo.png`) used in login + app bar.
-- State-aware Australian rego lookup (NSW/VIC/QLD/WA/SA/TAS/NT/ACT) with personalised-plate word decoding (e.g. TCRWN/VIC → Toyota Crown).
-- plateapi.com.au provider integration (env-configured `REGO_LOOKUP_URL`/`REGO_LOOKUP_API_KEY`, never hardcoded) with tolerant response mapping incl. year-range + description.
-- Services overhaul: scheduled/completed status, upcoming vs history sections, expandable editable service cards, mark-completed checkbox, common-item checklist + unlimited free-form extra items, work steps, AI diagnostic → scheduled service with steps + parts (incl. part numbers), reports include items and exclude future services, analytics/TCO exclude scheduled until completed.
+- TOTP multi-factor authentication (setup QR, enable/disable, MFA-gated login) and self-service password reset.
+- Role-based access (admin/user) with admin user management, seeded bootstrap admin, no self-signup.
+- Australian rego lookup (state-aware, personalised-plate word decoding, optional plateapi.com.au provider).
+- Services overhaul: scheduled/completed status, editable service cards with items + work steps, AI prediction, PDF/CSV export.
+- Receipt & parts OCR, parts inventory with AI reorder suggestions, resale value estimator, analytics.
 
 ### Removed
 - GitHub Actions CI/CD workflows.

@@ -31,6 +31,12 @@ async def valuate(
     vehicle = await _get_owned_vehicle(db, vehicle_id, user)
 
     # Demo accounts get a realistic sample valuation instead of an AI call.
+    if user.free_account:
+        raise HTTPException(
+            status_code=403,
+            detail="Valuation is an AI feature and is disabled on the free plan. Upgrade to enable it.",
+        )
+
     if user.role == "demo":
         today = date.today()
         return ValuationResponse(

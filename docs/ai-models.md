@@ -1,6 +1,6 @@
 # AI Models
 
-All five modules live in `ai/app/modules/` and are exposed by the gateway at
+All modules live in `ai/app/modules/` and are exposed by the gateway at
 `/v1/{module}`. Each module first POSTs the inference request to 9Router and
 falls back to a deterministic rule-based engine if the router is unreachable.
 The response includes a `model` field (`"9router"` or `"rule-based-fallback"`)
@@ -13,6 +13,11 @@ so callers know which path produced it.
 | OCR | `/v1/ocr` | file metadata + content preview | vendor, date, total, tax, items (part/labour), warranty, next service |
 | Resale | `/v1/resale` | vehicle attributes, service history, mods, condition | value low/est/high, factor breakdown, recommendations |
 | Mod impact | `/v1/mod-impact` | mod name, category, vehicle, notes | performance score, value impact, reliability impact |
+| Fuel receipt | `/v1/fuel-ocr` | fuel receipt text or base64 image | vendor, date, litres, price_per_litre, total_cost |
+| Odometer | `/v1/odometer` | dashboard photo (base64) | odometer_km, confidence (start/end logbook trips, fuel odo) |
+
+All router calls run at **temperature 0** (deterministic) and numeric output is
+validated/clamped (`resale` enforces low ≤ estimated ≤ high).
 
 ## Fallback engines
 

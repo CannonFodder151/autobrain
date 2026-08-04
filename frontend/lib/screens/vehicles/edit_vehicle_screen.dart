@@ -27,6 +27,7 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
   String _state = 'VIC';
   bool _busy = false;
   bool _isPrimary = false;
+  bool _clubReg = false;
   bool _lookingUp = false;
   String? _lookupInfo;
 
@@ -44,6 +45,7 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
     _odometer = TextEditingController(text: '${v.odometerKm ?? ''}');
     _year = v.year;
     _isPrimary = v.isPrimary;
+    _clubReg = v.clubReg;
   }
 
   @override
@@ -101,6 +103,7 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
         'transmission': _transmission.text.isEmpty ? null : _transmission.text,
         'odometer_km': int.tryParse(_odometer.text),
         'is_primary': _isPrimary,
+        'club_reg': _clubReg,
       });
       if (mounted) Navigator.pop(context);
     } catch (e) {
@@ -243,6 +246,15 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
                 title: const Text('Set as primary vehicle'),
                 value: _isPrimary,
                 onChanged: (v) => setState(() => _isPrimary = v ?? false),
+              ),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Club registration'),
+                subtitle: const Text(
+                    'Club-registered vehicles are not used for ATO logbook '
+                    'claims, so the logbook feature is disabled.'),
+                value: _clubReg,
+                onChanged: (v) => setState(() => _clubReg = v ?? false),
               ),
               const SizedBox(height: 20),
               FilledButton(
