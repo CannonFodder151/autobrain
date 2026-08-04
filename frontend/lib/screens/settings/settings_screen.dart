@@ -24,6 +24,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   bool get _aiEnabled => !((_profile?['free_account'] as bool?) ?? false);
   bool get _obdEnabled => (_profile?['obd_enabled'] as bool?) ?? false;
+  int get _maxVehicles => (_profile?['max_vehicles'] as int?) ?? 1;
+  int get _vehiclesUsed => (_profile?['vehicle_count'] as int?) ?? 0;
 
   Widget _chip(bool on) => Chip(
         label: Text(on ? 'Enabled' : 'Disabled'),
@@ -36,6 +38,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         labelStyle: TextStyle(
             color: on ? Colors.green.shade700 : Colors.grey, fontSize: 12),
+      );
+
+  Widget _countChip(int used, int max) => Chip(
+        label: Text('$used/$max'),
+        visualDensity: VisualDensity.compact,
+        backgroundColor: Colors.blue.withValues(alpha: 0.15),
+        side: BorderSide(color: Colors.blue, width: 1),
+        labelStyle: TextStyle(color: Colors.blue.shade700, fontSize: 12),
       );
 
   @override
@@ -289,8 +299,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ListTile(
                   leading: const Icon(Icons.directions_car),
                   title: const Text('Maximum cars'),
-                  subtitle: Text('${(_profile?['max_vehicles'] as int?) ?? 1} '
-                      'vehicle slot${(_profile?['max_vehicles'] as int? ?? 1) == 1 ? '' : 's'}'),
+                  subtitle: Text('$_vehiclesUsed car${_vehiclesUsed == 1 ? '' : 's'} used '
+                      'of $_maxVehicles'),
+                  trailing: _countChip(_vehiclesUsed, _maxVehicles),
                 ),
                 const Divider(height: 1),
                 ListTile(
