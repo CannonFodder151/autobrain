@@ -246,14 +246,16 @@ async def lookup_rego(rego: str, jurisdiction: str = "AU", state: str = "VIC") -
         return None
     state = state.upper()
 
-    # 1) External provider (real lookup) — plateapi.com.au compatible.
+    # 1) External provider (real lookup) — self-hosted Plate-API-Scraper
+    #    (POST /lookup, body {"plate", "state"}, X-API-Key header). Also accepts
+    #    any plateapi.com.au-compatible GET endpoint if configured that way.
     #    Configure REGO_LOOKUP_URL + REGO_LOOKUP_API_KEY in .env (never hardcode).
     if settings.REGO_LOOKUP_URL:
         try:
-            async with httpx.AsyncClient(timeout=20) as client:
-                resp = await client.get(
+            async with httpx.AsyncClient(timeout=60) as client:
+                resp = await client.post(
                     settings.REGO_LOOKUP_URL,
-                    params={"plate": clean, "state": state, "detailed": "true"},
+                    json={"plate": clean, "state": state},
                     headers={"X-API-Key": settings.REGO_LOOKUP_API_KEY} if settings.REGO_LOOKUP_API_KEY else {},
                 )
                 data = resp.json()
