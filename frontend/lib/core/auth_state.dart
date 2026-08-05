@@ -146,6 +146,27 @@ class AuthState extends ChangeNotifier {
     );
   }
 
+  /// Registers a Free-tier account (hosted instance). Auto-login on success.
+  /// Returns null on success, or a user-facing error message.
+  Future<String?> signup({
+    required String email,
+    required String displayName,
+    required String password,
+  }) async {
+    try {
+      final data = await _anonymous().post(
+        '/auth/signup',
+        {'email': email, 'display_name': displayName, 'password': password},
+      ) as Map<String, dynamic>;
+      await _persist(data);
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
+    } catch (_) {
+      return 'Could not create your account. Please try again.';
+    }
+  }
+
   /// Confirms a password reset with the emailed token.
   Future<bool> confirmPasswordReset(String token, String newPassword) async {
     try {

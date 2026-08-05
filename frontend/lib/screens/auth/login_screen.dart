@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../core/auth_state.dart';
 import '../../core/config.dart';
 import 'reset_password.dart';
+import 'signup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -312,6 +313,15 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                               child: const Text('Forgot password?'),
                             ),
+                            const SizedBox(height: 4),
+                            TextButton(
+                              onPressed: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const SignupScreen(),
+                                ),
+                              ),
+                              child: const Text('New here? Create a free account'),
+                            ),
                           ],
                           ],
                         ),
@@ -332,7 +342,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   ],
                   const SizedBox(height: 20),
                   const Text(
-                    'Accounts are provisioned by your administrator.',
+                    'Free tier available · Self-hosted accounts are admin-managed',
+                    textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.white60, fontSize: 12),
                   ),
                 ],

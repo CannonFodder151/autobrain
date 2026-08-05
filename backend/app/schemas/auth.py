@@ -119,3 +119,5 @@ class UserAdminOut(BaseModel):
 class UserWithVehicleCount(UserOut):
     vehicle_count: int = 0
     vehicles_remaining: int = 0
+    plan: str = "free"  # free / enthusiast / garage (billing tier)
+    subscription_status: str | None = None

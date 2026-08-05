@@ -100,6 +100,20 @@ class Settings(BaseSettings):
     # Admin API key: enables machine-to-machine user management via X-Admin-API-Key.
     ADMIN_API_KEY: str = ""  # leave empty to disable the /admin-api endpoints
 
+    # Self-service signup (hosted). When enabled, anyone can register a
+    # Free-tier account via POST /auth/signup. Self-hosted instances keep
+    # admin-only provisioning by leaving this off.
+    SELF_SIGNUP_ENABLED: bool = False
+
+    # Stripe billing (hosted subscriptions). Price IDs come from the Stripe
+    # Dashboard (or scripts/stripe-setup.py). Leave empty to disable /billing.
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""  # whsec_... from the Stripe Dashboard
+    STRIPE_PRICE_ENTHUSIAST_MONTHLY: str = ""
+    STRIPE_PRICE_ENTHUSIAST_YEARLY: str = ""
+    STRIPE_PRICE_GARAGE_MONTHLY: str = ""
+    STRIPE_PRICE_GARAGE_YEARLY: str = ""
+
     @property
     def sqlalchemy_database_uri(self) -> str:
         if self.DATABASE_URL:

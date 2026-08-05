@@ -1,7 +1,7 @@
 """User account model."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import DateTime, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
@@ -28,6 +28,11 @@ class User(Base):
     obd_auto_connect: Mapped[bool] = mapped_column(default=False)  # auto-connect Bluetooth OBD
     mfa_secret: Mapped[str | None] = mapped_column(String(64))
     mfa_enabled: Mapped[bool] = mapped_column(default=False)
+    # Stripe billing (hosted subscriptions). Populated by the billing webhook.
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String(64))
+    stripe_subscription_status: Mapped[str | None] = mapped_column(String(32))
+    stripe_price_id: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

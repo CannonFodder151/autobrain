@@ -4,7 +4,6 @@ import base64
 import io
 import secrets
 import time
-import uuid
 from collections import defaultdict, deque
 
 import pyotp
@@ -214,6 +213,8 @@ async def me(
     )
     count = count or 0
     remaining = max(current.max_vehicles - count, 0)
+    from app.services import billing as billing_svc
+
     return UserWithVehicleCount.model_validate(
         {
             "id": current.id,
@@ -228,6 +229,8 @@ async def me(
             "obd_auto_connect": current.obd_auto_connect,
             "vehicle_count": count,
             "vehicles_remaining": remaining,
+            "plan": billing_svc.plan_for_user(current),
+            "subscription_status": current.stripe_subscription_status,
         }
     )
 
@@ -368,6 +371,39 @@ async def admin_create_user(
         await mail.send_account_invite(user.email, user.display_name, token, settings.APP_BASE_URL, expiry_days=7)
     else:
         await mail.send_welcome(user.email, user.display_name, settings.APP_BASE_URL)
+    return _token_pair(user)
+
+
+# --- public self-service signup (hosted Free tier) ---
+@router.post("/signup", response_model=TokenPair, status_code=status.HTTP_201_CREATED)
+async def public_signup(
+    payload: UserCreate,
+    db: AsyncSession = Depends(get_db),
+) -> TokenPair:
+    """Create a Free-tier account. Enabled via SELF_SIGNUP_ENABLED (hosted
+    instance); self-hosted servers keep admin-only provisioning."""
+    if not settings.SELF_SIGNUP_ENABLED:
+        raise HTTPException(
+            status_code=403,
+            detail="Self-service signup is disabled on this server. Ask your administrator for an account.",
+        )
+    if not payload.password:
+        raise HTTPException(status_code=422, detail="Password required")
+    existing = await db.scalar(select(User).where(User.email == payload.email.lower()))
+    if existing:
+        raise HTTPException(status_code=409, detail="Email already registered")
+    user = User(
+        email=payload.email.lower(),
+        display_name=payload.display_name,
+        hashed_password=hash_password(payload.password),
+        role="user",
+        max_vehicles=1,
+        free_account=True,
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    await mail.send_welcome(user.email, user.display_name, settings.APP_BASE_URL)
     return _token_pair(user)
 
 

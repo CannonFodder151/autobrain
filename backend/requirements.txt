@@ -23,6 +23,7 @@ websockets==14.1
 structlog==24.4.0
 pyotp==2.9.0
 qrcode[pil]==8.0
+stripe==15.4.0
 
 # Test/dev
 pytest==9.1.1
