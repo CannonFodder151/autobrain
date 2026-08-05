@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/auth_state.dart';
@@ -156,17 +155,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Focus(
-      onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            (event.logicalKey == LogicalKeyboardKey.enter ||
-                event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
-          _submit();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: Scaffold(
+    return Scaffold(
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -282,6 +271,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               keyboardType: TextInputType.number,
                               maxLength: 6,
                               autofocus: true,
+                              autofillHints: const [AutofillHints.oneTimeCode],
                               onFieldSubmitted: (_) => _submit(),
                               validator: (v) =>
                                   v == null || v.trim().length < 6
@@ -299,6 +289,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               keyboardType: TextInputType.number,
                               maxLength: 6,
                               autofocus: true,
+                              autofillHints: const [AutofillHints.oneTimeCode],
                               onFieldSubmitted: (_) => _submit(),
                               validator: (v) =>
                                   v == null || v.trim().length < 6
@@ -408,7 +399,6 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
         ),
-      ),
       ),
     );
   }

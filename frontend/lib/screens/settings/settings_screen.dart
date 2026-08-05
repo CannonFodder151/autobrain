@@ -211,6 +211,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           controller: _code,
                           keyboardType: TextInputType.number,
                           maxLength: 6,
+                          autofillHints: const [AutofillHints.oneTimeCode],
                           decoration: const InputDecoration(
                             labelText: 'Current code to disable',
                             counterText: '',
@@ -252,6 +253,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             keyboardType: TextInputType.number,
                             maxLength: 6,
                             autofocus: true,
+                            autofillHints: const [AutofillHints.oneTimeCode],
                             decoration: const InputDecoration(
                               labelText: 'Enter 6-digit code',
                               counterText: '',

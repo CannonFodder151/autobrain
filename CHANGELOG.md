@@ -5,6 +5,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-08-05
+
+### Fixed
+- Web autofill: removed the global Enter-key interceptor that could swallow browser password-manager fills (Enter still submits via the fields themselves).
+- MFA code fields now carry `one-time-code` autofill hints so browsers offer the OTP/password suggestion (login, MFA setup, and Settings & security).
+
 ## [0.2.1] - 2026-08-05
 
 ### Added
