@@ -89,7 +89,7 @@ class Settings(BaseSettings):
     APP_BASE_URL: str = "http://10.0.3.39"
 
     # Versioning + GitHub release checking
-    APP_VERSION: str = "0.2.4"  # mirror frontend/pubspec.yaml version
+    APP_VERSION: str = "0.3.0"  # mirror frontend/pubspec.yaml version
     GITHUB_REPO: str = "CannonFodder151/autobrain"
     GITHUB_TOKEN: str = ""  # optional, raises the GitHub API rate limit for release checks
 
@@ -104,6 +104,10 @@ class Settings(BaseSettings):
     # Free-tier account via POST /auth/signup. Self-hosted instances keep
     # admin-only provisioning by leaving this off.
     SELF_SIGNUP_ENABLED: bool = False
+
+    # Licence/subscription feature visibility. Off by default; the hosted
+    # instance turns it on. When off, the app hides the licence/upgrade page.
+    LICENSE_ENABLED: bool = False
 
     # Stripe billing (hosted subscriptions). Price IDs come from the Stripe
     # Dashboard (or scripts/stripe-setup.py). Leave empty to disable /billing.

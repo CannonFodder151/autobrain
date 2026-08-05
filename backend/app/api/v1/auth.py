@@ -208,6 +208,7 @@ async def auth_config() -> dict:
     return {
         "signup_enabled": settings.SELF_SIGNUP_ENABLED,
         "mfa_enforced": settings.MFA_ENFORCED,
+        "license_enabled": settings.LICENSE_ENABLED,
     }
 
 

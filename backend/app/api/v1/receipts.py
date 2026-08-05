@@ -104,6 +104,7 @@ async def apply_receipt_to_service(
         cost=receipt.total or 0.0,
         currency=receipt.currency,
         notes=payload.notes or f"From scanned receipt {receipt.original_name or receipt_id}",
+        photo_keys=[receipt.file_key],
     )
     db.add(service)
     await db.flush()

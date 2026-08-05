@@ -11,7 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_write
 from app.api.v1.vehicles import add_event, _get_owned_vehicle
-from app.core.storage import detect_mime, ensure_bucket, upload_object
+from app.core.logging import get_logger
+from app.core.storage import detect_mime, ensure_bucket, get_object, upload_object
 from app.db.session import get_db
 from app.models.fuel import FuelLog
 from app.models.receipt import Receipt
@@ -24,10 +25,12 @@ from app.schemas.fuel import (
     FuelReceiptResult,
 )
 from app.services.ai_client import extract_fuel_receipt
-from app.services.export import export_fuel_csv
+from app.services.export import export_fuel_csv, export_zip
 from app.services.odometer import sync_odometer
 
 router = APIRouter(prefix="/vehicles/{vehicle_id}/fuel", tags=["fuel"])
+
+logger = get_logger(__name__)
 
 ALLOWED_RECEIPT_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/tiff", "application/pdf"}
 MAX_BYTES = 15 * 1024 * 1024
@@ -54,16 +57,28 @@ def _ref_time(log: FuelLog) -> datetime:
 @router.get("", response_model=list[FuelLogOut])
 async def list_fuel(
     vehicle_id: str,
+    fy: int | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[FuelLog]:
+    """List fuel logs, optionally filtered to an Australian financial year
+    (e.g. fy=2026 covers 2025-07-01 .. 2026-06-30)."""
     await _get_owned_vehicle(db, vehicle_id, user)
-    rows = await db.scalars(
-        select(FuelLog)
-        .where(FuelLog.vehicle_id == vehicle_id)
-        .order_by(FuelLog.fill_date.desc())
-    )
+    q = select(FuelLog).where(FuelLog.vehicle_id == vehicle_id)
+    if fy:
+        q = q.where(FuelLog.fill_date >= date(fy - 1, 7, 1), FuelLog.fill_date <= date(fy, 6, 30))
+    rows = await db.scalars(q.order_by(FuelLog.fill_date.desc()))
     return list(rows)
+
+
+async def _link_receipt(db: AsyncSession, vehicle_id: str, receipt_id: str | None) -> str | None:
+    """Validate a receipt belongs to this vehicle and return its id (or None)."""
+    if not receipt_id:
+        return None
+    r = await db.get(Receipt, receipt_id)
+    if not r or r.vehicle_id != vehicle_id:
+        raise HTTPException(status_code=404, detail="Receipt not found for this vehicle")
+    return receipt_id
 
 
 @router.post("", response_model=FuelLogOut, status_code=201)
@@ -75,10 +90,12 @@ async def add_fuel(
 ) -> FuelLog:
     vehicle = await _get_owned_vehicle(db, vehicle_id, user)
     total = payload.total_cost if payload.total_cost else round(payload.litres * payload.price_per_litre, 2)
+    receipt_id = await _link_receipt(db, vehicle_id, payload.receipt_id)
     log = FuelLog(
         vehicle_id=vehicle_id,
         total_cost=total,
-        **payload.model_dump(exclude={"total_cost"}),
+        receipt_id=receipt_id,
+        **payload.model_dump(exclude={"total_cost", "receipt_id"}),
     )
     prev = await db.scalar(
         select(FuelLog)
@@ -119,6 +136,8 @@ async def update_fuel(
     if not log or log.vehicle_id != vehicle_id:
         raise HTTPException(status_code=404, detail="Fuel log not found")
     data = payload.model_dump(exclude_unset=True)
+    if "receipt_id" in data:
+        data["receipt_id"] = await _link_receipt(db, vehicle_id, data["receipt_id"])
     if "total_cost" in data and data["total_cost"] is None:
         data.pop("total_cost")
     if data.get("total_cost") is None:
@@ -210,10 +229,14 @@ async def fuel_stats(
 async def export_fuel_year(
     vehicle_id: str,
     fy: int | None = Query(default=None),
+    fmt: str = Query("csv", pattern="^(csv|zip)$"),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Response:
-    """Export fuel records for an Australian financial year (tax purposes)."""
+    """Export fuel records for an Australian financial year (tax purposes).
+
+    fmt=zip bundles the CSV (with an Image column) plus the receipt images.
+    """
     vehicle = await _get_owned_vehicle(db, vehicle_id, user)
     fy = fy or _current_fy()
     start = datetime(fy - 1, 7, 1)
@@ -227,10 +250,24 @@ async def export_fuel_year(
     )).all())
     content = export_fuel_csv(logs, fy)
     label = vehicle.nickname.replace(" ", "-")
+    if fmt == "csv":
+        return Response(
+            content=content,
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="fuel-{label}-FY{fy-1}-{str(fy)[2:]}.csv"'},
+        )
+    images: dict[str, bytes] = {}
+    for log in logs:
+        if log.receipt and log.receipt.file_key:
+            try:
+                images[log.receipt.file_key.rsplit("/", 1)[-1]] = await get_object(log.receipt.file_key)
+            except Exception:
+                continue
+    zipped = export_zip(content, images)
     return Response(
-        content=content,
-        media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="fuel-{label}-FY{fy-1}-{str(fy)[2:]}.csv"'},
+        content=zipped,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="fuel-{label}-FY{fy-1}-{str(fy)[2:]}-with-images.zip"'},
     )
 
 
@@ -272,19 +309,26 @@ async def upload_fuel_receipt(
 
     parsed: dict = {}
     if ai:
-        parsed = await extract_fuel_receipt({
-            "content": "",
-            "content_base64": base64.b64encode(data).decode() if content_type != "application/pdf" else "",
-            "content_type": content_type,
-            "filename": file.filename,
-            "vehicle_id": vehicle_id,
-        }) or {}
+        try:
+            parsed = await extract_fuel_receipt({
+                "content": "",
+                "content_base64": base64.b64encode(data).decode() if content_type != "application/pdf" else "",
+                "content_type": content_type,
+                "filename": file.filename,
+                "vehicle_id": vehicle_id,
+            }) or {}
+        except Exception:
+            logger.exception("fuel_receipt_ai_failed")
+            parsed = {}
+        receipt.ocr_status = "done" if parsed else "failed"
         if parsed:
-            receipt.ocr_status = "done"
             receipt.vendor = parsed.get("vendor")
             receipt.total = parsed.get("total_cost")
             receipt.invoice_date = parsed.get("date")
-            await db.commit()
+    else:
+        receipt.ocr_status = "done"
+    await db.commit()
+    await db.refresh(receipt)
 
     return FuelReceiptResult(
         receipt_id=receipt.id,

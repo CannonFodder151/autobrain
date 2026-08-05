@@ -4,7 +4,7 @@ import uuid
 from datetime import date, datetime
 
 from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
 
@@ -30,3 +30,5 @@ class FuelLog(Base):
     cost_per_km: Mapped[float | None] = mapped_column(Float)
     receipt_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("receipts.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    receipt: Mapped["Receipt | None"] = relationship(foreign_keys=[receipt_id], lazy="selectin")

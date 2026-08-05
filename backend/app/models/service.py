@@ -38,6 +38,7 @@ class ServiceRecord(Base):
     status: Mapped[str] = mapped_column(String(20), default="completed", nullable=False, index=True)
     completed_date: Mapped[date | None] = mapped_column(Date)
     steps: Mapped[str | None] = mapped_column(Text)  # JSON list of work steps
+    photo_keys: Mapped[list | None] = mapped_column(Text)  # JSON list of MinIO keys (receipt scans etc.)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     items: Mapped[list["ServiceItem"]] = relationship(

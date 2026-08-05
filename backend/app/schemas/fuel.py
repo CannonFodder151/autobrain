@@ -13,6 +13,7 @@ class FuelLogCreate(BaseModel):
     total_cost: float | None = None
     is_full_tank: bool = True
     notes: str | None = None
+    receipt_id: str | None = None
 
 
 class FuelLogUpdate(BaseModel):
@@ -23,6 +24,7 @@ class FuelLogUpdate(BaseModel):
     total_cost: float | None = None
     is_full_tank: bool | None = None
     notes: str | None = None
+    receipt_id: str | None = None
 
 
 class FuelLogOut(BaseModel):

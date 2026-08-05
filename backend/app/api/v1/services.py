@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 from app.api.deps import get_current_user, require_ai, require_write
 from app.api.v1.vehicles import add_event, _get_owned_vehicle
 from app.core.logging import get_logger
+from app.core.storage import get_object
 from app.db.session import get_db
 from app.models.part import Part, PartMovement
 from app.models.service import ServiceItem, ServiceRecord
@@ -25,7 +26,7 @@ from app.schemas.service import (
     ServiceUpdate,
 )
 from app.services.ai_client import predict_service
-from app.services.export import export_service_history_csv, export_service_history_pdf
+from app.services.export import export_service_history_csv, export_service_history_pdf, export_zip
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/vehicles/{vehicle_id}/services", tags=["services"])
@@ -166,7 +167,7 @@ async def create_service(
 @router.get("/export")
 async def export(
     vehicle_id: str,
-    fmt: str = Query("csv", pattern="^(csv|pdf)$"),
+    fmt: str = Query("csv", pattern="^(csv|pdf|zip)$"),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Response:
@@ -189,11 +190,27 @@ async def export(
             media_type="text/csv",
             headers={"Content-Disposition": f'attachment; filename="service-history-{vehicle.id}.csv"'},
         )
-    pdf = export_service_history_pdf(records, label)
+    if fmt == "pdf":
+        pdf = export_service_history_pdf(records, label)
+        return Response(
+            content=pdf,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="service-history-{vehicle.id}.pdf"'},
+        )
+    # fmt == "zip": CSV (with Image column) + the receipt/scan images
+    content = export_service_history_csv(records, label)
+    images: dict[str, bytes] = {}
+    for r in records:
+        for k in (r.photo_keys or []):
+            try:
+                images[k.rsplit("/", 1)[-1]] = await get_object(k)
+            except Exception:
+                continue
+    zipped = export_zip(content, images)
     return Response(
-        content=pdf,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="service-history-{vehicle.id}.pdf"'},
+        content=zipped,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="service-history-{vehicle.id}-with-images.zip"'},
     )
 
 

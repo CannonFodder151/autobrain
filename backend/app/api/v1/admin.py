@@ -135,6 +135,29 @@ async def update_user(
     return user
 
 
+@router.post("/{user_id}/re-upgrade", response_model=UserAdminOut)
+async def re_upgrade_user(
+    user_id: str,
+    enabled: bool = Query(default=True),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """Grant (or revoke, with enabled=false) the $19/month Enthusiast benefits
+    without a Stripe subscription. Re-upgraded accounts are blocked from
+    buying a licence (see billing.create_checkout_session)."""
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if enabled:
+        user.free_account = False
+        user.max_vehicles = 1
+    else:
+        user.free_account = True
+        user.max_vehicles = 1
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
 @router.delete("/{user_id}", status_code=204)
 async def delete_user(
     user_id: str,

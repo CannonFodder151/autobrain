@@ -96,6 +96,10 @@ async def create_checkout_session(
     """Find-or-create the Stripe customer and open a Checkout subscription."""
     if plan_key not in PLANS:
         raise ValueError("Unknown plan")
+    # Sponsored/re-upgraded accounts (paid benefits, no Stripe subscription)
+    # cannot buy a licence — the admin has already granted them access.
+    if not user.free_account and not has_paid_subscription(user):
+        raise ValueError("Licence upgrades are disabled on this account")
     price_id = price_for(plan_key, billing)
     if not price_id:
         raise ValueError("Billing is not configured for that plan")

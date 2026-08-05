@@ -3,11 +3,38 @@ and fuel, plus user-profile JSON export/import."""
 
 import csv
 import io
+import zipfile
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+
+def _photo_names(photo_keys) -> list[str]:
+    """Map MinIO keys to the short filenames used inside an export ZIP."""
+    if not photo_keys:
+        return []
+    keys = photo_keys if isinstance(photo_keys, list) else []
+    names = []
+    for k in keys:
+        fname = k.rsplit("/", 1)[-1]
+        names.append(f"images/{fname}")
+    return names
+
+
+def _photo_csv(photo_keys) -> str:
+    return "; ".join(_photo_names(photo_keys))
+
+
+def export_zip(csv_bytes: bytes, images: dict[str, bytes]) -> bytes:
+    """Bundle a CSV (with image references) and the referenced image files."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("export.csv", csv_bytes)
+        for name, data in images.items():
+            zf.writestr(f"images/{name}", data)
+    return buf.getvalue()
 
 
 def _items_text(r) -> str:
@@ -29,11 +56,11 @@ def export_service_history_csv(records: list, label: str) -> bytes:
     writer = csv.writer(buf)
     writer.writerow(["AutoBrain Service History", label])
     writer.writerow([])
-    writer.writerow(["Date", "Odometer (km)", "Type", "Workshop", "Cost", "Currency", "Items", "Notes"])
+    writer.writerow(["Date", "Odometer (km)", "Type", "Workshop", "Cost", "Currency", "Items", "Notes", "Images"])
     for r in records:
         writer.writerow(
             [r.service_date, r.odometer_km, r.service_type, r.workshop or "",
-             r.cost, r.currency, _items_text(r), (r.notes or "")]
+             r.cost, r.currency, _items_text(r), (r.notes or ""), _photo_csv(r.photo_keys)]
         )
     return buf.getvalue().encode("utf-8")
 
@@ -55,9 +82,10 @@ def export_build_sheet_csv(mods: list, label: str) -> bytes:
     writer = csv.writer(buf)
     writer.writerow(["AutoBrain Build Sheet", label])
     writer.writerow([])
-    writer.writerow(["Date", "Name", "Category", "Brand", "Cost", "Notes"])
+    writer.writerow(["Date", "Name", "Category", "Brand", "Cost", "Notes", "Images"])
     for m in mods:
-        writer.writerow([m.install_date or "", m.name, m.category, m.brand or "", m.cost, m.notes or ""])
+        writer.writerow([m.install_date or "", m.name, m.category, m.brand or "",
+                         m.cost, m.notes or "", _photo_csv(m.photo_keys)])
     return buf.getvalue().encode("utf-8")
 
 
@@ -131,12 +159,13 @@ def export_fuel_csv(logs: list, fy: int) -> bytes:
     writer = csv.writer(buf)
     writer.writerow([f"AutoBrain Fuel — FY{fy-1}/{str(fy)[2:]}"])
     writer.writerow(["Date", "Odometer (km)", "Litres", "Price/L", "Total cost",
-                     "Full tank", "Distance (km)", "L/100km", "Notes"])
+                     "Full tank", "Distance (km)", "L/100km", "Notes", "Image"])
     for l in logs:
         writer.writerow([
             l.fill_date, l.odometer_km, l.litres, l.price_per_litre, l.total_cost,
             "yes" if l.is_full_tank else "no", l.distance_km or "",
             l.l_per_100km or "", l.notes or "",
+            _photo_csv([l.receipt.file_key]) if l.receipt else "",
         ])
     return buf.getvalue().encode("utf-8")
 

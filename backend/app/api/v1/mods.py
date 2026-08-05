@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_ai, require_write
 from app.api.v1.vehicles import add_event, _get_owned_vehicle
+from app.core.storage import get_object
 from app.db.session import get_db
 from app.models.mod import Modification
 from app.models.user import User
@@ -20,7 +21,7 @@ from app.schemas.mod import (
     ModUpdate,
 )
 from app.services.ai_client import mod_impact
-from app.services.export import export_build_sheet_csv, export_build_sheet_pdf
+from app.services.export import export_build_sheet_csv, export_build_sheet_pdf, export_zip
 
 router = APIRouter(prefix="/vehicles/{vehicle_id}/mods", tags=["mods"])
 
@@ -111,7 +112,7 @@ async def get_impact(
 @router.get("/export")
 async def export_build_sheet(
     vehicle_id: str,
-    fmt: str,
+    fmt: str = "csv",
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Response:
@@ -127,8 +128,23 @@ async def export_build_sheet(
             content=content, media_type="text/csv",
             headers={"Content-Disposition": f'attachment; filename="build-sheet-{vehicle.id}.csv"'},
         )
-    pdf = export_build_sheet_pdf(mods, label)
+    if fmt == "pdf":
+        pdf = export_build_sheet_pdf(mods, label)
+        return Response(
+            content=pdf, media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="build-sheet-{vehicle.id}.pdf"'},
+        )
+    # fmt == "zip": CSV (with Image column) + the mod photos
+    content = export_build_sheet_csv(mods, label)
+    images: dict[str, bytes] = {}
+    for m in mods:
+        for k in (m.photo_keys or []):
+            try:
+                images[k.rsplit("/", 1)[-1]] = await get_object(k)
+            except Exception:
+                continue
+    zipped = export_zip(content, images)
     return Response(
-        content=pdf, media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="build-sheet-{vehicle.id}.pdf"'},
+        content=zipped, media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="build-sheet-{vehicle.id}-with-images.zip"'},
     )
