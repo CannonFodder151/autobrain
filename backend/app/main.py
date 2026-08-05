@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="AutoBrain API",
-    version="0.1.0",
+    version="0.2.0",
     description="AI-powered car enthusiast companion. REST + WebSocket.",
     lifespan=lifespan,
     docs_url="/docs" if settings.ENVIRONMENT != "production" else None,
@@ -51,7 +51,7 @@ app.include_router(api_router, prefix=settings.API_V1_PREFIX)
 
 @app.get("/health")
 async def health() -> dict:
-    return {"status": "ok", "service": "autobrain-backend", "version": "0.1.0"}
+    return {"status": "ok", "service": "autobrain-backend", "version": "0.2.0"}
 
 
 @app.websocket("/ws/{user_id}")

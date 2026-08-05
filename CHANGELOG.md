@@ -5,6 +5,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-05
+
 ### Added
 - Vehicle colour field (add/edit form, rego-lookup auto-fill, shown on vehicle cards and home screen).
 - Self-service Free-tier signup (hosted): display name + email only; a 7-day setup email completes the account (choose password + MFA, enforced on the hosted instance).
@@ -29,6 +31,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Australian rego lookup (state-aware, personalised-plate word decoding, optional plateapi.com.au provider).
 - Services overhaul: scheduled/completed status, editable service cards with items + work steps, AI prediction, PDF/CSV export.
 - Receipt & parts OCR, parts inventory with AI reorder suggestions, resale value estimator, analytics.
+
+### Fixed
+- Login: email field is focused and its text selected on page load (fixes the web-autofill landing issue).
+- Login/MFA: the 6-digit verification code field is auto-focused when the MFA step appears.
+- Login/MFA: pressing Enter on the keyboard now submits the form instead of doing nothing.
+- Login: completing MFA setup no longer leaves the button spinning — the busy state is cleared and the app returns to the home screen.
+
+### Changed
+- Free accounts can export files; only AI features and rego lookup remain paid.
+- MFA is no longer a paid-plan feature — available on all tiers.
+- Self-service signup collects display name + email only; a setup email completes the account (password + MFA).
 
 ### Removed
 - GitHub Actions CI/CD workflows.

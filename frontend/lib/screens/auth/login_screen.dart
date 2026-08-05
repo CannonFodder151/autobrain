@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/auth_state.dart';
@@ -21,6 +22,8 @@ class _LoginScreenState extends State<LoginScreen> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   final _code = TextEditingController();
+  final _emailNode = FocusNode();
+  final _codeNode = FocusNode();
   bool _busy = false;
   bool _mfaStep = false;
   bool _mfaSetupStep = false;
@@ -40,6 +43,13 @@ class _LoginScreenState extends State<LoginScreen> {
       _email.text = 'demo@autobrainservice.app';
       _password.text = 'demo';
     }
+    // Focus + select the email field so web autofill always lands in it.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _emailNode.requestFocus();
+      _email.selection =
+          TextSelection(baseOffset: 0, extentOffset: _email.text.length);
+    });
   }
 
   @override
@@ -47,10 +57,27 @@ class _LoginScreenState extends State<LoginScreen> {
     _email.dispose();
     _password.dispose();
     _code.dispose();
+    _emailNode.dispose();
+    _codeNode.dispose();
     super.dispose();
   }
 
+  Future<void> _afterAuth() async {
+    // Post-login cleanup: un-spin the button and drop back to the root route
+    // (which swaps to HomeScreen once logged in).
+    if (!mounted) return;
+    if (!context.read<AuthState>().isLoggedIn) return;
+    setState(() {
+      _busy = false;
+      _error = null;
+    });
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).popUntil((r) => r.isFirst);
+    }
+  }
+
   Future<void> _submit() async {
+    if (_busy) return;
     if (!_formKey.currentState!.validate()) return;
     setState(() {
       _busy = true;
@@ -59,7 +86,10 @@ class _LoginScreenState extends State<LoginScreen> {
     final auth = context.read<AuthState>();
     if (_mfaSetupStep) {
       final ok = await auth.completeMfaSetup(_mfaToken!, _code.text.trim());
-      if (!ok && mounted) {
+      if (!mounted) return;
+      if (ok) {
+        await _afterAuth();
+      } else {
         setState(() {
           _busy = false;
           _error = 'Invalid verification code';
@@ -69,7 +99,10 @@ class _LoginScreenState extends State<LoginScreen> {
     }
     if (_mfaStep) {
       final ok = await auth.verifyMfa(_mfaToken!, _code.text.trim());
-      if (!ok && mounted) {
+      if (!mounted) return;
+      if (ok) {
+        await _afterAuth();
+      } else {
         setState(() {
           _busy = false;
           _error = 'Invalid verification code';
@@ -96,24 +129,44 @@ class _LoginScreenState extends State<LoginScreen> {
         _mfaSecret = setup['secret'] as String?;
         _busy = false;
       });
+      _focusCode();
     } else if (outcome == LoginOutcome.mfaRequired) {
       setState(() {
         _mfaStep = true;
         _mfaToken = auth.mfaTokenHint;
         _busy = false;
       });
+      _focusCode();
     } else if (outcome == LoginOutcome.failed) {
       setState(() {
         _busy = false;
         _error = 'Invalid email or password';
       });
+    } else if (outcome == LoginOutcome.ok) {
+      await _afterAuth();
     }
+  }
+
+  void _focusCode() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _codeNode.requestFocus();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Scaffold(
+    return Focus(
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent &&
+            (event.logicalKey == LogicalKeyboardKey.enter ||
+                event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
+          _submit();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Scaffold(
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -221,6 +274,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             const SizedBox(height: 14),
                             TextFormField(
                               controller: _code,
+                              focusNode: _codeNode,
                               decoration: const InputDecoration(
                                 labelText: '6-digit code',
                                 prefixIcon: Icon(Icons.verified_user_outlined),
@@ -237,6 +291,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ] else if (_mfaStep) ...[
                             TextFormField(
                               controller: _code,
+                              focusNode: _codeNode,
                               decoration: const InputDecoration(
                                 labelText: '6-digit code',
                                 prefixIcon: Icon(Icons.verified_user_outlined),
@@ -253,13 +308,15 @@ class _LoginScreenState extends State<LoginScreen> {
                           ] else ...[
                             TextFormField(
                               controller: _email,
+                              focusNode: _emailNode,
                               decoration: const InputDecoration(
                                 labelText: 'Email',
                                 prefixIcon: Icon(Icons.mail_outline),
                               ),
                               keyboardType: TextInputType.emailAddress,
                               autofillHints: const [AutofillHints.username],
-                              textInputAction: TextInputAction.next,
+                              textInputAction: TextInputAction.done,
+                              onFieldSubmitted: (_) => _submit(),
                               validator: (v) => v == null || !v.contains('@')
                                   ? 'Valid email required'
                                   : null,
@@ -351,6 +408,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
         ),
+      ),
       ),
     );
   }
