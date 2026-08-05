@@ -110,7 +110,7 @@ class _AdminScreenState extends State<AdminScreen> {
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Free account'),
-                  subtitle: const Text('Disables AI, exports and rego lookup'),
+                  subtitle: const Text('Disables AI and rego lookup'),
                   value: freeAccount,
                   onChanged: (v) => setDialogState(() => freeAccount = v ?? false),
                 ),

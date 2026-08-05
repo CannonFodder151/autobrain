@@ -57,6 +57,23 @@ async def customer_portal(
     return PortalResponse(url=url)
 
 
+@router.post("/cancel")
+async def cancel_subscription(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Cancel the subscription — access stays until the end of the paid period."""
+    try:
+        svc.cancel_subscription(user)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception:
+        raise HTTPException(status_code=503, detail=_NOT_CONFIGURED)
+    return {
+        "message": "Subscription cancelled — you keep full access until the end of the billing period."
+    }
+
+
 @router.post("/webhook")
 async def webhook(
     request: Request,

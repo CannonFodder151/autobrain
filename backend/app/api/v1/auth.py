@@ -13,7 +13,7 @@ from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_admin, require_paid, require_write
+from app.api.deps import get_current_user, require_admin, require_write
 from app.core.config import settings
 from app.core.security import (
     create_access_token,
@@ -36,6 +36,7 @@ from app.schemas.auth import (
     PasswordResetConfirm,
     PasswordResetRequest,
     RefreshRequest,
+    SignupRequest,
     TokenPair,
     UserCreate,
     UserLogin,
@@ -375,27 +376,27 @@ async def admin_create_user(
 
 
 # --- public self-service signup (hosted Free tier) ---
-@router.post("/signup", response_model=TokenPair, status_code=status.HTTP_201_CREATED)
+@router.post("/signup", status_code=status.HTTP_201_CREATED)
 async def public_signup(
-    payload: UserCreate,
+    payload: SignupRequest,
     db: AsyncSession = Depends(get_db),
-) -> TokenPair:
-    """Create a Free-tier account. Enabled via SELF_SIGNUP_ENABLED (hosted
-    instance); self-hosted servers keep admin-only provisioning."""
+) -> dict:
+    """Create a Free-tier account with display name + email only. A setup link
+    is emailed to finish activation (password + MFA). Enabled via
+    SELF_SIGNUP_ENABLED (hosted instance); self-hosted servers keep
+    admin-only provisioning."""
     if not settings.SELF_SIGNUP_ENABLED:
         raise HTTPException(
             status_code=403,
             detail="Self-service signup is disabled on this server. Ask your administrator for an account.",
         )
-    if not payload.password:
-        raise HTTPException(status_code=422, detail="Password required")
     existing = await db.scalar(select(User).where(User.email == payload.email.lower()))
     if existing:
         raise HTTPException(status_code=409, detail="Email already registered")
     user = User(
         email=payload.email.lower(),
         display_name=payload.display_name,
-        hashed_password=hash_password(payload.password),
+        hashed_password=hash_password(secrets.token_urlsafe(32)),
         role="user",
         max_vehicles=1,
         free_account=True,
@@ -403,15 +404,21 @@ async def public_signup(
     db.add(user)
     await db.commit()
     await db.refresh(user)
-    await mail.send_welcome(user.email, user.display_name, settings.APP_BASE_URL)
-    return _token_pair(user)
+    token = create_invite_token(user.id, days=7)
+    await mail.send_signup_setup(
+        user.email, user.display_name, token, settings.APP_BASE_URL, expiry_days=7
+    )
+    return {
+        "message": "Account created — check your email to finish setting it up.",
+        "email": user.email,
+    }
 
 
 # --- profile data portability (export / import own data) ---
 @router.get("/export")
 async def export_profile(
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_paid),
+    user: User = Depends(get_current_user),
 ) -> Response:
     """Export the whole account (user + vehicles + all records) as JSON."""
     from app.services.backup import dump_backup, serialize_user

@@ -31,6 +31,7 @@ class Vehicle(Base):
     vin: Mapped[str | None] = mapped_column(String(17))
     make: Mapped[str | None] = mapped_column(String(80))
     model: Mapped[str | None] = mapped_column(String(80))
+    colour: Mapped[str | None] = mapped_column(String(30))
     year: Mapped[int | None] = mapped_column(Integer)
     engine: Mapped[str | None] = mapped_column(String(120))
     transmission: Mapped[str | None] = mapped_column(String(60))

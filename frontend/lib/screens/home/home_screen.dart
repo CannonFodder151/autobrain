@@ -198,6 +198,7 @@ class _HeroCard extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   '${vehicle.make ?? ''} ${vehicle.model ?? ''}'
+                  '${vehicle.colour != null ? ' · ${vehicle.colour}' : ''}'
                   '${vehicle.year != null ? ' · ${vehicle.year}' : ''}'.trim(),
                   style: const TextStyle(color: Colors.white70),
                 ),

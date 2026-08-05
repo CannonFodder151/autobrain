@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_current_user, require_ai, require_paid, require_write
+from app.api.deps import get_current_user, require_ai, require_write
 from app.api.v1.vehicles import add_event, _get_owned_vehicle
 from app.core.logging import get_logger
 from app.db.session import get_db
@@ -168,7 +168,7 @@ async def export(
     vehicle_id: str,
     fmt: str = Query("csv", pattern="^(csv|pdf)$"),
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_paid),
+    user: User = Depends(get_current_user),
 ) -> Response:
     vehicle = await _get_owned_vehicle(db, vehicle_id, user)
     rows = await db.scalars(

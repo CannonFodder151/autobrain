@@ -17,6 +17,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
   final _vin = TextEditingController();
   final _make = TextEditingController();
   final _model = TextEditingController();
+  final _colour = TextEditingController();
   final _engine = TextEditingController();
   final _transmission = TextEditingController();
   final _odometer = TextEditingController();
@@ -56,7 +57,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
   @override
   void dispose() {
     for (final c in [
-      _nickname, _rego, _vin, _make, _model, _engine, _transmission, _odometer
+      _nickname, _rego, _vin, _make, _model, _colour, _engine, _transmission, _odometer
     ]) {
       c.dispose();
     }
@@ -80,15 +81,13 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
         _vin.text = (r['vin'] as String?) ?? '';
         _make.text = (r['make'] as String?) ?? '';
         _model.text = (r['model'] as String?) ?? '';
+        _colour.text = (r['colour'] as String?) ?? '';
         _engine.text = (r['engine'] as String?) ?? '';
         _transmission.text = (r['transmission'] as String?) ?? '';
         _year = r['year'] as int?;
         final extra = <String>[];
         if (r['body_type'] != null && (r['body_type'] as String).isNotEmpty) {
           extra.add(r['body_type'] as String);
-        }
-        if (r['colour'] != null && (r['colour'] as String).isNotEmpty) {
-          extra.add(r['colour'] as String);
         }
         final src = (r['source'] as String?) ?? 'unknown';
         final matched = (r['matched'] as String?) ?? '';
@@ -124,6 +123,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
         'vin': _vin.text.isEmpty ? null : _vin.text,
         'make': _make.text.isEmpty ? null : _make.text,
         'model': _model.text.isEmpty ? null : _model.text,
+        'colour': _colour.text.isEmpty ? null : _colour.text,
         'year': _year,
         'engine': _engine.text.isEmpty ? null : _engine.text,
         'transmission': _transmission.text.isEmpty ? null : _transmission.text,
@@ -304,6 +304,11 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
               TextFormField(
                 controller: _transmission,
                 decoration: const InputDecoration(labelText: 'Transmission'),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _colour,
+                decoration: const InputDecoration(labelText: 'Colour'),
               ),
               const SizedBox(height: 12),
               CheckboxListTile(

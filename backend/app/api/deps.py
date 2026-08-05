@@ -65,12 +65,12 @@ async def require_ai(user: User = Depends(get_current_user)) -> User:
     return user
 
 
-async def require_paid(user: User = Depends(get_current_user)) -> User:
-    """Free accounts cannot export files or use rego lookup."""
+async def require_rego(user: User = Depends(get_current_user)) -> User:
+    """Free accounts cannot use rego lookup (exports are available on all plans)."""
     if user.free_account:
         raise HTTPException(
             status_code=403,
-            detail="Exporting and rego lookup are disabled on the free plan. Upgrade to enable them.",
+            detail="Rego lookup is disabled on the free plan. Upgrade to enable it.",
         )
     return user
 

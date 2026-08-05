@@ -22,6 +22,14 @@ class UserLogin(BaseModel):
     totp_code: str | None = Field(default=None, max_length=10)
 
 
+class SignupRequest(BaseModel):
+    """Self-service signup (hosted Free tier). No password — the user receives
+    an email with a setup link to choose a password + MFA."""
+
+    email: EmailStr
+    display_name: str = Field(min_length=1, max_length=120)
+
+
 class UserOut(BaseModel):
     id: str
     email: EmailStr

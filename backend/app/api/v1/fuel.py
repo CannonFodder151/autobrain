@@ -9,7 +9,7 @@ from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_ai, require_paid, require_write
+from app.api.deps import get_current_user, require_write
 from app.api.v1.vehicles import add_event, _get_owned_vehicle
 from app.core.storage import ensure_bucket, upload_object
 from app.db.session import get_db
@@ -211,7 +211,7 @@ async def export_fuel_year(
     vehicle_id: str,
     fy: int | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_paid),
+    user: User = Depends(get_current_user),
 ) -> Response:
     """Export fuel records for an Australian financial year (tax purposes)."""
     vehicle = await _get_owned_vehicle(db, vehicle_id, user)

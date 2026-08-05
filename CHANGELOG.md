@@ -6,10 +6,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- Vehicle colour field (add/edit form, rego-lookup auto-fill, shown on vehicle cards and home screen).
+- Self-service Free-tier signup (hosted): display name + email only; a 7-day setup email completes the account (choose password + MFA, enforced on the hosted instance).
+- Stripe self-service billing: Checkout, Customer Portal, cancel-at-end-of-period, webhook promote/demote between free and paid plans.
+- OBD2 hardware companion listed as a **Coming soon** product on the marketing site (not part of subscription plans).
 - ATO logbook: per-trip logging for non-club-reg vehicles (start/end time, GPS, odometer, work/private, reason), edit/complete trips, per-financial-year CSV export, and dashboard-photo odometer OCR (AI). Completing a trip updates the vehicle odometer.
 - Club registration selector on vehicles — club-registered vehicles disable the logbook feature.
 - Fuel: edit/delete fill-ups, fuel-receipt photo upload (AI parse of litres/price-per-litre, or plain upload without AI), and per-financial-year CSV export for tax purposes. Fuel always updates the odometer unless a newer logbook trip governs.
-- Free account tier (`free_account` per user): disables all AI features, file exports and rego lookup (403 server-side).
+- Free account tier (`free_account` per user): disables AI features and rego lookup (403 server-side); file exports are available on all plans.
 - Server version in admin settings with GitHub latest-release check (up to date / update available).
 - Diagnostics: resolve + delete once fixed; a diagnostic auto-flips to resolved (green tick) when its linked scheduled service is completed.
 - Profile export/import: download your whole account as JSON and import it on any server.
@@ -21,7 +25,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Live 9Router integration: OpenAI-compatible router client (`AI_ROUTER_URL`/`AI_ROUTER_MODEL`), per-module strict-JSON prompts, tolerant schemas.
 - Web app delivery: Flutter web build served at `/` behind the proxy nginx.
 - TOTP multi-factor authentication (setup QR, enable/disable, MFA-gated login) and self-service password reset.
-- Role-based access (admin/user) with admin user management, seeded bootstrap admin, no self-signup.
+- Role-based access (admin/user) with admin user management and seeded bootstrap admin.
 - Australian rego lookup (state-aware, personalised-plate word decoding, optional plateapi.com.au provider).
 - Services overhaul: scheduled/completed status, editable service cards with items + work steps, AI prediction, PDF/CSV export.
 - Receipt & parts OCR, parts inventory with AI reorder suggestions, resale value estimator, analytics.

@@ -1,16 +1,16 @@
 # AutoBrain Database Schema
 
-Managed by SQLAlchemy models (`backend/app/models/`) and Alembic migrations (`backend/alembic/`). Head revision `c3d4e5f6a7b8`.
+Managed by SQLAlchemy models (`backend/app/models/`) and Alembic migrations (`backend/alembic/`). Head revision `e6f7a8b9c0d1`.
 
 ## users
 
 id (PK), email (unique), display_name, hashed_password (bcrypt), role (admin/user/demo), max_vehicles, is_active, free_account, obd_enabled, obd_auto_connect, mfa_secret, mfa_enabled, created_at, updated_at.
 
-`free_account` disables AI, exports and rego lookup. `obd_enabled` / `obd_auto_connect` control OBD-II access (admin-granted).
+`free_account` disables AI and rego lookup (file exports are available on all plans). `obd_enabled` / `obd_auto_connect` control OBD-II access (admin-granted).
 
 ## vehicles
 
-id (PK), user_id (FK), nickname, rego, vin, make, model, engine, transmission, year, odometer_km, condition, is_primary, club_reg, created_at, updated_at.
+id (PK), user_id (FK), nickname, rego, vin, make, model, colour, engine, transmission, year, odometer_km, condition, is_primary, club_reg, created_at, updated_at.
 
 `club_reg` (bool) — club-registered vehicles disable the ATO logbook feature.
 

@@ -315,11 +315,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const Divider(height: 1),
                 ListTile(
                   leading: const Icon(Icons.verified_user_outlined),
-                  title: const Text('Exports & rego lookup'),
+                  title: const Text('Rego lookup'),
                   subtitle: Text(
                       _aiEnabled
-                          ? 'Enabled — CSV/PDF exports, profile backup, rego lookup'
-                          : 'Disabled on this account'),
+                          ? 'Enabled — auto-fill vehicle details from an AU plate'
+                          : 'Disabled on this account — upgrade to enable'),
                   trailing: _chip(_aiEnabled),
                 ),
               ],

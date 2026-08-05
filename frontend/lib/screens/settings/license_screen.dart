@@ -153,8 +153,7 @@ class _LicenseScreenState extends State<LicenseScreen> {
                     features: const [
                       '1 vehicle',
                       'All AI features included',
-                      'Exports & rego lookup',
-                      'MFA & role-based access',
+                      'Rego lookup',
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -167,7 +166,7 @@ class _LicenseScreenState extends State<LicenseScreen> {
                     features: const [
                       '5 vehicles',
                       'All AI features included',
-                      'Exports & rego lookup',
+                      'Rego lookup',
                       'Priority support',
                     ],
                     popular: true,
@@ -200,8 +199,8 @@ class _LicenseScreenState extends State<LicenseScreen> {
       icon = Icons.info_outline;
       color = Colors.blue;
       title = 'Free plan';
-      subtitle = '$_maxVehicles vehicle, no AI or exports. '
-          'Upgrade to unlock everything.';
+      subtitle = '$_maxVehicles vehicle, no AI. '
+          'Upgrade for rego lookup and more vehicles.';
     }
     return Card(
       child: Padding(

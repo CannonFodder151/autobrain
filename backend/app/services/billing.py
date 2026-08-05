@@ -145,6 +145,19 @@ async def create_portal_session(user: User) -> str:
     return session.url
 
 
+def cancel_subscription(user: User) -> None:
+    """Cancel the active subscription at the end of its current period.
+    The account keeps paid access until then; the webhook demotes it when the
+    period ends (customer.subscription.deleted)."""
+    if not user.stripe_subscription_id:
+        raise ValueError("No active subscription")
+    if user.stripe_subscription_status not in ACTIVE_STATUSES:
+        raise ValueError("No active subscription")
+    get_client().subscriptions.cancel(
+        user.stripe_subscription_id, params={"at_period_end": True}
+    )
+
+
 def construct_event(payload: bytes, sig_header: str):
     if not settings.STRIPE_WEBHOOK_SECRET:
         raise RuntimeError("STRIPE_WEBHOOK_SECRET is not configured")

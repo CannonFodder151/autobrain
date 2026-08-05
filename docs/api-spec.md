@@ -2,7 +2,7 @@
 
 Base URL: `/api/v1`. Auth: `Authorization: Bearer <token>` (JWT). Interactive spec: `http://<host>/docs` (OpenAPI).
 
-Access tiers: `role` ∈ `admin | user | demo`; `free_account` (per-user) disables **AI features, file exports and rego lookup** (403 on those endpoints). Demo accounts are read-only.
+Access tiers: `role` ∈ `admin | user | demo`; `free_account` (per-user) disables **AI features and rego lookup** (403 on those endpoints). File exports are available on all plans. Demo accounts are read-only.
 
 ## Auth
 
@@ -13,11 +13,12 @@ Access tiers: `role` ∈ `admin | user | demo`; `free_account` (per-user) disabl
 | POST   | `/auth/refresh` | Refresh tokens |
 | GET    | `/auth/me` | Current user (role, mfa_enabled, free_account, obd_enabled, obd_auto_connect, vehicle_count) |
 | PATCH  | `/auth/settings` | Self-service toggles: `free_account`, `obd_auto_connect` |
-| GET    | `/auth/export` | Export your whole profile (user + vehicles + records) as JSON. Paid only. |
+| GET    | `/auth/export` | Export your whole profile (user + vehicles + records) as JSON |
 | POST   | `/auth/import` | Import an exported profile (creates a new account on this server) |
 | GET    | `/auth/mfa/setup` | Generate TOTP secret + QR |
 | POST   | `/auth/mfa/enable` / `/auth/mfa/disable` | Verify code, enable/disable MFA |
 | POST   | `/auth/password-reset/request` / `/confirm` | Email reset link / confirm |
+| POST   | `/auth/signup` | Self-service Free-tier signup (display name + email; setup link emailed) |
 | POST   | `/auth/register` | **Admin-only** — create a user account |
 
 ## Admin users & server (admin role only)
@@ -60,7 +61,7 @@ Access tiers: `role` ∈ `admin | user | demo`; `free_account` (per-user) disabl
 | GET/POST | `` | List / create |
 | GET/PATCH/DELETE | `/{service_id}` | Detail / edit (items replace + status) / delete |
 | POST   | `/predict` | AI next-service prediction |
-| GET    | `/export?fmt=csv\|pdf` | Export completed history. **Paid only.** |
+| GET    | `/export?fmt=csv\|pdf` | Export completed history |
 
 Completing a scheduled service created from a diagnostic auto-resolves (green-tick) that diagnostic.
 
@@ -71,7 +72,7 @@ Completing a scheduled service created from a diagnostic auto-resolves (green-ti
 | GET/POST | `` | List / add fill-up (updates vehicle odometer unless a newer logbook trip exists) |
 | PATCH/DELETE | `/{fuel_id}` | Edit / delete a fill-up |
 | GET    | `/stats` | Totals, averages, series |
-| GET    | `/export?fy=` | CSV export per Australian financial year. **Paid only.** |
+| GET    | `/export?fy=` | CSV export per Australian financial year |
 | POST   | `/receipt?ai=true\|false` | Fuel receipt photo. `ai=true` OCR-fills litres & price/L then user enters odometer; `ai=false` stores photo only. |
 
 ## Logbook (`/vehicles/{id}/logbook`) — ATO claiming, non-club-reg vehicles only
@@ -111,7 +112,7 @@ A diagnostic auto-flips to `resolved` when its linked service is completed.
 
 ## Mods, Receipts, Parts, Valuation, Analytics, Notifications
 
-- **Mods** (`/vehicles/{id}/mods`): GET/POST, PATCH/DELETE `/{mod_id}`, POST `/impact` (AI), GET `/export?fmt=csv|pdf` (paid).
+- **Mods** (`/vehicles/{id}/mods`): GET/POST, PATCH/DELETE `/{mod_id}`, POST `/impact` (AI), GET `/export?fmt=csv|pdf`.
 - **Receipts** (`/vehicles/{id}/receipts`): POST (multipart → async OCR), GET, POST `/{id}/apply-to-service`.
 - **Parts** (`/vehicles/{id}/parts`): GET/POST, PATCH/DELETE `/{id}`, POST `/{id}/movement`, GET `/reorder-suggestions` (AI).
 - **Valuation** (`/vehicles/{id}/valuation`): POST (AI — disabled on free accounts), GET `/history`.

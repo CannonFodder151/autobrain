@@ -124,7 +124,6 @@ async def test_public_signup_disabled_by_default() -> None:
             json={
                 "email": "new@example.com",
                 "display_name": "New User",
-                "password": "hunter22",
             },
         )
     assert resp.status_code == 403

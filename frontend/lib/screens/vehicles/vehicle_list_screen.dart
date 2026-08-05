@@ -96,6 +96,7 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
                       title: Text(v.nickname),
                       subtitle: Text(
                         '${v.make ?? ''} ${v.model ?? ''} ${v.year ?? ''}'
+                        '${v.colour != null ? ' · ${v.colour}' : ''}'
                         '${v.rego != null ? ' · ${v.rego}' : ''}'.trim(),
                       ),
                       trailing: Row(
