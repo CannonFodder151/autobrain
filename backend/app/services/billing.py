@@ -154,6 +154,8 @@ def construct_event(payload: bytes, sig_header: str):
 
 
 async def handle_event(db: AsyncSession, event) -> None:
+    # StripeObject supports []/attr access but not .get(); normalise to dicts.
+    event = event.to_dict() if hasattr(event, "to_dict") else event
     etype = event.get("type")
     obj = event.get("data", {}).get("object", {})
     if etype == "checkout.session.completed":
@@ -177,7 +179,7 @@ async def _on_checkout_completed(db: AsyncSession, session) -> None:
         return
     sub_id = session["subscription"]
     try:
-        sub = get_client().subscriptions.retrieve(sub_id)
+        sub = get_client().subscriptions.retrieve(sub_id).to_dict()
     except stripe.StripeError:
         logger.exception("stripe_subscription_retrieve_failed", extra={"sub": sub_id})
         return
