@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, require_write
 from app.api.v1.vehicles import _get_owned_vehicle
 from app.core.logging import get_logger
-from app.core.storage import ensure_bucket, upload_object
+from app.core.storage import detect_mime, ensure_bucket, upload_object
 from app.db.session import get_db
 from app.models.part import Part, PartMovement
 from app.models.receipt import ExtractedItem, Receipt
@@ -21,8 +21,8 @@ from app.workers.tasks import process_receipt
 logger = get_logger(__name__)
 router = APIRouter(prefix="/vehicles/{vehicle_id}/receipts", tags=["receipts"])
 
-ALLOWED_TYPES = {"application/pdf", "image/jpeg", "image/png", "image/webp", "image/heic"}
-ALLOWED_EXTS = {"pdf", "jpg", "jpeg", "png", "webp", "heic", "heif"}
+ALLOWED_TYPES = {"application/pdf", "image/jpeg", "image/png", "image/webp", "image/heic", "image/tiff"}
+ALLOWED_EXTS = {"pdf", "jpg", "jpeg", "png", "webp", "heic", "heif", "tiff", "tif"}
 MAX_BYTES = 15 * 1024 * 1024
 
 
@@ -30,32 +30,6 @@ def _ext(filename: str | None) -> str:
     if not filename or "." not in filename:
         return "bin"
     return filename.rsplit(".", 1)[-1].lower()
-
-
-def _resolve_type(filename: str | None, content_type: str | None, data: bytes) -> str:
-    """Best-effort MIME detection: magic bytes > content-type > extension."""
-    if data[:8] == b"%PDF-":
-        return "application/pdf"
-    if data[:3] == b"\xff\xd8\xff":
-        return "image/jpeg"
-    if data[:8] == b"\x89PNG\r\n\x1a\n":
-        return "image/png"
-    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
-        return "image/webp"
-    ext = _ext(filename)
-    if content_type in ALLOWED_TYPES:
-        return content_type
-    if content_type and content_type.startswith("image/"):
-        return "image/jpeg" if "jpeg" in content_type else "image/png"
-    mime_by_ext = {
-        "pdf": "application/pdf", "jpg": "image/jpeg", "jpeg": "image/jpeg",
-        "png": "image/png", "webp": "image/webp", "heic": "image/heic", "heif": "image/heic",
-    }
-    if ext in mime_by_ext:
-        return mime_by_ext[ext]
-    if content_type == "application/octet-stream":
-        return "application/pdf" if ext == "pdf" else "image/png"
-    return content_type or "application/octet-stream"
 
 
 @router.post("", response_model=ReceiptOut, status_code=201)
@@ -69,7 +43,7 @@ async def upload_receipt(
     data = await file.read()
     if len(data) > MAX_BYTES:
         raise HTTPException(status_code=413, detail="File too large (max 15MB)")
-    content_type = _resolve_type(file.filename, file.content_type, data)
+    content_type = detect_mime(file.filename, file.content_type, data)
     if content_type not in ALLOWED_TYPES:
         raise HTTPException(
             status_code=415,

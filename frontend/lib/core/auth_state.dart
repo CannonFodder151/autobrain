@@ -21,6 +21,7 @@ class AuthState extends ChangeNotifier {
   String? _userId;
   String? _mfaToken;
   bool _darkMode = true;
+  bool _signupEnabled = true;
   String? get token => _token;
   String? get role => _role;
   String? get userId => _userId;
@@ -29,6 +30,8 @@ class AuthState extends ChangeNotifier {
   bool get isLoggedIn => _token != null;
   bool get isAdmin => _role == 'admin';
   bool get isDemo => _role == 'demo';
+  /// Whether this server allows self-service signup (from /auth/config).
+  bool get signupEnabled => _signupEnabled;
 
   Future<void> toggleThemeMode() async {
     _darkMode = !_darkMode;
@@ -46,10 +49,22 @@ class AuthState extends ChangeNotifier {
     _token = prefs.getString('auth_token');
     _role = prefs.getString('auth_role');
     _darkMode = prefs.getBool('dark_mode') ?? true;
+    _loadConfig();
     if (_token != null) {
       _client = ApiClient(_token);
       _refreshProfile();
       notifyListeners();
+    }
+  }
+
+  /// Fetches public server config (self-signup enabled, MFA enforced).
+  Future<void> _loadConfig() async {
+    try {
+      final data = await _anonymous().get('/auth/config') as Map<String, dynamic>;
+      _signupEnabled = data['signup_enabled'] != false;
+      notifyListeners();
+    } catch (_) {
+      // Defaults to enabled; the backend still enforces SELF_SIGNUP_ENABLED.
     }
   }
 
@@ -60,9 +75,11 @@ class AuthState extends ChangeNotifier {
     _role = null;
     _userId = null;
     _client = null;
+    _signupEnabled = true;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('auth_token');
     await prefs.remove('auth_role');
+    _loadConfig();
     notifyListeners();
   }
 

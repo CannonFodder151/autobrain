@@ -155,6 +155,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final auth = context.watch<AuthState>();
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
@@ -361,15 +362,17 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                               child: const Text('Forgot password?'),
                             ),
-                            const SizedBox(height: 4),
-                            TextButton(
-                              onPressed: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const SignupScreen(),
+                            if (auth.signupEnabled) ...[
+                              const SizedBox(height: 4),
+                              TextButton(
+                                onPressed: () => Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => const SignupScreen(),
+                                  ),
                                 ),
+                                child: const Text('New here? Create a free account'),
                               ),
-                              child: const Text('New here? Create a free account'),
-                            ),
+                            ],
                           ],
                           ],
                         ),

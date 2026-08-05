@@ -2,6 +2,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/api_client.dart';
 import '../../core/auth_state.dart';
 import '../../core/download.dart';
 import '../../core/models.dart';
@@ -59,7 +60,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
         '/vehicles/${widget.vehicleId}/receipts',
         bytes,
         filename,
-        'application/octet-stream',
+        mimeForFile(filename),
       );
       _load();
     } catch (e) {

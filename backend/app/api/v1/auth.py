@@ -202,6 +202,15 @@ async def refresh(payload: RefreshRequest, db: AsyncSession = Depends(get_db)) -
     return _token_pair(user)
 
 
+@router.get("/config")
+async def auth_config() -> dict:
+    """Public client config (no auth). Frontend hides self-signup when disabled."""
+    return {
+        "signup_enabled": settings.SELF_SIGNUP_ENABLED,
+        "mfa_enforced": settings.MFA_ENFORCED,
+    }
+
+
 @router.get("/me", response_model=UserWithVehicleCount)
 async def me(
     current: User = Depends(get_current_user),

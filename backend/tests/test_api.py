@@ -89,13 +89,14 @@ def test_login_schema_handles_mfa_setup_flag() -> None:
 
 
 def test_receipt_type_sniffing() -> None:
-    from app.api.v1.receipts import _resolve_type
+    from app.core.storage import detect_mime
 
-    assert _resolve_type("scan.pdf", "application/octet-stream", b"%PDF-1.4 ...") == "application/pdf"
-    assert _resolve_type("photo.jpg", "application/octet-stream", b"\xff\xd8\xff\xe0") == "image/jpeg"
-    assert _resolve_type("photo.png", "application/octet-stream", b"\x89PNG\r\n\x1a\n") == "image/png"
-    assert _resolve_type("scan.png", "image/png", b"\x00\x01\x02") == "image/png"
-    assert _resolve_type("scan.bin", "application/octet-stream", b"\x00\x01\x02") == "image/png"
+    assert detect_mime("scan.pdf", "application/octet-stream", b"%PDF-1.4 ...") == "application/pdf"
+    assert detect_mime("photo.jpg", "application/octet-stream", b"\xff\xd8\xff\xe0") == "image/jpeg"
+    assert detect_mime("photo.png", "application/octet-stream", b"\x89PNG\r\n\x1a\n") == "image/png"
+    assert detect_mime("scan.png", "image/png", b"\x00\x01\x02") == "image/png"
+    assert detect_mime("scan.heic", "application/octet-stream", b"\x00\x00\x00\x18") == "image/heic"
+    assert detect_mime("scan.bin", "application/octet-stream", b"\x00\x01\x02") == "application/octet-stream"
 
 
 def test_pdf_export_builds() -> None:

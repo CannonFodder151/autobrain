@@ -30,6 +30,50 @@ async def ensure_bucket() -> None:
     await asyncio.to_thread(_ensure_bucket_sync)
 
 
+_RECEIPT_MIME_BY_EXT = {
+    "pdf": "application/pdf",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "png": "image/png",
+    "webp": "image/webp",
+    "heic": "image/heic",
+    "heif": "image/heic",
+    "tiff": "image/tiff",
+    "tif": "image/tiff",
+}
+
+_ALLOWED_IMAGE_TYPES = {
+    "application/pdf", "image/jpeg", "image/png",
+    "image/webp", "image/heic", "image/tiff",
+}
+
+
+def detect_mime(filename: str | None, content_type: str | None, data: bytes) -> str:
+    """Best-effort MIME detection: magic bytes > filename extension > header.
+
+    Clients (Flutter web/mobile) often send `application/octet-stream`, so the
+    declared header alone is not trustworthy.
+    """
+    if data[:8] == b"%PDF-":
+        return "application/pdf"
+    if data[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    ext = ""
+    if filename and "." in filename:
+        ext = filename.rsplit(".", 1)[-1].lower()
+    if ext in _RECEIPT_MIME_BY_EXT:
+        return _RECEIPT_MIME_BY_EXT[ext]
+    if content_type in _ALLOWED_IMAGE_TYPES:
+        return content_type
+    if content_type and content_type.startswith("image/"):
+        return content_type
+    return content_type or "application/octet-stream"
+
+
 def _ensure_bucket_sync() -> None:
     client = get_minio()
     if not client.bucket_exists(settings.MINIO_BUCKET):

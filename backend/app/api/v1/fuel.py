@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_write
 from app.api.v1.vehicles import add_event, _get_owned_vehicle
-from app.core.storage import ensure_bucket, upload_object
+from app.core.storage import detect_mime, ensure_bucket, upload_object
 from app.db.session import get_db
 from app.models.fuel import FuelLog
 from app.models.receipt import Receipt
@@ -29,7 +29,7 @@ from app.services.odometer import sync_odometer
 
 router = APIRouter(prefix="/vehicles/{vehicle_id}/fuel", tags=["fuel"])
 
-ALLOWED_RECEIPT_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic", "application/pdf"}
+ALLOWED_RECEIPT_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/tiff", "application/pdf"}
 MAX_BYTES = 15 * 1024 * 1024
 
 
@@ -253,8 +253,8 @@ async def upload_fuel_receipt(
     if len(data) > MAX_BYTES:
         raise HTTPException(status_code=413, detail="File too large (max 15MB)")
     ext = (file.filename or "receipt").rsplit(".", 1)[-1].lower()
-    content_type = file.content_type or ("application/pdf" if ext == "pdf" else "image/jpeg")
-    if content_type not in ALLOWED_RECEIPT_TYPES and ext != "bin":
+    content_type = detect_mime(file.filename, file.content_type, data)
+    if content_type not in ALLOWED_RECEIPT_TYPES:
         raise HTTPException(status_code=415, detail="Unsupported receipt file type")
     await ensure_bucket()
     key = f"fuel-receipts/{vehicle_id}/receipt_{uuid.uuid4().hex[:8]}.{ext}"

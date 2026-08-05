@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_ai, require_write
 from app.api.v1.vehicles import _get_owned_vehicle
-from app.core.storage import ensure_bucket, upload_object
+from app.core.storage import detect_mime, ensure_bucket, upload_object
 from app.db.session import get_db
 from app.models.logbook import LogEntry
 from app.models.user import User
@@ -200,7 +200,7 @@ async def read_odometer_photo(
     result = await read_odometer({
         "content": "",
         "content_base64": base64.b64encode(data).decode(),
-        "content_type": file.content_type or "image/jpeg",
+        "content_type": detect_mime(file.filename, file.content_type, data),
         "filename": file.filename,
     })
     if not result:

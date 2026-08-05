@@ -2,6 +2,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/api_client.dart';
 import '../../core/auth_state.dart';
 import '../../core/download.dart';
 import '../../core/geoloc.dart';
@@ -108,7 +109,7 @@ class _LogbookScreenState extends State<LogbookScreen> {
         '/vehicles/${widget.vehicleId}/logbook/odometer-photo',
         bytes,
         picked.name,
-        'application/octet-stream',
+        mimeForFile(picked.name),
       ) as Map<String, dynamic>;
       return data['odometer_km'] as int?;
     } catch (_) {

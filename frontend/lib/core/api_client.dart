@@ -4,8 +4,35 @@ library;
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 
 import '../core/config.dart';
+
+/// Best-effort MIME guess from a filename extension (upload helper).
+String mimeForFile(String filename,
+    [String fallback = 'application/octet-stream']) {
+  final ext =
+      filename.contains('.') ? filename.split('.').last.toLowerCase() : '';
+  switch (ext) {
+    case 'pdf':
+      return 'application/pdf';
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg';
+    case 'png':
+      return 'image/png';
+    case 'webp':
+      return 'image/webp';
+    case 'heic':
+    case 'heif':
+      return 'image/heic';
+    case 'tiff':
+    case 'tif':
+      return 'image/tiff';
+    default:
+      return fallback;
+  }
+}
 
 class ApiException implements Exception {
   final int statusCode;
@@ -34,6 +61,7 @@ class ApiClient {
         'file',
         bytes,
         filename: filename,
+        contentType: MediaType.parse(contentType),
       ));
     final streamed = await request.send();
     final response = await http.Response.fromStream(streamed);

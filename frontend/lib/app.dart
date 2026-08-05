@@ -44,7 +44,7 @@ class AutoBrainApp extends StatelessWidget {
       home = const ServerSetupScreen();
     } else if (auth.isLoggedIn) {
       home = const HomeScreen();
-    } else if (signupRequested()) {
+    } else if (signupRequested() && auth.signupEnabled) {
       home = const SignupScreen();
     } else {
       home = const LoginScreen();

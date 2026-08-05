@@ -9,6 +9,7 @@ Access tiers: `role` ∈ `admin | user | demo`; `free_account` (per-user) disabl
 | Method | Path | Description |
 |--------|------|-------------|
 | POST   | `/auth/login` | Login; returns `token_pair` or `{mfa_required, mfa_token}` when MFA enabled |
+| GET    | `/auth/config` | Public client config: `{signup_enabled, mfa_enforced}` (drives the app's signup button) |
 | POST   | `/auth/mfa/verify` | Complete login with TOTP code |
 | POST   | `/auth/refresh` | Refresh tokens |
 | GET    | `/auth/me` | Current user (role, mfa_enabled, free_account, obd_enabled, obd_auto_connect, vehicle_count) |
@@ -18,7 +19,7 @@ Access tiers: `role` ∈ `admin | user | demo`; `free_account` (per-user) disabl
 | GET    | `/auth/mfa/setup` | Generate TOTP secret + QR |
 | POST   | `/auth/mfa/enable` / `/auth/mfa/disable` | Verify code, enable/disable MFA |
 | POST   | `/auth/password-reset/request` / `/confirm` | Email reset link / confirm |
-| POST   | `/auth/signup` | Self-service Free-tier signup (display name + email; setup link emailed) |
+| POST   | `/auth/signup` | Self-service Free-tier signup (display name + email; setup link emailed). **403 when `SELF_SIGNUP_ENABLED=false`** |
 | POST   | `/auth/register` | **Admin-only** — create a user account |
 
 ## Admin users & server (admin role only)
