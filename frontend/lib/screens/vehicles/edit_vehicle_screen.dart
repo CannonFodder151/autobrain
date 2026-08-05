@@ -21,6 +21,7 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
   late final TextEditingController _make;
   late final TextEditingController _model;
   late final TextEditingController _colour;
+  late final TextEditingController _bodyType;
   late final TextEditingController _engine;
   late final TextEditingController _transmission;
   late final TextEditingController _odometer;
@@ -42,6 +43,7 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
     _make = TextEditingController(text: v.make ?? '');
     _model = TextEditingController(text: v.model ?? '');
     _colour = TextEditingController(text: v.colour ?? '');
+    _bodyType = TextEditingController(text: v.bodyType ?? '');
     _engine = TextEditingController(text: v.engine ?? '');
     _transmission = TextEditingController(text: v.transmission ?? '');
     _odometer = TextEditingController(text: '${v.odometerKm ?? ''}');
@@ -53,7 +55,7 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
   @override
   void dispose() {
     for (final c in [
-      _nickname, _rego, _vin, _make, _model, _colour, _engine, _transmission, _odometer
+      _nickname, _rego, _vin, _make, _model, _colour, _bodyType, _engine, _transmission, _odometer
     ]) {
       c.dispose();
     }
@@ -78,6 +80,7 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
         _make.text = (r['make'] as String?) ?? _make.text;
         _model.text = (r['model'] as String?) ?? _model.text;
         _colour.text = (r['colour'] as String?) ?? _colour.text;
+        _bodyType.text = (r['body_type'] as String?) ?? _bodyType.text;
         _engine.text = (r['engine'] as String?) ?? _engine.text;
         _transmission.text = (r['transmission'] as String?) ?? _transmission.text;
         _year = r['year'] as int? ?? _year;
@@ -102,6 +105,7 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
         'make': _make.text.isEmpty ? null : _make.text,
         'model': _model.text.isEmpty ? null : _model.text,
         'colour': _colour.text.isEmpty ? null : _colour.text,
+        'body_type': _bodyType.text.isEmpty ? null : _bodyType.text,
         'year': _year,
         'engine': _engine.text.isEmpty ? null : _engine.text,
         'transmission': _transmission.text.isEmpty ? null : _transmission.text,
@@ -248,6 +252,11 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
               TextFormField(
                 controller: _colour,
                 decoration: const InputDecoration(labelText: 'Colour'),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _bodyType,
+                decoration: const InputDecoration(labelText: 'Body type'),
               ),
               const SizedBox(height: 12),
               CheckboxListTile(

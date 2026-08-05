@@ -5,6 +5,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-08-05
+
+### Added
+- Vehicle body type field (add/edit form, rego-lookup auto-fill, shown on vehicle cards and home screen).
+
 ## [0.2.0] - 2026-08-05
 
 ### Added

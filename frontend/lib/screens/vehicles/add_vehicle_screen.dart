@@ -18,6 +18,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
   final _make = TextEditingController();
   final _model = TextEditingController();
   final _colour = TextEditingController();
+  final _bodyType = TextEditingController();
   final _engine = TextEditingController();
   final _transmission = TextEditingController();
   final _odometer = TextEditingController();
@@ -57,7 +58,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
   @override
   void dispose() {
     for (final c in [
-      _nickname, _rego, _vin, _make, _model, _colour, _engine, _transmission, _odometer
+      _nickname, _rego, _vin, _make, _model, _colour, _bodyType, _engine, _transmission, _odometer
     ]) {
       c.dispose();
     }
@@ -82,19 +83,15 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
         _make.text = (r['make'] as String?) ?? '';
         _model.text = (r['model'] as String?) ?? '';
         _colour.text = (r['colour'] as String?) ?? '';
+        _bodyType.text = (r['body_type'] as String?) ?? '';
         _engine.text = (r['engine'] as String?) ?? '';
         _transmission.text = (r['transmission'] as String?) ?? '';
         _year = r['year'] as int?;
-        final extra = <String>[];
-        if (r['body_type'] != null && (r['body_type'] as String).isNotEmpty) {
-          extra.add(r['body_type'] as String);
-        }
         final src = (r['source'] as String?) ?? 'unknown';
         final matched = (r['matched'] as String?) ?? '';
         final desc = (r['description'] as String?) ?? '';
         _lookupInfo =
             '${src == 'provider' ? 'Live registry data' : 'Best guess ($src)'}'
-            '${extra.isEmpty ? '' : ' · ${extra.join(', ')}'}'
             '${desc.isEmpty ? '' : ' · $desc'}'
             '${matched.isEmpty ? '' : ' · $matched'}';
       });
@@ -124,6 +121,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
         'make': _make.text.isEmpty ? null : _make.text,
         'model': _model.text.isEmpty ? null : _model.text,
         'colour': _colour.text.isEmpty ? null : _colour.text,
+        'body_type': _bodyType.text.isEmpty ? null : _bodyType.text,
         'year': _year,
         'engine': _engine.text.isEmpty ? null : _engine.text,
         'transmission': _transmission.text.isEmpty ? null : _transmission.text,
@@ -309,6 +307,11 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
               TextFormField(
                 controller: _colour,
                 decoration: const InputDecoration(labelText: 'Colour'),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _bodyType,
+                decoration: const InputDecoration(labelText: 'Body type'),
               ),
               const SizedBox(height: 12),
               CheckboxListTile(

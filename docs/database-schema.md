@@ -1,6 +1,6 @@
 # AutoBrain Database Schema
 
-Managed by SQLAlchemy models (`backend/app/models/`) and Alembic migrations (`backend/alembic/`). Head revision `e6f7a8b9c0d1`.
+Managed by SQLAlchemy models (`backend/app/models/`) and Alembic migrations (`backend/alembic/`). Head revision `f7a8b9c0d1e2`.
 
 ## users
 
@@ -10,7 +10,7 @@ id (PK), email (unique), display_name, hashed_password (bcrypt), role (admin/use
 
 ## vehicles
 
-id (PK), user_id (FK), nickname, rego, vin, make, model, colour, engine, transmission, year, odometer_km, condition, is_primary, club_reg, created_at, updated_at.
+id (PK), user_id (FK), nickname, rego, vin, make, model, colour, body_type, engine, transmission, year, odometer_km, condition, is_primary, club_reg, created_at, updated_at.
 
 `club_reg` (bool) — club-registered vehicles disable the ATO logbook feature.
 

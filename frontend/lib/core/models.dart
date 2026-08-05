@@ -4,7 +4,7 @@ library models;
 class Vehicle {
   final String id;
   final String nickname;
-  final String? rego, vin, make, model, colour, engine, transmission;
+  final String? rego, vin, make, model, colour, bodyType, engine, transmission;
   final int? year, odometerKm;
   final String condition;
   final bool isPrimary, clubReg;
@@ -17,6 +17,7 @@ class Vehicle {
     this.make,
     this.model,
     this.colour,
+    this.bodyType,
     this.engine,
     this.transmission,
     this.year,
@@ -37,6 +38,7 @@ class Vehicle {
         make: j['make'] as String?,
         model: j['model'] as String?,
         colour: j['colour'] as String?,
+        bodyType: j['body_type'] as String?,
         engine: j['engine'] as String?,
         transmission: j['transmission'] as String?,
         year: j['year'] as int?,

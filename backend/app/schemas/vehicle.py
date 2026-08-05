@@ -35,6 +35,7 @@ class VehicleCreate(BaseModel):
     make: str | None = None
     model: str | None = None
     colour: str | None = None
+    body_type: str | None = None
     year: int | None = None
     engine: str | None = None
     transmission: str | None = None
@@ -51,6 +52,7 @@ class VehicleUpdate(BaseModel):
     make: str | None = None
     model: str | None = None
     colour: str | None = None
+    body_type: str | None = None
     year: int | None = None
     engine: str | None = None
     transmission: str | None = None
@@ -68,6 +70,7 @@ class VehicleOut(BaseModel):
     make: str | None
     model: str | None
     colour: str | None
+    body_type: str | None
     year: int | None
     engine: str | None
     transmission: str | None
