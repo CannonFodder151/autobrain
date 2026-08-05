@@ -103,26 +103,30 @@ async def create_checkout_session(
 
     customer_id = user.stripe_customer_id
     if not customer_id:
-        existing = client.customers.list(email=user.email, limit=1)
+        existing = client.customers.list(params={"email": user.email, "limit": 1})
         customer_id = existing.data[0].id if existing.data else None
         if not customer_id:
             customer_id = client.customers.create(
-                email=user.email,
-                name=user.display_name,
-                metadata={"user_id": user.id},
+                params={
+                    "email": user.email,
+                    "name": user.display_name,
+                    "metadata": {"user_id": user.id},
+                }
             ).id
         user.stripe_customer_id = customer_id
         await db.commit()
 
     base = settings.APP_BASE_URL.rstrip("/")
     session = client.checkout.sessions.create(
-        mode="subscription",
-        customer=customer_id,
-        client_reference_id=user.id,
-        line_items=[{"price": price_id, "quantity": 1}],
-        success_url=f"{base}/?checkout=success",
-        cancel_url=f"{base}/",
-        metadata={"plan": plan_key, "billing": billing},
+        params={
+            "mode": "subscription",
+            "customer": customer_id,
+            "client_reference_id": user.id,
+            "line_items": [{"price": price_id, "quantity": 1}],
+            "success_url": f"{base}/?checkout=success",
+            "cancel_url": f"{base}/",
+            "metadata": {"plan": plan_key, "billing": billing},
+        }
     )
     return session.url
 
@@ -133,8 +137,10 @@ async def create_portal_session(user: User) -> str:
         raise ValueError("No billing account on file")
     base = settings.APP_BASE_URL.rstrip("/")
     session = get_client().billing_portal.sessions.create(
-        customer=user.stripe_customer_id,
-        return_url=f"{base}/?billing=done",
+        params={
+            "customer": user.stripe_customer_id,
+            "return_url": f"{base}/?billing=done",
+        }
     )
     return session.url
 

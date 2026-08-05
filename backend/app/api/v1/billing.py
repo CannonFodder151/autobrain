@@ -6,6 +6,8 @@ the subscription is cancelled or lapses. Webhook signature verification is
 mandatory (STRIPE_WEBHOOK_SECRET); events are rejected when it is unset.
 """
 
+import logging
+
 import stripe
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +17,8 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.billing import CheckoutRequest, CheckoutResponse, PortalResponse
 from app.services import billing as svc
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
@@ -33,6 +37,7 @@ async def create_checkout(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception:
+        logger.exception("billing_checkout_failed")
         raise HTTPException(status_code=503, detail=_NOT_CONFIGURED)
     return CheckoutResponse(url=url)
 

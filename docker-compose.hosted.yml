@@ -1,76 +1,14 @@
 # AutoBrain HOSTED stack (self-service Free signup + Stripe subscriptions).
-# Target: a standalone Portainer stack (or any Docker Compose v2 host).
+# Image-based deployment: prebuilt `cannonfodder151/autobrain-*:hosted` images
+# from Docker Hub (builds: backend/worker/ai unchanged code; frontend built
+# with API_BASE_URL/WS_BASE_URL pointed at the hosted instance).
 #
-# Deploy via Portainer: add the repo as a stack, select this file, and set the
-# variables below in the stack's "Environment variables" panel (never commit
-# secrets). The frontend nginx is published on :8087 — the box's reverse proxy
-# routes hosted.autobrainservice.app to it.
+# Portainer: standalone stack on endpoint 2 (Portainer-Host). The frontend
+# nginx publishes on :8086 — the box's reverse proxy routes
+# hosted.autobrainservice.app to it.
 #
-# Or locally: cp .env.example .env (fill values) && docker compose -f docker-compose.hosted.yml up -d --build
-
-x-app-env: &app-env
-  ENVIRONMENT: production
-  LOG_LEVEL: ${LOG_LEVEL:-INFO}
-  SECRET_KEY: ${SECRET_KEY:-change-me}
-  ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-10080}
-  REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-30}
-  POSTGRES_HOST: postgres
-  POSTGRES_PORT: ${POSTGRES_PORT:-5432}
-  POSTGRES_USER: ${POSTGRES_USER:-autobrain}
-  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-autobrain}
-  POSTGRES_DB: ${POSTGRES_DB:-autobrain}
-  REDIS_URL: redis://redis:6379/0
-  CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/1}
-  CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/2}
-  MINIO_ENDPOINT: minio:9000
-  MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-autobrain}
-  MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-autobrain}
-  MINIO_BUCKET: ${MINIO_BUCKET:-autobrain-assets}
-  MINIO_SECURE: "false"
-  MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-http://localhost:9000}
-  AI_ROUTER_URL: ${AI_ROUTER_URL:-http://your-9router-instance:port/v1}
-  AI_ROUTER_API_KEY: ${AI_ROUTER_API_KEY:-}
-  AI_ROUTER_MODEL: ${AI_ROUTER_MODEL:-General-Use}
-  AI_ROUTER_TIMEOUT_SECONDS: ${AI_ROUTER_TIMEOUT_SECONDS:-120}
-  AI_LOCAL_BASE_URL: http://ai:8001
-  REGO_LOOKUP_URL: ${REGO_LOOKUP_URL:-}
-  REGO_LOOKUP_API_KEY: ${REGO_LOOKUP_API_KEY:-}
-  MARKET_DATA_URL: ${MARKET_DATA_URL:-}
-  MARKET_DATA_API_KEY: ${MARKET_DATA_API_KEY:-}
-  ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@autobrain.local}
-  ADMIN_DISPLAY_NAME: ${ADMIN_DISPLAY_NAME:-AutoBrain Admin}
-  ADMIN_INITIAL_PASSWORD: ${ADMIN_INITIAL_PASSWORD:-}
-  DEMO_MODE: ${DEMO_MODE:-false}
-  DEMO_EMAIL: ${DEMO_EMAIL:-demo@autobrainservice.app}
-  DEMO_PASSWORD: ${DEMO_PASSWORD:-demo}
-  DEMO_DISPLAY_NAME: ${DEMO_DISPLAY_NAME:-Demo Garage}
-  MFA_ENFORCED: ${MFA_ENFORCED:-false}
-  LOGIN_MAX_ATTEMPTS: ${LOGIN_MAX_ATTEMPTS:-5}
-  LOGIN_WINDOW_SECONDS: ${LOGIN_WINDOW_SECONDS:-10800}
-  FCM_SERVER_KEY: ${FCM_SERVER_KEY:-}
-  SMTP_HOST: ${SMTP_HOST:-}
-  SMTP_PORT: ${SMTP_PORT:-587}
-  SMTP_USERNAME: ${SMTP_USERNAME:-}
-  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-  SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
-  SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-noreply@nathanmartina.com}
-  SMTP_FROM_NAME: ${SMTP_FROM_NAME:-AutoBrain}
-  APP_BASE_URL: ${APP_BASE_URL:-https://hosted.autobrainservice.app}
-  APP_VERSION: ${APP_VERSION:-0.1.0}
-  GITHUB_REPO: ${GITHUB_REPO:-CannonFodder151/autobrain}
-  GITHUB_TOKEN: ${GITHUB_TOKEN:-}
-  BACKUP_ENABLED: ${BACKUP_ENABLED:-true}
-  BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
-  ADMIN_API_KEY: ${ADMIN_API_KEY:-}
-  # Hosted: allow anyone to register a Free-tier account.
-  SELF_SIGNUP_ENABLED: ${SELF_SIGNUP_ENABLED:-true}
-  # Stripe billing. Price IDs from the Stripe Dashboard (see scripts/stripe-setup.py).
-  STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
-  STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
-  STRIPE_PRICE_ENTHUSIAST_MONTHLY: ${STRIPE_PRICE_ENTHUSIAST_MONTHLY:-}
-  STRIPE_PRICE_ENTHUSIAST_YEARLY: ${STRIPE_PRICE_ENTHUSIAST_YEARLY:-}
-  STRIPE_PRICE_GARAGE_MONTHLY: ${STRIPE_PRICE_GARAGE_MONTHLY:-}
-  STRIPE_PRICE_GARAGE_YEARLY: ${STRIPE_PRICE_GARAGE_YEARLY:-}
+# Secrets are interpolated from ${VAR}; set them in Portainer's stack env
+# vars or a local .env. Never commit real values.
 
 services:
   postgres:
@@ -128,11 +66,55 @@ services:
       "
 
   backend:
-    build:
-      context: ./backend
-      dockerfile: ../docker/backend/Dockerfile
+    image: cannonfodder151/autobrain-backend:hosted
     restart: unless-stopped
-    environment: *app-env
+    environment:
+      ENVIRONMENT: production
+      SECRET_KEY: ${SECRET_KEY:-change-me}
+      POSTGRES_USER: ${POSTGRES_USER:-autobrain}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-autobrain}
+      POSTGRES_DB: ${POSTGRES_DB:-autobrain}
+      POSTGRES_HOST: postgres
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-autobrain}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-autobrain}
+      MINIO_BUCKET: ${MINIO_BUCKET:-autobrain-assets}
+      MINIO_PUBLIC_ENDPOINT: ${APP_BASE_URL:-https://hosted.autobrainservice.app}
+      AI_LOCAL_BASE_URL: http://ai:8001
+      AI_ROUTER_URL: ${AI_ROUTER_URL:-http://your-9router-instance:port/v1}
+      AI_ROUTER_API_KEY: ${AI_ROUTER_API_KEY:-}
+      AI_ROUTER_MODEL: ${AI_ROUTER_MODEL:-General-Use}
+      AI_ROUTER_TIMEOUT_SECONDS: 120
+      REGO_LOOKUP_URL: ${REGO_LOOKUP_URL:-}
+      REGO_LOOKUP_API_KEY: ${REGO_LOOKUP_API_KEY:-}
+      MARKET_DATA_URL: ${MARKET_DATA_URL:-}
+      MARKET_DATA_API_KEY: ${MARKET_DATA_API_KEY:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@autobrain.io}
+      ADMIN_DISPLAY_NAME: AutoBrain Admin
+      ADMIN_INITIAL_PASSWORD: ${ADMIN_INITIAL_PASSWORD:-}
+      DEMO_MODE: "false"
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: 25
+      SMTP_USE_TLS: "true"
+      SMTP_USERNAME: ""
+      SMTP_PASSWORD: ""
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-no-reply@autobrainservice.app}
+      SMTP_FROM_NAME: AutoBrain
+      APP_BASE_URL: ${APP_BASE_URL:-https://hosted.autobrainservice.app}
+      MFA_ENFORCED: "true"
+      LOGIN_MAX_ATTEMPTS: 5
+      LOGIN_WINDOW_SECONDS: 10800
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-}
+      SELF_SIGNUP_ENABLED: ${SELF_SIGNUP_ENABLED:-true}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_PRICE_ENTHUSIAST_MONTHLY: ${STRIPE_PRICE_ENTHUSIAST_MONTHLY:-}
+      STRIPE_PRICE_ENTHUSIAST_YEARLY: ${STRIPE_PRICE_ENTHUSIAST_YEARLY:-}
+      STRIPE_PRICE_GARAGE_MONTHLY: ${STRIPE_PRICE_GARAGE_MONTHLY:-}
+      STRIPE_PRICE_GARAGE_YEARLY: ${STRIPE_PRICE_GARAGE_YEARLY:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -144,11 +126,23 @@ services:
       - "8000"
 
   worker:
-    build:
-      context: .
-      dockerfile: docker/worker/Dockerfile
+    image: cannonfodder151/autobrain-worker:hosted
     restart: unless-stopped
-    environment: *app-env
+    environment:
+      ENVIRONMENT: production
+      PYTHONPATH: /app
+      POSTGRES_HOST: postgres
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-autobrain}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-autobrain}
+      MINIO_BUCKET: ${MINIO_BUCKET:-autobrain-assets}
+      AI_LOCAL_BASE_URL: http://ai:8001
+      AI_ROUTER_URL: ${AI_ROUTER_URL:-http://your-9router-instance:port/v1}
+      AI_ROUTER_API_KEY: ${AI_ROUTER_API_KEY:-}
+      AI_ROUTER_MODEL: ${AI_ROUTER_MODEL:-General-Use}
     depends_on:
       postgres:
         condition: service_healthy
@@ -159,11 +153,20 @@ services:
     command: ["celery", "-A", "app.workers.celery_app:celery_app", "worker", "-l", "info", "--concurrency=2"]
 
   beat:
-    build:
-      context: .
-      dockerfile: docker/worker/Dockerfile
+    image: cannonfodder151/autobrain-worker:hosted
     restart: unless-stopped
-    environment: *app-env
+    environment:
+      ENVIRONMENT: production
+      PYTHONPATH: /app
+      POSTGRES_HOST: postgres
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-autobrain}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-autobrain}
+      MINIO_BUCKET: ${MINIO_BUCKET:-autobrain-assets}
+      AI_LOCAL_BASE_URL: http://ai:8001
     depends_on:
       postgres:
         condition: service_healthy
@@ -172,9 +175,7 @@ services:
     command: ["celery", "-A", "app.workers.celery_app:celery_app", "beat", "-l", "info"]
 
   ai:
-    build:
-      context: ./ai
-      dockerfile: ../docker/ai/Dockerfile
+    image: cannonfodder151/autobrain-ai:hosted
     restart: unless-stopped
     environment:
       AI_ROUTER_URL: ${AI_ROUTER_URL:-http://your-9router-instance:port/v1}
@@ -184,15 +185,10 @@ services:
       - "8001"
 
   frontend:
-    build:
-      context: .
-      dockerfile: docker/frontend/Dockerfile
-      args:
-        API_BASE_URL: ${API_BASE_URL:-https://hosted.autobrainservice.app/api/v1}
-        WS_BASE_URL: ${WS_BASE_URL:-wss://hosted.autobrainservice.app/ws}
+    image: cannonfodder151/autobrain-frontend:hosted
     restart: unless-stopped
     ports:
-      - "8087:80"
+      - "8086:80"
     depends_on:
       - backend
       - ai
