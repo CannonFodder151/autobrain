@@ -17,6 +17,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed
 - Service/mod `photo_keys` now store as JSON (raw-list inserts from the receipt auto-apply flow and the demo seed previously failed).
 - Web home screen no longer shows garbled characters on the vehicle display.
+- Admin user list no longer 500s — `UserAdminOut` now serializes ORM rows (blank list / broken search fixed).
+- CSV exports now include a UTF-8 BOM so Excel renders em-dashes and unicode correctly instead of garbled characters.
+- Home screen shows a clear "server unreachable" error (with Retry) instead of "no vehicles" when the backend is offline.
 
 ## [0.3.2] - 2026-08-06
 
