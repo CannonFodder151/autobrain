@@ -33,6 +33,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Vehicle> _vehicles = const [];
   Vehicle? _selected;
   bool _loading = true;
+  String? _loadError;
 
   @override
   void initState() {
@@ -42,7 +43,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _load() async {
     final api = context.read<AuthState>().api;
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
     try {
       final data = await api.get('/vehicles') as List;
       final vehicles = data
@@ -50,7 +54,9 @@ class _HomeScreenState extends State<HomeScreen> {
           .toList();
       _vehicles = vehicles;
       _selected = _selected ?? _firstPrimary(vehicles);
-    } catch (_) {}
+    } catch (_) {
+      _loadError = 'Could not reach the server. Check your connection or server settings.';
+    }
     setState(() => _loading = false);
   }
 
@@ -143,12 +149,14 @@ class _HomeScreenState extends State<HomeScreen> {
         onRefresh: _load,
         child: _loading
             ? const Center(child: CircularProgressIndicator())
-            : ListView(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-                children: [
-                  if (_selected != null) _HeroCard(vehicle: _selected!),
-                  const SizedBox(height: 12),
-                  VehicleSelector(
+            : _loadError != null
+                ? _ErrorView(message: _loadError!, onRetry: _load)
+                : ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                    children: [
+                      if (_selected != null) _HeroCard(vehicle: _selected!),
+                      const SizedBox(height: 12),
+                      VehicleSelector(
                     vehicles: _vehicles,
                     selected: _selected,
                     onChanged: (v) => setState(() => _selected = v),
@@ -430,6 +438,36 @@ class DownloadAppDialog extends StatelessWidget {
           child: const Text('Close'),
         ),
       ],
+    );
+  }
+}
+
+class _ErrorView extends StatelessWidget {
+  const _ErrorView({required this.message, required this.onRetry});
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.cloud_off, size: 56, color: scheme.error),
+            const SizedBox(height: 16),
+            Text(message, textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            FilledButton.tonalIcon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
