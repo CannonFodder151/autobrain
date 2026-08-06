@@ -5,6 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-08-06
+
+### Changed
+- Android app distributed via Google Play (`com.autobrainservice.app`); the
+  in-app "Get the mobile app" download dialog and menu item are removed.
+- Mobile: sign out now offers "Sign out & change server"; new app icon.
+- Rego lookup resilience: provider timeout raised to 90s (covers the
+  scraper's fast-fail + retry).
+
 ## [0.3.1] - 2026-08-06
 
 ### Fixed
