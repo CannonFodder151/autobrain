@@ -41,13 +41,32 @@ def _current_fy() -> int:
     return today.year + (1 if today.month >= 7 else 0)
 
 
-def _compute_efficiency(prev: FuelLog | None, log: FuelLog, total: float) -> None:
-    if prev and log.is_full_tank and prev.is_full_tank:
-        distance = log.odometer_km - prev.odometer_km
-        if distance > 0:
-            log.distance_km = distance
-            log.l_per_100km = round(log.litres / distance * 100, 2)
-            log.cost_per_km = round(total / distance, 4)
+async def _recompute_efficiency(db: AsyncSession, vehicle_id: str) -> None:
+    """Recompute L/100km / cost-per-km for every full-tank fill of a vehicle.
+
+    Runs after any add/update/delete so back-filled (older-odometer) entries
+    still get an efficiency, and later fills are re-chained correctly. Logs
+    with a non-positive distance (duplicate or out-of-order odometer) are
+    left without an efficiency rather than given a wrong one.
+    """
+    rows = await db.scalars(
+        select(FuelLog)
+        .where(FuelLog.vehicle_id == vehicle_id)
+        .order_by(FuelLog.odometer_km, FuelLog.fill_date)
+    )
+    prev: FuelLog | None = None
+    for log in rows:
+        log.distance_km = None
+        log.l_per_100km = None
+        log.cost_per_km = None
+        if log.is_full_tank and prev and prev.is_full_tank:
+            distance = log.odometer_km - prev.odometer_km
+            if distance > 0:
+                log.distance_km = distance
+                log.l_per_100km = round(log.litres / distance * 100, 2)
+                log.cost_per_km = round(log.total_cost / distance, 4)
+        if log.is_full_tank:
+            prev = log
 
 
 def _ref_time(log: FuelLog) -> datetime:
@@ -97,14 +116,9 @@ async def add_fuel(
         receipt_id=receipt_id,
         **payload.model_dump(exclude={"total_cost", "receipt_id"}),
     )
-    prev = await db.scalar(
-        select(FuelLog)
-        .where(FuelLog.vehicle_id == vehicle_id, FuelLog.odometer_km < payload.odometer_km)
-        .order_by(FuelLog.odometer_km.desc())
-    )
-    _compute_efficiency(prev, log, total)
     db.add(log)
     await db.flush()
+    await _recompute_efficiency(db, vehicle_id)
     await sync_odometer(db, vehicle, payload.odometer_km, _ref_time(log))
     await add_event(
         db,
@@ -148,15 +162,7 @@ async def update_fuel(
         setattr(log, key, value)
     if log.odometer_km <= 0:
         raise HTTPException(status_code=422, detail="odometer_km must be positive")
-    prev = await db.scalar(
-        select(FuelLog)
-        .where(FuelLog.vehicle_id == vehicle_id, FuelLog.odometer_km < log.odometer_km)
-        .order_by(FuelLog.odometer_km.desc())
-    )
-    log.distance_km = None
-    log.l_per_100km = None
-    log.cost_per_km = None
-    _compute_efficiency(prev, log, log.total_cost)
+    await _recompute_efficiency(db, vehicle_id)
     await db.flush()
     await sync_odometer(db, await _get_owned_vehicle(db, vehicle_id, user), log.odometer_km, _ref_time(log))
     await db.commit()
@@ -176,6 +182,7 @@ async def delete_fuel(
     if not log or log.vehicle_id != vehicle_id:
         raise HTTPException(status_code=404, detail="Fuel log not found")
     await db.delete(log)
+    await _recompute_efficiency(db, vehicle_id)
     await db.commit()
 
 
