@@ -5,6 +5,38 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-08-06
+
+### Fixed
+- Fuel efficiency (L/100km, cost/km) now calculates when you back-fill an
+  older fill-up. The full-tank efficiency chain is recomputed after every
+  add/edit/delete, so later fills are re-chained correctly; out-of-order or
+  duplicate odometer entries stay blank instead of getting a wrong value.
+
+## [0.3.0] - 2026-08-06
+
+### Added
+- Fuel tracker: filter the list by Australian financial year, and export by
+  FY as CSV or CSV + receipt images (ZIP). Scanned receipts are saved against
+  the fuel record (receipt_id) and exported alongside it.
+- Service history and build sheet exports support `fmt=zip`: CSV gains an
+  Image column and the receipt/scan photos are bundled in the ZIP.
+- Receipt scans auto-attach their image to the service record created from
+  the scanner (`photo_keys` on `service_records`).
+- Admin console: "Re-upgrade" action grants the $19/month Enthusiast
+  benefits to an account without a Stripe subscription, and sponsored
+  accounts are blocked from buying a licence.
+- Licence/upgrade feature is gated behind `LICENSE_ENABLED` (served via
+  `GET /auth/config`). On for the hosted instance, off for demo/default and
+  self-hosted; the app hides the License page when disabled.
+- Self-hosted rego lookup: `REGO_LOOKUP_URL` now points at the
+  Plate-API-Scraper (POST `/lookup`) instead of the paid plateapi provider.
+
+### Fixed
+- Fuel receipts no longer stay stuck on `pending` when OCR is unavailable
+  (the record is marked done/failed and the image stays usable).
+- Removed the odometer photo-scan option from the logbook.
+
 ## [0.2.4] - 2026-08-05
 
 ### Added

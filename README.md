@@ -31,7 +31,7 @@ Copy `.env.example` to `.env` and set at minimum:
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_FROM_EMAIL` | Email notifications + password reset (uses the system SMTP) |
 | `APP_BASE_URL` | Public URL used to build password-reset links |
 
-Optional: `DEMO_MODE=true` seeds a read-only demo account with sample data. `MFA_ENFORCED=true` requires two-factor auth for all non-demo accounts. `REGO_LOOKUP_URL` / `REGO_LOOKUP_API_KEY` enable Australian rego lookups. `SELF_SIGNUP_ENABLED=true` enables self-service Free-tier signup (a setup email completes the account); when `false` (default) the signup endpoint is disabled **and the app hides the "Create a free account" button** — the app learns this from the public `GET /auth/config` endpoint.
+Optional: `DEMO_MODE=true` seeds a read-only demo account with sample data. `MFA_ENFORCED=true` requires two-factor auth for all non-demo accounts. `REGO_LOOKUP_URL` / `REGO_LOOKUP_API_KEY` enable Australian rego lookups via your self-hosted [Plate-API-Scraper](https://github.com/CannonFodder151/rego-lookup-api) (POST `/lookup`, `X-API-Key` header) — no paid provider needed; the offline heuristic covers failures. `SELF_SIGNUP_ENABLED=true` enables self-service Free-tier signup (a setup email completes the account); when `false` (default) the signup endpoint is disabled **and the app hides the "Create a free account" button** — the app learns this from the public `GET /auth/config` endpoint. `LICENSE_ENABLED=true` turns on the licence/upgrade page (hosted instance; off for self-hosted/demo).
 
 See `.env.example` for the full list with comments.
 
