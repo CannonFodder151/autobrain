@@ -9,6 +9,7 @@ class RegoLookupRequest(BaseModel):
     rego: str = Field(min_length=1, max_length=20)
     jurisdiction: str = Field(default="AU", max_length=4)
     state: str = Field(default="VIC", max_length=4)  # NSW/VIC/QLD/WA/SA/TAS/NT/ACT
+    vehicle_type: str = "car"  # car/motorcycle — some states need the type
 
 
 class RegoLookupResponse(BaseModel):

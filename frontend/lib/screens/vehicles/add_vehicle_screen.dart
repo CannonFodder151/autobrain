@@ -78,6 +78,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
         'rego': _rego.text.trim(),
         'jurisdiction': 'AU',
         'state': _state,
+        'vehicle_type': _vehicleType,
       }) as Map<String, dynamic>;
       setState(() {
         _vin.text = (r['vin'] as String?) ?? '';
@@ -197,6 +198,16 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                 validator: (v) => v == null || v.isEmpty ? 'Required' : null,
               ),
               const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: _vehicleType,
+                decoration: const InputDecoration(labelText: 'Vehicle type'),
+                items: const [
+                  DropdownMenuItem(value: 'car', child: Text('Car')),
+                  DropdownMenuItem(value: 'motorcycle', child: Text('Motorcycle')),
+                ],
+                onChanged: (v) => setState(() => _vehicleType = v ?? 'car'),
+              ),
+              const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
@@ -244,16 +255,6 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                   child: Text(_lookupInfo!, style: TextStyle(
                       color: Theme.of(context).colorScheme.primary)),
                 ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: _vehicleType,
-                decoration: const InputDecoration(labelText: 'Vehicle type'),
-                items: const [
-                  DropdownMenuItem(value: 'car', child: Text('Car')),
-                  DropdownMenuItem(value: 'motorcycle', child: Text('Motorcycle')),
-                ],
-                onChanged: (v) => setState(() => _vehicleType = v ?? 'car'),
-              ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _vin,

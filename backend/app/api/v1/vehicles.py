@@ -115,7 +115,7 @@ async def rego_lookup(
     _user: User = Depends(require_rego),
 ) -> RegoLookupResponse:
     """Populate vehicle details from an Australian registration plate + state."""
-    result = await lookup_rego(payload.rego, payload.jurisdiction, payload.state)
+    result = await lookup_rego(payload.rego, payload.jurisdiction, payload.state, payload.vehicle_type)
     if not result:
         raise HTTPException(status_code=404, detail="No registration data found for this plate")
     return RegoLookupResponse(**result)
