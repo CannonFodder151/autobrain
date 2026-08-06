@@ -91,6 +91,36 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
     }
   }
 
+  Future<void> _delete(Receipt r) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete receipt?'),
+        content: Text(
+            '${r.originalName ?? 'This receipt'} will be removed. '
+            'Use this to clear scans stuck on "pending".'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final api = context.read<AuthState>().api;
+    try {
+      await api.delete('/vehicles/${widget.vehicleId}/receipts/${r.id}');
+      _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(

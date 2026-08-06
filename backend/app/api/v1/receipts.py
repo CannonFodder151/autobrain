@@ -3,13 +3,13 @@
 import json
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_write
 from app.api.v1.vehicles import _get_owned_vehicle
 from app.core.logging import get_logger
-from app.core.storage import detect_mime, ensure_bucket, upload_object
+from app.core.storage import delete_object, detect_mime, ensure_bucket, upload_object
 from app.db.session import get_db
 from app.models.part import Part, PartMovement
 from app.models.receipt import ExtractedItem, Receipt
@@ -78,6 +78,36 @@ async def list_receipts(
         select(Receipt).where(Receipt.vehicle_id == vehicle_id).order_by(Receipt.created_at.desc())
     )
     return list(rows)
+
+
+@router.delete("/{receipt_id}", status_code=204)
+async def delete_receipt(
+    vehicle_id: str,
+    receipt_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_write),
+) -> None:
+    """Delete a scanned receipt (e.g. one stuck on 'pending' after OCR failed)."""
+    await _get_owned_vehicle(db, vehicle_id, user)
+    receipt = await db.get(Receipt, receipt_id)
+    if not receipt or receipt.vehicle_id != vehicle_id:
+        raise HTTPException(status_code=404, detail="Receipt not found")
+    from app.models.fuel import FuelLog
+
+    linked = await db.scalar(select(FuelLog).where(FuelLog.receipt_id == receipt_id))
+    if linked:
+        raise HTTPException(
+            status_code=409,
+            detail="Receipt is attached to a fuel record — remove it from the fuel log first",
+        )
+    await db.execute(delete(ExtractedItem).where(ExtractedItem.receipt_id == receipt_id))
+    file_key = receipt.file_key
+    await db.delete(receipt)
+    await db.commit()
+    try:
+        await delete_object(file_key)
+    except Exception:
+        pass
 
 
 @router.post("/{receipt_id}/apply-to-service", response_model=ReceiptOut)

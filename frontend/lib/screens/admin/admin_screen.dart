@@ -345,6 +345,7 @@ class _AdminScreenState extends State<AdminScreen> {
                           final active = u['is_active'] == true;
                           final free = u['free_account'] == true;
                           final obd = u['obd_enabled'] == true;
+                          final licenseOn = context.read<AuthState>().licenseEnabled;
                           return Card(
                             child: ListTile(
                               leading: CircleAvatar(
@@ -390,16 +391,18 @@ class _AdminScreenState extends State<AdminScreen> {
                                   PopupMenuItem(
                                       value: 'restore',
                                       child: const Text('Restore user')),
-                                  PopupMenuItem(
-                                      value: 'toggle_free',
-                                      child: Text(free
-                                          ? 'Upgrade to paid account'
-                                          : 'Set as free account')),
-                                   PopupMenuItem(
-                                      value: 'reup',
-                                      child: Text(free
-                                          ? r'Re-upgrade ($19/mo benefits)'
-                                          : 'Remove re-upgrade')),
+                                  if (licenseOn) ...[
+                                    PopupMenuItem(
+                                        value: 'toggle_free',
+                                        child: Text(free
+                                            ? 'Upgrade to paid account'
+                                            : 'Set as free account')),
+                                    PopupMenuItem(
+                                        value: 'reup',
+                                        child: Text(free
+                                            ? r'Re-upgrade ($19/mo benefits)'
+                                            : 'Remove re-upgrade')),
+                                  ],
                                   PopupMenuItem(
                                       value: 'toggle_obd',
                                       child: Text(obd

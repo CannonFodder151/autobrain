@@ -102,25 +102,6 @@ class _FuelScreenState extends State<FuelScreen> {
       appBar: AppBar(
         title: const Text('Fuel tracker'),
         actions: [
-          PopupMenuButton<int?>(
-            tooltip: 'Filter by financial year',
-            icon: const Icon(Icons.filter_alt_outlined),
-            onSelected: (v) {
-              setState(() => _fy = v);
-              _load();
-            },
-            itemBuilder: (_) => [
-              PopupMenuItem<int?>(
-                value: null,
-                child: Text(_fy == null ? 'All time ✓' : 'All time'),
-              ),
-              for (final fy in [_currentFy, _currentFy - 1, _currentFy - 2])
-                PopupMenuItem<int?>(
-                  value: fy,
-                  child: Text(_fy == fy ? 'FY${fy - 1}/${fy % 100} ✓' : 'FY${fy - 1}/${fy % 100}'),
-                ),
-            ],
-          ),
           PopupMenuButton<String>(
             tooltip: 'Export',
             icon: const Icon(Icons.download_outlined),
@@ -147,6 +128,29 @@ class _FuelScreenState extends State<FuelScreen> {
                 padding: const EdgeInsets.all(16),
                 children: [
                   _SummaryCard(logs: _logs),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      ChoiceChip(
+                        label: const Text('All'),
+                        selected: _fy == null,
+                        onSelected: (_) {
+                          setState(() => _fy = null);
+                          _load();
+                        },
+                      ),
+                      for (final fy in [_currentFy, _currentFy - 1, _currentFy - 2])
+                        ChoiceChip(
+                          label: Text('FY${fy - 1}/${fy % 100}'),
+                          selected: _fy == fy,
+                          onSelected: (_) {
+                            setState(() => _fy = fy);
+                            _load();
+                          },
+                        ),
+                    ],
+                  ),
                   const SizedBox(height: 16),
                   if (spots.length >= 2) ...[
                     Card(
