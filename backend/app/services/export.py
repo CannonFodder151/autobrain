@@ -62,7 +62,7 @@ def export_service_history_csv(records: list, label: str) -> bytes:
             [r.service_date, r.odometer_km, r.service_type, r.workshop or "",
              r.cost, r.currency, _items_text(r), (r.notes or ""), _photo_csv(r.photo_keys)]
         )
-    return buf.getvalue().encode("utf-8")
+    return b"\xef\xbb\xbf" + buf.getvalue().encode("utf-8")
 
 
 def export_service_history_pdf(records: list, label: str) -> bytes:
@@ -86,7 +86,7 @@ def export_build_sheet_csv(mods: list, label: str) -> bytes:
     for m in mods:
         writer.writerow([m.install_date or "", m.name, m.category, m.brand or "",
                          m.cost, m.notes or "", _photo_csv(m.photo_keys)])
-    return buf.getvalue().encode("utf-8")
+    return b"\xef\xbb\xbf" + buf.getvalue().encode("utf-8")
 
 
 def export_build_sheet_pdf(mods: list, label: str) -> bytes:
@@ -150,7 +150,7 @@ def export_logbook_csv(entries: list, fy: int) -> bytes:
             e.distance_km or "", e.purpose, e.reason or "",
             e.start_location or "", e.end_location or "",
         ])
-    return buf.getvalue().encode("utf-8")
+    return b"\xef\xbb\xbf" + buf.getvalue().encode("utf-8")
 
 
 def export_fuel_csv(logs: list, fy: int) -> bytes:
@@ -167,7 +167,7 @@ def export_fuel_csv(logs: list, fy: int) -> bytes:
             l.l_per_100km or "", l.notes or "",
             _photo_csv([l.receipt.file_key]) if l.receipt else "",
         ])
-    return buf.getvalue().encode("utf-8")
+    return b"\xef\xbb\xbf" + buf.getvalue().encode("utf-8")
 
 
 def export_user_profile(user: dict, vehicles: list) -> dict:

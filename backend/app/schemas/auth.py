@@ -121,6 +121,8 @@ class UserAdminOut(BaseModel):
     obd_auto_connect: bool = False
     created_at: datetime | None = None
 
+    model_config = {"from_attributes": True}
+
 
 
 class UserPage(BaseModel):

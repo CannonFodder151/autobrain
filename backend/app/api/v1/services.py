@@ -82,8 +82,8 @@ async def _reconcile_part_stock(
     """Keep parts inventory in sync with a completed service.
 
     Reverses any prior stock movements recorded against this service (so the
-    operation is idempotent across edits), then â€” when the service is
-    completed â€” deducts the used quantities and logs a PartMovement per part.
+    operation is idempotent across edits), then — when the service is
+    completed — deducts the used quantities and logs a PartMovement per part.
     """
     prev = list((await db.scalars(
         select(PartMovement).where(PartMovement.service_id == service_id)
