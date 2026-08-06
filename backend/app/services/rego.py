@@ -252,7 +252,7 @@ async def lookup_rego(rego: str, jurisdiction: str = "AU", state: str = "VIC") -
     #    Configure REGO_LOOKUP_URL + REGO_LOOKUP_API_KEY in .env (never hardcode).
     if settings.REGO_LOOKUP_URL:
         try:
-            async with httpx.AsyncClient(timeout=60) as client:
+            async with httpx.AsyncClient(timeout=90) as client:
                 resp = await client.post(
                     settings.REGO_LOOKUP_URL,
                     json={"plate": clean, "state": state},
