@@ -5,6 +5,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-08-06
+
+### Added
+- Vehicle type: every vehicle is a Car or a Motorcycle (dropdown on add/edit). The home screen shows a motorcycle icon for bikes, and the vehicle type is passed to the AI agents (diagnostics, service prediction, valuation, mod impact).
+- Admin console: search users by display name or email — alphabetical, 15 per page, with previous/next buttons.
+- Account creation (signup + admin) rejects duplicate emails and duplicate display names.
+- "Delete account" menu item for non-admin users on licensed servers, linking to the deletion instructions page.
+- Demo data: two motorcycles plus logbook trips, scanned receipts, valuations and diagnostics.
+
+### Fixed
+- Service/mod `photo_keys` now store as JSON (raw-list inserts from the receipt auto-apply flow and the demo seed previously failed).
+- Web home screen no longer shows garbled characters on the vehicle display.
+
 ## [0.3.2] - 2026-08-06
 
 ### Changed
