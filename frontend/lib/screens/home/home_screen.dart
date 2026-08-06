@@ -68,6 +68,18 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _openDeleteAccount() async {
+    final ok = await launchUrl(
+      Uri.parse('https://autobrainservice.app/delete-account.html'),
+      mode: LaunchMode.externalApplication,
+    );
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open the link.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthState>();
@@ -106,6 +118,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const AdminScreen()),
                   );
+                case 'delete_account':
+                  _openDeleteAccount();
                 case 'logout':
                   auth.logout();
               }
@@ -117,6 +131,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 const PopupMenuItem(value: 'license', child: Text('License')),
               if (auth.isAdmin)
                 const PopupMenuItem(value: 'admin', child: Text('User administration')),
+              if (!auth.isAdmin && auth.licenseEnabled)
+                const PopupMenuItem(value: 'delete_account', child: Text('Delete account')),
               const PopupMenuDivider(),
               const PopupMenuItem(value: 'logout', child: Text('Sign out')),
             ],
