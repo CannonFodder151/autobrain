@@ -199,9 +199,9 @@ class _HeroCard extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   '${vehicle.make ?? ''} ${vehicle.model ?? ''}'
-                  '${vehicle.bodyType != null ? ' ┬À ${vehicle.bodyType}' : ''}'
-                  '${vehicle.colour != null ? ' ┬À ${vehicle.colour}' : ''}'
-                  '${vehicle.year != null ? ' ┬À ${vehicle.year}' : ''}'.trim(),
+                  '${vehicle.bodyType != null ? ' · ${vehicle.bodyType}' : ''}'
+                  '${vehicle.colour != null ? ' · ${vehicle.colour}' : ''}'
+                  '${vehicle.year != null ? ' · ${vehicle.year}' : ''}'.trim(),
                   style: const TextStyle(color: Colors.white70),
                 ),
                 const SizedBox(height: 14),
@@ -215,7 +215,7 @@ class _HeroCard extends StatelessWidget {
                     _HeroStat(
                         icon: Icons.confirmation_number_outlined,
                         label: 'Rego',
-                        value: vehicle.rego ?? 'ÔÇö'),
+                        value: vehicle.rego ?? '—'),
                   ],
                 ),
               ],
@@ -384,7 +384,7 @@ class DownloadAppDialog extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Install AutoBrain on your phone for the full experience ÔÇö offline cache, '
+            'Install AutoBrain on your phone for the full experience — offline cache, '
             'push notifications and faster access.',
             style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 14),
           ),
