@@ -92,7 +92,7 @@ class Settings(BaseSettings):
     APP_BASE_URL: str = "http://10.0.3.39"
 
     # Versioning + GitHub release checking
-    APP_VERSION: str = "0.3.0"  # mirror frontend/pubspec.yaml version
+    APP_VERSION: str = "0.3.4"  # mirror frontend/pubspec.yaml version
     GITHUB_REPO: str = "CannonFodder151/autobrain"
     GITHUB_TOKEN: str = ""  # optional, raises the GitHub API rate limit for release checks
 
