@@ -5,6 +5,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-08-06
+
+### Added
+- Rego lookup now sends the vehicle type (car/motorcycle) to the self-hosted scraper. VIC motorcycles resolve correctly — the vicroads form selects the motorcycle field and vehicle-type dropdown (test case: `3B4PV` → clean not-found for an unregistered plate).
+- Motorcycle-aware offline fallback — a bike never falls back to a guessed car.
+- Vehicle type is enforced in the add/edit vehicle screens before rego lookup (selector moved above the rego field).
+
+### Fixed
+- Scraper no longer misreads form dropdown labels (e.g. "Chassis number") as result data.
+- Provider timeout raised to 150s so a retrying browser lookup completes instead of falling back early.
+
 ## [0.3.3] - 2026-08-06
 
 ### Added
