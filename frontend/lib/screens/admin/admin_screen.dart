@@ -17,6 +17,9 @@ class _AdminScreenState extends State<AdminScreen> {
   List<Map<String, dynamic>> _users = const [];
   bool _loading = true;
   String _query = '';
+  int _page = 1;
+  int _pages = 1;
+  int _total = 0;
   Map<String, dynamic>? _version;
 
   @override
@@ -40,8 +43,12 @@ class _AdminScreenState extends State<AdminScreen> {
     final api = context.read<AuthState>().api;
     setState(() => _loading = true);
     try {
-      final data = await api.get('/admin/users?q=${Uri.encodeQueryComponent(_query)}') as List;
-      _users = data.cast<Map<String, dynamic>>();
+      final data = await api.get(
+              '/admin/users?q=${Uri.encodeQueryComponent(_query)}&page=$_page')
+          as Map<String, dynamic>;
+      _users = (data['items'] as List).cast<Map<String, dynamic>>();
+      _total = data['total'] as int? ?? 0;
+      _pages = data['pages'] as int? ?? 1;
     } catch (_) {}
     setState(() => _loading = false);
   }
@@ -323,6 +330,7 @@ class _AdminScreenState extends State<AdminScreen> {
             child: TextField(
               onChanged: (v) {
                 _query = v;
+                _page = 1;
                 _load();
               },
               decoration: const InputDecoration(
@@ -423,6 +431,42 @@ class _AdminScreenState extends State<AdminScreen> {
                         },
                       ),
           ),
+          if (_total > 0)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('$_total user${_total == 1 ? '' : 's'}',
+                      style: Theme.of(context).textTheme.bodySmall),
+                  Row(
+                    children: [
+                      IconButton(
+                        tooltip: 'Previous page',
+                        icon: const Icon(Icons.chevron_left),
+                        onPressed: _page > 1
+                            ? () {
+                                setState(() => _page--);
+                                _load();
+                              }
+                            : null,
+                      ),
+                      Text('Page $_page of $_pages'),
+                      IconButton(
+                        tooltip: 'Next page',
+                        icon: const Icon(Icons.chevron_right),
+                        onPressed: _page < _pages
+                            ? () {
+                                setState(() => _page++);
+                                _load();
+                              }
+                            : null,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
