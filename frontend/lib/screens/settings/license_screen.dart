@@ -19,22 +19,12 @@ class _LicenseScreenState extends State<LicenseScreen> {
   bool _busy = false;
   String? _error;
 
-  String get _plan => ((_profile?['plan'] as String?) ?? 'free');
   String? get _subStatus => _profile?['subscription_status'] as String?;
   bool get _hasSub =>
       _subStatus == 'active' ||
       _subStatus == 'trialing' ||
       _subStatus == 'past_due';
   int get _maxVehicles => (_profile?['max_vehicles'] as int?) ?? 1;
-
-  static const _statusLabels = {
-    'active': 'Active',
-    'trialing': 'Trial',
-    'past_due': 'Past due',
-    'canceled': 'Cancelled',
-    'unpaid': 'Unpaid',
-    'incomplete_expired': 'Expired',
-  };
 
   @override
   void initState() {
@@ -191,14 +181,13 @@ class _LicenseScreenState extends State<LicenseScreen> {
     if (_hasSub) {
       icon = Icons.verified_user;
       color = Colors.green;
-      title = '${_plan == 'garage' ? 'Garage' : 'Enthusiast'} plan — '
-          '${_statusLabels[_subStatus] ?? _subStatus}';
-      subtitle = '$_maxVehicles vehicles, all AI features. '
+      title = 'Subscription active';
+      subtitle = 'You have full access to AutoBrain. '
           'Managed by Stripe.';
     } else {
       icon = Icons.info_outline;
       color = Colors.blue;
-      title = 'Free plan';
+      title = 'No active subscription';
       subtitle = '$_maxVehicles vehicle, no AI. '
           'Upgrade for rego lookup and more vehicles.';
     }
@@ -246,7 +235,6 @@ class _LicenseScreenState extends State<LicenseScreen> {
     bool popular = false,
   }) {
     final scheme = Theme.of(context).colorScheme;
-    final isCurrent = _plan == key;
     return Card(
       shape: popular
           ? RoundedRectangleBorder(
@@ -313,12 +301,8 @@ class _LicenseScreenState extends State<LicenseScreen> {
             SizedBox(
               width: double.infinity,
               child: FilledButton(
-                onPressed: _busy
-                    ? null
-                    : isCurrent
-                        ? _portal
-                        : () => _checkout(key),
-                child: Text(isCurrent ? 'Manage subscription' : 'Upgrade to $name'),
+                onPressed: _busy ? null : () => _checkout(key),
+                child: Text('Upgrade to $name'),
               ),
             ),
           ],

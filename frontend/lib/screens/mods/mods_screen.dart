@@ -102,6 +102,8 @@ class _ModsScreenState extends State<ModsScreen> {
             itemBuilder: (_) => const [
               PopupMenuItem(value: 'csv', child: Text('Export CSV')),
               PopupMenuItem(value: 'pdf', child: Text('Export PDF')),
+              PopupMenuItem(
+                  value: 'zip', child: Text('Export CSV + images (ZIP)')),
             ],
           ),
         ],

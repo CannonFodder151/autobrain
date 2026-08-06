@@ -22,6 +22,7 @@ class AuthState extends ChangeNotifier {
   String? _mfaToken;
   bool _darkMode = true;
   bool _signupEnabled = true;
+  bool _licenseEnabled = false;
   String? get token => _token;
   String? get role => _role;
   String? get userId => _userId;
@@ -32,6 +33,9 @@ class AuthState extends ChangeNotifier {
   bool get isDemo => _role == 'demo';
   /// Whether this server allows self-service signup (from /auth/config).
   bool get signupEnabled => _signupEnabled;
+  /// Whether the licence/upgrade feature is enabled on this server
+  /// (LICENSE_ENABLED env var; on for hosted, off for demo/default).
+  bool get licenseEnabled => _licenseEnabled;
 
   Future<void> toggleThemeMode() async {
     _darkMode = !_darkMode;
@@ -57,11 +61,13 @@ class AuthState extends ChangeNotifier {
     }
   }
 
-  /// Fetches public server config (self-signup enabled, MFA enforced).
+  /// Fetches public server config (self-signup enabled, MFA enforced,
+  /// licence feature enabled).
   Future<void> _loadConfig() async {
     try {
       final data = await _anonymous().get('/auth/config') as Map<String, dynamic>;
       _signupEnabled = data['signup_enabled'] != false;
+      _licenseEnabled = data['license_enabled'] == true;
       notifyListeners();
     } catch (_) {
       // Defaults to enabled; the backend still enforces SELF_SIGNUP_ENABLED.
@@ -76,6 +82,7 @@ class AuthState extends ChangeNotifier {
     _userId = null;
     _client = null;
     _signupEnabled = true;
+    _licenseEnabled = false;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('auth_token');
     await prefs.remove('auth_role');

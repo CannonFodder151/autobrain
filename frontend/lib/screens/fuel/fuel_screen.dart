@@ -18,6 +18,12 @@ class FuelScreen extends StatefulWidget {
 class _FuelScreenState extends State<FuelScreen> {
   List<FuelLog> _logs = const [];
   bool _loading = true;
+  int? _fy; // null = all time; otherwise Australian FY (e.g. 2026)
+
+  int get _currentFy {
+    final now = DateTime.now();
+    return now.month >= 7 ? now.year + 1 : now.year;
+  }
 
   @override
   void initState() {
@@ -29,8 +35,9 @@ class _FuelScreenState extends State<FuelScreen> {
     final api = context.read<AuthState>().api;
     setState(() => _loading = true);
     try {
-      final data =
-          await api.get('/vehicles/${widget.vehicleId}/fuel') as List;
+      final data = await api.get(
+              '/vehicles/${widget.vehicleId}/fuel'
+          '${_fy != null ? '?fy=$_fy' : ''}') as List;
       _logs = data
           .map((e) => FuelLog.fromJson(e as Map<String, dynamic>))
           .toList();
@@ -71,15 +78,15 @@ class _FuelScreenState extends State<FuelScreen> {
     }
   }
 
-  Future<void> _exportYear() async {
+  Future<void> _export(bool withImages) async {
     final api = context.read<AuthState>().api;
-    final now = DateTime.now();
-    final fy = now.month >= 7 ? now.year + 1 : now.year;
+    final fy = _fy ?? _currentFy;
     try {
       final bytes = await api.export(
-          '/vehicles/${widget.vehicleId}/fuel/export?fy=$fy');
-      final stamp = '$fy';
-      await downloadBytes('fuel-FY$stamp.csv', bytes);
+          '/vehicles/${widget.vehicleId}/fuel/export?fy=$fy'
+          '${withImages ? '&fmt=zip' : ''}');
+      final name = 'fuel-FY$fy${withImages ? '-with-images.zip' : '.csv'}';
+      await downloadBytes(name, bytes);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -95,10 +102,35 @@ class _FuelScreenState extends State<FuelScreen> {
       appBar: AppBar(
         title: const Text('Fuel tracker'),
         actions: [
-          IconButton(
-            tooltip: 'Export financial year (tax)',
+          PopupMenuButton<int?>(
+            tooltip: 'Filter by financial year',
+            icon: const Icon(Icons.filter_alt_outlined),
+            onSelected: (v) {
+              setState(() => _fy = v);
+              _load();
+            },
+            itemBuilder: (_) => [
+              PopupMenuItem<int?>(
+                value: null,
+                child: Text(_fy == null ? 'All time ✓' : 'All time'),
+              ),
+              for (final fy in [_currentFy, _currentFy - 1, _currentFy - 2])
+                PopupMenuItem<int?>(
+                  value: fy,
+                  child: Text(_fy == fy ? 'FY${fy - 1}/${fy % 100} ✓' : 'FY${fy - 1}/${fy % 100}'),
+                ),
+            ],
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Export',
             icon: const Icon(Icons.download_outlined),
-            onPressed: _exportYear,
+            onSelected: (v) => _export(v == 'zip'),
+            itemBuilder: (_) => [
+              const PopupMenuItem(
+                  value: 'csv', child: Text('Export CSV')),
+              const PopupMenuItem(
+                  value: 'zip', child: Text('Export CSV + receipts (ZIP)')),
+            ],
           ),
         ],
       ),
@@ -171,6 +203,12 @@ class _FuelScreenState extends State<FuelScreen> {
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            if (l.receiptId != null)
+                              const Padding(
+                                padding: EdgeInsets.only(right: 6),
+                                child: Icon(Icons.receipt_long,
+                                    size: 18, color: Colors.grey),
+                              ),
                             Text('\$${l.totalCost.toStringAsFixed(2)}'),
                             PopupMenuButton<String>(
                               onSelected: (v) {

@@ -113,7 +113,8 @@ class _HomeScreenState extends State<HomeScreen> {
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'settings', child: Text('Settings & security')),
               const PopupMenuItem(value: 'download', child: Text('Get the mobile app')),
-              const PopupMenuItem(value: 'license', child: Text('License')),
+              if (auth.licenseEnabled)
+                const PopupMenuItem(value: 'license', child: Text('License')),
               if (auth.isAdmin)
                 const PopupMenuItem(value: 'admin', child: Text('User administration')),
               const PopupMenuDivider(),

@@ -197,6 +197,20 @@ class _AdminScreenState extends State<AdminScreen> {
     if (saved != null) _update(u, {'max_vehicles': saved});
   }
 
+  Future<void> _reUpgrade(Map<String, dynamic> u) async {
+    // Sponsored (free_account=false, no Stripe sub) => revoke; else grant.
+    final enable = u['free_account'] == true;
+    final api = context.read<AuthState>().api;
+    try {
+      await api.post('/admin/users/${u['id']}/re-upgrade?enabled=$enable');
+      _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
+  }
+
   Future<void> _delete(Map<String, dynamic> u) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -352,6 +366,8 @@ class _AdminScreenState extends State<AdminScreen> {
                                       _update(u, {'role': isAdmin ? 'user' : 'admin'});
                                     case 'toggle_free':
                                       _update(u, {'free_account': !free});
+                                    case 'reup':
+                                      _reUpgrade(u);
                                     case 'toggle_obd':
                                       _update(u, {'obd_enabled': !obd});
                                     case 'limit':
@@ -379,6 +395,11 @@ class _AdminScreenState extends State<AdminScreen> {
                                       child: Text(free
                                           ? 'Upgrade to paid account'
                                           : 'Set as free account')),
+                                   PopupMenuItem(
+                                      value: 'reup',
+                                      child: Text(free
+                                          ? r'Re-upgrade ($19/mo benefits)'
+                                          : 'Remove re-upgrade')),
                                   PopupMenuItem(
                                       value: 'toggle_obd',
                                       child: Text(obd

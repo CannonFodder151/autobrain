@@ -1,4 +1,3 @@
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -83,35 +82,6 @@ class _LogbookScreenState extends State<LogbookScreen> {
   Future<Map<String, double>?> _gps() async {
     try {
       return await getCurrentPosition();
-    } catch (_) {
-      return null;
-    }
-  }
-
-  Future<int?> _scanOdo() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['jpg', 'jpeg', 'png', 'webp'],
-    );
-    if (result == null || result.files.isEmpty) return null;
-    final picked = result.files.single;
-    final List<int> bytes;
-    if (picked.bytes != null) {
-      bytes = picked.bytes!;
-    } else if (picked.path != null) {
-      bytes = await readLocalFile(picked.path!);
-    } else {
-      return null;
-    }
-    final api = context.read<AuthState>().api;
-    try {
-      final data = await api.upload(
-        '/vehicles/${widget.vehicleId}/logbook/odometer-photo',
-        bytes,
-        picked.name,
-        mimeForFile(picked.name),
-      ) as Map<String, dynamic>;
-      return data['odometer_km'] as int?;
     } catch (_) {
       return null;
     }
@@ -260,41 +230,8 @@ class _LogbookScreenState extends State<LogbookScreen> {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () async {
-                              final odo = await _scanOdo();
-                              if (odo != null) {
-                                setModal(() => odoEnd.text = odo.toString());
-                              } else {
-                                ScaffoldMessenger.of(ctx).showSnackBar(
-                                    const SnackBar(
-                                        content: Text('Could not read odometer')));
-                              }
-                            },
-                            icon: const Icon(Icons.camera_alt_outlined),
-                            label: const Text('Scan end odometer photo'),
-                          ),
-                        ),
-                      ],
-                    ),
                   ] else ...[
                     const SizedBox(height: 8),
-                    OutlinedButton.icon(
-                      onPressed: () async {
-                        final odo = await _scanOdo();
-                        if (odo != null) {
-                          setModal(() => odoStart.text = odo.toString());
-                        } else {
-                          ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
-                              content: Text('Could not read odometer')));
-                        }
-                      },
-                      icon: const Icon(Icons.camera_alt_outlined),
-                      label: const Text('Scan start odometer photo'),
-                    ),
                   ],
                   const SizedBox(height: 8),
                   CheckboxListTile(
