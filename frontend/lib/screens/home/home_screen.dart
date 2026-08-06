@@ -362,7 +362,7 @@ class _Feature {
 class DownloadAppDialog extends StatelessWidget {
   const DownloadAppDialog({super.key});
 
-  static const _androidUrl = 'https://autobrainservice.app/downloads/autobrain.apk';
+  static const _androidUrl = 'https://play.google.com/store/apps/details?id=com.autobrainservice.app';
   static const _iosUrl = 'https://apps.apple.com/app/autobrain';
 
   Future<void> _open(BuildContext context, String url) async {
@@ -392,7 +392,7 @@ class DownloadAppDialog extends StatelessWidget {
           FilledButton.tonalIcon(
             onPressed: () => _open(context, _androidUrl),
             icon: const Icon(Icons.android),
-            label: const Text('Download for Android (.apk)'),
+            label: const Text('Get it on Google Play'),
           ),
           const SizedBox(height: 10),
           FilledButton.tonalIcon(
