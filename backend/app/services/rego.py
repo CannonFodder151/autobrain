@@ -252,7 +252,7 @@ async def lookup_rego(rego: str, jurisdiction: str = "AU", state: str = "VIC",
     #    Configure REGO_LOOKUP_URL + REGO_LOOKUP_API_KEY in .env (never hardcode).
     if settings.REGO_LOOKUP_URL:
         try:
-            async with httpx.AsyncClient(timeout=90) as client:
+            async with httpx.AsyncClient(timeout=150) as client:
                 resp = await client.post(
                     settings.REGO_LOOKUP_URL,
                     json={"plate": clean, "state": state, "vehicle_type": vehicle_type},
@@ -292,6 +292,10 @@ async def lookup_rego(rego: str, jurisdiction: str = "AU", state: str = "VIC",
                        source="word-heuristic", state=state, matched=f"{make} {model}")
 
     # 5) Generic
+    if vehicle_type == "motorcycle":
+        # Directionally correct fallback for bikes (never guess a car).
+        return _result(clean, ("", "Motorcycle", 2018, "", "Manual"),
+                       source="heuristic", state=state, matched="motorcycle")
     return _result(clean, _GENERIC, source="heuristic", state=state)
 
 
