@@ -41,6 +41,7 @@ class VehicleCreate(BaseModel):
     transmission: str | None = None
     odometer_km: int | None = 0
     condition: str = "good"
+    vehicle_type: str = "car"
     is_primary: bool = False
     club_reg: bool = False
 
@@ -58,6 +59,7 @@ class VehicleUpdate(BaseModel):
     transmission: str | None = None
     odometer_km: int | None = None
     condition: str | None = None
+    vehicle_type: str | None = None
     is_primary: bool | None = None
     club_reg: bool | None = None
 
@@ -76,6 +78,7 @@ class VehicleOut(BaseModel):
     transmission: str | None
     odometer_km: int | None
     condition: str
+    vehicle_type: str = "car"
     is_primary: bool
     club_reg: bool = False
     created_at: datetime

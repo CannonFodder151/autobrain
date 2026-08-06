@@ -1,4 +1,4 @@
-﻿"""AI diagnostics routes."""
+"""AI diagnostics routes."""
 
 import json
 from datetime import date, datetime, timezone
@@ -49,6 +49,7 @@ async def diagnose(
     context.setdefault("vehicle", {
         "make": vehicle.make, "model": vehicle.model, "year": vehicle.year,
         "engine": vehicle.engine, "odometer_km": vehicle.odometer_km,
+        "vehicle_type": vehicle.vehicle_type,
     })
     result = await run_diagnostics({"symptoms": payload.symptoms, **context, "obd_codes": payload.obd_codes})
     if not result:

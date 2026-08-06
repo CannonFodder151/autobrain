@@ -13,7 +13,7 @@ from app.core.logging import get_logger
 from app.core.security import create_invite_token, hash_password
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.auth import AdminUserUpdate, UserAdminOut, UserCreate
+from app.schemas.auth import AdminUserUpdate, UserAdminOut, UserCreate, UserPage
 from app.services import email as mail
 from app.services.backup import dump_backup, load_backup, restore_all, serialize_all
 from app.services.version import check_latest_release, current_version
@@ -71,18 +71,27 @@ async def restore_backup(
 
 
 
-@router.get("", response_model=list[UserAdminOut])
+@router.get("", response_model=UserPage)
 async def list_users(
     q: str | None = Query(default=None, max_length=255),
+    page: int = Query(default=1, ge=1),
     db: AsyncSession = Depends(get_db),
-) -> list[User]:
-    stmt = select(User).order_by(User.created_at.desc())
+) -> UserPage:
+    """Search users by display name or email, alphabetical, 15 per page."""
+    stmt = select(User)
     if q:
         like = f"%{q.lower()}%"
-        stmt = stmt.where(
-            User.email.ilike(like) | User.display_name.ilike(like)
-        )
-    return list((await db.scalars(stmt)).all())
+        stmt = stmt.where(User.email.ilike(like) | User.display_name.ilike(like))
+    total = (await db.scalar(
+        select(func.count()).select_from(stmt.subquery())
+    )) or 0
+    rows = list((await db.scalars(
+        stmt.order_by(User.display_name.asc()).offset((page - 1) * 15).limit(15)
+    )).all())
+    return UserPage(
+        items=rows, total=total, page=page,
+        pages=max((total + 14) // 15, 1),
+    )
 
 
 @router.post("", response_model=UserAdminOut, status_code=201)
@@ -93,6 +102,11 @@ async def create_user(
     existing = await db.scalar(select(User).where(User.email == payload.email.lower()))
     if existing:
         raise HTTPException(status_code=409, detail="Email already registered")
+    name_taken = await db.scalar(
+        select(User).where(func.lower(User.display_name) == payload.display_name.lower())
+    )
+    if name_taken:
+        raise HTTPException(status_code=409, detail="Display name already in use")
     if not payload.send_invite and not payload.password:
         raise HTTPException(status_code=422, detail="Password required (or enable email invite)")
     hashed = hash_password(payload.password) if payload.password else hash_password(secrets.token_urlsafe(32))

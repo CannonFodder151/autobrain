@@ -7,6 +7,7 @@ class Vehicle {
   final String? rego, vin, make, model, colour, bodyType, engine, transmission;
   final int? year, odometerKm;
   final String condition;
+  final String vehicleType;
   final bool isPrimary, clubReg;
 
   const Vehicle({
@@ -23,6 +24,7 @@ class Vehicle {
     this.year,
     this.odometerKm,
     this.condition = 'good',
+    this.vehicleType = 'car',
     this.isPrimary = false,
     this.clubReg = false,
   });
@@ -44,6 +46,7 @@ class Vehicle {
         year: j['year'] as int?,
         odometerKm: j['odometer_km'] as int?,
         condition: (j['condition'] as String?) ?? 'good',
+        vehicleType: (j['vehicle_type'] as String?) ?? 'car',
         isPrimary: (j['is_primary'] as bool?) ?? false,
         clubReg: (j['club_reg'] as bool?) ?? false,
       );

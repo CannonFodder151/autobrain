@@ -7,6 +7,7 @@ from sqlalchemy import Date, DateTime, Float, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.session import Base
+from app.db.types import JSONList
 
 
 def _uuid() -> str:
@@ -26,6 +27,6 @@ class Modification(Base):
     install_date: Mapped[date | None] = mapped_column(Date)
     odometer_km: Mapped[int | None] = mapped_column()
     notes: Mapped[str | None] = mapped_column(Text)
-    photo_keys: Mapped[list | None] = mapped_column(Text)  # JSON list of MinIO keys
+    photo_keys: Mapped[list | None] = mapped_column(JSONList)  # JSON list of MinIO keys
     ai_impact: Mapped[dict | None] = mapped_column(Text)  # JSON from AI mod_impact module
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

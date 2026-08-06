@@ -228,7 +228,13 @@ class _HeroCard extends StatelessWidget {
               color: Colors.white.withValues(alpha: 0.18),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.directions_car, size: 40, color: Colors.white),
+            child: Icon(
+              vehicle.vehicleType == 'motorcycle'
+                  ? Icons.two_wheeler
+                  : Icons.directions_car,
+              size: 40,
+              color: Colors.white,
+            ),
           ),
         ],
       ),

@@ -1,4 +1,4 @@
-﻿"""Fuel tracker routes."""
+"""Fuel tracker routes."""
 
 import base64
 import uuid

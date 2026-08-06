@@ -1,4 +1,4 @@
-﻿"""Receipt & parts scanner routes (OCR + AI extraction)."""
+"""Receipt & parts scanner routes (OCR + AI extraction)."""
 
 import json
 

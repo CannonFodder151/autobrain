@@ -24,6 +24,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
   final _odometer = TextEditingController();
   int? _year;
   String _state = 'VIC';
+  String _vehicleType = 'car';
   bool _busy = false;
   bool _isPrimary = false;
   bool _clubReg = false;
@@ -127,6 +128,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
         'transmission': _transmission.text.isEmpty ? null : _transmission.text,
         'odometer_km': int.tryParse(_odometer.text) ?? 0,
         'condition': 'good',
+        'vehicle_type': _vehicleType,
         'is_primary': _isPrimary,
         'club_reg': _clubReg,
       });
@@ -242,6 +244,16 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                   child: Text(_lookupInfo!, style: TextStyle(
                       color: Theme.of(context).colorScheme.primary)),
                 ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: _vehicleType,
+                decoration: const InputDecoration(labelText: 'Vehicle type'),
+                items: const [
+                  DropdownMenuItem(value: 'car', child: Text('Car')),
+                  DropdownMenuItem(value: 'motorcycle', child: Text('Motorcycle')),
+                ],
+                onChanged: (v) => setState(() => _vehicleType = v ?? 'car'),
+              ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _vin,

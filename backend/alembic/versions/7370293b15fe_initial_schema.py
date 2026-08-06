@@ -1,4 +1,4 @@
-﻿"""initial_schema
+"""initial_schema
 
 Revision ID: 7370293b15fe
 Revises: 

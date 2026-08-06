@@ -1,4 +1,4 @@
-﻿"""Parts inventory routes."""
+"""Parts inventory routes."""
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select

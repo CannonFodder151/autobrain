@@ -38,6 +38,7 @@ class Vehicle(Base):
     transmission: Mapped[str | None] = mapped_column(String(60))
     odometer_km: Mapped[int | None] = mapped_column(Integer, default=0)
     condition: Mapped[str] = mapped_column(String(20), default="good")  # excellent/good/fair/poor
+    vehicle_type: Mapped[str] = mapped_column(String(20), default="car")  # car/motorcycle
     is_primary: Mapped[bool] = mapped_column(default=False)
     club_reg: Mapped[bool] = mapped_column(default=False)  # club reg => no ATO logbook
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

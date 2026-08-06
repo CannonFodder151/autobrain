@@ -1,4 +1,4 @@
-﻿"""Service routes: CRUD (with items/status), AI prediction, PDF/CSV export."""
+"""Service routes: CRUD (with items/status), AI prediction, PDF/CSV export."""
 
 import json
 from datetime import date, datetime, timezone
@@ -310,6 +310,7 @@ async def predict(
     data["make"] = data["make"] or vehicle.make or ""
     data["model"] = data["model"] or vehicle.model or ""
     data["year"] = data["year"] or vehicle.year or date.today().year
+    data["vehicle_type"] = vehicle.vehicle_type or "car"
     if not data.get("odometer_km"):
         data["odometer_km"] = vehicle.odometer_km or 0
     data["service_history"] = [

@@ -1,4 +1,4 @@
-﻿"""Modification tracker routes."""
+"""Modification tracker routes."""
 
 import json
 
@@ -103,7 +103,10 @@ async def get_impact(
     _user: User = Depends(require_ai),
 ) -> ModImpactResponse:
     """AI summary of a modification's impact on performance and value."""
-    result = await mod_impact(payload.model_dump())
+    data = payload.model_dump()
+    if data.get("vehicle") and not data["vehicle"].get("vehicle_type"):
+        data["vehicle"]["vehicle_type"] = "car"
+    result = await mod_impact(data)
     if not result:
         raise HTTPException(status_code=503, detail="Mod impact engine unavailable")
     return ModImpactResponse(**result)

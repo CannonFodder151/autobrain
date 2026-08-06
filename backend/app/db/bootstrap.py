@@ -10,6 +10,7 @@ import asyncio
 import os
 import subprocess
 
+from app.core.config import settings
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -22,9 +23,12 @@ async def _seed_admin() -> None:
 
 
 async def _seed_demo() -> None:
-    from app.db.seed import seed_demo
+    from app.db.seed import reset_demo, seed_demo
 
-    await seed_demo()
+    if settings.DEMO_RESET:
+        await reset_demo()
+    else:
+        await seed_demo()
 
 
 def bootstrap() -> None:

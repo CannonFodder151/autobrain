@@ -67,6 +67,9 @@ class Settings(BaseSettings):
     DEMO_EMAIL: str = "demo@autobrainservice.app"
     DEMO_PASSWORD: str = "demo"
     DEMO_DISPLAY_NAME: str = "Demo Garage"
+    # One-shot demo reseed: wipe + regenerate the demo data on startup
+    # (used when the seed changes so existing instances get new sample data).
+    DEMO_RESET: bool = False
 
     # Security hardening
     MFA_ENFORCED: bool = False  # force MFA setup for all accounts except demo

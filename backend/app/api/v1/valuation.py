@@ -1,4 +1,4 @@
-﻿"""Resale value estimation routes."""
+"""Resale value estimation routes."""
 
 import json
 from datetime import date, timedelta
@@ -83,6 +83,7 @@ async def valuate(
             "make": vehicle.make, "model": vehicle.model, "year": vehicle.year,
             "engine": vehicle.engine, "odometer_km": payload.odometer_km or vehicle.odometer_km,
             "condition": payload.condition or vehicle.condition,
+            "vehicle_type": vehicle.vehicle_type,
         },
         "service_count": len(services),
         "total_service_cost": sum(s.cost for s in services),

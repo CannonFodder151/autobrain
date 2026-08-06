@@ -403,6 +403,11 @@ async def public_signup(
     existing = await db.scalar(select(User).where(User.email == payload.email.lower()))
     if existing:
         raise HTTPException(status_code=409, detail="Email already registered")
+    name_taken = await db.scalar(
+        select(User).where(func.lower(User.display_name) == payload.display_name.lower())
+    )
+    if name_taken:
+        raise HTTPException(status_code=409, detail="Display name already in use")
     user = User(
         email=payload.email.lower(),
         display_name=payload.display_name,

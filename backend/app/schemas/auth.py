@@ -121,6 +121,16 @@ class UserAdminOut(BaseModel):
     obd_auto_connect: bool = False
     created_at: datetime | None = None
 
+
+
+class UserPage(BaseModel):
+    """Paginated admin user listing."""
+
+    items: list[UserAdminOut]
+    total: int
+    page: int
+    pages: int
+
     model_config = {"from_attributes": True}
 
 

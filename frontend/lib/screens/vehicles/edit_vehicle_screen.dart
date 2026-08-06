@@ -27,6 +27,7 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
   late final TextEditingController _odometer;
   int? _year;
   String _state = 'VIC';
+  String _vehicleType = 'car';
   bool _busy = false;
   bool _isPrimary = false;
   bool _clubReg = false;
@@ -48,6 +49,7 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
     _transmission = TextEditingController(text: v.transmission ?? '');
     _odometer = TextEditingController(text: '${v.odometerKm ?? ''}');
     _year = v.year;
+    _vehicleType = v.vehicleType;
     _isPrimary = v.isPrimary;
     _clubReg = v.clubReg;
   }
@@ -111,6 +113,7 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
         'transmission': _transmission.text.isEmpty ? null : _transmission.text,
         'odometer_km': int.tryParse(_odometer.text),
         'is_primary': _isPrimary,
+        'vehicle_type': _vehicleType,
         'club_reg': _clubReg,
       });
       if (mounted) Navigator.pop(context);
@@ -189,6 +192,16 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
                       style:
                           TextStyle(color: Theme.of(context).colorScheme.primary)),
                 ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: _vehicleType,
+                decoration: const InputDecoration(labelText: 'Vehicle type'),
+                items: const [
+                  DropdownMenuItem(value: 'car', child: Text('Car')),
+                  DropdownMenuItem(value: 'motorcycle', child: Text('Motorcycle')),
+                ],
+                onChanged: (v) => setState(() => _vehicleType = v ?? 'car'),
+              ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _vin,
