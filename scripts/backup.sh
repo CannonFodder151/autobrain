@@ -12,10 +12,19 @@ docker compose exec -T postgres pg_dump -U "${POSTGRES_USER:-autobrain}" "${POST
   > "$OUT/autobrain-db-$STAMP.sql"
 
 echo "==> Backing up MinIO bucket"
-docker compose run --rm -T minio-init \
-  /bin/sh -c "mc alias set local http://minio:9000 ${MINIO_ACCESS_KEY:-autobrain} ${MINIO_SECRET_KEY:-autobrain} && \
-  mc mirror --overwrite local/${MINIO_BUCKET:-autobrain-assets} /backup" \
-  > /dev/null 2>&1 || echo " (minio backup skipped)"
+BUCKET="${MINIO_BUCKET:-autobrain-assets}"
+# minio-init container is gone (P1-1); the minio image bundles `mc`, so the
+# mirror streams a tarball out of the running minio container — no extra container.
+if docker compose exec -T minio sh -c \
+    "mc alias set local http://localhost:9000 \$MINIO_ROOT_USER \$MINIO_ROOT_PASSWORD >/dev/null 2>&1 && \
+     mc mirror --overwrite local/$BUCKET /backup >/dev/null && \
+     tar -czf - -C /backup ." \
+    > "$OUT/autobrain-minio-$STAMP.tar.gz" 2>/dev/null; then
+  echo "==> MinIO bucket mirrored to $OUT/autobrain-minio-$STAMP.tar.gz"
+else
+  rm -f "$OUT/autobrain-minio-$STAMP.tar.gz"
+  echo " (minio backup skipped)"
+fi
 
 tar -czf "$OUT/autobrain-backup-$STAMP.tar.gz" -C "$OUT" "autobrain-db-$STAMP.sql" 2>/dev/null || true
 echo "==> Backups written to $OUT/autobrain-backup-$STAMP.tar.gz"

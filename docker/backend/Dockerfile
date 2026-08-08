@@ -30,4 +30,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=5 \
     CMD curl -fsS http://localhost:8000/health || exit 1
 
-CMD ["sh", "-c", "python -m app.db.bootstrap && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+# Single backend container runs API + Celery worker + beat (consolidated P1-1).
+CMD ["sh", "-c", "python -m app.db.bootstrap && (celery -A app.workers.celery_app:celery_app worker -l info --concurrency=2 --beat &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]

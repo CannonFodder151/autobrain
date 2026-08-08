@@ -10,6 +10,11 @@
 # Secrets are interpolated from ${VAR}; set them in Portainer's stack env
 # vars or a local .env. Never commit real values.
 
+x-ai-env: &ai-env
+  AI_ROUTER_URL: ${AI_ROUTER_URL:-http://your-9router-instance:port/v1}
+  AI_ROUTER_API_KEY: ${AI_ROUTER_API_KEY:-}
+  AI_ROUTER_MODEL: ${AI_ROUTER_MODEL:-General-Use}
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -52,19 +57,6 @@ services:
       timeout: 5s
       retries: 10
 
-  minio-init:
-    image: minio/mc:latest
-    restart: "no"
-    depends_on:
-      minio:
-        condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set local http://minio:9000 ${MINIO_ACCESS_KEY:-autobrain} ${MINIO_SECRET_KEY:-autobrain} &&
-      mc mb -p local/${MINIO_BUCKET:-autobrain-assets} || true &&
-      mc anonymous set download local/${MINIO_BUCKET:-autobrain-assets} || true;
-      "
-
   backend:
     image: cannonfodder151/autobrain-backend:hosted
     restart: unless-stopped
@@ -84,9 +76,7 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET:-autobrain-assets}
       MINIO_PUBLIC_ENDPOINT: ${APP_BASE_URL:-https://hosted.autobrainservice.app}
       AI_LOCAL_BASE_URL: http://ai:8001
-      AI_ROUTER_URL: ${AI_ROUTER_URL:-http://your-9router-instance:port/v1}
-      AI_ROUTER_API_KEY: ${AI_ROUTER_API_KEY:-}
-      AI_ROUTER_MODEL: ${AI_ROUTER_MODEL:-General-Use}
+      <<: *ai-env
       AI_ROUTER_TIMEOUT_SECONDS: 120
       REGO_LOOKUP_URL: ${REGO_LOOKUP_URL:-}
       REGO_LOOKUP_API_KEY: ${REGO_LOOKUP_API_KEY:-}
@@ -125,41 +115,11 @@ services:
     expose:
       - "8000"
 
-  worker:
-    image: cannonfodder151/autobrain-worker:hosted
-    restart: unless-stopped
-    environment:
-      ENVIRONMENT: production
-      PYTHONPATH: /app
-      POSTGRES_HOST: postgres
-      REDIS_URL: redis://redis:6379/0
-      CELERY_BROKER_URL: redis://redis:6379/1
-      CELERY_RESULT_BACKEND: redis://redis:6379/2
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-autobrain}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-autobrain}
-      MINIO_BUCKET: ${MINIO_BUCKET:-autobrain-assets}
-      AI_LOCAL_BASE_URL: http://ai:8001
-      AI_ROUTER_URL: ${AI_ROUTER_URL:-http://your-9router-instance:port/v1}
-      AI_ROUTER_API_KEY: ${AI_ROUTER_API_KEY:-}
-      AI_ROUTER_MODEL: ${AI_ROUTER_MODEL:-General-Use}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-    # Embedded beat scheduler (--beat) replaces the separate beat container.
-    command: ["celery", "-A", "app.workers.celery_app:celery_app", "worker", "-l", "info", "--concurrency=2", "--beat"]
-
   ai:
     image: cannonfodder151/autobrain-ai:hosted
     restart: unless-stopped
     environment:
-      AI_ROUTER_URL: ${AI_ROUTER_URL:-http://your-9router-instance:port/v1}
-      AI_ROUTER_API_KEY: ${AI_ROUTER_API_KEY:-}
-      AI_ROUTER_MODEL: ${AI_ROUTER_MODEL:-General-Use}
+      <<: *ai-env
     expose:
       - "8001"
 

@@ -1,6 +1,7 @@
 """MinIO (S3-compatible) storage helpers."""
 
 import asyncio
+import json
 from io import BytesIO
 from typing import BinaryIO
 
@@ -76,9 +77,26 @@ def detect_mime(filename: str | None, content_type: str | None, data: bytes) -> 
 
 def _ensure_bucket_sync() -> None:
     client = get_minio()
-    if not client.bucket_exists(settings.MINIO_BUCKET):
-        client.make_bucket(settings.MINIO_BUCKET)
-        logger.info("created_minio_bucket", bucket=settings.MINIO_BUCKET)
+    bucket = settings.MINIO_BUCKET
+    if not client.bucket_exists(bucket):
+        client.make_bucket(bucket)
+        logger.info("created_minio_bucket", bucket=bucket)
+    # Public read policy — replaces the old minio-init container's
+    # `mc anonymous set download` so upload URLs work without a one-shot container.
+    policy = json.dumps(
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {"AWS": ["*"]},
+                    "Action": ["s3:GetObject"],
+                    "Resource": [f"arn:aws:s3:::{bucket}/*"],
+                }
+            ],
+        }
+    )
+    client.set_bucket_policy(bucket, policy)
 
 
 async def upload_object(key: str, data: bytes, content_type: str) -> str:

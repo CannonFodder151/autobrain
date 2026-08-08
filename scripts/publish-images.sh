@@ -21,11 +21,8 @@ fi
 
 echo "==> Building images as $USER/autobrain-*:$TAG"
 
-echo "==> backend"
+echo "==> backend (includes Celery worker + beat, consolidated P1-1)"
 docker build -f docker/backend/Dockerfile -t "$USER/autobrain-backend:$TAG" ./backend
-
-echo "==> worker"
-docker build -f docker/worker/Dockerfile -t "$USER/autobrain-worker:$TAG" .
 
 echo "==> ai"
 docker build -f docker/ai/Dockerfile -t "$USER/autobrain-ai:$TAG" ./ai
@@ -38,7 +35,6 @@ docker build -f docker/frontend/Dockerfile \
 
 echo "==> Pushing"
 docker push "$USER/autobrain-backend:$TAG"
-docker push "$USER/autobrain-worker:$TAG"
 docker push "$USER/autobrain-ai:$TAG"
 docker push "$USER/autobrain-frontend:$TAG"
 
