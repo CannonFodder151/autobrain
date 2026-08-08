@@ -16,6 +16,7 @@ from app.api.v1 import (
     obd,
     parts,
     receipts,
+    search,
     services,
     valuation,
     vehicles,
@@ -39,3 +40,4 @@ api_router.include_router(parts.router)
 api_router.include_router(valuation.router)
 api_router.include_router(analytics.router)
 api_router.include_router(notifications.router)
+api_router.include_router(search.router)

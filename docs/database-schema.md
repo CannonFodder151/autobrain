@@ -1,6 +1,21 @@
 # AutoBrain Database Schema
 
-Managed by SQLAlchemy models (`backend/app/models/`) and Alembic migrations (`backend/alembic/`). Head revision `f7a8b9c0d1e2`.
+Managed by SQLAlchemy models (`backend/app/models/`) and Alembic migrations (`backend/alembic/`). Head revision `g7h8i9j0k1l2`.
+
+## Vector search (pgvector)
+
+PostgreSQL runs the `pgvector/pgvector:pg16` image (pgvector extension pre-installed).
+Embeddings are generated via 9Router's `/v1/embeddings` endpoint (model: `text-embedding-3-small`, 1536-dim).
+The following tables carry an `embedding vector(1536)` column with `ivfflat` cosine-similarity indexes:
+
+- **diagnostics** — symptoms + AI response summary
+- **service_records** — description + notes + steps
+- **modifications** — name + notes + category
+- **receipts** — vendor + extracted line-item names
+
+Search is hybrid: keyword ILIKE runs always; vector cosine similarity layers on
+top when the embedding router is reachable. Both paths return ranked results via
+`GET /api/v1/search?q=...&entity_types=...`.
 
 ## users
 
@@ -34,13 +49,13 @@ Adding/editing a fill-up bumps the vehicle odometer unless a **newer** logbook t
 
 ## diagnostics
 
-id, vehicle_id (FK), symptoms, ai_response (JSON), summary, severity, estimated_cost, parts_needed (JSON), added_to_service, linked_service_id (FK), status (open/resolved), resolved_at, created_at.
+id, vehicle_id (FK), symptoms, ai_response (JSON), summary, severity, estimated_cost, parts_needed (JSON), added_to_service, linked_service_id (FK), status (open/resolved), resolved_at, created_at, embedding vector(1536).
 
 Auto-resolves to `resolved` when the linked scheduled service is completed (green tick).
 
 ## modifications
 
-id, vehicle_id (FK), name, category, brand, cost, install_date, odometer_km, notes, photo_keys (JSON), ai_impact (JSON), created_at.
+id, vehicle_id (FK), name, category, brand, cost, install_date, odometer_km, notes, photo_keys (JSON), ai_impact (JSON), created_at, embedding vector(1536).
 
 ## parts
 
@@ -52,7 +67,7 @@ id, part_id (FK), delta, reason, service_id (FK), created_at.
 
 ## receipts
 
-id, vehicle_id (FK), file_key (MinIO), original_name, content_type, ocr_status (pending/processing/done/failed), extracted (JSON), vendor, total, tax, currency, invoice_date, created_at.
+id, vehicle_id (FK), file_key (MinIO), original_name, content_type, ocr_status (pending/processing/done/failed), extracted (JSON), vendor, total, tax, currency, invoice_date, created_at, embedding vector(1536).
 
 ## extracted_items
 

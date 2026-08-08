@@ -30,7 +30,7 @@ x-db-env: &db-env
 services:
   # ── Datastores ──────────────────────────────────────────────
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-autobrain}
