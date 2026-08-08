@@ -20,6 +20,7 @@ below are mirrors kept in-repo for offline reading and PR review.
 | [monitoring.md](monitoring.md) | Logging and monitoring |
 | [infrastructure-diagrams.md](infrastructure-diagrams.md) | Network / container diagrams |
 | [container-architecture.md](container-architecture.md) | Container image layout, healthchecks, upgrade path |
+| [mobile-release.md](mobile-release.md) | Mobile `.aab` release runbook + Discord change-notes delivery |
 
 **Rule:** when behaviour changes, update the matching Outline document and the
 mirror here in the same change.
