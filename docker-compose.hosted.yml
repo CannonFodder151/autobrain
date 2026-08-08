@@ -150,29 +150,8 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-    command: ["celery", "-A", "app.workers.celery_app:celery_app", "worker", "-l", "info", "--concurrency=2"]
-
-  beat:
-    image: cannonfodder151/autobrain-worker:hosted
-    restart: unless-stopped
-    environment:
-      ENVIRONMENT: production
-      PYTHONPATH: /app
-      POSTGRES_HOST: postgres
-      REDIS_URL: redis://redis:6379/0
-      CELERY_BROKER_URL: redis://redis:6379/1
-      CELERY_RESULT_BACKEND: redis://redis:6379/2
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-autobrain}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-autobrain}
-      MINIO_BUCKET: ${MINIO_BUCKET:-autobrain-assets}
-      AI_LOCAL_BASE_URL: http://ai:8001
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    command: ["celery", "-A", "app.workers.celery_app:celery_app", "beat", "-l", "info"]
+    # Embedded beat scheduler (--beat) replaces the separate beat container.
+    command: ["celery", "-A", "app.workers.celery_app:celery_app", "worker", "-l", "info", "--concurrency=2", "--beat"]
 
   ai:
     image: cannonfodder151/autobrain-ai:hosted
