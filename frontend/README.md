@@ -1,6 +1,10 @@
 # AutoBrain Frontend (Flutter)
 
-Offline-first mobile app for iOS and Android.
+> **Split:** the iOS/Android app now lives in the separate **private** repo
+> [`CannonFodder151/autobrain-mobile`](https://github.com/CannonFodder151/autobrain-mobile).
+> This `frontend/` is the **Flutter web** build (produced by the frontend Docker
+> image). The two share a common Flutter lineage but version independently
+> (`scripts/bump-version.sh --mobile`).
 
 ## Structure
 
