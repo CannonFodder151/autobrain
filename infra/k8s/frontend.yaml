@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: autobrain-frontend
+  namespace: autobrain
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: autobrain
+      component: frontend
+  template:
+    metadata:
+      labels:
+        app: autobrain
+        component: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: autobrain-frontend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 30
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: autobrain-frontend
+  namespace: autobrain
+spec:
+  selector:
+    app: autobrain
+    component: frontend
+  ports:
+    - port: 80
+      targetPort: 80

@@ -1,0 +1,51 @@
+part of models;
+
+class LogEntry {
+  final String id;
+  final String? startedAt, endedAt;
+  final int? startOdometerKm, endOdometerKm;
+  final double? distanceKm;
+  final String purpose; // work/private
+  final String? reason;
+  final String? startLocation, endLocation;
+  final double? startLat, startLng, endLat, endLng;
+  final String status; // in_progress/completed
+
+  const LogEntry({
+    required this.id,
+    this.startedAt,
+    this.endedAt,
+    this.startOdometerKm,
+    this.endOdometerKm,
+    this.distanceKm,
+    this.purpose = 'private',
+    this.reason,
+    this.startLocation,
+    this.endLocation,
+    this.startLat,
+    this.startLng,
+    this.endLat,
+    this.endLng,
+    this.status = 'in_progress',
+  });
+
+  bool get isComplete => status == 'completed';
+
+  factory LogEntry.fromJson(Map<String, dynamic> j) => LogEntry(
+        id: j['id'] as String,
+        startedAt: j['started_at'] as String?,
+        endedAt: j['ended_at'] as String?,
+        startOdometerKm: j['start_odometer_km'] as int?,
+        endOdometerKm: j['end_odometer_km'] as int?,
+        distanceKm: (j['distance_km'] as num?)?.toDouble(),
+        purpose: j['purpose'] as String? ?? 'private',
+        reason: j['reason'] as String?,
+        startLocation: j['start_location'] as String?,
+        endLocation: j['end_location'] as String?,
+        startLat: (j['start_lat'] as num?)?.toDouble(),
+        startLng: (j['start_lng'] as num?)?.toDouble(),
+        endLat: (j['end_lat'] as num?)?.toDouble(),
+        endLng: (j['end_lng'] as num?)?.toDouble(),
+        status: j['status'] as String? ?? 'in_progress',
+      );
+}
