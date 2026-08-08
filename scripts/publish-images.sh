@@ -22,10 +22,13 @@ fi
 echo "==> Building images as $USER/autobrain-*:$TAG"
 
 echo "==> backend"
-docker build -f docker/backend/Dockerfile -t "$USER/autobrain-backend:$TAG" ./backend
+docker build -f docker/backend/Dockerfile -t "$USER/autobrain-backend:$TAG" .
 
 echo "==> worker"
-docker build -f docker/worker/Dockerfile -t "$USER/autobrain-worker:$TAG" .
+docker build \
+  --build-arg BASE_IMAGE="$USER/autobrain-backend:$TAG" \
+  -f docker/worker/Dockerfile \
+  -t "$USER/autobrain-worker:$TAG" .
 
 echo "==> ai"
 docker build -f docker/ai/Dockerfile -t "$USER/autobrain-ai:$TAG" ./ai

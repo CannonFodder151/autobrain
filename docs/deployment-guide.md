@@ -24,6 +24,13 @@ Services:
 - AI gateway: http://localhost:8001/docs
 - MinIO console: http://localhost:9001
 
+## Deploy (hosted)
+
+```bash
+./scripts/publish-images.sh hosted
+# Then update Portainer stack on endpoint 5 (AutoBrain-Hosted) to pull new images.
+```
+
 ## Deploy (production)
 
 ```bash

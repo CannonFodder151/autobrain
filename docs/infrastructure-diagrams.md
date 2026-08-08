@@ -2,44 +2,59 @@
 
 ## Network topology (production)
 
+```mermaid
+graph TD
+    Net[Internet] -->|:443 HTTPS| Nginx[nginx :80]
+    Nginx -->|/api /ws| Backend[backend :8000]
+    Nginx -->|/ai| AI[ai :8001]
+    Nginx -->|/| Frontend[frontend :80]
+    Backend --> Postgres[(PostgreSQL :5432)]
+    Backend --> Redis[(Redis :6379)]
+    Backend --> MinIO[(MinIO :9000)]
+    AI --> Router[9Router]
+    Redis --> Worker[Celery Worker]
+    Redis --> Beat[Celery Beat]
 ```
-                 Internet
-                    │ :80 (HTTPS via LB/TLS)
-                    ▼
-              ┌───────────┐
-              │   nginx   │
-              └─┬──────┬──┘
-                │      │
-        ┌───────┘      └───────┐
-        ▼                      ▼
-   /api /ws                /ai
-   backend:8000          ai:8001
-        │
-   ┌────┼────────────┐
-   ▼    ▼            ▼
-postgres redis     minio
- (5432)  (6379)     (9000)
-        │ (broker)
-        ▼
-   celery worker
-   celery beat
+
+## Hosted topology (Oracle Cloud)
+
+```mermaid
+graph TD
+    CF[Cloudflare DNS] -->|autobrainservice.app| Proxy[Reverse Proxy]
+    Proxy -->|:8086| Frontend[frontend :80]
+    Proxy -->|/api| Backend[backend :8000]
+    Proxy -->|/ai| AI[ai :8001]
+    Backend --> PostgresH[(PostgreSQL)]
+    Backend --> RedisH[(Redis)]
+    Backend --> MinIOH[(MinIO)]
+    Backend --> WorkerH[Celery Worker]
+    AI --> Router[9Router :20128]
+    WorkerH --> RedisH
+    WorkerH --> AI
 ```
 
 ## Container image graph
 
-```
-docker/backend/Dockerfile ──► autobrain-backend   (API + migrations)
-docker/ai/Dockerfile      ──► autobrain-ai        (inference gateway)
-docker/worker/Dockerfile  ──► autobrain-worker    (celery worker + beat)
-docker/frontend/Dockerfile──► autobrain-frontend  (Flutter web → nginx)
+```mermaid
+graph LR
+    BF[docker/backend/Dockerfile] --> AB[autobrain-backend]
+    AF[docker/ai/Dockerfile] --> AAI[autobrain-ai]
+    WF[docker/worker/Dockerfile] --> AW[autobrain-worker]
+    FF[docker/frontend/Dockerfile] --> AFE[autobrain-frontend]
+    AB -->|BASE_IMAGE| AW
 ```
 
 ## K8s deployment graph
 
-```
-ingress ──► autobrain-backend:8000 (2 replicas)
-         ──► autobrain-ai:8001
-         ──► autobrain-frontend:80
-autobrain-backend ──► autobrain-postgres / autobrain-redis / autobrain-minio
-autobrain-worker, autobrain-beat ──► autobrain-redis, autobrain-postgres
+```mermaid
+graph LR
+    Ingress[ingress] --> B2[autobrain-backend 2x]
+    Ingress --> AI2[autobrain-ai]
+    Ingress --> FE2[autobrain-frontend]
+    B2 --> PG[(autobrain-postgres)]
+    B2 --> RD[(autobrain-redis)]
+    B2 --> MN[(autobrain-minio)]
+    WorkerK[autobrain-worker] --> RD
+    WorkerK --> PG
+    BeatK[autobrain-beat] --> RD
 ```

@@ -1,10 +1,14 @@
 # AutoBrain local development stack.
 # Usage: cp .env.example .env && docker compose up --build
+# Runs: postgres, redis, minio, backend (reload), worker, ai (reload), frontend.
+# All services bind to localhost — connects to 9Router at AI_ROUTER_URL.
 
+# Backend service factory — reused by dev and test overrides.
 x-backend-base: &backend-base
   build:
-    context: ./backend
-    dockerfile: ../docker/backend/Dockerfile
+    context: .
+    dockerfile: docker/backend/Dockerfile
+  image: autobrain-backend:latest
   restart: unless-stopped
   env_file: .env
   environment:
@@ -20,7 +24,15 @@ x-backend-base: &backend-base
     minio:
       condition: service_healthy
 
+x-env-shared: &env-shared
+  PYTHONPATH: /app
+  POSTGRES_HOST: postgres
+  REDIS_URL: redis://redis:6379/0
+  MINIO_ENDPOINT: minio:9000
+  AI_ROUTER_URL: ${AI_ROUTER_URL:-http://your-9router-instance:port}
+
 services:
+  # ── Datastores ──────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -69,19 +81,7 @@ services:
       timeout: 5s
       retries: 10
 
-  minio-init:
-    image: minio/mc:latest
-    restart: "no"
-    depends_on:
-      minio:
-        condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set local http://minio:9000 ${MINIO_ACCESS_KEY:-autobrain} ${MINIO_SECRET_KEY:-autobrain} &&
-      mc mb -p local/${MINIO_BUCKET:-autobrain-assets} || true &&
-      mc anonymous set download local/${MINIO_BUCKET:-autobrain-assets} || true;
-      "
-
+  # ── App services ───────────────────────────────────────────
   backend:
     <<: *backend-base
     ports:
@@ -94,45 +94,22 @@ services:
     build:
       context: .
       dockerfile: docker/worker/Dockerfile
+      args:
+        BASE_IMAGE: autobrain-backend:latest
     image: autobrain-worker
-    restart: unless-stopped
-    env_file: .env
-    environment:
-      PYTHONPATH: /app
-      POSTGRES_HOST: postgres
-      REDIS_URL: redis://redis:6379/0
-      MINIO_ENDPOINT: minio:9000
-      AI_ROUTER_URL: ${AI_ROUTER_URL:-http://your-9router-instance:port}
     depends_on:
+      backend:
+        condition: service_started
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
       minio:
         condition: service_healthy
-    command: ["celery", "-A", "app.workers.celery_app:celery_app", "worker", "-l", "info"]
-    volumes:
-      - ./backend:/app
-
-  beat:
-    build:
-      context: .
-      dockerfile: docker/worker/Dockerfile
-    image: autobrain-worker
     restart: unless-stopped
     env_file: .env
     environment:
-      PYTHONPATH: /app
-      POSTGRES_HOST: postgres
-      REDIS_URL: redis://redis:6379/0
-      MINIO_ENDPOINT: minio:9000
-      AI_ROUTER_URL: ${AI_ROUTER_URL:-http://your-9router-instance:port}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    command: ["celery", "-A", "app.workers.celery_app:celery_app", "beat", "-l", "info"]
+      <<: *env-shared
     volumes:
       - ./backend:/app
 
@@ -163,8 +140,8 @@ services:
     depends_on:
       - backend
 
+# ── Persistent volumes ──────────────────────────────────────
 volumes:
   postgres-data:
   redis-data:
   minio-data:
-

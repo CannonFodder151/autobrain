@@ -19,6 +19,16 @@ impact analysis.
 | **AI gateway (FastAPI)** | Hosts 5 inference modules; routes to 9Router via `AI_ROUTER_URL`. |
 | **9Router** | External LLM router that powers AI modules when configured. |
 
+## Deployment topologies
+
+| Topology | Compose file | Notes |
+|----------|-------------|-------|
+| Dev | `docker-compose.yml` | Source mounts, reload, all ports exposed |
+| Prod | `docker-compose.prod.yml` | Nginx frontend, no exposed ports except :80 |
+| Hosted | `docker-compose.hosted.yml` | Prebuilt Docker Hub images, Stripe, self-signup, Oracle Cloud VM |
+| Kubernetes | `infra/k8s/` | Ingress, 2 replicas, secrets |
+| Bare metal | `infra/systemd/` | Container-backed systemd units |
+
 ## Data flow (AI)
 
 1. Backend receives a request (e.g. symptoms for diagnosis).

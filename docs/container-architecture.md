@@ -11,6 +11,10 @@ worker, beat, ai (reload), frontend. Source volumes for hot reload.
 mounts, nginx reverse proxy published on :80, backend/ai only exposed
 internally.
 
+## Compose (hosted)
+
+`docker-compose.hosted.yml`: prebuilt tagged images (`cannonfodder151/autobrain-*:hosted`), frontend on :8086, Stripe billing env vars, self-signup + MFA enforced. Deployed via Portainer on Oracle Cloud VM (152.69.188.133).
+
 ## Image layout
 
 Each service runs as non-root (`autobrain` uid 1000), has a healthcheck, and

@@ -24,6 +24,7 @@ uptime monitor:
 | OCR failures | `ocr_status=failed` in receipts |
 | Queue depth | Celery `inspect active`, Redis `llen` on broker queues |
 | Disk | `df -h` (backups + MinIO grow fastest) |
+| AI fallback rate | Log grep for `router_unreachable_using_fallback` (indicates router down; system works via fallbacks) |
 
 ## Alerting
 

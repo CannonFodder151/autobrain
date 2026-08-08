@@ -6,13 +6,9 @@
 2. **MinIO bucket** — receipts, photos, uploads.
 3. **`.env`** — environment configuration (store separately, encrypted).
 
-## On-host backup
+## Admin JSON backup (instant, in-app)
 
-`./scripts/backup.sh <output-dir>`:
-
-- `pg_dump` of the `autobrain` database → SQL file.
-- `mc mirror` of the MinIO bucket.
-- Packages the SQL dump into a timestamped tarball.
+`GET /admin/backup` (admin-authenticated) downloads a full JSON snapshot of the database. `POST /admin/restore` wipes and restores from a backup file. The daily Celery beat task also writes a JSON backup to MinIO (`backups/`) with retention of `BACKUP_RETENTION_DAYS` (default 14).
 
 Recommended cron (on the server):
 

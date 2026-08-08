@@ -19,6 +19,7 @@ below are mirrors kept in-repo for offline reading and PR review.
 | [backup-strategy.md](backup-strategy.md) | Data backup & restore |
 | [monitoring.md](monitoring.md) | Logging and monitoring |
 | [infrastructure-diagrams.md](infrastructure-diagrams.md) | Network / container diagrams |
+| [container-architecture.md](container-architecture.md) | Container image layout, healthchecks, upgrade path |
 
 **Rule:** when behaviour changes, update the matching Outline document and the
 mirror here in the same change.

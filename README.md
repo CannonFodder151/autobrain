@@ -58,7 +58,7 @@ curl http://localhost:8001/health        # AI gateway
 
 ## Services
 
-`docker-compose.prod.yml` runs: **postgres, redis, minio, backend, worker, beat, ai, nginx**. Nginx serves the web app at `/` and proxies `/api/*`, `/ws/*`, `/ai/*` to the backend/AI gateway — same-origin, so no CORS config is needed.
+`docker-compose.prod.yml` runs: **postgres, redis, minio, backend, worker (+embedded beat), ai, frontend**. The frontend nginx container serves the Flutter web app at `/` and proxies `/api/*`, `/ws/*`, `/ai/*` to backend/AI — same-origin, no CORS needed.
 
 `docker-compose.hosted.yml` runs the same stack plus Stripe billing and self-service signup, with prebuilt Docker Hub images (`cannonfodder151/autobrain-*:hosted`).
 
@@ -75,7 +75,7 @@ Full docs are maintained in the Outline wiki (AutoBrain collection) and mirrored
 /infra      Kubernetes manifests, systemd units, nginx config
 /docker     Build contexts: backend, ai, worker, frontend
 /scripts    deploy, backup, setup-server, publish-images, bump-version
-/docs       Markdown mirrors of the wiki
+/docs       Markdown mirrors of the Outline wiki
 ```
 
 ## Mobile app split

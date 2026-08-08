@@ -4,8 +4,10 @@
 
 - API: semantic versioning in the URL (`/api/v1`). New breaking versions add
   `/api/v2` while v1 stays supported during a deprecation window.
-- App: `major.minor.patch+build` from `pubspec.yaml`.
-- Docker images: tagged `latest` per env plus immutable `prod` tags on release.
+- Backend app: `APP_VERSION` in `.env` (shown in admin settings, checked against GitHub latest release).
+- Web frontend: `pubspec.yaml` version — kept in sync with `APP_VERSION` via `scripts/bump-version.sh`.
+- Mobile app: separate `pubspec.yaml` in `autobrain-mobile` repo (independent versioning).
+- Docker images: tagged `latest` per env plus immutable `prod`/`hosted` tags on release.
 
 ## Releases
 

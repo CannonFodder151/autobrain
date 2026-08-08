@@ -39,12 +39,17 @@
 - Prod runs behind nginx; only :80 exposed. Internal services are not
   published.
 - CORS is locked to configured origins in production (empty = same-origin).
+- Hosted instance enforces MFA, rate-limits auth endpoints (`LOGIN_MAX_ATTEMPTS=5`, `LOGIN_WINDOW_SECONDS=10800`), and runs behind a Cloudflare-reverse-proxied domain.
 
 ## Data protection
 
 - Receipts/photos stored in MinIO; keys are random per upload.
 - Consider S3 server-side encryption in production.
 - Backups contain PII — encrypt backup artifacts at rest.
+
+## Vulnerability reporting
+
+See [SECURITY.md](../../SECURITY.md) for the reporting policy.
 
 ## Hardening checklist
 

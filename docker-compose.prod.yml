@@ -1,14 +1,44 @@
 # AutoBrain production stack.
-# Builds from source and tags with ${DOCKERHUB_USERNAME} so images can be
-# pushed to Docker Hub (scripts/publish-images.sh) or run locally.
+# Builds from source, tags images as ${DOCKERHUB_USERNAME}/autobrain-*.
+# Runs: postgres, redis, minio, minio-init, backend, worker, beat, ai, frontend.
+# Nginx frontend container serves Flutter web + proxies /api, /ws, /ai.
+# No ports exposed except frontend :80. All internal services exposed only via Compose network.
 #
 # First time:
-#   cp .env.example .env           # fill in values
-#   ./scripts/deploy.sh user@host  # or: docker compose -f docker-compose.prod.yml up -d --build
+#   cp .env.example .env           # fill in values, especially SECRET_KEY
+#   docker compose -f docker-compose.prod.yml up -d --build
 # Updates:
 #   ./scripts/deploy.sh user@host
 
+x-core-env: &core-env
+  ENVIRONMENT: production
+  PYTHONPATH: /app
+  REDIS_URL: redis://redis:6379/0
+  MINIO_ENDPOINT: minio:9000
+  AI_LOCAL_BASE_URL: http://ai:8001
+
+x-backend-base: &backend-base
+  build:
+    context: .
+    dockerfile: docker/backend/Dockerfile
+  image: ${DOCKERHUB_USERNAME:-autobrain}/autobrain-backend:${IMAGE_TAG:-latest}
+  restart: unless-stopped
+  env_file: .env
+  environment:
+    POSTGRES_HOST: postgres
+    <<: *core-env
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    minio:
+      condition: service_healthy
+  expose:
+    - "8000"
+
 services:
+  # ── Datastores ──────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -50,56 +80,21 @@ services:
       timeout: 5s
       retries: 10
 
-  minio-init:
-    image: minio/mc:latest
-    restart: "no"
-    depends_on:
-      minio:
-        condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set local http://minio:9000 ${MINIO_ACCESS_KEY} ${MINIO_SECRET_KEY} &&
-      mc mb -p local/${MINIO_BUCKET:-autobrain-assets} || true &&
-      mc anonymous set download local/${MINIO_BUCKET:-autobrain-assets} || true;
-      "
-
+  # ── App services ───────────────────────────────────────────
   backend:
-    build:
-      context: ./backend
-      dockerfile: ../docker/backend/Dockerfile
-    image: ${DOCKERHUB_USERNAME:-autobrain}/autobrain-backend:${IMAGE_TAG:-latest}
-    restart: unless-stopped
-    env_file: .env
-    environment:
-      ENVIRONMENT: production
-      POSTGRES_HOST: postgres
-      REDIS_URL: redis://redis:6379/0
-      MINIO_ENDPOINT: minio:9000
-      AI_LOCAL_BASE_URL: http://ai:8001
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-    expose:
-      - "8000"
+    <<: *backend-base
 
   worker:
     build:
       context: .
       dockerfile: docker/worker/Dockerfile
+      args:
+        BASE_IMAGE: ${DOCKERHUB_USERNAME:-autobrain}/autobrain-backend:${IMAGE_TAG:-latest}
     image: ${DOCKERHUB_USERNAME:-autobrain}/autobrain-worker:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file: .env
     environment:
-      ENVIRONMENT: production
-      PYTHONPATH: /app
-      POSTGRES_HOST: postgres
-      REDIS_URL: redis://redis:6379/0
-      MINIO_ENDPOINT: minio:9000
-      AI_LOCAL_BASE_URL: http://ai:8001
+      <<: *core-env
     depends_on:
       postgres:
         condition: service_healthy
@@ -107,28 +102,6 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-    command: ["celery", "-A", "app.workers.celery_app:celery_app", "worker", "-l", "info", "--concurrency=2"]
-
-  beat:
-    build:
-      context: .
-      dockerfile: docker/worker/Dockerfile
-    image: ${DOCKERHUB_USERNAME:-autobrain}/autobrain-worker:${IMAGE_TAG:-latest}
-    restart: unless-stopped
-    env_file: .env
-    environment:
-      ENVIRONMENT: production
-      PYTHONPATH: /app
-      POSTGRES_HOST: postgres
-      REDIS_URL: redis://redis:6379/0
-      MINIO_ENDPOINT: minio:9000
-      AI_LOCAL_BASE_URL: http://ai:8001
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    command: ["celery", "-A", "app.workers.celery_app:celery_app", "beat", "-l", "info"]
 
   ai:
     build:
@@ -157,6 +130,7 @@ services:
       - backend
       - ai
 
+# ── Persistent volumes ──────────────────────────────────────
 volumes:
   postgres-data:
   redis-data:
