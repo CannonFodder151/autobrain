@@ -9,7 +9,7 @@ import base64
 import io
 
 from app.fallbacks import extract_receipt_fallback
-from app.router_client import route
+from app.router_client import enhance
 
 _IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/tiff"}
 
@@ -32,12 +32,12 @@ async def run(payload: dict) -> dict:
     if not text and payload.get("content_base64") and content_type in _IMAGE_TYPES:
         text = _tesseract_text(payload["content_base64"])
 
-    # Router path gets only the extracted text — never raw image bytes.
+    baseline = extract_receipt_fallback(text, content_type)
+
+    # Router gets only the extracted text — never raw image bytes. It can only
+    # polish line-item classification; vendor/total/tax/items stay deterministic.
     router_payload = {
         k: v for k, v in payload.items() if k != "content_base64"
     }
     router_payload["text"] = text
-    result = await route("ocr", router_payload)
-    if result is not None and isinstance(result, dict):
-        return result
-    return extract_receipt_fallback(text, content_type)
+    return await enhance("ocr", router_payload, baseline)

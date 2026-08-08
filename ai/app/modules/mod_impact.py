@@ -2,15 +2,15 @@
 
 Input:  mod name, category, vehicle context, notes.
 Output: performance/value/reliability impact summary.
+
+Deterministic-first: the category lookup table produces the baseline and its
+scores are never overridden; 9Router only adds a narrative summary.
 """
 
 from app.fallbacks import mod_impact_fallback
-from app.router_client import route
+from app.router_client import enhance
 
 
 async def run(payload: dict) -> dict:
-    result = await route("mod-impact", payload)
-    if result is not None and isinstance(result, dict):
-        result.setdefault("model", "9router")
-        return result
-    return mod_impact_fallback(payload)
+    baseline = mod_impact_fallback(payload)
+    return await enhance("mod-impact", payload, baseline)

@@ -3,12 +3,15 @@
 Input:  vehicle attributes, service history, mods, condition, market data.
 Output: value range, factor breakdown, recommendations, trend.
 
+Deterministic-first: the depreciation-curve baseline is always returned and its
+value numbers are never overridden; 9Router only enriches market trend data.
+
 The output is validated and clamped so estimates stay sane and consistent:
 low <= estimated <= high, values bounded to a realistic AUD range.
 """
 
 from app.fallbacks import estimate_value_fallback
-from app.router_client import route
+from app.router_client import enhance
 
 _MIN_VAL, _MAX_VAL = 500.0, 5_000_000.0
 
@@ -50,10 +53,9 @@ def _validate(result: dict) -> dict:
 
 
 async def run(payload: dict) -> dict:
-    result = await route("resale", payload)
-    if result is not None and isinstance(result, dict):
-        try:
-            return _validate(result)
-        except (ValueError, KeyError, TypeError):
-            pass
-    return estimate_value_fallback(payload)
+    baseline = estimate_value_fallback(payload)
+    merged = await enhance("resale", payload, baseline)
+    try:
+        return _validate(merged)
+    except (ValueError, KeyError, TypeError):
+        return baseline

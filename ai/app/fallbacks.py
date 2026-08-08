@@ -117,6 +117,7 @@ def diagnose_fallback(symptoms: str, vehicle: dict | None = None, obd_codes: lis
     return {
         "summary": items[0]["cause"] if items else "No fault pattern identified.",
         "severity": max((it["severity"] for it in items), key=lambda s: _sev_rank(s)),
+        "confidence": max(it["confidence"] for it in items),
         "estimated_cost": est if est else None,
         "cost_range": [round(est * 0.8, 0), round(est * 1.4, 0)] if est else None,
         "items": items,
@@ -244,6 +245,7 @@ def predict_service_fallback(payload: dict) -> dict:
         "next_due_date": due_date.isoformat(),
         "confidence": confidence,
         "reason": reason,
+        "model": "rule-based-fallback",
     }
 
 
@@ -311,11 +313,16 @@ def estimate_value_fallback(payload: dict) -> dict:
     if mods:
         recommendations.insert(0, "Highlight documented, reversible modifications in the listing.")
 
+    confidence = 0.85 if payload.get("service_count") or payload.get("total_service_cost") else (
+        0.7 if make in _BASE_VALUES else 0.5
+    )
+
     return {
         "estimated_value": round(value, 0),
         "low": round(low, 0),
         "high": round(high, 0),
         "currency": "AUD",
+        "confidence": confidence,
         "factors": {
             "base_value": base, "age_years": age, "odometer": odo,
             "condition": condition, "service_records": payload.get("service_count", 0),
@@ -355,6 +362,7 @@ _MOD_IMPACT: dict[str, tuple[str, float, str]] = {
 
 def mod_impact_fallback(payload: dict) -> dict:
     cat = (payload.get("category") or "other").lower()
+    known = cat in _MOD_IMPACT
     summary, score, reliability = _MOD_IMPACT.get(cat, _MOD_IMPACT["other"])
     name = payload.get("name") or "This modification"
     value_impact = _mod_value_impact({"category": cat, "cost": payload.get("cost")})
@@ -363,6 +371,7 @@ def mod_impact_fallback(payload: dict) -> dict:
         "performance_score": score,
         "value_impact": value_impact,
         "reliability_impact": reliability,
+        "confidence": 0.9 if known else 0.5,
         "model": "rule-based-fallback",
     }
 
@@ -413,12 +422,15 @@ def extract_receipt_fallback(text: str, content_type: str = "") -> dict:
     if "oil" in text.lower() and "filter" in text.lower():
         next_service = "Oil and filter service"
 
+    confidence = round(min(0.4 + 0.12 * len(items), 0.95), 2) if items else 0.4
+
     return {
         "vendor": vendor,
         "invoice_date": _extract_date(text),
         "total": total,
         "tax": tax,
         "currency": "AUD",
+        "confidence": confidence,
         "items": items,
         "next_recommended_service": next_service,
         "warranty_notes": "Parts warranty: 12 months on new components" if any(

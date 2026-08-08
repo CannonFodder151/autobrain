@@ -69,6 +69,25 @@ async def test_module_router_disabled_uses_fallback() -> None:
     assert out["model"] == "rule-based-fallback"
 
 
+@pytest.mark.asyncio
+async def test_module_deterministic_model_label() -> None:
+    # Deterministic-first: every module returns a rule-based baseline (with the
+    # router disabled), never an AI-only response.
+    os.environ["AI_ROUTER_URL"] = "http://your-9router-instance:port"
+    cases = [
+        ("diagnostics", {"symptoms": "squealing brakes"}),
+        ("service-prediction", {"make": "Toyota", "odometer_km": 40000, "last_service_km": 35000}),
+        ("ocr", {"content": "SuperCheap Auto\nOil 35.00\nFilter 25.00\nTotal 60.00"}),
+        ("fuel-ocr", {"content": "Shell\n45.20L @ 2.09\nTotal 94.47"}),
+        ("odometer", {"content": "odometer 123456 km"}),
+        ("resale", {"vehicle": {"make": "Toyota", "model": "Camry", "year": 2021}}),
+        ("mod-impact", {"name": "Cold air intake", "category": "performance"}),
+    ]
+    for name, payload in cases:
+        out = await modules.MODULES[name](payload)
+        assert out["model"].startswith("rule-based"), name
+
+
 def test_fuel_receipt_fallback() -> None:
     from app.modules.fuel_ocr import _fuel_receipt_fallback
 

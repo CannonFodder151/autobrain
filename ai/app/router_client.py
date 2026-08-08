@@ -98,6 +98,16 @@ _SYSTEM_PROMPTS: dict[str, str] = {
 # stable resale estimates depend on this.
 _TEMPERATURES: dict[str, float] = {}
 
+# Keys the rule engines produce deterministically (measurements, identifiers,
+# currency). The router may enrich the baseline but never override these —
+# they are the ground truth and the whole point of deterministic-first.
+_AI_IMMUTABLE: dict[str, frozenset[str]] = {
+    "resale": frozenset({"estimated_value", "low", "high", "currency"}),
+    "mod-impact": frozenset({"performance_score", "value_impact", "reliability_impact"}),
+    "ocr": frozenset({"vendor", "invoice_date", "total", "tax", "currency", "items"}),
+    "fuel-ocr": frozenset({"vendor", "date", "litres", "price_per_litre", "total_cost", "currency"}),
+}
+
 
 def router_url() -> str:
     return os.getenv("AI_ROUTER_URL", "http://your-9router-instance:port/v1").rstrip("/")
@@ -166,3 +176,29 @@ async def route(module: str, payload: dict) -> dict | None:
     except Exception as exc:
         logger.warning("router_unreachable_using_fallback", module=module, error=str(exc))
         return None
+
+
+async def enhance(module: str, payload: dict, baseline: dict) -> dict:
+    """Deterministic baseline, optionally enriched by 9Router.
+
+    The rule engine runs first and its result is always returned. When the
+    router is reachable its response is shallow-merged into the baseline, never
+    overwriting deterministic-critical keys (see _AI_IMMUTABLE). model becomes
+    ``rule-based+ai`` when the router contributed fields, else the baseline is
+    returned untouched. The service stays fully functional with the router down.
+    """
+    result = await route(module, payload)
+    if not isinstance(result, dict):
+        return baseline
+
+    immutable = _AI_IMMUTABLE.get(module, frozenset())
+    merged = dict(baseline)
+    enriched = False
+    for key, value in result.items():
+        if key == "model" or key in immutable:
+            continue
+        merged[key] = value
+        enriched = True
+    if enriched:
+        merged["model"] = "rule-based+ai"
+    return merged

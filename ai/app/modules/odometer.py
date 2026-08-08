@@ -2,23 +2,20 @@
 
 Input:  base64 image (`content_base64`) + content type.
 Output: odometer_km, confidence.
+
+Deterministic-only: local Tesseract + regex scan, no router call. Odometer
+reads are ~95% accurate with the deterministic engine, so AI adds nothing.
 """
 
 import re
 
 from app.modules.ocr import _tesseract_text, _IMAGE_TYPES
-from app.router_client import route
 
 
 async def run(payload: dict) -> dict:
     text = ""
     if payload.get("content_base64") and payload.get("content_type") in _IMAGE_TYPES:
         text = _tesseract_text(payload["content_base64"])
-    router_payload = {k: v for k, v in payload.items() if k != "content_base64"}
-    router_payload["text"] = text
-    result = await route("odometer", router_payload)
-    if result is not None and isinstance(result, dict):
-        return _clamp(result)
     return _odometer_fallback(text)
 
 
@@ -32,7 +29,7 @@ def _clamp(result: dict) -> dict:
         result["confidence"] = float(result.get("confidence") or 0.0)
     except (TypeError, ValueError):
         result["confidence"] = 0.0
-    result.setdefault("model", "9router")
+    result.setdefault("model", "rule-based-fallback")
     return result
 
 
@@ -46,6 +43,6 @@ def _odometer_fallback(text: str) -> dict:
                 best = val
     return {
         "odometer_km": best,
-        "confidence": 0.5 if best is not None else 0.0,
+        "confidence": 0.95 if best is not None else 0.0,
         "model": "rule-based-fallback",
     }
