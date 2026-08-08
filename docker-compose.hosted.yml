@@ -118,25 +118,6 @@ services:
     expose:
       - "8000"
 
-  worker:
-    build:
-      context: .
-      dockerfile: docker/worker/Dockerfile
-      args:
-        BASE_IMAGE: cannonfodder151/autobrain-backend:hosted
-    image: cannonfodder151/autobrain-worker:hosted
-    restart: unless-stopped
-    environment:
-      <<: [*db-env, *core-env]
-      PYTHONPATH: /app
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-
   ai:
     image: cannonfodder151/autobrain-ai:hosted
     restart: unless-stopped

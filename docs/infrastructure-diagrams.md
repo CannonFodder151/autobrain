@@ -11,9 +11,8 @@ graph TD
     Backend --> Postgres[(PostgreSQL :5432)]
     Backend --> Redis[(Redis :6379)]
     Backend --> MinIO[(MinIO :9000)]
+    Backend -->|Celery worker + beat in-container| Redis
     AI --> Router[9Router]
-    Redis --> Worker[Celery Worker]
-    Redis --> Beat[Celery Beat]
 ```
 
 ## Hosted topology (Oracle Cloud)
@@ -27,10 +26,8 @@ graph TD
     Backend --> PostgresH[(PostgreSQL)]
     Backend --> RedisH[(Redis)]
     Backend --> MinIOH[(MinIO)]
-    Backend --> WorkerH[Celery Worker]
+    Backend -->|Celery worker + beat in-container| RedisH
     AI --> Router[9Router :20128]
-    WorkerH --> RedisH
-    WorkerH --> AI
 ```
 
 ## Container image graph
@@ -39,9 +36,7 @@ graph TD
 graph LR
     BF[docker/backend/Dockerfile] --> AB[autobrain-backend]
     AF[docker/ai/Dockerfile] --> AAI[autobrain-ai]
-    WF[docker/worker/Dockerfile] --> AW[autobrain-worker]
     FF[docker/frontend/Dockerfile] --> AFE[autobrain-frontend]
-    AB -->|BASE_IMAGE| AW
 ```
 
 ## K8s deployment graph

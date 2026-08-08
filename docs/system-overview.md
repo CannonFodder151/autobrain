@@ -15,7 +15,7 @@ impact analysis.
 | **PostgreSQL** | Primary datastore. |
 | **Redis** | Cache + Celery broker/result backend. |
 | **MinIO** | S3-compatible object storage for receipts and photos. |
-| **Celery worker + beat** | Async OCR processing, scheduled valuations, reorder suggestions. |
+| **Celery worker + beat** | Async OCR processing, scheduled valuations, reorder suggestions. Runs inside the backend container. |
 | **AI gateway (FastAPI)** | Hosts 5 inference modules; routes to 9Router via `AI_ROUTER_URL`. |
 | **9Router** | External LLM router that powers AI modules when configured. |
 

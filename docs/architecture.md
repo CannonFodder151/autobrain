@@ -20,8 +20,8 @@
      PostgreSQL   Redis      MinIO     │  9Router     │
      (primary)   (cache/     (S3)      └──────────────┘
                   broker)
-         ▲
-         └── Celery worker + beat
+          ▲
+          └── Celery worker + beat (in backend container)
 ```
 
 ## Async processing
@@ -41,12 +41,11 @@ graph TD
     Backend --> Postgres[(PostgreSQL)]
     Backend --> Redis[(Redis)]
     Backend --> MinIO[(MinIO S3)]
-    Backend --> Worker[Celery Worker]
+    Backend --> Worker[Celery worker + beat (in-container)]
     Worker --> AI
     Worker --> Postgres
     AI -->|AI_ROUTER_URL| Router[9Router]
     Worker --> Redis
-    Redis --> Beat[Celery Beat]
 ```
 
 ## Deployment topologies

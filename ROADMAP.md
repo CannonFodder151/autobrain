@@ -23,7 +23,7 @@
 
 - Phase 1 code review & improvement initiative
 - Mobile app split into `autobrain-mobile` repo
-- Reduce container count: consolidate beat into worker, merge AI gateway into backend image
+- Reduce container count: consolidate beat into worker, merge AI gateway into backend image, fold worker+beat into the backend container (9 → 6 containers)
 - Vectorise data for efficient storage
 - Make AI functions less AI-dependent (deterministic-first, AI fallback)
 

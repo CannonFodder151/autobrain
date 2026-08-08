@@ -3,7 +3,7 @@
 ## Logging
 
 - Backend + AI use **structlog** → JSON lines on stdout, captured by Docker.
-- Celery worker logs via Python logging to stdout.
+- Celery worker runs inside the backend container; logs via Python logging to stdout.
 - All containers have Docker healthchecks (see Dockerfiles / compose):
   - backend → `/health`
   - ai → `/health`

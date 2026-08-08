@@ -1,6 +1,6 @@
 # AutoBrain production stack.
 # Builds from source, tags images as ${DOCKERHUB_USERNAME}/autobrain-*.
-# Runs: postgres, redis, minio, minio-init, backend, worker, beat, ai, frontend.
+# Runs: postgres, redis, minio, backend (API + Celery worker+beat), ai, frontend.
 # Nginx frontend container serves Flutter web + proxies /api, /ws, /ai.
 # No ports exposed except frontend :80. All internal services exposed only via Compose network.
 #
@@ -83,25 +83,6 @@ services:
   # ── App services ───────────────────────────────────────────
   backend:
     <<: *backend-base
-
-  worker:
-    build:
-      context: .
-      dockerfile: docker/worker/Dockerfile
-      args:
-        BASE_IMAGE: ${DOCKERHUB_USERNAME:-autobrain}/autobrain-backend:${IMAGE_TAG:-latest}
-    image: ${DOCKERHUB_USERNAME:-autobrain}/autobrain-worker:${IMAGE_TAG:-latest}
-    restart: unless-stopped
-    env_file: .env
-    environment:
-      <<: *core-env
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
 
   ai:
     build:

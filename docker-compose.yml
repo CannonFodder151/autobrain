@@ -1,6 +1,6 @@
 # AutoBrain local development stack.
 # Usage: cp .env.example .env && docker compose up --build
-# Runs: postgres, redis, minio, backend (reload), worker, ai (reload), frontend.
+# Runs: postgres, redis, minio, backend (API + Celery worker+beat), ai (reload), frontend.
 # All services bind to localhost — connects to 9Router at AI_ROUTER_URL.
 
 # Backend service factory — reused by dev and test overrides.
@@ -23,13 +23,6 @@ x-backend-base: &backend-base
       condition: service_healthy
     minio:
       condition: service_healthy
-
-x-env-shared: &env-shared
-  PYTHONPATH: /app
-  POSTGRES_HOST: postgres
-  REDIS_URL: redis://redis:6379/0
-  MINIO_ENDPOINT: minio:9000
-  AI_ROUTER_URL: ${AI_ROUTER_URL:-http://your-9router-instance:port}
 
 services:
   # ── Datastores ──────────────────────────────────────────────
@@ -86,30 +79,7 @@ services:
     <<: *backend-base
     ports:
       - "8000:8000"
-    command: ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"]
-    volumes:
-      - ./backend:/app
-
-  worker:
-    build:
-      context: .
-      dockerfile: docker/worker/Dockerfile
-      args:
-        BASE_IMAGE: autobrain-backend:latest
-    image: autobrain-worker
-    depends_on:
-      backend:
-        condition: service_started
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-    restart: unless-stopped
-    env_file: .env
-    environment:
-      <<: *env-shared
+    command: ["sh", "-c", "alembic upgrade head && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"]
     volumes:
       - ./backend:/app
 

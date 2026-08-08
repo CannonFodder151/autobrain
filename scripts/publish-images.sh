@@ -24,12 +24,6 @@ echo "==> Building images as $USER/autobrain-*:$TAG"
 echo "==> backend"
 docker build -f docker/backend/Dockerfile -t "$USER/autobrain-backend:$TAG" .
 
-echo "==> worker"
-docker build \
-  --build-arg BASE_IMAGE="$USER/autobrain-backend:$TAG" \
-  -f docker/worker/Dockerfile \
-  -t "$USER/autobrain-worker:$TAG" .
-
 echo "==> ai"
 docker build -f docker/ai/Dockerfile -t "$USER/autobrain-ai:$TAG" ./ai
 
@@ -41,7 +35,6 @@ docker build -f docker/frontend/Dockerfile \
 
 echo "==> Pushing"
 docker push "$USER/autobrain-backend:$TAG"
-docker push "$USER/autobrain-worker:$TAG"
 docker push "$USER/autobrain-ai:$TAG"
 docker push "$USER/autobrain-frontend:$TAG"
 
