@@ -17,6 +17,7 @@ rule-based engine that always produces a valid result, then optionally lets
 | Mod impact | `/v1/mod-impact` | per-category performance/value/reliability table | Advice prose |
 | Fuel receipt | `/v1/fuel-ocr` | line-scan for vendor, date, litres, price-per-litre, total | Fills only missing optional fields |
 | Odometer | `/v1/odometer` | local Tesseract + regex digit scan on the dashboard photo | **None — deterministic-only** |
+| Social image | `/v1/social-image` | Pillow on-brand card renderer (title/hook/CTA, 1200x630) | Optional prompt → free Pollinations photo (falls back to deterministic card) |
 
 ## Deterministic-first flow
 
