@@ -106,8 +106,15 @@ verify these in `autobrain-mobile` — a mismatch is the #1 cause of upload reje
    `com.autobrainservice.app` avoids the "authority in use by other developers"
    rejection. Never add a hardcoded `androidx-startup` provider with the old appId.
 4. Sign with the **machine keystore** (`key.properties` in `android/`), not a
-   different AutoBrain key. The AAB must be signed with **v2+v3** (APK Signature
-   Block 42 present) — Play rejects v1-only bundles.
+   different AutoBrain key. AGP signs the `.aab` with the JAR (v1) signature;
+   Play re-signs the derived APKs with the upload key using **v2+v3**, which is
+   what Play actually requires. Verify after the build:
+   `jarsigner -verify <aab>` for the v1 (JAR) signature, plus
+   `apksigner verify --verbose --print-certs` on a **same-`signingConfig`
+   release APK** — it must report v2 and v3 (`apksigner` cannot parse `.aab`
+   archives directly, it needs `AndroidManifest.xml`). The release
+   `signingConfig` in `android/app/build.gradle` enables v1+v2+v3 explicitly
+   (`enableV1Signing`/`enableV2Signing`/`enableV3Signing`).
 
 Commit and push any of these changes to `autobrain-mobile` **before** building.
 
@@ -153,15 +160,35 @@ Every release also lands on the public website: add the new version entry to
 commit + push that repo. The site's Azure Static Web Apps deployment publishes
 it automatically.
 
-## GitHub Actions (recommended automation)
+## GitHub Actions (shipped)
 
-A workflow on `CannonFodder151/autobrain-mobile` (`main`) can automate steps 3–5:
+Automated pipeline now lives at `CannonFodder151/autobrain-mobile`
+`.github/workflows/release-mobile.yml` (steps 3–5, plus version/identity guards):
 
-1. `actions/checkout@v4`
-2. `subosito/flutter-action@v2` (stable channel)
-3. `flutter pub get && flutter build appbundle --release --dart-define=...`
-4. Upload `build/app/outputs/bundle/release/app-release.aab` to a `softprops/action-gh-release@v2` release
-5. `curl` the n8n `discord-report` webhook for `changelog` + `updates` with the release URL
+1. Trigger: `workflow_dispatch` only — input `version` must equal the
+   `pubspec.yaml` version tag (`v<X.Y.Z>+<build>`, e.g. `v0.3.4+21`); the job
+   fails if they mismatch. Bump with `bump-version.sh <x.y.z> --mobile` first.
+2. `actions/checkout@v4` → `subosito/flutter-action@v2` (stable) →
+   `android-actions/setup-android@v3`.
+3. Decodes `android/upload-keystore.jks` + writes `android/key.properties` from
+   Actions secrets (`UPLOAD_KEYSTORE_BASE64`, `KEY_STORE_PASSWORD`,
+   `KEY_PASSWORD`, `KEY_ALIAS`). Keystore files are gitignored — never commit.
+4. Verifies Play-locked package identity: `namespace` + `applicationId` =
+   `com.autobrainservice.app` and the `MainActivity.kt` package statement.
+5. `flutter pub get` + `flutter build appbundle --release --dart-define=...`
+   (hosted API/WS URLs), then builds the release APK with the same config.
+6. Signing guard: `jarsigner -verify` the `.aab` (v1) and `apksigner verify`
+   the APK for v2+v3 (Play-required), with the upload certificate.
+7. Publishes a **draft** GitHub Release (`softprops/action-gh-release@v2`) on
+   tag `v<X.Y.Z>+<build>` with the shared `CHANGELOG.md` top entry as the body
+   and `app-release.aab` attached. Publish the draft when the CEO/CTO approves.
+8. Posts the n8n `discord-report` webhook embeds: `changelog` (public,
+   `0x2ECC71`) and `updates` (staff, `0x3498DB`). Payloads are built with `jq`
+   (changelog text contains quotes that break inline JSON) and are best-effort
+   (`|| true` so a transient n8n outage never fails a release).
+
+Run it from the repo Actions tab (or `gh workflow run release-mobile.yml -f
+version=v<X.Y.Z>+<build>`).
 
 ## Where the `.aab` lives (Nathan's answer)
 
