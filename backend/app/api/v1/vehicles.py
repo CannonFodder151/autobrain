@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_rego, require_write
+from app.api.deps import get_current_user, require_write
 from app.core.logging import get_logger
 from app.db.session import get_db
 from app.models.service import ServiceRecord
@@ -37,16 +37,72 @@ async def _get_owned_vehicle(db: AsyncSession, vehicle_id: str, user: User) -> V
     return vehicle
 
 
+async def _get_accessible_vehicle(db: AsyncSession, vehicle_id: str, user: User) -> Vehicle:
+    """Return a vehicle the user owns or has an active share on."""
+    vehicle = await db.get(Vehicle, vehicle_id)
+    if not vehicle:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+    if vehicle.user_id == user.id:
+        return vehicle
+    share = await db.scalar(
+        select(VehicleShare).where(
+            VehicleShare.vehicle_id == vehicle_id,
+            VehicleShare.invitee_user_id == user.id,
+        )
+    )
+    if share is None:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+    return vehicle
+
+
+async def effective_feature_owner(db: AsyncSession, vehicle: Vehicle, user: User) -> User:
+    """The account whose plan gates a vehicle's features (the owner for shared cars)."""
+    if vehicle.user_id == user.id:
+        return user
+    owner = await db.get(User, vehicle.user_id)
+    return owner or user
+
+
+async def _require_ai_vehicle(
+    db: AsyncSession, vehicle: Vehicle, user: User
+) -> None:
+    """AI entitlement for a vehicle-scoped call follows the owner's plan."""
+    if user.role == "demo":
+        raise HTTPException(
+            status_code=403,
+            detail="AI features are disabled on the demo account.",
+        )
+    owner = await effective_feature_owner(db, vehicle, user)
+    if owner.free_account:
+        raise HTTPException(
+            status_code=403,
+            detail="AI features are disabled on the free plan. Upgrade to enable them.",
+        )
+
+
 @router.get("", response_model=list[VehicleOut])
 async def list_vehicles(
     db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
 ) -> list[Vehicle]:
-    rows = list((await db.scalars(
+    owned = list((await db.scalars(
         select(Vehicle).where(Vehicle.user_id == user.id).order_by(Vehicle.created_at.desc())
     )).all())
-    for v in rows:
+    shared = (await db.execute(
+        select(Vehicle, User)
+        .join(VehicleShare, VehicleShare.vehicle_id == Vehicle.id)
+        .join(User, User.id == Vehicle.user_id)
+        .where(VehicleShare.invitee_user_id == user.id)
+        .order_by(Vehicle.created_at.desc())
+    )).all()
+    for v in owned:
         await _sync_odometer_from_fuel(db, v)
-    return rows
+        v.is_shared = False
+        v.shared_by = None
+    for v, owner in shared:
+        await _sync_odometer_from_fuel(db, v)
+        v.is_shared = True
+        v.shared_by = owner.display_name
+    return owned + [v for v, _owner in shared]
 
 
 @router.post("", response_model=VehicleOut, status_code=201)
@@ -80,7 +136,7 @@ async def get_vehicle(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Vehicle:
-    vehicle = await _get_owned_vehicle(db, vehicle_id, user)
+    vehicle = await _get_accessible_vehicle(db, vehicle_id, user)
     return await _sync_odometer_from_fuel(db, vehicle)
 
 
@@ -115,9 +171,27 @@ async def delete_vehicle(
 @router.post("/rego-lookup", response_model=RegoLookupResponse)
 async def rego_lookup(
     payload: RegoLookupRequest,
-    _user: User = Depends(require_rego),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> RegoLookupResponse:
-    """Populate vehicle details from an Australian registration plate + state."""
+    """Populate vehicle details from an Australian registration plate + state.
+
+    Free plans can't use rego lookup, except on a vehicle shared with them
+    where the owner's plan applies.
+    """
+    if payload.vehicle_id:
+        vehicle = await _get_accessible_vehicle(db, payload.vehicle_id, user)
+        owner = await effective_feature_owner(db, vehicle, user)
+        if user.role == "demo" or owner.free_account:
+            raise HTTPException(
+                status_code=403,
+                detail="Rego lookup is disabled on the free plan. Upgrade to enable it.",
+            )
+    elif user.role == "demo" or user.free_account:
+        raise HTTPException(
+            status_code=403,
+            detail="Rego lookup is disabled on the free plan. Upgrade to enable it.",
+        )
     result = await lookup_rego(payload.rego, payload.jurisdiction, payload.state, payload.vehicle_type)
     if not result:
         raise HTTPException(status_code=404, detail="No registration data found for this plate")
@@ -130,7 +204,7 @@ async def get_timeline(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[VehicleEvent]:
-    await _get_owned_vehicle(db, vehicle_id, user)
+    await _get_accessible_vehicle(db, vehicle_id, user)
     rows = await db.scalars(
         select(VehicleEvent)
         .outerjoin(ServiceRecord, ServiceRecord.id == VehicleEvent.source_id)

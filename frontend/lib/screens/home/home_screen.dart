@@ -218,7 +218,9 @@ class _HeroCard extends StatelessWidget {
                   '${vehicle.make ?? ''} ${vehicle.model ?? ''}'
                   '${vehicle.bodyType != null ? ' · ${vehicle.bodyType}' : ''}'
                   '${vehicle.colour != null ? ' · ${vehicle.colour}' : ''}'
-                  '${vehicle.year != null ? ' · ${vehicle.year}' : ''}'.trim(),
+                  '${vehicle.year != null ? ' · ${vehicle.year}' : ''}'
+                  '${vehicle.isShared ? ' · Invited by ${vehicle.sharedBy ?? 'Unknown'}' : ''}'
+                  .trim(),
                   style: const TextStyle(color: Colors.white70),
                 ),
                 const SizedBox(height: 14),

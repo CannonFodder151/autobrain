@@ -4,6 +4,8 @@ Base URL: `/api/v1`. Auth: `Authorization: Bearer <token>` (JWT). Interactive sp
 
 Access tiers: `role` ∈ `admin | user | demo`; `free_account` (per-user) disables **AI features and rego lookup** (403 on those endpoints). File exports are available on all plans. Demo accounts are read-only.
 
+Vehicle sharing: a user with an accepted share on a vehicle can read and write its data. For shared vehicles, **AI and rego feature entitlement follows the owner's plan** — a free account invited to a paid owner's car gets the owner's features on that car.
+
 ## Auth
 
 | Method | Path | Description |
@@ -48,10 +50,12 @@ Access tiers: `role` ∈ `admin | user | demo`; `free_account` (per-user) disabl
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET/POST | `/vehicles` | List / create (payload incl. `club_reg`) |
-| GET/PATCH/DELETE | `/vehicles/{id}` | Detail / update / delete |
-| POST   | `/vehicles/rego-lookup` | Plate + state → VIN, make, model, year, engine. **Paid only.** |
+| GET/POST | `/vehicles` | List / create. List returns owned vehicles plus vehicles shared with you (`is_shared`, `shared_by` set on shared rows) |
+| GET/PATCH/DELETE | `/vehicles/{id}` | Detail / update / delete. Shared users can read, but only the owner can update/delete |
+| POST   | `/vehicles/rego-lookup` | Plate + state → VIN, make, model, year, engine. **Paid only**; pass optional `vehicle_id` to gate by that vehicle's owner (a shared free invitee inherits the owner's plan) |
 | GET    | `/vehicles/{id}/timeline` | Unified event timeline |
+| POST   | `/vehicles/{id}/shares` | Owner invites another account by email (creates a pending share) |
+| GET    | `/vehicles/{id}/shares` | Owner lists shares (`pending`/`accepted`, invitee name + email) |
 
 `club_reg: bool` — club-registered vehicles disable the ATO logbook feature.
 

@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
-from app.api.v1.vehicles import _get_owned_vehicle
+from app.api.v1.vehicles import _get_accessible_vehicle
 from app.db.session import get_db
 from app.models.fuel import FuelLog
 from app.models.mod import Modification
@@ -25,7 +25,7 @@ async def analytics(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> AnalyticsResponse:
-    await _get_owned_vehicle(db, vehicle_id, user)
+    await _get_accessible_vehicle(db, vehicle_id, user)
 
     fuel = list((await db.scalars(
         select(FuelLog).where(FuelLog.vehicle_id == vehicle_id).order_by(FuelLog.fill_date)

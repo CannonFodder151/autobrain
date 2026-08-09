@@ -8,6 +8,8 @@ class Vehicle {
   final String condition;
   final String vehicleType;
   final bool isPrimary, clubReg;
+  final bool isShared;
+  final String? sharedBy;
 
   const Vehicle({
     required this.id,
@@ -26,10 +28,18 @@ class Vehicle {
     this.vehicleType = 'car',
     this.isPrimary = false,
     this.clubReg = false,
+    this.isShared = false,
+    this.sharedBy,
   });
 
   String get displayName => '$nickname'
       '${make != null ? ' ($make $model)' : ''}'.trim();
+
+  /// Dropdown/list label: appends '(Invited by <Display Name>)' for vehicles
+  /// the user accesses through a share rather than owning.
+  String get dropdownLabel => isShared
+      ? '$displayName (Invited by ${sharedBy ?? 'Unknown'})'
+      : displayName;
 
   @override
   bool operator ==(Object other) => other is Vehicle && other.id == id;
@@ -69,5 +79,7 @@ class Vehicle {
         vehicleType: (j['vehicle_type'] as String?) ?? 'car',
         isPrimary: (j['is_primary'] as bool?) ?? false,
         clubReg: (j['club_reg'] as bool?) ?? false,
+        isShared: (j['is_shared'] as bool?) ?? false,
+        sharedBy: j['shared_by'] as String?,
       );
 }

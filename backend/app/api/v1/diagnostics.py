@@ -7,8 +7,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_ai, require_write
-from app.api.v1.vehicles import add_event, _get_owned_vehicle
+from app.api.deps import get_current_user, require_write
+from app.api.v1.vehicles import (
+    _get_accessible_vehicle,
+    _require_ai_vehicle,
+    add_event,
+)
 from app.db.session import get_db
 from app.models.diagnostic import Diagnostic
 from app.models.service import ServiceItem, ServiceRecord
@@ -42,9 +46,10 @@ async def diagnose(
     vehicle_id: str,
     payload: DiagnosticRequest,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_ai),
+    user: User = Depends(get_current_user),
 ) -> DiagnosticResponse:
-    vehicle = await _get_owned_vehicle(db, vehicle_id, user)
+    vehicle = await _get_accessible_vehicle(db, vehicle_id, user)
+    await _require_ai_vehicle(db, vehicle, user)
     context = payload.vehicle_context or {}
     context.setdefault("vehicle", {
         "make": vehicle.make, "model": vehicle.model, "year": vehicle.year,
@@ -75,7 +80,7 @@ async def list_diagnostics(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[Diagnostic]:
-    await _get_owned_vehicle(db, vehicle_id, user)
+    await _get_accessible_vehicle(db, vehicle_id, user)
     rows = await db.scalars(
         select(Diagnostic)
         .where(Diagnostic.vehicle_id == vehicle_id)
@@ -92,7 +97,7 @@ async def add_to_service(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_write),
 ) -> Diagnostic:
-    vehicle = await _get_owned_vehicle(db, vehicle_id, user)
+    vehicle = await _get_accessible_vehicle(db, vehicle_id, user)
     diag = await db.get(Diagnostic, diagnostic_id)
     if not diag or diag.vehicle_id != vehicle_id:
         raise HTTPException(status_code=404, detail="Diagnostic not found")
@@ -148,7 +153,7 @@ async def resolve_diagnostic(
     user: User = Depends(require_write),
 ) -> Diagnostic:
     """Mark a diagnostic as resolved once the issue is fixed."""
-    await _get_owned_vehicle(db, vehicle_id, user)
+    await _get_accessible_vehicle(db, vehicle_id, user)
     diag = await db.get(Diagnostic, diagnostic_id)
     if not diag or diag.vehicle_id != vehicle_id:
         raise HTTPException(status_code=404, detail="Diagnostic not found")
@@ -167,7 +172,7 @@ async def delete_diagnostic(
     user: User = Depends(require_write),
 ) -> None:
     """Delete a diagnostic once the issue is resolved."""
-    await _get_owned_vehicle(db, vehicle_id, user)
+    await _get_accessible_vehicle(db, vehicle_id, user)
     diag = await db.get(Diagnostic, diagnostic_id)
     if not diag or diag.vehicle_id != vehicle_id:
         raise HTTPException(status_code=404, detail="Diagnostic not found")

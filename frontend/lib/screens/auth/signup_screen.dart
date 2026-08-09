@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/auth_state.dart';
+import 'login_screen.dart';
 
 /// Self-service Free-tier account creation (hosted instance).
 class SignupScreen extends StatefulWidget {
@@ -24,6 +25,17 @@ class _SignupScreenState extends State<SignupScreen> {
     _name.dispose();
     _email.dispose();
     super.dispose();
+  }
+
+  void _goToSignIn() {
+    final nav = Navigator.of(context);
+    if (nav.canPop()) {
+      nav.pop();
+    } else {
+      nav.pushReplacement(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+      );
+    }
   }
 
   Future<void> _submit() async {
@@ -143,7 +155,7 @@ class _SignupScreenState extends State<SignupScreen> {
                               ),
                               const SizedBox(height: 16),
                               TextButton(
-                                onPressed: () => Navigator.of(context).pop(),
+                                onPressed: _goToSignIn,
                                 child: const Text('Back to sign in'),
                               ),
                             ],
@@ -207,7 +219,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   ),
                   const SizedBox(height: 16),
                   TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
+                    onPressed: _goToSignIn,
                     child: const Text('Already have an account? Sign in',
                         style: TextStyle(color: Colors.white)),
                   ),

@@ -78,6 +78,7 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
         'jurisdiction': 'AU',
         'state': _state,
         'vehicle_type': _vehicleType,
+        'vehicle_id': widget.vehicle.id,
       }) as Map<String, dynamic>;
       setState(() {
         _vin.text = (r['vin'] as String?) ?? _vin.text;

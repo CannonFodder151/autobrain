@@ -93,7 +93,7 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
                   Card(
                     child: ListTile(
                       leading: const Icon(Icons.directions_car),
-                      title: Text(v.nickname),
+                      title: Text(v.dropdownLabel),
                       subtitle: Text(
                         '${v.make ?? ''} ${v.model ?? ''} ${v.year ?? ''}'
                         '${v.bodyType != null ? ' · ${v.bodyType}' : ''}'
@@ -105,21 +105,27 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
                         children: [
                           if (v.isPrimary)
                             const Icon(Icons.star, color: Colors.amber),
-                          PopupMenuButton<String>(
-                            onSelected: (action) {
-                              if (action == 'edit') _edit(v);
-                              if (action == 'delete') _delete(v);
-                            },
-                            itemBuilder: (_) => const [
-                              PopupMenuItem(
-                                  value: 'edit', child: Text('Edit details')),
-                              PopupMenuItem(
-                                  value: 'delete', child: Text('Delete')),
-                            ],
-                          ),
+                          if (v.isShared)
+                            const Icon(Icons.group, color: Colors.grey)
+                          else
+                            PopupMenuButton<String>(
+                              onSelected: (action) {
+                                if (action == 'edit') _edit(v);
+                                if (action == 'delete') _delete(v);
+                              },
+                              itemBuilder: (_) => const [
+                                PopupMenuItem(
+                                    value: 'edit',
+                                    child: Text('Edit details')),
+                                PopupMenuItem(
+                                    value: 'delete', child: Text('Delete')),
+                              ],
+                            ),
                         ],
                       ),
-                      onTap: () => _edit(v),
+                      onTap: () {
+                        if (!v.isShared) _edit(v);
+                      },
                     ),
                   ),
               ],

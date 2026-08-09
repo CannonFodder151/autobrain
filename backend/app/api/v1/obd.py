@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_write
-from app.api.v1.vehicles import _get_owned_vehicle
+from app.api.v1.vehicles import _get_accessible_vehicle
 from app.db.session import get_db
 from app.models.obd import ObdCode
 from app.models.user import User
@@ -41,7 +41,7 @@ async def obd_settings(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> ObdSettingsOut:
-    await _get_owned_vehicle(db, vehicle_id, user)
+    await _get_accessible_vehicle(db, vehicle_id, user)
     return ObdSettingsOut(enabled=user.obd_enabled, auto_connect=user.obd_auto_connect)
 
 
@@ -52,7 +52,7 @@ async def set_obd_vin(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_write),
 ) -> Vehicle:
-    vehicle = await _get_owned_vehicle(db, vehicle_id, user)
+    vehicle = await _get_accessible_vehicle(db, vehicle_id, user)
     _require_obd(user, vehicle)
     if vehicle.vin and len(vehicle.vin) >= 5:
         raise HTTPException(status_code=409, detail="Vehicle already has a VIN")
@@ -69,7 +69,7 @@ async def list_codes(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[ObdCode]:
-    await _get_owned_vehicle(db, vehicle_id, user)
+    await _get_accessible_vehicle(db, vehicle_id, user)
     stmt = select(ObdCode).where(ObdCode.vehicle_id == vehicle_id)
     if q:
         stmt = stmt.where(ObdCode.code.ilike(f"%{q.upper()}%"))
@@ -84,7 +84,7 @@ async def add_code(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_write),
 ) -> ObdCode:
-    vehicle = await _get_owned_vehicle(db, vehicle_id, user)
+    vehicle = await _get_accessible_vehicle(db, vehicle_id, user)
     _require_obd(user, vehicle)
     code = ObdCode(vehicle_id=vehicle_id, code=payload.code.upper(), **payload.model_dump(exclude={"code"}))
     db.add(code)
@@ -101,7 +101,7 @@ async def update_code(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_write),
 ) -> ObdCode:
-    await _get_owned_vehicle(db, vehicle_id, user)
+    await _get_accessible_vehicle(db, vehicle_id, user)
     code = await db.get(ObdCode, code_id)
     if not code or code.vehicle_id != vehicle_id:
         raise HTTPException(status_code=404, detail="OBD code not found")
@@ -119,7 +119,7 @@ async def delete_code(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_write),
 ) -> None:
-    await _get_owned_vehicle(db, vehicle_id, user)
+    await _get_accessible_vehicle(db, vehicle_id, user)
     code = await db.get(ObdCode, code_id)
     if not code or code.vehicle_id != vehicle_id:
         raise HTTPException(status_code=404, detail="OBD code not found")

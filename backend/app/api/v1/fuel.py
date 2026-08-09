@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_write
-from app.api.v1.vehicles import add_event, _get_owned_vehicle
+from app.api.v1.vehicles import add_event, _get_accessible_vehicle
 from app.core.logging import get_logger
 from app.core.storage import detect_mime, ensure_bucket, get_object, upload_object
 from app.db.session import get_db
@@ -82,7 +82,7 @@ async def list_fuel(
 ) -> list[FuelLog]:
     """List fuel logs, optionally filtered to an Australian financial year
     (e.g. fy=2026 covers 2025-07-01 .. 2026-06-30)."""
-    await _get_owned_vehicle(db, vehicle_id, user)
+    await _get_accessible_vehicle(db, vehicle_id, user)
     q = select(FuelLog).where(FuelLog.vehicle_id == vehicle_id)
     if fy:
         q = q.where(FuelLog.fill_date >= date(fy - 1, 7, 1), FuelLog.fill_date <= date(fy, 6, 30))
@@ -107,7 +107,7 @@ async def add_fuel(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_write),
 ) -> FuelLog:
-    vehicle = await _get_owned_vehicle(db, vehicle_id, user)
+    vehicle = await _get_accessible_vehicle(db, vehicle_id, user)
     total = payload.total_cost if payload.total_cost else round(payload.litres * payload.price_per_litre, 2)
     receipt_id = await _link_receipt(db, vehicle_id, payload.receipt_id)
     log = FuelLog(
@@ -145,7 +145,7 @@ async def update_fuel(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_write),
 ) -> FuelLog:
-    await _get_owned_vehicle(db, vehicle_id, user)
+    await _get_accessible_vehicle(db, vehicle_id, user)
     log = await db.get(FuelLog, fuel_id)
     if not log or log.vehicle_id != vehicle_id:
         raise HTTPException(status_code=404, detail="Fuel log not found")
@@ -164,7 +164,7 @@ async def update_fuel(
         raise HTTPException(status_code=422, detail="odometer_km must be positive")
     await _recompute_efficiency(db, vehicle_id)
     await db.flush()
-    await sync_odometer(db, await _get_owned_vehicle(db, vehicle_id, user), log.odometer_km, _ref_time(log))
+    await sync_odometer(db, await _get_accessible_vehicle(db, vehicle_id, user), log.odometer_km, _ref_time(log))
     await db.commit()
     await db.refresh(log)
     return log
@@ -177,7 +177,7 @@ async def delete_fuel(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_write),
 ) -> None:
-    await _get_owned_vehicle(db, vehicle_id, user)
+    await _get_accessible_vehicle(db, vehicle_id, user)
     log = await db.get(FuelLog, fuel_id)
     if not log or log.vehicle_id != vehicle_id:
         raise HTTPException(status_code=404, detail="Fuel log not found")
@@ -192,7 +192,7 @@ async def fuel_stats(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> FuelStats:
-    await _get_owned_vehicle(db, vehicle_id, user)
+    await _get_accessible_vehicle(db, vehicle_id, user)
     rows = list(
         (
             await db.scalars(
@@ -244,7 +244,7 @@ async def export_fuel_year(
 
     fmt=zip bundles the CSV (with an Image column) plus the receipt images.
     """
-    vehicle = await _get_owned_vehicle(db, vehicle_id, user)
+    vehicle = await _get_accessible_vehicle(db, vehicle_id, user)
     fy = fy or _current_fy()
     start = datetime(fy - 1, 7, 1)
     end = datetime(fy, 6, 30, 23, 59, 59)
@@ -292,7 +292,7 @@ async def upload_fuel_receipt(
     price-per-litre. ai=false just stores the photo — the user fills the
     values manually.
     """
-    await _get_owned_vehicle(db, vehicle_id, user)
+    await _get_accessible_vehicle(db, vehicle_id, user)
     data = await file.read()
     if len(data) > MAX_BYTES:
         raise HTTPException(status_code=413, detail="File too large (max 15MB)")

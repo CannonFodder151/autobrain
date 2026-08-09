@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
-from app.api.v1.vehicles import _get_owned_vehicle
+from app.api.v1.vehicles import _get_accessible_vehicle
 from app.db.session import get_db
 from app.models.fuel import FuelLog
 from app.models.mod import Modification
@@ -28,7 +28,7 @@ async def valuate(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> ValuationResponse:
-    vehicle = await _get_owned_vehicle(db, vehicle_id, user)
+    vehicle = await _get_accessible_vehicle(db, vehicle_id, user)
 
     # Demo accounts get a realistic sample valuation instead of an AI call.
     if user.free_account:
@@ -124,7 +124,7 @@ async def valuation_history(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[ValuationSnapshot]:
-    await _get_owned_vehicle(db, vehicle_id, user)
+    await _get_accessible_vehicle(db, vehicle_id, user)
     rows = await db.scalars(
         select(ValuationSnapshot)
         .where(ValuationSnapshot.vehicle_id == vehicle_id)
