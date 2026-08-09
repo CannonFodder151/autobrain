@@ -123,6 +123,15 @@ class Settings(BaseSettings):
     STRIPE_PRICE_GARAGE_MONTHLY: str = ""
     STRIPE_PRICE_GARAGE_YEARLY: str = ""
 
+    # Early-adopter sale (AUT-93): 40% off the first 3 months for the first
+    # 100 subscribers within 6 months of launch. The coupon/promotion code is
+    # created by scripts/stripe-setup.py; the app auto-applies it to monthly
+    # checkouts while the window is open. Stripe enforces the 100-subscriber
+    # cap and redeem-by date at checkout.
+    STRIPE_PROMO_EARLY_ADOPTER: str = ""      # promotion code id (promo_...)
+    STRIPE_PROMO_EARLY_ADOPTER_CODE: str = "EARLY40"
+    STRIPE_SALE_ENDS_AT: str = ""             # ISO date (YYYY-MM-DD); empty = sale on
+
     @property
     def sqlalchemy_database_uri(self) -> str:
         if self.DATABASE_URL:
