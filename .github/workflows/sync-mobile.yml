@@ -1,0 +1,70 @@
+name: Sync mobile app
+
+# Keeps CannonFodder151/autobrain-mobile in lockstep with the server build:
+# on every push to main that touches the shared Flutter lineage or the version,
+# mirror frontend/lib + assets + CHANGELOG into autobrain-mobile, bump its
+# version to match APP_VERSION, and trigger the mobile release pipeline.
+# Manual dispatch always available: gh workflow run sync-mobile.yml.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/lib/**'
+      - 'frontend/assets/**'
+      - 'frontend/pubspec.yaml'
+      - 'CHANGELOG.md'
+      - 'scripts/bump-version.sh'
+      - 'scripts/sync-mobile.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: autobrain
+
+      - uses: actions/checkout@v4
+        with:
+          repository: CannonFodder151/autobrain-mobile
+          token: ${{ secrets.MOBILE_SYNC_TOKEN }}
+          path: autobrain-mobile
+
+      - name: Sync lineage + version into autobrain-mobile
+        working-directory: autobrain
+        run: ./scripts/sync-mobile.sh "$GITHUB_WORKSPACE/autobrain-mobile"
+
+      - name: Commit and push if changed
+        id: commit
+        working-directory: autobrain-mobile
+        run: |
+          set -euo pipefail
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "mobile already in sync — nothing to push"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          version="$(grep -E '^version: ' pubspec.yaml | head -1 | awk '{print $2}')"
+          git config user.name "AutoBrain Release Bot"
+          git config user.email "release@autobrainservice.app"
+          git add -A
+          git commit -m "chore: sync frontend lineage + version to $version from autobrain (auto)"
+          git push origin main
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger mobile release pipeline for the new version
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.MOBILE_SYNC_TOKEN }}
+        working-directory: autobrain-mobile
+        run: |
+          set -euo pipefail
+          gh workflow run release-mobile.yml --repo CannonFodder151/autobrain-mobile \
+            -f "version=v${{ steps.commit.outputs.version }}"
+          echo "dispatched mobile release for v${{ steps.commit.outputs.version }}"
