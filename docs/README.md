@@ -21,6 +21,7 @@ below are mirrors kept in-repo for offline reading and PR review.
 | [infrastructure-diagrams.md](infrastructure-diagrams.md) | Network / container diagrams |
 | [container-architecture.md](container-architecture.md) | Container image layout, healthchecks, upgrade path |
 | [mobile-release.md](mobile-release.md) | Mobile `.aab` release runbook + Discord change-notes delivery |
+| [planable-integration.md](planable-integration.md) | Planable MCP integration for social planning/approvals |
 
 **Rule:** when behaviour changes, update the matching Outline document and the
 mirror here in the same change.
