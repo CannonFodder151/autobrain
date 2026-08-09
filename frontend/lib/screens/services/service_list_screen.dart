@@ -37,6 +37,38 @@ class _ServiceListScreenState extends State<ServiceListScreen> {
     setState(() => _loading = false);
   }
 
+  Future<void> _delete(ServiceRecord s) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete service?'),
+        content: Text(
+            '${s.serviceType} (${s.serviceDate}) will be permanently removed.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final api = context.read<AuthState>().api;
+    try {
+      await api.delete('/vehicles/${widget.vehicleId}/services/${s.id}');
+      _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
+  }
+
   Future<void> _markCompleted(ServiceRecord s) async {
     final api = context.read<AuthState>().api;
     try {
@@ -134,7 +166,7 @@ class _ServiceListScreenState extends State<ServiceListScreen> {
                           count: upcoming.length,
                           icon: Icons.schedule,
                         ),
-                        for (final s in upcoming) _ServiceCard(service: s, onEdit: _openForm, onComplete: _markCompleted),
+                        for (final s in upcoming) _ServiceCard(service: s, onEdit: _openForm, onComplete: _markCompleted, onDelete: _delete),
                         const SizedBox(height: 16),
                       ],
                       _SectionHeader(
@@ -142,7 +174,7 @@ class _ServiceListScreenState extends State<ServiceListScreen> {
                         count: history.length,
                         icon: Icons.history,
                       ),
-                      for (final s in history) _ServiceCard(service: s, onEdit: _openForm, onComplete: _markCompleted),
+                      for (final s in history) _ServiceCard(service: s, onEdit: _openForm, onComplete: _markCompleted, onDelete: _delete),
                     ],
                   ),
       ),
@@ -180,10 +212,12 @@ class _ServiceCard extends StatelessWidget {
     required this.service,
     required this.onEdit,
     required this.onComplete,
+    required this.onDelete,
   });
   final ServiceRecord service;
   final void Function(ServiceRecord?) onEdit;
   final void Function(ServiceRecord) onComplete;
+  final void Function(ServiceRecord) onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -282,6 +316,13 @@ class _ServiceCard extends StatelessWidget {
                   onPressed: () => onEdit(service),
                   icon: const Icon(Icons.edit_outlined, size: 18),
                   label: const Text('Edit'),
+                ),
+                TextButton.icon(
+                  onPressed: () => onDelete(service),
+                  icon: const Icon(Icons.delete_outline, size: 18),
+                  label: const Text('Delete'),
+                  style: TextButton.styleFrom(
+                      foregroundColor: Theme.of(context).colorScheme.error),
                 ),
               ],
             ),

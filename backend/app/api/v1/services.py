@@ -280,8 +280,15 @@ async def delete_service(
     await _get_owned_vehicle(db, vehicle_id, user)
     record = await _service_or_404(db, vehicle_id, service_id)
     await _reconcile_part_stock(db, vehicle_id, service_id, [], deduct=False)
+    await db.execute(
+        VehicleEvent.__table__.delete().where(VehicleEvent.source_id == service_id)
+    )
+    had_due = record.next_due_km is not None or record.next_due_date is not None
     await db.delete(record)
     await db.commit()
+    if had_due:
+        from app.workers.tasks import check_due_notifications
+        check_due_notifications.delay(vehicle_id)
 
 
 @router.post("/predict", response_model=ServicePredictionResponse)
