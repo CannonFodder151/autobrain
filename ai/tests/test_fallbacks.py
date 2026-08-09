@@ -28,6 +28,19 @@ def test_diagnostics_obd() -> None:
     assert any("misfire" in it["cause"].lower() for it in out["items"])
 
 
+def test_diagnostics_multiple_rules() -> None:
+    out = diagnose_fallback("squealing brakes and the car vibrates at speed")
+    causes = [it["cause"].lower() for it in out["items"]]
+    assert any("brake" in c for c in causes)
+    assert any("vibration" in c for c in causes)
+
+
+def test_diagnostics_symptom_parts() -> None:
+    out = diagnose_fallback("misfire when cold")
+    parts = " ".join(out["parts_needed"]).lower()
+    assert "spark plug" in parts and "ignition coil" in parts
+
+
 def test_service_prediction_oil() -> None:
     out = predict_service_fallback({"make": "Toyota", "odometer_km": 40000, "last_service_km": 35000,
                                     "service_type": "oil_change"})
@@ -44,6 +57,26 @@ def test_resale_depreciation() -> None:
     })
     assert 0 < out["low"] < out["estimated_value"] < out["high"]
     assert out["currency"] == "AUD"
+
+
+def test_resale_crown_victoria_holds_value() -> None:
+    # Regression for AUT-146: an old Crown Vic must not decay to ~$2k.
+    out = estimate_value_fallback({
+        "vehicle": {"make": "Ford", "model": "Crown Victoria", "year": 2008,
+                    "odometer_km": 180000, "condition": "good"},
+        "service_count": 3,
+    })
+    assert out["estimated_value"] >= 10000
+    assert out["confidence"] >= 0.9
+
+
+def test_resale_unknown_model_sane_floor() -> None:
+    out = estimate_value_fallback({
+        "vehicle": {"make": "Ford", "model": "Crown Victoria", "year": 2000,
+                    "odometer_km": 250000, "condition": "fair"},
+    })
+    # 24-year-old car still holds a floor; never collapses to the old ~$2k.
+    assert out["estimated_value"] >= 8000
 
 
 def test_mod_impact() -> None:
