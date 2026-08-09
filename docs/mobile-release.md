@@ -31,42 +31,44 @@ local machine with the above.
 
 ## Steps
 
-### 1. Sync shared Flutter lineage into `autobrain-mobile`
+### 1. Sync shared Flutter lineage into `autobrain-mobile` (automatic)
 
-The mobile repo mirrors the web app's Flutter code. After web/frontend changes land
-on `autobrain` `main`:
+The mobile repo mirrors the web app's Flutter code. **This is now automated**:
+`.github/workflows/sync-mobile.yml` on `autobrain` `main` runs
+`scripts/sync-mobile.sh` on every push touching `frontend/lib`, `frontend/assets`,
+`frontend/pubspec.yaml`, `CHANGELOG.md` or `scripts/bump-version.sh`. It:
+
+- mirrors `frontend/lib`, `frontend/assets`, `pubspec.yaml` and the shared
+  `CHANGELOG.md` into `autobrain-mobile` (single source for both apps),
+- bumps the mobile version to match the server `APP_VERSION` (build number
+  incremented), commits + pushes to `autobrain-mobile` `main`, then
+  **dispatches the mobile release pipeline** (draft release) automatically.
+
+`scripts/sync-mobile.sh` **preserves mobile-only deltas** and will not silently
+drop them:
+- `lib/core/version_check.dart` (mobile-only file)
+- `lib/core/auth_state.dart` + `lib/screens/auth/login_screen.dart` — the
+  "update available" prompt logic layered on the web base
+- `package_info_plus` pubspec dependency
+
+> If the shared (web) base of `auth_state.dart` / `login_screen.dart` changes,
+> the web copy would drop those mobile deltas, so `sync-mobile.sh` restores the
+> mobile versions and a human must re-merge the deltas on top. Platform folders
+> (`android/`, `ios/`, `web/`) are never touched.
+
+Manual fallback (monorepo checkout with a sibling mobile repo, or explicit path):
 
 ```bash
-# Fresh checkout of the mobile repo (private, needs PAT)
-git clone https://github.com/CannonFodder151/autobrain-mobile.git
-cd autobrain-mobile
-git checkout main && git pull
-
-# Mirror the shared Flutter source from the monorepo frontend/ (lib/, assets/, pubspec.yaml)
-# plus the shared changelog (single source for both apps).
-rsync -a --delete \
-  --exclude '.git' --exclude 'build/' --exclude 'web/' --exclude 'android/' --exclude 'ios/' \
-  ../autobrain/frontend/lib ../autobrain/frontend/assets ./pubspec.yaml ../autobrain/CHANGELOG.md .
-# Keep platform folders (android/, ios/) as-is; they are mobile-only.
-git add -A && git commit -m "chore: sync frontend lineage + shared changelog from autobrain@<sha>"
+./scripts/sync-mobile.sh ../autobrain-mobile
+# review, then commit + push inside autobrain-mobile
 ```
-
-> Note: `--exclude web/` keeps the mobile repo from tracking the web-only build
-> folder. `android/` and `ios/` are owned by this repo and must not be overwritten
-> by the monorepo copy.
 
 ### 2. Bump the mobile version
 
-From the **monorepo** repo root (bumps `frontend/pubspec.yaml` and, with `--mobile`,
-`../autobrain-mobile/pubspec.yaml`):
-
-```bash
-cd autobrain
-./scripts/bump-version.sh <x.y.z> --mobile
-```
-
-Or bump directly in `autobrain-mobile/pubspec.yaml` if the monorepo checkout is not
-a sibling:
+**Automatic**: `sync-mobile.yml` bumps it to match the server `APP_VERSION`
+(with an incremented build number) and dispatches the release. Manual bump
+(e.g. a throwaway validation build) — `bump-version.sh --mobile` from the
+monorepo, or directly:
 
 ```bash
 # pubspec.yaml version: <major>.<minor>.<patch>+<build>
@@ -166,8 +168,9 @@ Automated pipeline now lives at `CannonFodder151/autobrain-mobile`
 `.github/workflows/release-mobile.yml` (steps 3–5, plus version/identity guards):
 
 1. Trigger: `workflow_dispatch` only — input `version` must equal the
-   `pubspec.yaml` version tag (`v<X.Y.Z>+<build>`, e.g. `v0.3.4+21`); the job
-   fails if they mismatch. Bump with `bump-version.sh <x.y.z> --mobile` first.
+   `pubspec.yaml` version tag (`v<X.Y.Z>+<build>`, e.g. `v0.3.5+22`); the job
+   fails if they mismatch. `sync-mobile.yml` dispatches it automatically on a
+   frontend version bump; otherwise bump with `sync-mobile.sh` first.
 2. `actions/checkout@v4` → `subosito/flutter-action@v2` (stable) →
    `android-actions/setup-android@v3`.
 3. Decodes `android/upload-keystore.jks` + writes `android/key.properties` from
