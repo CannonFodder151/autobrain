@@ -3,6 +3,8 @@
 # Usage: ./scripts/deploy.sh <user@host>
 set -euo pipefail
 
+"$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/check-release.sh"
+
 HOST="${1:?Usage: deploy.sh <user@host>}"
 REMOTE_DIR="~/autobrain"
 SSH_ARGS=${SSH_ARGS:-""}

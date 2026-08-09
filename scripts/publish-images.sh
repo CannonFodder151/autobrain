@@ -7,6 +7,8 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+"$REPO_ROOT/scripts/check-release.sh"
 cd "$REPO_ROOT"
 
 USER="${DOCKERHUB_USERNAME:?Set DOCKERHUB_USERNAME (e.g. DOCKERHUB_USERNAME=you ./scripts/publish-images.sh)}"
