@@ -132,3 +132,5 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/developer-onboarding.md](docs/d
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+<!-- AUT-103: temporary verification commit -->
