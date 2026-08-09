@@ -1,5 +1,20 @@
 # Deployment Guide
 
+## Deployment order (promotion policy) — MANDATORY
+
+When a new update is pushed out, roll it out in this exact order. Do not skip or
+reorder a tier:
+
+1. **Demo** — `demo.autobrainservice.app` (public, low-risk, demo account).
+2. **Default** — the default/dev environment (dev box, `docker-compose.yml` /
+   `docker-compose.prod.yml` source mounts).
+3. **Hosted** — `hosted.autobrainservice.app` (Oracle Cloud `152.69.188.133`,
+   Portainer endpoint 5, `docker-compose.hosted.yml` prebuilt images).
+
+Only promote to the next tier once the current one is verified healthy (startup,
+health checks, key flows). A change never goes to Hosted without first passing
+Demo and Default. Source of truth: board directive AUT-78.
+
 ## Prerequisites
 
 - Linux host with Docker 24+ and Docker Compose v2.
