@@ -8,7 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > user-facing change ships with an entry here under `[Unreleased]` — see
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
-## [Unreleased]
+## [0.3.5] - 2026-08-09
 
 ### Added
 - Vehicle sharing (AUT-16/AUT-21/AUT-115): share a vehicle with another AutoBrain account by email (3-dot menu on the vehicle card). Pending invites sit in an **Invited** section with Accept/Deny, shared vehicles show an "(Invited by <name>)" label, and owners can remove access at any time. Available in both the web and mobile apps.
