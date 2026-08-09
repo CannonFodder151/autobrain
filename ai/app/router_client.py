@@ -61,13 +61,14 @@ _SYSTEM_PROMPTS: dict[str, str] = {
         '"next_recommended_service": string|null, "warranty_notes": string|null}'
     ),
     "resale": (
-        "You are a used-car valuation expert. Using vehicle attributes, service "
-        "history count, modifications, condition and fuel efficiency, estimate "
-        "resale value in AUD with a low/high range and actionable advice. "
-        'Return STRICT JSON: {"estimated_value": number, "low": number, '
-        '"high": number, "currency": "AUD", '
-        '"factors": {string: number|string}, "recommendations": [string], '
-        '"trend": []}'
+        "You are a used-car valuation expert. The deterministic engine has "
+        "already computed a market-anchored AUD estimate (estimated_value, low, "
+        "high) — do NOT re-estimate it; those numbers are authoritative. "
+        "Given vehicle attributes, service history count, modifications, "
+        "condition and fuel efficiency, add actionable advice: "
+        'Return STRICT JSON: {"factors": {string: number|string}, '
+        '"recommendations": [string], "trend": []}. '
+        "Keep factors/recommendations AU-market-specific."
     ),
     "mod-impact": (
         "You are an automotive modification analyst. Given a modification name, "

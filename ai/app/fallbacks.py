@@ -20,6 +20,8 @@ _SEVERITY_RULES: list[tuple[re.Pattern, str, str]] = [
     (re.compile(r"check engine|misfire|overheat|smoke|stall|limp", re.I), "high",
      "A warning light, misfire or overheating points to a drivability issue. Do not delay."),
     (re.compile(r"brake|squeal|grind|pulse", re.I), "high", "Brake noises are safety-critical. Inspect pads and rotors."),
+    (re.compile(r"won'?t start|no start|no crank|clicking", re.I), "high",
+     "Starting failure. Check battery voltage, starter motor and fuel delivery."),
     (re.compile(r"tick|knock|rattl", re.I), "medium", "Engine top-end noise. Likely hydraulic lifters or timing chain wear."),
     (re.compile(r"vibrat|shake|wobble", re.I), "medium", "Vibration at speed suggests wheel balance, suspension bushes or drive shaft."),
     (re.compile(r"leak|drip|puddle|smell|odour", re.I), "medium", "Fluid leak. Identify fluid colour to isolate the system."),
@@ -28,6 +30,27 @@ _SEVERITY_RULES: list[tuple[re.Pattern, str, str]] = [
     (re.compile(r"rattle|creak|squeak", re.I), "low", "Trim or suspension creaks. Typically non-critical."),
 ]
 
+# symptom keyword -> likely parts, used to enrich parts/cost estimates when the
+# symptom text names a symptom but not the part.
+_SYMPTOM_PARTS: dict[str, list[str]] = {
+    "misfire": ["spark plugs", "ignition coil"],
+    "rough idle": ["spark plugs", "ignition coil", "maf sensor"],
+    "overheat": ["thermostat", "radiator"],
+    "no start": ["battery", "starter"],
+    "no crank": ["battery", "starter"],
+    "clicking": ["battery", "starter"],
+    "brake": ["brake pads", "brake rotors"],
+    "squeal": ["brake pads"],
+    "grind": ["brake rotors"],
+    "vibrat": ["tyres", "wheel bearing"],
+    "leak": ["thermostat", "radiator"],
+    "smoke": ["engine oil", "valve cover gasket"],
+    "transmission": ["transmission fluid", "transmission service"],
+    "whine": ["wheel bearing", "power steering pump"],
+    "battery": ["battery"],
+    "crank": ["battery", "starter"],
+}
+
 _OBD_RULES: list[tuple[str, str, str, list[str], float]] = [
     ("P030", "Misfire detected", "Cylinder misfire — coil, plug or injector.",
      ["Ignition coil", "Spark plugs"], 250.0),
@@ -35,12 +58,20 @@ _OBD_RULES: list[tuple[str, str, str, list[str], float]] = [
      ["O2 sensor", "Catalytic converter"], 900.0),
     ("P0171", "Fuel trim lean", "System running lean — vacuum leak or MAF.",
      ["MAF sensor", "Vacuum lines"], 180.0),
+    ("P0172", "Fuel trim rich", "System running rich — injector or MAF.",
+     ["MAF sensor", "Fuel injectors"], 220.0),
     ("P0101", "MAF circuit range", "MAF sensor reading out of range.",
      ["MAF sensor"], 150.0),
     ("P0401", "EGR flow insufficient", "EGR valve clogged.",
      ["EGR valve", "EGR gasket"], 220.0),
+    ("P0441", "EVAP purge flow", "Purge valve or charcoal canister flow fault.",
+     ["Purge valve", "Charcoal canister"], 160.0),
     ("P0455", "EVAP leak large", "Fuel vapour leak — cap or purge valve.",
      ["Fuel cap", "Purge valve"], 60.0),
+    ("P0335", "Crankshaft position sensor", "No crankshaft signal — sensor or wiring.",
+     ["Crankshaft position sensor"], 220.0),
+    ("P0700", "Transmission fault", "PCM requesting transmission control service.",
+     ["Transmission service", "Transmission fluid"], 350.0),
 ]
 
 _PART_COSTS: dict[str, float] = {
@@ -52,6 +83,10 @@ _PART_COSTS: dict[str, float] = {
     "catalytic converter": 850.0, "o2 sensor": 140.0, "maf sensor": 150.0,
     "egr valve": 210.0, "purge valve": 60.0, "thermostat": 90.0,
     "radiator": 340.0, "cv joint": 180.0, "wheel bearing": 160.0,
+    "fuel injectors": 340.0, "charcoal canister": 180.0,
+    "crankshaft position sensor": 180.0, "transmission fluid": 180.0,
+    "transmission service": 380.0, "valve cover gasket": 90.0,
+    "power steering pump": 380.0, "engine oil": 80.0,
 }
 
 _LABOUR = 120.0  # $/hr default
@@ -80,6 +115,14 @@ _PART_NUMBERS: dict[str, str] = {
     "radiator": "NISSENS 65017",
     "cv joint": "GKN 307004",
     "wheel bearing": "TIMKEN 513084",
+    "fuel injectors": "BOSCH 0280158126",
+    "charcoal canister": "ACDELCO 215-112",
+    "crankshaft position sensor": "DENSO 90919-05024",
+    "transmission fluid": "VALVOLINE MAXLIFE ATF",
+    "transmission service": "TRANSMISSION FLUSH KIT",
+    "valve cover gasket": "FEL-PRO VS50326R",
+    "power steering pump": "CARDONE 21-5841",
+    "engine oil": "PENRITE HPR 5",
 }
 
 
@@ -98,13 +141,17 @@ def diagnose_fallback(symptoms: str, vehicle: dict | None = None, obd_codes: lis
         if any(code in (c or "").upper() for c in obd_codes):
             items.append(_diag_item(label, cause, 0.92, "high", parts, part_cost))
 
-    symptom_used = False
+    low = symptoms.lower()
+    matched = []
     for pattern, severity, note in _SEVERITY_RULES:
-        if pattern.search(symptoms):
-            items.append(_diag_item(note.split(" — ")[0], note, 0.75, severity,
-                                    _parts_for(symptoms), _cost_for(symptoms)))
-            symptom_used = True
+        if pattern.search(low):
+            parts = _parts_for(low)
+            cost = _cost_for(low)
+            matched.append(_diag_item(note.split(" — ")[0], note, 0.75, severity,
+                                      parts, cost))
+        if len(matched) >= 3:
             break
+    items.extend(matched)
 
     if not items:
         items.append(_diag_item(
@@ -143,13 +190,17 @@ def _diag_item(cause, note, confidence, severity, parts, cost) -> dict:
 
 
 def _parts_for(symptoms: str) -> list[str]:
-    hits = [p for p in _PART_COSTS if p in symptoms.lower()]
+    low = symptoms.lower()
+    hits = [p for p in _PART_COSTS if p in low]
+    for kw, parts in _SYMPTOM_PARTS.items():
+        if kw in low:
+            hits.extend(p for p in parts if p not in hits)
     return hits or ["Inspection required"]
 
 
 def _cost_for(symptoms: str) -> float | None:
-    hits = [p for p in _PART_COSTS if p in symptoms.lower()]
-    return sum(_PART_COSTS[p] for p in hits) + _LABOUR if hits else None
+    parts = [p for p in _parts_for(symptoms) if p != "Inspection required"]
+    return sum(_PART_COSTS[p] for p in parts) + _LABOUR if parts else None
 
 
 def _sev_rank(s: str) -> int:
@@ -251,43 +302,80 @@ def predict_service_fallback(payload: dict) -> dict:
 
 # --- Resale value ---------------------------------------------------------
 
+# Realistic AU used-market values (AUD) for a ~2010 model-year car with
+# ~120,000 km in good condition. Values are market anchors, not new-car
+# prices: 9Router enrichment may tweak advice/trend, but the deterministic
+# number is the ground truth (see _AI_IMMUTABLE in router_client.py).
 _BASE_VALUES: dict[str, dict[str, float]] = {
-    # make -> {model_token: base_value}
-    "toyota": {"camry": 26000.0, "corolla": 22000.0, "hilux": 38000.0, "land cruiser": 75000.0},
-    "mazda": {"cx-5": 30000.0, "mazda3": 24000.0, "bt-50": 35000.0},
-    "ford": {"ranger": 38000.0, "focus": 18000.0, "mustang": 55000.0},
-    "holden": {"commodore": 22000.0},
-    "bmw": {"3 series": 42000.0, "5 series": 52000.0, "m3": 85000.0},
-    "audi": {"a4": 40000.0, "a3": 33000.0},
-    "subaru": {"outback": 32000.0, "forester": 30000.0, "wrx": 38000.0},
-    "honda": {"civic": 24000.0, "accord": 27000.0},
+    "toyota": {"corolla": 11000.0, "camry": 12000.0, "hilux": 22000.0,
+               "land cruiser": 30000.0, "landcruiser": 30000.0, "prado": 28000.0,
+               "rav4": 14000.0, "86": 12000.0, "aurion": 11000.0},
+    "ford": {"crown victoria": 14000.0, "crown": 14000.0, "falcon": 14000.0, "territory": 16000.0,
+             "ranger": 18000.0, "mustang": 25000.0, "focus": 8000.0,
+             "fiesta": 7000.0},
+    "holden": {"commodore": 14000.0, "cruze": 7000.0, "captiva": 9000.0,
+               "colorado": 16000.0, "astra": 7000.0},
+    "mazda": {"mazda3": 9000.0, "mazda 3": 9000.0, "mazda6": 10000.0,
+              "mazda 6": 10000.0, "cx-5": 12000.0, "bt-50": 15000.0, "mx-5": 15000.0},
+    "nissan": {"patrol": 24000.0, "navara": 15000.0, "skyline": 18000.0,
+               "xtrail": 10000.0, "gtr": 60000.0, "pulsar": 7000.0},
+    "subaru": {"outback": 13000.0, "forester": 13000.0, "wrx": 15000.0,
+               "impreza": 9000.0},
+    "honda": {"civic": 10000.0, "accord": 11000.0, "cr-v": 12000.0, "jazz": 8000.0},
+    "bmw": {"3 series": 15000.0, "3-series": 15000.0, "5 series": 17000.0,
+            "5-series": 17000.0, "m3": 28000.0, "x5": 20000.0},
+    "audi": {"a3": 13000.0, "a4": 15000.0, "q5": 16000.0},
+    "mercedes": {"c-class": 15000.0, "e-class": 18000.0, "a-class": 12000.0,
+                 "g-class": 35000.0},
+    "volkswagen": {"golf": 10000.0, "polo": 8000.0, "passat": 11000.0, "tiguan": 13000.0},
+    "hyundai": {"i30": 8000.0, "tucson": 10000.0, "santa fe": 11000.0},
+    "kia": {"cerato": 7000.0, "sportage": 10000.0, "carnival": 12000.0},
+    "mitsubishi": {"lancer": 7000.0, "outlander": 10000.0, "triton": 14000.0,
+                   "pajero": 18000.0},
+    "jeep": {"wrangler": 18000.0, "grand cherokee": 12000.0, "cherokee": 10000.0},
+    "land rover": {"defender": 22000.0, "range rover": 25000.0, "discovery": 15000.0},
 }
+
+# Minimum fraction of the model's market anchor a vehicle can fall to.
+# Cult classics / AU icons (Crown Vic, Falcon, Commodore, Patrol, LandCruiser)
+# hold a high floor; generic hatches depreciate further but never to zero.
+_FLOOR_RATIOS: dict[str, float] = {
+    "crown victoria": 0.9, "crown": 0.9, "falcon": 0.8, "commodore": 0.8, "territory": 0.7,
+    "land cruiser": 0.9, "landcruiser": 0.9, "prado": 0.85, "patrol": 0.85,
+    "hilux": 0.85, "ranger": 0.8, "defender": 0.9, "gtr": 0.8, "skyline": 0.8,
+    "mustang": 0.7, "wrangler": 0.8, "mx-5": 0.7, "wrx": 0.7, "g-class": 0.8,
+}
+
+_REF_YEAR = 2010  # market anchor year for _BASE_VALUES
 
 
 def estimate_value_fallback(payload: dict) -> dict:
     vehicle = payload.get("vehicle", {})
     make = (vehicle.get("make") or "").lower()
     model = (vehicle.get("model") or "").lower()
-    year = int(vehicle.get("year") or date.today().year)
+    year = int(vehicle.get("year") or _REF_YEAR)
     odo = int(vehicle.get("odometer_km") or 0)
     condition = (vehicle.get("condition") or "good").lower()
 
-    base = 24000.0
-    for model_token, value in _BASE_VALUES.get(make, {}).items():
-        if model_token in model:
-            base = value
-            break
+    base, floor = _model_market_value(make, model)
 
-    age = max(date.today().year - year, 0)
-    value = base * (0.85 ** min(age, 15))
-
-    # odometer: assume 15k km/yr
-    expected_km = age * 15000
-    km_ratio = odo / max(expected_km, 1)
-    if km_ratio > 1:
-        value *= max(1.0 - (km_ratio - 1) * 0.12, 0.5)
+    # Age adjustment around the anchor year: newer cars carry a modest premium,
+    # older cars decay gently to the model floor (never to ~0 like the old
+    # 0.85^age curve).
+    age_delta = year - _REF_YEAR
+    if age_delta >= 0:
+        value = base * (1.03 ** min(age_delta, 15))
     else:
-        value *= 1.0 + (1 - km_ratio) * 0.04
+        value = base * (0.97 ** min(-age_delta, 20))
+    value = max(value, base * floor)
+
+    # Odometer vs. expected 15k km/yr from the anchor year.
+    expected_km = max((year - _REF_YEAR) * 15000, 0) + 120000
+    km_ratio = odo / max(expected_km, 1)
+    if km_ratio > 1.1:
+        value *= max(1.0 - (km_ratio - 1) * 0.10, 0.6)
+    elif km_ratio < 0.9:
+        value *= 1.0 + (0.9 - km_ratio) * 0.08
 
     cond_mult = {"excellent": 1.08, "good": 1.0, "fair": 0.88, "poor": 0.72}.get(condition, 1.0)
     value *= cond_mult
@@ -313,9 +401,10 @@ def estimate_value_fallback(payload: dict) -> dict:
     if mods:
         recommendations.insert(0, "Highlight documented, reversible modifications in the listing.")
 
-    confidence = 0.85 if payload.get("service_count") or payload.get("total_service_cost") else (
-        0.7 if make in _BASE_VALUES else 0.5
-    )
+    known = make in _BASE_VALUES and any(t in model for t in _BASE_VALUES[make])
+    confidence = 0.9 if known else (0.6 if make in _BASE_VALUES else 0.5)
+    if payload.get("service_count") or payload.get("total_service_cost"):
+        confidence = round(min(confidence + 0.05, 0.95), 2)
 
     return {
         "estimated_value": round(value, 0),
@@ -324,7 +413,8 @@ def estimate_value_fallback(payload: dict) -> dict:
         "currency": "AUD",
         "confidence": confidence,
         "factors": {
-            "base_value": base, "age_years": age, "odometer": odo,
+            "base_value": base, "floor_value": round(base * floor, 0),
+            "anchor_year": _REF_YEAR, "odometer": odo,
             "condition": condition, "service_records": payload.get("service_count", 0),
             "modification_value_delta": round(mods_value, 0),
         },
@@ -332,6 +422,25 @@ def estimate_value_fallback(payload: dict) -> dict:
         "trend": [],
         "model": "rule-based-fallback",
     }
+
+
+def _model_market_value(make: str, model: str) -> tuple[float, float]:
+    """Return (market_anchor, floor_ratio) for a make/model.
+
+    Falls back to a make-level estimate, then to a generic AUD hatchback
+    anchor so unknown vehicles still get a sane, non-zero number.
+    """
+    for token, value in _BASE_VALUES.get(make, {}).items():
+        if token in model:
+            return value, _FLOOR_RATIOS.get(token, 0.5)
+    make_defaults = {
+        "toyota": 12000.0, "ford": 12000.0, "holden": 10000.0, "mazda": 9000.0,
+        "nissan": 10000.0, "subaru": 11000.0, "honda": 9000.0, "bmw": 15000.0,
+        "audi": 14000.0, "mercedes": 15000.0, "volkswagen": 9000.0,
+        "hyundai": 8000.0, "kia": 7000.0, "mitsubishi": 9000.0, "jeep": 12000.0,
+        "land rover": 15000.0,
+    }
+    return make_defaults.get(make, 10000.0), 0.5
 
 
 def _mod_value_impact(mod: dict) -> float:
