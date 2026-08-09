@@ -5,6 +5,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- Vehicle sharing (AUT-16/AUT-21): invite another AutoBrain account by email from the modify-vehicle screen; pending invites sit in an **Invited** section on the share screen. Invited users see the shared car in their vehicle dropdown labelled `(Invited by <Name>)` and can read/write its data.
+- Feature gating follows the car's owner (AUT-21): a free account invited to a paid owner's vehicle inherits the owner's AI and rego entitlement on that car; a free owner still blocks those features for everyone, including invitees.
+
 ### Changed
 - Versioning unified around a single `x.y.z` (see `docs/versioning.md`): the backend and AI gateway report `APP_VERSION` (no more stale hardcoded strings), and `bump-version.sh` updates backend, AI gateway, web, mobile and the changelog in one shot.
 - Public `GET /api/v1/auth/config` now returns `app_version` so the mobile app can detect when it is behind and prompt for an update on login.

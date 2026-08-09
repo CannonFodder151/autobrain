@@ -56,4 +56,22 @@ void main() {
     expect(Vehicle.resolveSelection([primary, other], null), same(primary));
     expect(Vehicle.resolveSelection([], gone), isNull);
   });
+
+  test('Vehicle.fromJson parses share fields', () {
+    final v = Vehicle.fromJson(const {
+      'id': 's1',
+      'nickname': 'The Whip',
+      'is_shared': true,
+      'shared_by': 'Alice Owner',
+    });
+    expect(v.isShared, isTrue);
+    expect(v.sharedBy, 'Alice Owner');
+    expect(v.dropdownLabel, 'The Whip (Invited by Alice Owner)');
+  });
+
+  test('Vehicle dropdownLabel unchanged when owned', () {
+    final v = Vehicle.fromJson(const {'id': 'o1', 'nickname': 'Mine'});
+    expect(v.isShared, isFalse);
+    expect(v.dropdownLabel, 'Mine');
+  });
 }

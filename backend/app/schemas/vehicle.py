@@ -10,6 +10,7 @@ class RegoLookupRequest(BaseModel):
     jurisdiction: str = Field(default="AU", max_length=4)
     state: str = Field(default="VIC", max_length=4)  # NSW/VIC/QLD/WA/SA/TAS/NT/ACT
     vehicle_type: str = "car"  # car/motorcycle — some states need the type
+    vehicle_id: str | None = None  # owner's plan gates rego for shared vehicles
 
 
 class RegoLookupResponse(BaseModel):
@@ -82,6 +83,8 @@ class VehicleOut(BaseModel):
     vehicle_type: str = "car"
     is_primary: bool
     club_reg: bool = False
+    is_shared: bool = False
+    shared_by: str | None = None  # owner display name when viewed via a share
     created_at: datetime
 
     model_config = {"from_attributes": True}

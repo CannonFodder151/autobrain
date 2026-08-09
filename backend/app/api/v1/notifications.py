@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_write
-from app.api.v1.vehicles import _get_owned_vehicle
+from app.api.v1.vehicles import _get_accessible_vehicle
 from app.db.session import get_db
 from app.models.notification import NotificationPreference
 from app.models.user import User
@@ -20,7 +20,7 @@ async def get_preference(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> NotificationPreference:
-    await _get_owned_vehicle(db, vehicle_id, user)
+    await _get_accessible_vehicle(db, vehicle_id, user)
     pref = await db.scalar(
         select(NotificationPreference).where(
             NotificationPreference.user_id == user.id,
@@ -40,7 +40,7 @@ async def update_preference(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_write),
 ) -> NotificationPreference:
-    await _get_owned_vehicle(db, vehicle_id, user)
+    await _get_accessible_vehicle(db, vehicle_id, user)
     pref = await db.scalar(
         select(NotificationPreference).where(
             NotificationPreference.user_id == user.id,

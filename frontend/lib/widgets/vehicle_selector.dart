@@ -37,7 +37,7 @@ class VehicleSelector extends StatelessWidget {
                   ),
                   items: [
                     for (final v in vehicles)
-                      DropdownMenuItem(value: v, child: Text(v.displayName)),
+                      DropdownMenuItem(value: v, child: Text(v.dropdownLabel)),
                   ],
                   onChanged: (v) {
                     if (v != null) onChanged(v);
