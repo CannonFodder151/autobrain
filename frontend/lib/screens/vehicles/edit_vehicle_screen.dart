@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/auth_state.dart';
 import '../../core/models.dart';
+import 'share_vehicle_screen.dart';
 
 class EditVehicleScreen extends StatefulWidget {
   const EditVehicleScreen({super.key, required this.vehicle});
@@ -128,10 +129,29 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
     }
   }
 
+  void _share() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => ShareVehicleScreen(vehicle: widget.vehicle)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Edit vehicle')),
+      appBar: AppBar(
+        title: const Text('Edit vehicle'),
+        actions: [
+          PopupMenuButton<String>(
+            tooltip: 'More options',
+            onSelected: (action) {
+              if (action == 'share') _share();
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'share', child: Text('Share')),
+            ],
+          ),
+        ],
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Form(

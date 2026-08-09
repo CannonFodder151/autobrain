@@ -97,3 +97,17 @@ class TimelineEventOut(BaseModel):
     source_id: str | None
 
     model_config = {"from_attributes": True}
+
+
+class ShareCreate(BaseModel):
+    email: str = Field(min_length=3, max_length=255)
+
+
+class ShareOut(BaseModel):
+    id: str
+    vehicle_id: str
+    invitee_user_id: str
+    invitee_email: str
+    invitee_display_name: str
+    status: str  # pending/accepted
+    created_at: datetime

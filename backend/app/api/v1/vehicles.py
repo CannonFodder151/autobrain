@@ -13,9 +13,12 @@ from app.models.mod import Modification
 from app.models.diagnostic import Diagnostic
 from app.models.user import User
 from app.models.vehicle import Vehicle, VehicleEvent
+from app.models.share import VehicleShare
 from app.schemas.vehicle import (
     RegoLookupRequest,
     RegoLookupResponse,
+    ShareCreate,
+    ShareOut,
     TimelineEventOut,
     VehicleCreate,
     VehicleOut,
@@ -134,6 +137,69 @@ async def get_timeline(
         .order_by(VehicleEvent.occurred_on.desc(), VehicleEvent.created_at.desc())
     )
     return list(rows)
+
+@router.post("/{vehicle_id}/shares", response_model=ShareOut, status_code=201)
+async def create_share(
+    vehicle_id: str,
+    payload: ShareCreate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_write),
+) -> dict:
+    """Share a vehicle with another AutoBrain account by email."""
+    await _get_owned_vehicle(db, vehicle_id, user)
+    email = payload.email.strip().lower()
+    invitee = await db.scalar(select(User).where(User.email == email))
+    if not invitee:
+        raise HTTPException(status_code=404, detail="No AutoBrain account with that email")
+    if invitee.id == user.id:
+        raise HTTPException(status_code=400, detail="You can't share a vehicle with yourself")
+    existing = await db.scalar(
+        select(VehicleShare).where(
+            VehicleShare.vehicle_id == vehicle_id,
+            VehicleShare.invitee_user_id == invitee.id,
+        )
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="Vehicle already shared with this account")
+    share = VehicleShare(vehicle_id=vehicle_id, invitee_user_id=invitee.id)
+    db.add(share)
+    await db.commit()
+    await db.refresh(share)
+    return {
+        "id": share.id,
+        "vehicle_id": share.vehicle_id,
+        "invitee_user_id": invitee.id,
+        "invitee_email": invitee.email,
+        "invitee_display_name": invitee.display_name,
+        "status": share.status,
+        "created_at": share.created_at,
+    }
+
+@router.get("/{vehicle_id}/shares", response_model=list[ShareOut])
+async def list_shares(
+    vehicle_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[dict]:
+    await _get_owned_vehicle(db, vehicle_id, user)
+    rows = (await db.execute(
+        select(VehicleShare, User)
+        .join(User, VehicleShare.invitee_user_id == User.id)
+        .where(VehicleShare.vehicle_id == vehicle_id)
+        .order_by(VehicleShare.created_at.desc())
+    )).all()
+    return [
+        {
+            "id": s.id,
+            "vehicle_id": s.vehicle_id,
+            "invitee_user_id": u.id,
+            "invitee_email": u.email,
+            "invitee_display_name": u.display_name,
+            "status": s.status,
+            "created_at": s.created_at,
+        }
+        for s, u in rows
+    ]
 
 
 async def _clear_primary(db: AsyncSession, user: User) -> None:
