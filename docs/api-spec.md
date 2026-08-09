@@ -56,6 +56,12 @@ Vehicle sharing: a user with an accepted share on a vehicle can read and write i
 | GET    | `/vehicles/{id}/timeline` | Unified event timeline |
 | POST   | `/vehicles/{id}/shares` | Owner invites another account by email (creates a pending share) |
 | GET    | `/vehicles/{id}/shares` | Owner lists shares (`pending`/`accepted`, invitee name + email) |
+| GET    | `/vehicle-shares` | Invitee lists shares on them (`pending`/`accepted`, vehicle nickname + owner name) |
+| POST   | `/vehicle-shares/{id}/accept` | Invitee accepts a pending share → vehicle appears in their garage |
+| POST   | `/vehicle-shares/{id}/deny` | Invitee declines a pending share → share removed |
+| DELETE | `/vehicle-shares/{id}` | Owner revokes access, or invitee removes a shared vehicle from their garage |
+
+Sharing flow: the owner shares by email → the invitee sees a pending invite with **Accept/Deny** in the Vehicles screen → only after accepting does the car appear in their garage (labelled `Invited by <owner>`), and either party can later remove access. Pending invites grant no data access.
 
 `club_reg: bool` — club-registered vehicles disable the ATO logbook feature.
 

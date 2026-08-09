@@ -114,3 +114,14 @@ class ShareOut(BaseModel):
     invitee_display_name: str
     status: str  # pending/accepted
     created_at: datetime
+
+
+class ShareInviteOut(BaseModel):
+    """A share as seen by the invitee (pending or accepted)."""
+
+    id: str
+    status: str  # pending/accepted
+    vehicle_id: str
+    vehicle_nickname: str
+    owner_name: str
+    created_at: datetime
