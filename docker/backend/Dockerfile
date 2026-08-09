@@ -9,6 +9,7 @@ WORKDIR /app
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl minio-client \
+    && ln -s /usr/bin/minio-client /usr/local/bin/mc \
     && rm -rf /var/lib/apt/lists/*
 
 # Backend dependencies
