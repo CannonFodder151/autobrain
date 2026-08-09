@@ -20,6 +20,12 @@ Demo and Default. Source of truth: board directive AUT-78.
 Every release runs the gates below, in order. No gate may be skipped; a failed
 gate blocks the release at that tier.
 
+- [ ] 0. **Code gate** — every feature/PR for this release is **merged to `main`
+      first**. Do NOT deploy, promote, or announce a feature whose PR is still
+      open or unmerged. A merged-but-unannounced feature still needs a deploy;
+      an unmerged feature must not be deployed or changelogged. (AUT-121
+      regression: AUT-21/AUT-115 sat in open PRs for hours while the changelog
+      claimed the feature shipped — nothing reached any tier.)
 - [ ] 1. **Demo** — deploy to `demo.autobrainservice.app`; verify startup +
       `/health` + key flows.
 - [ ] 2. **Default** — deploy to dev/default (source mounts); verify startup +
@@ -27,6 +33,11 @@ gate blocks the release at that tier.
 - [ ] 3. **Hosted** — deploy to `hosted.autobrainservice.app` (Oracle Cloud
       `152.69.188.133`, Portainer endpoint 5); verify startup + `/health` + key
       flows. **Only when this passes is the release complete.**
+- [ ] **Verify the feature is actually present** on each tier — do not rely on
+      the version banner alone. Exercise the flow (e.g. open the new screen,
+      hit the new endpoint) or confirm the feature's UI strings/endpoints exist
+      in the deployed build. (AUT-121 regression: frontends on Demo/Default
+      were stale builds with no share feature while Hosted had a newer one.)
 - [ ] Note promotion order + verification result in the issue / #updates channel.
 
 ## Prerequisites
