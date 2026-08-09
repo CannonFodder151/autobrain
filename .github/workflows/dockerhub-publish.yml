@@ -1,0 +1,43 @@
+name: Publish images to Docker Hub
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push images
+        env:
+          API_BASE_URL: https://hosted.autobrainservice.app/api/v1
+          WS_BASE_URL: wss://hosted.autobrainservice.app/ws
+        run: |
+          set -euo pipefail
+          for svc in backend ai frontend; do
+            case "$svc" in
+              backend)  ctx=.;        df=docker/backend/Dockerfile;   args="";;
+              ai)       ctx=./ai;     df=docker/ai/Dockerfile;         args="";;
+              frontend) ctx=.;        df=docker/frontend/Dockerfile;   args="--build-arg API_BASE_URL=${API_BASE_URL} --build-arg WS_BASE_URL=${WS_BASE_URL}";;
+            esac
+            for tag in latest hosted; do
+              echo "==> building autobrain-${svc}:${tag}"
+              docker buildx build --platform linux/amd64,linux/arm64 --push \
+                -t "cannonfodder151/autobrain-${svc}:${tag}" \
+                ${args} -f "${df}" "${ctx}"
+            done
+          done
