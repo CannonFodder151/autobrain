@@ -71,6 +71,13 @@ a sibling:
 sed -i -E 's/^version: [0-9.]+.*/version: 1.2.3+10/' pubspec.yaml
 ```
 
+> **versionCode is the number after `+`** and must be **strictly higher** than any
+> version ever uploaded to Play Console. Once a version code is used on Play it is
+> burned forever — you cannot reuse it. When in doubt, `+1` the previous build
+> number. `flutter build` turns `<x.y.z>+<N>` into `versionName=<x.y.z>`,
+> `versionCode=<N>` automatically; do **not** hardcode versionCode in
+> `android/app/build.gradle` (it reads `local.properties` from pubspec).
+
 ### 3. Build the release `.aab`
 
 ```bash
@@ -82,6 +89,25 @@ flutter build appbundle --release \
 ```
 
 Artifact: `build/app/outputs/bundle/release/app-release.aab`
+
+### 3b. Android package name & signing (must-match checklist)
+
+Play Console is locked to package **`com.autobrainservice.app`**. Before uploading,
+verify these in `autobrain-mobile` — a mismatch is the #1 cause of upload rejection:
+
+1. `android/app/build.gradle` → `namespace` and `applicationId` must be
+   **`com.autobrainservice.app`** (both, together). Do NOT use `com.autobrain.app`.
+2. `MainActivity.kt` package must match the namespace:
+   `android/app/src/main/kotlin/com/autobrainservice/app/MainActivity.kt`.
+3. The androidx-startup content-provider authority is auto-derived from the
+   `applicationId` (`<appId>.androidx-startup`). Keeping `applicationId` =
+   `com.autobrainservice.app` avoids the "authority in use by other developers"
+   rejection. Never add a hardcoded `androidx-startup` provider with the old appId.
+4. Sign with the **machine keystore** (`key.properties` in `android/`), not a
+   different AutoBrain key. The AAB must be signed with **v2+v3** (APK Signature
+   Block 42 present) — Play rejects v1-only bundles.
+
+Commit and push any of these changes to `autobrain-mobile` **before** building.
 
 ### 4. Create a GitHub Release and attach the `.aab`
 
