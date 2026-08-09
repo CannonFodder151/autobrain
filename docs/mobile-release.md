@@ -4,8 +4,9 @@ Run this whenever frontend/app changes ship so AutoBrain's Android app is update
 a release `.aab` is produced, and Nathan knows where the change notes live.
 
 **Canonical home for `.aab` change notes:**
+- **`CHANGELOG.md` in the `autobrain` monorepo is the single shared changelog for BOTH the hosted (web) app and the mobile app.** Mobile has no changelog of its own — GitHub Releases here use the shared changelog, so its contents are mirrored into this repo on every sync.
 - Discord **`#changelog`** on AutoBrain HQ (public, customer-facing) — link + notes.
-- **GitHub Releases** on `CannonFodder151/autobrain-mobile` — the `.aab` artifact + full notes.
+- **GitHub Releases** on `CannonFodder151/autobrain-mobile` — the `.aab` artifact + full notes from the shared changelog.
 - A short staff summary also posts to Discord **`#updates`**.
 
 ## Repos
@@ -42,11 +43,12 @@ cd autobrain-mobile
 git checkout main && git pull
 
 # Mirror the shared Flutter source from the monorepo frontend/ (lib/, assets/, pubspec.yaml)
+# plus the shared changelog (single source for both apps).
 rsync -a --delete \
   --exclude '.git' --exclude 'build/' --exclude 'web/' --exclude 'android/' --exclude 'ios/' \
-  ../autobrain/frontend/lib ../autobrain/frontend/assets ./pubspec.yaml .
+  ../autobrain/frontend/lib ../autobrain/frontend/assets ./pubspec.yaml ../autobrain/CHANGELOG.md .
 # Keep platform folders (android/, ios/) as-is; they are mobile-only.
-git add -A && git commit -m "chore: sync frontend lineage from autobrain@<sha>"
+git add -A && git commit -m "chore: sync frontend lineage + shared changelog from autobrain@<sha>"
 ```
 
 > Note: `--exclude web/` keeps the mobile repo from tracking the web-only build

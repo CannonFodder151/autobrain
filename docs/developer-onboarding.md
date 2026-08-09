@@ -47,6 +47,23 @@ docs/      markdown mirrors of the wiki
 - **Add an AI feature** → module in `ai/app/modules/` + fallback in `ai/app/fallbacks.py` + client fn in `backend/app/services/ai_client.py`.
 - **Add a screen** → `frontend/lib/screens/<area>/`.
 
+### Feature parity (web + mobile)
+
+Every feature is built for **both** frontends at the same time:
+- **Web** = `frontend/` in this repo (hosted at autobrainservice.app).
+- **Mobile** = the private `CannonFodder151/autobrain-mobile` repo (same Flutter lineage).
+- A feature is not done until the screen/flow exists in **both**. If it adds a
+  screen, add it in `frontend/lib/screens/` here and mirror it into
+  `autobrain-mobile/lib/` (see `docs/mobile-release.md`).
+- **OBD2 integration is the only exception** — mobile-only, never on the website.
+
+### Changelog
+
+- One shared changelog (`CHANGELOG.md`) covers **both** the hosted and mobile
+  apps — no separate mobile changelog.
+- Every feature or user-facing change adds an entry under `[Unreleased]` in the
+  same PR that ships it. Frontend-only changes count too.
+
 ## 6. Tests
 
 ```bash

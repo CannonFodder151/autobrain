@@ -13,10 +13,24 @@ Thanks for contributing! Please read the [developer onboarding guide](docs/devel
 
 - Branch from `main`: `git checkout -b feat/my-feature`.
 - Keep PRs small and focused.
-- Every PR must update the [CHANGELOG.md](CHANGELOG.md) under "Unreleased".
 - Run `ruff check` and `pytest` before pushing.
 - Backend + AI: `docker compose exec backend ruff check app tests && docker compose exec backend pytest`
 - Frontend: `cd frontend && flutter analyze && flutter test`
+
+## Feature parity & changelog (mandatory)
+
+- **Build every feature for BOTH frontends at the same time** — the web app
+  (`frontend/`, hosted at autobrainservice.app) and the mobile app
+  (`CannonFodder151/autobrain-mobile`). They share one Flutter codebase; a
+  feature is not "done" until the screen/flow exists in both.
+- **The only exception is OBD2 integration** — it is **mobile-only** and must
+  NOT be exposed on the website.
+- **Every feature must update the shared [CHANGELOG.md](CHANGELOG.md)** under
+  "Unreleased". It is the single changelog for both the hosted and mobile apps —
+  no separate mobile changelog. Add the entry in the same PR that ships the
+  feature, listing it once even though it lands in both apps.
+- Frontend-only changes (a new screen, setting, or flow) count as features and
+  need a changelog entry too.
 
 ## Code style
 

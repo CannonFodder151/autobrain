@@ -3,7 +3,15 @@
 All notable changes to this project are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+> This is the single shared changelog for BOTH the hosted (web) app (`frontend/`)
+> and the mobile app (`CannonFodder151/autobrain-mobile`). Every feature or
+> user-facing change ships with an entry here under `[Unreleased]` — see
+> `CONTRIBUTING.md` for the frontend-parity + changelog rules.
+
 ## [Unreleased]
+
+### Added
+- Vehicle sharing: share a vehicle with another AutoBrain account by email (3-dot menu on the vehicle card). Shared vehicles show an "(Invited by <name>)" label, pending invites appear in an Invited section with Accept/Deny, and owners can remove access at any time. Available in both the web and mobile apps.
 
 ### Changed
 - Versioning unified around a single `x.y.z` (see `docs/versioning.md`): the backend and AI gateway report `APP_VERSION` (no more stale hardcoded strings), and `bump-version.sh` updates backend, AI gateway, web, mobile and the changelog in one shot.
