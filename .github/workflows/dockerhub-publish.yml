@@ -41,3 +41,32 @@ jobs:
                 ${args} -f "${df}" "${ctx}"
             done
           done
+
+  sync-changelog:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: app
+      - uses: actions/checkout@v4
+        with:
+          repository: CannonFodder151/autobrainservice-website
+          token: ${{ secrets.WEBSITE_SYNC_TOKEN }}
+          path: website
+      - name: Sync CHANGELOG.md to the marketing site
+        working-directory: website
+        run: |
+          set -euo pipefail
+          cp ../app/CHANGELOG.md CHANGELOG.md
+          if git diff --quiet CHANGELOG.md; then
+            echo "changelog unchanged — nothing to sync"
+            exit 0
+          fi
+          git config user.name "AutoBrain Release Bot"
+          git config user.email "release@autobrainservice.app"
+          git add CHANGELOG.md
+          git commit -m "Changelog: sync release notes from autobrain"
+          git push
