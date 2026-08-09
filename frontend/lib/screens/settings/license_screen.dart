@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/auth_state.dart';
 
 /// Stripe subscription management: current plan + upgrade/downgrade/cancel.
+/// Prices come from GET /billing/pricing (with the early-adopter sale); the
+/// values below are a fallback for hosts that do not expose /billing/pricing.
 class LicenseScreen extends StatefulWidget {
   const LicenseScreen({super.key});
 
@@ -13,7 +16,17 @@ class LicenseScreen extends StatefulWidget {
 }
 
 class _LicenseScreenState extends State<LicenseScreen> {
+  static const _fallbackPlans = [
+    {'key': 'enthusiast', 'name': 'Enthusiast', 'monthly': 900, 'yearly': 8400},
+    {'key': 'garage', 'name': 'Garage', 'monthly': 1900, 'yearly': 16800},
+  ];
+
+  final _promoController = TextEditingController();
+
   Map<String, dynamic>? _profile;
+  List<Map<String, dynamic>> _plans = _fallbackPlans;
+  Map<String, dynamic> _sale = const {};
+  bool _saleActive = false;
   bool _loading = true;
   bool _yearly = false;
   bool _busy = false;
@@ -32,6 +45,12 @@ class _LicenseScreenState extends State<LicenseScreen> {
     _load();
   }
 
+  @override
+  void dispose() {
+    _promoController.dispose();
+    super.dispose();
+  }
+
   Future<void> _load() async {
     final api = context.read<AuthState>().api;
     setState(() {
@@ -43,13 +62,28 @@ class _LicenseScreenState extends State<LicenseScreen> {
       setState(() => _profile = me);
     } catch (_) {
       setState(() => _error = 'Could not load your license status.');
+    }
+    // Pricing is public; ignore failures so a host without it still renders.
+    try {
+      final data = await api.get('/billing/pricing') as Map<String, dynamic>;
+      setState(() {
+        _sale = (data['sale'] as Map<String, dynamic>?) ?? const {};
+        _saleActive = _sale['active'] == true;
+        _plans = ((data['plans'] as List?) ?? [])
+            .map((p) => Map<String, dynamic>.from(p as Map))
+            .toList();
+        if (_plans.isEmpty) _plans = _fallbackPlans;
+      });
+    } catch (_) {
+      // keep fallback plans
     } finally {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
   Future<void> _checkout(String plan) async {
     final api = context.read<AuthState>().api;
+    final promo = _promoController.text.trim();
     setState(() {
       _busy = true;
       _error = null;
@@ -58,6 +92,7 @@ class _LicenseScreenState extends State<LicenseScreen> {
       final data = await api.post('/billing/checkout', {
         'plan': plan,
         'billing': _yearly ? 'yearly' : 'monthly',
+        if (promo.isNotEmpty) 'promo_code': promo,
       }) as Map<String, dynamic>;
       await _openUrl(data['url'] as String);
     } catch (e) {
@@ -94,6 +129,12 @@ class _LicenseScreenState extends State<LicenseScreen> {
     }
   }
 
+  String _fmt(int cents) {
+    final whole = cents ~/ 100;
+    final frac = (cents % 100).toString().padLeft(2, '0');
+    return '\$$whole.$frac';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -106,6 +147,10 @@ class _LicenseScreenState extends State<LicenseScreen> {
                 padding: const EdgeInsets.all(16),
                 children: [
                   _statusCard(context),
+                  if (_saleActive) ...[
+                    const SizedBox(height: 16),
+                    _saleBanner(context),
+                  ],
                   const SizedBox(height: 20),
                   Text('Plans',
                       style: Theme.of(context)
@@ -134,35 +179,14 @@ class _LicenseScreenState extends State<LicenseScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  _planCard(
-                    key: 'enthusiast',
-                    name: 'Enthusiast',
-                    price: _yearly ? r'$90' : r'$9',
-                    period: _yearly ? '/year' : '/month',
-                    vehicles: 1,
-                    features: const [
-                      '1 vehicle',
-                      'All AI features included',
-                      'Rego lookup',
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  _planCard(
-                    key: 'garage',
-                    name: 'Garage',
-                    price: _yearly ? r'$190' : r'$19',
-                    period: _yearly ? '/year' : '/month',
-                    vehicles: 5,
-                    features: const [
-                      '5 vehicles',
-                      'All AI features included',
-                      'Rego lookup',
-                      'Priority support',
-                    ],
-                    popular: true,
-                  ),
-                  if (_error != null) ...[
+                  _promoField(context),
+                  const SizedBox(height: 8),
+                  for (final plan in _plans) ...[
+                    _planCard(context, plan),
                     const SizedBox(height: 16),
+                  ],
+                  if (_error != null) ...[
+                    const SizedBox(height: 8),
                     Text(_error!,
                         style: TextStyle(color: Colors.red.shade600)),
                   ],
@@ -170,6 +194,192 @@ class _LicenseScreenState extends State<LicenseScreen> {
               ),
             ),
     );
+  }
+
+  Widget _saleBanner(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final code = _sale['code'] as String? ?? 'EARLY40';
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: scheme.primary.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: scheme.primary),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.local_fire_department, color: scheme.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Early-adopter sale — 40% off your first 3 months. '
+              'First 100 subscribers only.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _promoField(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final entered = _promoController.text.trim().toUpperCase();
+    final code = (_sale['code'] as String? ?? 'EARLY40').toUpperCase();
+    final matches = entered.isNotEmpty && entered == code;
+    return TextField(
+      controller: _promoController,
+      textCapitalization: TextCapitalization.characters,
+      inputFormatters: [
+        FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9]')),
+      ],
+      decoration: InputDecoration(
+        labelText: 'Promo code',
+        hintText: 'e.g. $code',
+        border: const OutlineInputBorder(),
+        isDense: true,
+        suffixIcon: matches
+            ? Icon(Icons.check_circle, color: Colors.green.shade600)
+            : null,
+        helperText: matches
+            ? '40% off your first 3 months applied at checkout'
+            : 'Applied automatically at checkout when entered.',
+        helperStyle: TextStyle(
+          color: matches ? Colors.green.shade700 : scheme.onSurfaceVariant,
+          fontSize: 12,
+        ),
+      ),
+    );
+  }
+
+  Widget _planCard(BuildContext context, Map<String, dynamic> plan) {
+    final scheme = Theme.of(context).colorScheme;
+    final key = plan['key'] as String;
+    final name = plan['name'] as String;
+    final monthly = plan['monthly'] as int? ?? 900;
+    final yearly = plan['yearly'] as int? ?? 8400;
+    final saleMonthly = plan['sale_monthly'] as int?;
+    final isGarage = key == 'garage';
+    final vehicles = isGarage ? 5 : 1;
+
+    final String price;
+    final String period;
+    if (_yearly) {
+      price = _fmt(yearly);
+      period = '/year';
+    } else if (_saleActive && saleMonthly != null) {
+      price = _fmt(saleMonthly);
+      period = '/month';
+    } else {
+      price = _fmt(monthly);
+      period = '/month';
+    }
+
+    return Card(
+      shape: isGarage
+          ? RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: scheme.primary, width: 2),
+            )
+          : null,
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(name,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w800)),
+                ),
+                if (isGarage)
+                  Chip(
+                    label: const Text('Most popular'),
+                    labelStyle: TextStyle(color: scheme.primary, fontSize: 12),
+                    side: BorderSide(color: scheme.primary),
+                    backgroundColor: scheme.primary.withValues(alpha: 0.1),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(price,
+                    style: TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.w800,
+                        color: scheme.primary)),
+                const SizedBox(width: 4),
+                Text(period,
+                    style: TextStyle(color: scheme.onSurfaceVariant)),
+                if (_saleActive && saleMonthly != null && !_yearly) ...[
+                  const SizedBox(width: 8),
+                  Text(_fmt(monthly),
+                      style: TextStyle(
+                        color: scheme.onSurfaceVariant,
+                        decoration: TextDecoration.lineThrough,
+                      )),
+                  const SizedBox(width: 6),
+                  Chip(
+                    label: const Text('40% off'),
+                    labelStyle: TextStyle(color: Colors.green.shade800),
+                    visualDensity: VisualDensity.compact,
+                    side: BorderSide(color: Colors.green.shade400),
+                    backgroundColor: Colors.green.withValues(alpha: 0.08),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text('$vehicles vehicle${vehicles == 1 ? '' : 's'}',
+                style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: 12),
+            ..._featuresFor(key).map(
+              (f) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  children: [
+                    Icon(Icons.check_circle,
+                        size: 18, color: scheme.primary),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(f)),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _busy ? null : () => _checkout(key),
+                child: Text('Upgrade to $name'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<String> _featuresFor(String key) {
+    return key == 'garage'
+        ? const [
+            '5 vehicles',
+            'All AI features included',
+            'Rego lookup',
+            'Priority support',
+          ]
+        : const [
+            '1 vehicle',
+            'All AI features included',
+            'Rego lookup',
+          ];
   }
 
   Widget _statusCard(BuildContext context) {
@@ -219,92 +429,6 @@ class _LicenseScreenState extends State<LicenseScreen> {
                     .textTheme
                     .bodySmall
                     ?.copyWith(color: scheme.onSurfaceVariant)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _planCard({
-    required String key,
-    required String name,
-    required String price,
-    required String period,
-    required int vehicles,
-    required List<String> features,
-    bool popular = false,
-  }) {
-    final scheme = Theme.of(context).colorScheme;
-    return Card(
-      shape: popular
-          ? RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: BorderSide(color: scheme.primary, width: 2),
-            )
-          : null,
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(name,
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w800)),
-                ),
-                if (popular)
-                  Chip(
-                    label: const Text('Most popular'),
-                    labelStyle: TextStyle(color: scheme.primary, fontSize: 12),
-                    side: BorderSide(color: scheme.primary),
-                    backgroundColor: scheme.primary.withValues(alpha: 0.1),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Text(price,
-                    style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w800,
-                        color: scheme.primary)),
-                const SizedBox(width: 4),
-                Text(period,
-                    style: TextStyle(color: scheme.onSurfaceVariant)),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text('$vehicles vehicle${vehicles == 1 ? '' : 's'}',
-                style: Theme.of(context).textTheme.bodySmall),
-            const SizedBox(height: 12),
-            ...features.map(
-              (f) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 3),
-                child: Row(
-                  children: [
-                    Icon(Icons.check_circle,
-                        size: 18, color: scheme.primary),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(f)),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: _busy ? null : () => _checkout(key),
-                child: Text('Upgrade to $name'),
-              ),
-            ),
           ],
         ),
       ),

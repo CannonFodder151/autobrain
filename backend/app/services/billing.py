@@ -7,6 +7,7 @@ driven by price IDs held in the environment (STRIPE_PRICE_*).
 """
 
 import logging
+from datetime import date
 
 import stripe
 from sqlalchemy import select
@@ -24,6 +25,23 @@ PLANS: dict[str, dict] = {
     "enthusiast": {"name": "Enthusiast", "max_vehicles": 1},
     "garage": {"name": "Garage", "max_vehicles": 5},
 }
+
+# Display amounts in US cents — the approved prices (AUT-93 plan c36dbe7d).
+# The Stripe price objects created by scripts/stripe-setup.py are the source of
+# truth at checkout; these mirror them for the /billing/pricing endpoint so the
+# frontend renders prices without a live Stripe round-trip.
+PLAN_AMOUNTS: dict[str, dict[str, int]] = {
+    "enthusiast": {"monthly": 900, "yearly": 8400},
+    "garage": {"monthly": 1900, "yearly": 16800},
+}
+
+# Early-adopter sale (AUT-93): 40% off the first 3 months, capped at 100
+# subscribers for 6 months after launch. Stripe enforces the cap + window via
+# the coupon's max_redemptions/redeem_by; the app auto-applies it to monthly
+# checkouts so the discounted price ($5.40 / $11.40) shows without a code.
+SALE_PERCENT_OFF = 40
+SALE_DURATION_MONTHS = 3
+SALE_CAP = 100
 
 # Stripe statuses that still grant paid access (past_due keeps access while
 # Stripe retries the card; unpaid/canceled do not).
@@ -63,6 +81,68 @@ def plan_for_price(price_id: str) -> str | None:
     return None
 
 
+def sale_active() -> bool:
+    """True while the early-adopter sale window is open and wired up."""
+    if not settings.STRIPE_PROMO_EARLY_ADOPTER:
+        return False
+    if not settings.STRIPE_SALE_ENDS_AT:
+        return True
+    return date.today() <= date.fromisoformat(settings.STRIPE_SALE_ENDS_AT)
+
+
+def pricing() -> dict:
+    """Deterministic price catalogue for the /billing/pricing endpoint."""
+    sale = {"active": False, "code": "", "percent_off": 0, "months": 0, "cap": 0}
+    if sale_active():
+        sale = {
+            "active": True,
+            "code": settings.STRIPE_PROMO_EARLY_ADOPTER_CODE,
+            "percent_off": SALE_PERCENT_OFF,
+            "months": SALE_DURATION_MONTHS,
+            "cap": SALE_CAP,
+            "ends_at": settings.STRIPE_SALE_ENDS_AT or None,
+        }
+    plans = []
+    for key, plan in PLANS.items():
+        amounts = PLAN_AMOUNTS[key]
+        entry = {
+            "key": key,
+            "name": plan["name"],
+            "max_vehicles": plan["max_vehicles"],
+            "monthly": amounts["monthly"],
+            "yearly": amounts["yearly"],
+        }
+        if sale["active"]:
+            entry["sale_monthly"] = _discounted(amounts["monthly"], SALE_PERCENT_OFF)
+        plans.append(entry)
+    return {"currency": "usd", "sale": sale, "plans": plans}
+
+
+def _discounted(amount_cents: int, percent_off: int) -> int:
+    return round(amount_cents * (100 - percent_off) / 100)
+
+
+def _promo_discounts(promo_code: str | None, billing: str) -> list[dict] | None:
+    """Stripe `discounts` to attach to the checkout session, or None.
+
+    Auto-applies the early-adopter promotion code to monthly checkouts while
+    the sale is active. An explicit promo code must match the configured sale
+    code (the only promo AutoBrain issues); anything else is rejected locally
+    rather than guessed at — Stripe's promotion codes are validated at checkout
+    when allow_promotion_codes is set.
+    """
+    promo_id = settings.STRIPE_PROMO_EARLY_ADOPTER
+    code = settings.STRIPE_PROMO_EARLY_ADOPTER_CODE.upper()
+    entered = (promo_code or "").strip().upper()
+    if entered and entered != code:
+        raise ValueError("Unknown promo code")
+    if not promo_id:
+        return None
+    if entered == code or (billing == "monthly" and sale_active()):
+        return [{"promotion_code": promo_id}]
+    return None
+
+
 def plan_for_user(user: User) -> str:
     """Resolve the current plan key from a user's subscription state."""
     if not user.free_account:
@@ -91,7 +171,7 @@ def apply_free(user: User) -> None:
 
 
 async def create_checkout_session(
-    db: AsyncSession, user: User, plan_key: str, billing: str
+    db: AsyncSession, user: User, plan_key: str, billing: str, promo_code: str | None = None
 ) -> str:
     """Find-or-create the Stripe customer and open a Checkout subscription."""
     if plan_key not in PLANS:
@@ -121,17 +201,23 @@ async def create_checkout_session(
         await db.commit()
 
     base = settings.APP_BASE_URL.rstrip("/")
-    session = client.checkout.sessions.create(
-        params={
-            "mode": "subscription",
-            "customer": customer_id,
-            "client_reference_id": user.id,
-            "line_items": [{"price": price_id, "quantity": 1}],
-            "success_url": f"{base}/?checkout=success",
-            "cancel_url": f"{base}/",
-            "metadata": {"plan": plan_key, "billing": billing},
-        }
-    )
+    params: dict = {
+        "mode": "subscription",
+        "customer": customer_id,
+        "client_reference_id": user.id,
+        "line_items": [{"price": price_id, "quantity": 1}],
+        "success_url": f"{base}/?checkout=success",
+        "cancel_url": f"{base}/",
+        "metadata": {"plan": plan_key, "billing": billing},
+    }
+    discounts = _promo_discounts(promo_code, billing)
+    if discounts:
+        # Stripe forbids discounts + allow_promotion_codes together, so promo
+        # is applied via the code and other codes are typed at checkout.
+        params["discounts"] = discounts
+    else:
+        params["allow_promotion_codes"] = True
+    session = client.checkout.sessions.create(params=params)
     return session.url
 
 

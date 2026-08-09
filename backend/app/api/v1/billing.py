@@ -33,13 +33,21 @@ async def create_checkout(
 ) -> CheckoutResponse:
     """Create a Stripe Checkout session for a subscription and return its URL."""
     try:
-        url = await svc.create_checkout_session(db, user, payload.plan, payload.billing)
+        url = await svc.create_checkout_session(
+            db, user, payload.plan, payload.billing, payload.promo_code
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception:
         logger.exception("billing_checkout_failed")
         raise HTTPException(status_code=503, detail=_NOT_CONFIGURED)
     return CheckoutResponse(url=url)
+
+
+@router.get("/pricing")
+async def pricing() -> dict:
+    """Public price catalogue + early-adopter sale info (no auth)."""
+    return svc.pricing()
 
 
 @router.post("/portal", response_model=PortalResponse)

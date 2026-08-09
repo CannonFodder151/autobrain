@@ -20,7 +20,6 @@ _PRICES = {
     "STRIPE_PRICE_GARAGE_YEARLY": "price_gar_y",
 }
 
-
 def _user(**kw) -> User:
     defaults = dict(
         id=str(uuid.uuid4()),
@@ -128,3 +127,130 @@ async def test_public_signup_disabled_by_default() -> None:
         )
     assert resp.status_code == 403
     assert "disabled" in resp.json()["detail"].lower()
+
+
+class _FakeStripe:
+    """Minimal Stripe client stub recording checkout params."""
+
+    def __init__(self) -> None:
+        self.created = None
+        self.session_url = "https://checkout.stripe.test/sess"
+
+    @property
+    def customers(self):
+        class _Customers:
+            def list(self, **kw):
+                return type("R", (), {"data": []})()
+
+            def create(self, **kw):
+                return type("C", (), {"id": "cus_1"})()
+
+        return _Customers()
+
+    @property
+    def checkout(self):
+        class _Sessions:
+            def __init__(self, fake):
+                self.fake = fake
+
+            def create(self, params=None, **kw):
+                self.fake.created = params
+                return type("S", (), {"url": self.fake.session_url})()
+
+        return type("C", (), {"sessions": _Sessions(self)})()
+
+
+@pytest.fixture()
+def sale(monkeypatch, stripe_prices):
+    monkeypatch.setattr(settings, "STRIPE_PROMO_EARLY_ADOPTER", "promo_early40")
+    monkeypatch.setattr(settings, "STRIPE_PROMO_EARLY_ADOPTER_CODE", "EARLY40")
+    monkeypatch.setattr(settings, "STRIPE_SALE_ENDS_AT", "2999-01-01")
+    return True
+
+
+@pytest.fixture()
+def fake_stripe(monkeypatch):
+    fake = _FakeStripe()
+    monkeypatch.setattr(svc, "get_client", lambda: fake)
+    return fake
+
+
+async def _checkout(fake: _FakeStripe, plan="enthusiast", billing="monthly", promo=None):
+    await svc.create_checkout_session(
+        None,
+        _user(free_account=True, stripe_customer_id="cus_1"),
+        plan,
+        billing,
+        promo,
+    )
+    return fake.created
+
+
+def test_pricing_matches_approved_plan(sale) -> None:
+    data = svc.pricing()
+    assert data["currency"] == "usd"
+    assert data["sale"]["active"] is True
+    assert data["sale"]["code"] == "EARLY40"
+    assert data["sale"]["percent_off"] == 40
+    assert data["sale"]["cap"] == 100
+    by_key = {p["key"]: p for p in data["plans"]}
+    assert by_key["enthusiast"]["monthly"] == 900
+    assert by_key["enthusiast"]["yearly"] == 8400
+    assert by_key["enthusiast"]["sale_monthly"] == 540
+    assert by_key["garage"]["monthly"] == 1900
+    assert by_key["garage"]["yearly"] == 16800
+    assert by_key["garage"]["sale_monthly"] == 1140
+
+
+def test_pricing_no_sale_when_unconfigured(stripe_prices) -> None:
+    data = svc.pricing()
+    assert data["sale"]["active"] is False
+    assert "sale_monthly" not in data["plans"][0]
+
+
+@pytest.mark.asyncio
+async def test_checkout_auto_applies_sale_on_monthly(sale, fake_stripe) -> None:
+    params = await _checkout(fake_stripe)
+    assert params["discounts"] == [{"promotion_code": "promo_early40"}]
+    assert "allow_promotion_codes" not in params
+
+
+@pytest.mark.asyncio
+async def test_checkout_yearly_no_auto_discount(sale, fake_stripe) -> None:
+    params = await _checkout(fake_stripe, billing="yearly")
+    assert "discounts" not in params
+    assert params["allow_promotion_codes"] is True
+
+
+@pytest.mark.asyncio
+async def test_checkout_explicit_promo_code(sale, fake_stripe) -> None:
+    params = await _checkout(fake_stripe, promo="early40")
+    assert params["discounts"] == [{"promotion_code": "promo_early40"}]
+
+
+@pytest.mark.asyncio
+async def test_checkout_unknown_promo_rejected(sale, fake_stripe) -> None:
+    with pytest.raises(ValueError):
+        await _checkout(fake_stripe, promo="NOPE")
+
+
+@pytest.mark.asyncio
+async def test_checkout_no_promo_configured_allows_codes(stripe_prices, fake_stripe) -> None:
+    params = await _checkout(fake_stripe)
+    assert "discounts" not in params
+    assert params["allow_promotion_codes"] is True
+
+
+@pytest.mark.asyncio
+async def test_pricing_endpoint_public() -> None:
+    from httpx import ASGITransport, AsyncClient
+
+    from app.main import app
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/api/v1/billing/pricing")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert {p["key"] for p in body["plans"]} == {"enthusiast", "garage"}
+    assert "sale" in body
