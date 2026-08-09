@@ -4,13 +4,16 @@ Input:  vehicle attributes, service history, mods, condition, market data.
 Output: value range, factor breakdown, recommendations, trend.
 
 Deterministic-first: the depreciation-curve baseline is always returned and its
-value numbers are never overridden; 9Router only enriches market trend data.
+value numbers are never overridden by the AI. 9Router supplies market facts —
+the new-car RRP and a typical current used selling price — which are run
+through the deterministic model (used_price clamped to a sane band), plus
+advice/trend enrichment. The AI never writes the number directly.
 
 The output is validated and clamped so estimates stay sane and consistent:
 low <= estimated <= high, values bounded to a realistic AUD range.
 """
 
-from app.fallbacks import estimate_value_fallback
+from app.fallbacks import estimate_value_fallback, rrp_for
 from app.router_client import enhance
 
 _MIN_VAL, _MAX_VAL = 500.0, 5_000_000.0
@@ -55,7 +58,18 @@ def _validate(result: dict) -> dict:
 async def run(payload: dict) -> dict:
     baseline = estimate_value_fallback(payload)
     merged = await enhance("resale", payload, baseline)
+    vehicle = payload.get("vehicle", {})
+    # Deterministic table RRP wins; AI rrp fills gaps for unknown recent models.
+    rrp = rrp_for(vehicle)
+    if rrp is None:
+        rrp = _f(merged.get("rrp"))
+    used_price = _f(merged.get("used_price"))
     try:
-        return _validate(merged)
+        result = estimate_value_fallback(payload, rrp=rrp, used_price=used_price)
+        # Preserve AI-enriched advice/trend where provided.
+        for key in ("recommendations", "trend"):
+            if merged.get(key) is not None:
+                result[key] = merged[key]
+        return _validate(result)
     except (ValueError, KeyError, TypeError):
         return baseline

@@ -58,6 +58,38 @@ def test_resale_depreciation() -> None:
     assert 0 < out["low"] < out["estimated_value"] < out["high"]
     assert out["currency"] == "AUD"
 
+def test_resale_everest_anchored_on_rrp() -> None:
+    # Regression for AUT-161: a 2025 Ford Everest was valued ~20k because the
+    # model fell back to the ford make default. RRP anchor must keep it
+    # realistic (RRP ~62k, ~57k used).
+    out = estimate_value_fallback({
+        "vehicle": {"make": "Ford", "model": "Everest Trend", "year": 2025,
+                    "odometer_km": 5000, "condition": "good"},
+    })
+    assert out["factors"]["rrp"] == 62000.0
+    assert out["estimated_value"] > 45000
+    assert out["model"] == "rrp-depreciation"
+
+def test_resale_everest_used_price_refinement() -> None:
+    # AI-supplied current selling price (~57.8k) refines the estimate in-band.
+    out = estimate_value_fallback({
+        "vehicle": {"make": "Ford", "model": "Everest Trend", "year": 2025,
+                    "odometer_km": 5000, "condition": "good"},
+    }, used_price=57800.0)
+    assert 40000 < out["estimated_value"] < 70000
+    assert out["low"] <= out["estimated_value"] <= out["high"]
+
+def test_resale_used_price_cannot_skew_estimate() -> None:
+    # A wildly wrong used price is clamped to the deterministic band.
+    det = estimate_value_fallback({
+        "vehicle": {"make": "Ford", "model": "Everest Trend", "year": 2025,
+                    "odometer_km": 5000, "condition": "good"},
+    })["estimated_value"]
+    out = estimate_value_fallback({
+        "vehicle": {"make": "Ford", "model": "Everest Trend", "year": 2025,
+                    "odometer_km": 5000, "condition": "good"},
+    }, used_price=19973.0)
+    assert 0.8 * det <= out["estimated_value"] <= 1.2 * det
 
 def test_resale_crown_victoria_holds_value() -> None:
     # Regression for AUT-146: an old Crown Vic must not decay to ~$2k.
@@ -118,7 +150,9 @@ async def test_module_deterministic_model_label() -> None:
     ]
     for name, payload in cases:
         out = await modules.MODULES[name](payload)
-        assert out["model"].startswith("rule-based"), name
+        # Every module returns a deterministic baseline (rule-based or the
+        # rrp-depreciation resale model) with the router disabled.
+        assert out["model"].startswith("rule-based") or out["model"] == "rrp-depreciation", name
 
 
 def test_fuel_receipt_fallback() -> None:
