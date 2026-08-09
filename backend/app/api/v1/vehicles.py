@@ -1,7 +1,9 @@
 """Vehicle routes: CRUD, rego lookup, timeline."""
 
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_rego, require_write
@@ -9,8 +11,6 @@ from app.core.logging import get_logger
 from app.db.session import get_db
 from app.models.service import ServiceRecord
 from app.models.fuel import FuelLog
-from app.models.mod import Modification
-from app.models.diagnostic import Diagnostic
 from app.models.user import User
 from app.models.vehicle import Vehicle, VehicleEvent
 from app.models.share import VehicleShare
@@ -133,7 +133,17 @@ async def get_timeline(
     await _get_owned_vehicle(db, vehicle_id, user)
     rows = await db.scalars(
         select(VehicleEvent)
-        .where(VehicleEvent.vehicle_id == vehicle_id)
+        .outerjoin(ServiceRecord, ServiceRecord.id == VehicleEvent.source_id)
+        .where(
+            VehicleEvent.vehicle_id == vehicle_id,
+            or_(
+                VehicleEvent.event_type != "service",
+                and_(
+                    ServiceRecord.status == "completed",
+                    VehicleEvent.occurred_on <= date.today(),
+                ),
+            ),
+        )
         .order_by(VehicleEvent.occurred_on.desc(), VehicleEvent.created_at.desc())
     )
     return list(rows)

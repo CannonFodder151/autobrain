@@ -48,18 +48,30 @@ async def _service_or_404(db: AsyncSession, vehicle_id: str, service_id: str) ->
 
 
 async def _ensure_completed_event(db: AsyncSession, record: ServiceRecord) -> None:
-    if record.status != "completed":
-        return
+    """Sync the timeline event with the service record.
+
+    Completed services appear on the timeline; future/scheduled ones drop off
+    until they are completed again (AUT-18).
+    """
     existing = await db.scalar(
         select(VehicleEvent).where(VehicleEvent.source_id == record.id)
     )
-    if not existing:
-        await add_event(
-            db, record.vehicle_id, "service",
-            f"{record.service_type.title()} service @ {record.odometer_km:,} km",
-            record.completed_date or record.service_date,
-            record.odometer_km, record.cost, record.id,
-        )
+    if record.status != "completed":
+        if existing:
+            await db.delete(existing)
+        return
+    if existing:
+        existing.title = f"{record.service_type.title()} service @ {record.odometer_km:,} km"
+        existing.occurred_on = record.completed_date or record.service_date
+        existing.odometer_km = record.odometer_km
+        existing.amount = record.cost
+        return
+    await add_event(
+        db, record.vehicle_id, "service",
+        f"{record.service_type.title()} service @ {record.odometer_km:,} km",
+        record.completed_date or record.service_date,
+        record.odometer_km, record.cost, record.id,
+    )
 
 
 async def _resolve_linked_diagnostics(db: AsyncSession, record: ServiceRecord) -> None:
