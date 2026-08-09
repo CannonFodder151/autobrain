@@ -1,13 +1,14 @@
-"""Admin API-key routes (machine-to-machine user management).
+"""Admin API-key routes (machine-to-machine).
 
 Authenticated with the `X-Admin-API-Key` header (ADMIN_API_KEY env var).
 Allows external systems to create users, set permissions (role, vehicle
-quota, free/paid account, OBD access), list, disable and delete users.
+quota, free/paid account, OBD access), list, disable and delete users, and
+take full-database backup/restore for off-box retention (autobrain-backup).
 """
 
 import secrets
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,8 +19,41 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.auth import AdminUserUpdate, UserAdminOut, UserCreate
 from app.services import email as mail
+from app.services.backup import dump_backup, load_backup, restore_all, serialize_all
 
 router = APIRouter(prefix="/admin-api", tags=["admin-api"], dependencies=[Depends(require_admin_api_key)])
+
+
+@router.get("/backup")
+async def download_backup(db: AsyncSession = Depends(get_db)) -> Response:
+    """Full database snapshot (JSON) for machine-to-machine off-box retention."""
+    data = await serialize_all(db)
+    content = dump_backup(data)
+    from datetime import datetime, timezone
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    return Response(
+        content=content,
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="autobrain-backup-{stamp}.json"'},
+    )
+
+
+@router.post("/restore")
+async def restore_backup(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Wipe and restore the whole database from an uploaded backup. DANGEROUS."""
+    raw = await file.read()
+    if len(raw) > 100 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Backup file too large")
+    try:
+        data = load_backup(raw)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    await restore_all(db, data)
+    return {"message": "Restore complete", "restored_at": data.get("created_at")}
+
 
 
 @router.get("/users", response_model=list[UserAdminOut])
