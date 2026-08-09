@@ -1,5 +1,5 @@
 # AutoBrain HOSTED stack — self-service Free signup + Stripe subscriptions.
-# Deployed on Oracle Cloud VM (152.69.188.133) via Portainer stack on endpoint 5.
+# Deployed via Portainer (endpoint 5) on the Oracle Cloud VM.
 # Uses prebuilt `cannonfodder151/autobrain-*:hosted` Docker Hub images.
 # Frontend nginx on :8086 → box reverse proxy → hosted.autobrainservice.app.
 # Self-signup enabled, MFA enforced, LICENSE_ENABLED=true.

@@ -3,7 +3,7 @@
 > **Split:** the iOS/Android app now lives in the separate **private** repo
 > [`CannonFodder151/autobrain-mobile`](https://github.com/CannonFodder151/autobrain-mobile).
 > This `frontend/` is the **Flutter web** build (produced by the frontend Docker
-> image). The two share a common Flutter lineage but version independently
+> image). The two share a common Flutter lineage and the same release version
 > (`scripts/bump-version.sh --mobile`).
 
 ## Structure

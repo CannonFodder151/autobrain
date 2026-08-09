@@ -91,7 +91,7 @@ class Settings(BaseSettings):
     SMTP_FROM_EMAIL: str = "noreply@nathanmartina.com"
     SMTP_FROM_NAME: str = "AutoBrain"
     # Public base URL used to build password-reset links (no trailing slash)
-    APP_BASE_URL: str = "http://10.0.3.39"
+    APP_BASE_URL: str = "http://localhost:8000"
 
     # Versioning + GitHub release checking
     APP_VERSION: str = "0.3.4"  # mirror frontend/pubspec.yaml version

@@ -60,7 +60,7 @@ docker compose -f docker-compose.prod.yml up -d nginx   # mounts ./web-dist
 ## Over SSH
 
 ```bash
-./scripts/deploy.sh administrator@10.0.3.39
+./scripts/deploy.sh <user>@<host>
 ```
 
 ## Kubernetes

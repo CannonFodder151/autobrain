@@ -13,7 +13,7 @@ a release `.aab` is produced, and Nathan knows where the change notes live.
 | Repo | Purpose |
 |------|---------|
 | `CannonFodder151/autobrain` | Monorepo. `frontend/` = Flutter **web** app. `scripts/bump-version.sh` lives here. |
-| `CannonFodder151/autobrain-mobile` | Private. The same Flutter codebase for **iOS/Android**. Versioned independently. |
+| `CannonFodder151/autobrain-mobile` | Private. The same Flutter codebase for **iOS/Android**. Same release version as the server (`bump-version.sh --mobile`). |
 
 ## Prerequisites (build runner)
 
@@ -117,6 +117,13 @@ curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
 
 No auth needed on the reporter webhook. Keep embeds tight: `title` ≤ 90 chars,
 `description` 1–4 lines, `fields` ≤ 4.
+
+### 6. Mirror the release into the marketing site changelog
+
+Every release also lands on the public website: add the new version entry to
+`autobrainservice-website/changelog.html` (same content as `CHANGELOG.md`), then
+commit + push that repo. The site's Azure Static Web Apps deployment publishes
+it automatically.
 
 ## GitHub Actions (recommended automation)
 

@@ -5,10 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+- Versioning unified around a single `x.y.z` (see `docs/versioning.md`): the backend and AI gateway report `APP_VERSION` (no more stale hardcoded strings), and `bump-version.sh` updates backend, AI gateway, web, mobile and the changelog in one shot.
+- Public `GET /api/v1/auth/config` now returns `app_version` so the mobile app can detect when it is behind and prompt for an update on login.
+- Stripped sensitive info from the repo (sample number plate in the changelog, internal IPs, hostnames and hosting details in `.env.example`, config defaults, compose comments and docs).
+
 ## [0.3.4] - 2026-08-06
 
 ### Added
-- Rego lookup now sends the vehicle type (car/motorcycle) to the self-hosted scraper. VIC motorcycles resolve correctly — the vicroads form selects the motorcycle field and vehicle-type dropdown (test case: `3B4PV` → clean not-found for an unregistered plate).
+- Rego lookup now sends the vehicle type (car/motorcycle) to the self-hosted scraper. VIC motorcycles resolve correctly — the vicroads form selects the motorcycle field and vehicle-type dropdown (test case: `[redacted]` → clean not-found for an unregistered plate).
 - Motorcycle-aware offline fallback — a bike never falls back to a guessed car.
 - Vehicle type is enforced in the add/edit vehicle screens before rego lookup (selector moved above the rego field).
 

@@ -83,13 +83,16 @@ Full docs are maintained in the Outline wiki (AutoBrain collection) and mirrored
 The **mobile app** (iOS/Android) lives in its own private repo:
 [`CannonFodder151/autobrain-mobile`](https://github.com/CannonFodder151/autobrain-mobile).
 This repo (`frontend/`) keeps the **Flutter web** build only. The two repos
-share the same Flutter codebase lineage but are versioned independently:
+share the same Flutter codebase lineage and the same release version:
 
 - `autobrain` — web frontend (built by the frontend Docker image)
 - `autobrain-mobile` — iOS / Android app (built with Flutter tooling)
 
-`scripts/bump-version.sh` accepts `--mobile` to bump `autobrain-mobile`'s
-`pubspec.yaml` alongside a web release.
+`scripts/bump-version.sh --mobile` bumps `autobrain-mobile`'s `pubspec.yaml`
+in the same release, so store versions always match the server release. On
+login the app compares its installed version with the server's
+`GET /api/v1/auth/config` → `app_version` and prompts the user to update
+when it is behind.
 
 ## AI modules
 

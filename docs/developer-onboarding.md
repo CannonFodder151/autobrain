@@ -37,8 +37,8 @@ docs/      markdown mirrors of the wiki
 
 > **Mobile app:** the iOS/Android app lives in the separate **private** repo
 > `CannonFodder151/autobrain-mobile`. This repo's `frontend/` is the Flutter
-> **web** build only; the two share a common Flutter lineage but are versioned
-> independently (`scripts/bump-version.sh --mobile`).
+> **web** build only; the two share a common Flutter lineage and the same
+> release version (`scripts/bump-version.sh --mobile`).
 
 ## 5. Day-to-day
 
