@@ -31,6 +31,27 @@ class Vehicle {
   String get displayName => '$nickname'
       '${make != null ? ' ($make $model)' : ''}'.trim();
 
+  @override
+  bool operator ==(Object other) => other is Vehicle && other.id == id;
+
+  @override
+  int get hashCode => id.hashCode;
+
+  /// Re-resolves [current] against a freshly fetched [vehicles] list so the
+  /// stored selection always refers to a live instance in the list, keeping
+  /// the dropdown and card in sync across refreshes.
+  static Vehicle? resolveSelection(List<Vehicle> vehicles, Vehicle? current) {
+    if (current != null) {
+      for (final v in vehicles) {
+        if (v.id == current.id) return v;
+      }
+    }
+    for (final v in vehicles) {
+      if (v.isPrimary) return v;
+    }
+    return vehicles.isEmpty ? null : vehicles.first;
+  }
+
   factory Vehicle.fromJson(Map<String, dynamic> j) => Vehicle(
         id: j['id'] as String,
         nickname: j['nickname'] as String,

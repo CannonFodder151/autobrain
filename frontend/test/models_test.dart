@@ -30,4 +30,30 @@ void main() {
     });
     expect(low.needsReorder, isTrue);
   });
+
+  test('Vehicle equality is id-based', () {
+    final a = Vehicle.fromJson(const {'id': 'v1', 'nickname': 'A'});
+    final b = Vehicle.fromJson(const {'id': 'v1', 'nickname': 'B'});
+    final c = Vehicle.fromJson(const {'id': 'v2', 'nickname': 'A'});
+    expect(a, equals(b));
+    expect(a, isNot(equals(c)));
+    expect(a.hashCode, b.hashCode);
+  });
+
+  test('Vehicle.resolveSelection re-syncs selection to a fresh instance', () {
+    final fresh = Vehicle.fromJson(const {'id': 'v1', 'nickname': 'Edited'});
+    final other = Vehicle.fromJson(const {'id': 'v2', 'nickname': 'Other'});
+    final stale = Vehicle.fromJson(const {'id': 'v1', 'nickname': 'Old'});
+    expect(Vehicle.resolveSelection([fresh, other], stale), same(fresh));
+  });
+
+  test('Vehicle.resolveSelection falls back when current is gone', () {
+    final primary = Vehicle.fromJson(
+        const {'id': 'p', 'nickname': 'Primary', 'is_primary': true});
+    final other = Vehicle.fromJson(const {'id': 'o', 'nickname': 'Other'});
+    final gone = Vehicle.fromJson(const {'id': 'x', 'nickname': 'Gone'});
+    expect(Vehicle.resolveSelection([primary, other], gone), same(primary));
+    expect(Vehicle.resolveSelection([primary, other], null), same(primary));
+    expect(Vehicle.resolveSelection([], gone), isNull);
+  });
 }
