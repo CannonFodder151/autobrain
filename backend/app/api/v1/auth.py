@@ -281,6 +281,8 @@ async def confirm_password_reset(
     if not user or not user.is_active:
         raise HTTPException(status_code=400, detail="Invalid or expired reset token")
     user.hashed_password = hash_password(payload.new_password)
+    if data.get("type") == "invite":
+        user.pending = False  # invited user completed registration by setting a password
     await db.commit()
     await db.refresh(user)
     await mail.send_password_changed(user.email, user.display_name)
@@ -307,6 +309,7 @@ async def admin_create_user(
         hashed_password=hashed,
         role=payload.role,
         max_vehicles=payload.max_vehicles,
+        pending=payload.send_invite,
     )
     db.add(user)
     await db.commit()
@@ -349,6 +352,7 @@ async def public_signup(
         role="user",
         max_vehicles=1,
         free_account=True,
+        pending=True,
     )
     db.add(user)
     await db.commit()

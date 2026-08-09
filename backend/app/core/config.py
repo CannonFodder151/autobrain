@@ -112,6 +112,10 @@ class Settings(BaseSettings):
     # admin-only provisioning by leaving this off.
     SELF_SIGNUP_ENABLED: bool = False
 
+    # Pending (invited/self-signed-up but unactivated) accounts older than this
+    # are purged by the daily celery task (see workers.tasks.purge_stale_pending_accounts).
+    PENDING_ACCOUNT_RETENTION_DAYS: int = 7
+
     # Licence/subscription feature visibility. Off by default; the hosted
     # instance turns it on. When off, the app hides the licence/upgrade page.
     LICENSE_ENABLED: bool = False

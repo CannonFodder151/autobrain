@@ -178,6 +178,32 @@ def run_daily_notification_checks() -> None:
 
 
 @shared_task
+def purge_stale_pending_accounts() -> None:
+    """Delete invited/self-signed-up accounts that never completed registration."""
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import select
+
+    from app.core.config import settings
+    from app.models.user import User
+    from app.services.backup import delete_user_complete
+
+    async def _purge():
+        async with SessionLocal() as db:
+            cutoff = datetime.now(timezone.utc) - timedelta(days=settings.PENDING_ACCOUNT_RETENTION_DAYS)
+            stale = list((await db.scalars(
+                select(User).where(User.pending.is_(True), User.created_at < cutoff)
+            )).all())
+            for user in stale:
+                await delete_user_complete(db, user.id)
+                logger.info("purged_stale_pending_account", email=user.email, created_at=user.created_at)
+            if stale:
+                logger.info("purge_stale_pending_done", count=len(stale))
+
+    _run(_purge())
+
+
+@shared_task
 def scheduled_backup() -> None:
     """Daily full-DB snapshot stored to MinIO. Admin backup safety-net."""
     import io as _io
