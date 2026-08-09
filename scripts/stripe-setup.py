@@ -57,13 +57,14 @@ def upsert_price(plan_key: str, billing: str) -> dict:
         print(f"  verified {plan['name']} {billing}: {price.id}")
         return price
     product = stripe.Product.retrieve(plan_key)
+    interval = {"monthly": "month", "yearly": "year"}[billing]
     return stripe.Price.create(
         product=product.id,
         unit_amount=amount,
         currency="usd",
         lookup_key=lookup,
         nickname=f"{plan['name']} {billing}",
-        recurring={"interval": billing, "interval_count": 1},
+        recurring={"interval": interval, "interval_count": 1},
     )
 
 
@@ -106,6 +107,9 @@ def main() -> None:
     if not os.environ.get("STRIPE_SECRET_KEY"):
         sys.exit("STRIPE_SECRET_KEY is not set")
     stripe.api_key = os.environ["STRIPE_SECRET_KEY"]
+    # The account's default API version (2026-07-29.dahlia) rejects the `coupon`
+    # param on promotion_codes; pin a stable version that accepts it.
+    stripe.api_version = "2024-06-20"
 
     print("AutoBrain pricing setup")
     for plan_key in PLANS:
