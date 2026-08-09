@@ -112,3 +112,5 @@ def _compare(a: str, b: str) -> int:
         if x != y:
             return -1 if x < y else 1
     return (len(pa) > len(pb)) - (len(pa) < len(pb))
+
+# AUT-103 verification: ensure a python diff exists for CodeQL
