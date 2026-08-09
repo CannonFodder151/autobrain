@@ -86,6 +86,27 @@ class _ShareVehicleScreenState extends State<ShareVehicleScreen> {
     }
   }
 
+  Future<void> _remove(String shareId) async {
+    final api = context.read<AuthState>().api;
+    setState(() => _busy = true);
+    try {
+      await api.delete('/vehicle-shares/$shareId');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Access removed')),
+        );
+      }
+      await _load();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -144,13 +165,23 @@ class _ShareVehicleScreenState extends State<ShareVehicleScreen> {
         (s['invitee_display_name'] as String?) ?? 'Unknown',
       ),
       subtitle: Text((s['invitee_email'] as String?) ?? ''),
-      trailing: Text(
-        pending ? 'Pending' : 'Accepted',
-        style: TextStyle(
-          color: pending
-              ? Theme.of(context).colorScheme.tertiary
-              : Colors.green,
-        ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            pending ? 'Pending' : 'Accepted',
+            style: TextStyle(
+              color: pending
+                  ? Theme.of(context).colorScheme.tertiary
+                  : Colors.green,
+            ),
+          ),
+          IconButton(
+            tooltip: 'Remove access',
+            icon: const Icon(Icons.remove_circle_outline),
+            onPressed: _busy ? null : () => _remove(s['id'] as String),
+          ),
+        ],
       ),
     );
   }

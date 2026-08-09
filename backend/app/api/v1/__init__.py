@@ -18,6 +18,7 @@ from app.api.v1 import (
     receipts,
     search,
     services,
+    shares,
     valuation,
     vehicles,
 )
@@ -29,6 +30,7 @@ api_router.include_router(admin.router)
 api_router.include_router(admin.admin_ops)
 api_router.include_router(admin_api.router)
 api_router.include_router(vehicles.router)
+api_router.include_router(shares.router)
 api_router.include_router(services.router)
 api_router.include_router(fuel.router)
 api_router.include_router(diagnostics.router)

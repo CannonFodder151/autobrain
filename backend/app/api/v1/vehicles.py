@@ -38,7 +38,7 @@ async def _get_owned_vehicle(db: AsyncSession, vehicle_id: str, user: User) -> V
 
 
 async def _get_accessible_vehicle(db: AsyncSession, vehicle_id: str, user: User) -> Vehicle:
-    """Return a vehicle the user owns or has an active share on."""
+    """Return a vehicle the user owns or has an accepted share on."""
     vehicle = await db.get(Vehicle, vehicle_id)
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found")
@@ -48,6 +48,7 @@ async def _get_accessible_vehicle(db: AsyncSession, vehicle_id: str, user: User)
         select(VehicleShare).where(
             VehicleShare.vehicle_id == vehicle_id,
             VehicleShare.invitee_user_id == user.id,
+            VehicleShare.status == "accepted",
         )
     )
     if share is None:
@@ -91,7 +92,10 @@ async def list_vehicles(
         select(Vehicle, User)
         .join(VehicleShare, VehicleShare.vehicle_id == Vehicle.id)
         .join(User, User.id == Vehicle.user_id)
-        .where(VehicleShare.invitee_user_id == user.id)
+        .where(
+            VehicleShare.invitee_user_id == user.id,
+            VehicleShare.status == "accepted",
+        )
         .order_by(Vehicle.created_at.desc())
     )).all()
     for v in owned:
