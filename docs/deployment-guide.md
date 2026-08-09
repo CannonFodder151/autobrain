@@ -15,6 +15,20 @@ Only promote to the next tier once the current one is verified healthy (startup,
 health checks, key flows). A change never goes to Hosted without first passing
 Demo and Default. Source of truth: board directive AUT-78.
 
+### Release checklist (release is NOT complete until Hosted is verified last)
+
+Every release runs the gates below, in order. No gate may be skipped; a failed
+gate blocks the release at that tier.
+
+- [ ] 1. **Demo** — deploy to `demo.autobrainservice.app`; verify startup +
+      `/health` + key flows.
+- [ ] 2. **Default** — deploy to dev/default (source mounts); verify startup +
+      `/health` + key flows.
+- [ ] 3. **Hosted** — deploy to `hosted.autobrainservice.app` (Oracle Cloud
+      `152.69.188.133`, Portainer endpoint 5); verify startup + `/health` + key
+      flows. **Only when this passes is the release complete.**
+- [ ] Note promotion order + verification result in the issue / #updates channel.
+
 ## Prerequisites
 
 - Linux host with Docker 24+ and Docker Compose v2.
