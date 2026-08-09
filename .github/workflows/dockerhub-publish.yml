@@ -6,7 +6,30 @@ on:
   workflow_dispatch:
 
 jobs:
+  changelog-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require changelog iteration on app/docker changes (AUT-168)
+        run: |
+          set -euo pipefail
+          BEFORE="${{ github.event.before }}"
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            echo "workflow_dispatch or initial push — skipping changelog gate"
+            exit 0
+          fi
+          CHANGED="$(git diff --name-only "$BEFORE" "$GITHUB_SHA")"
+          APP_CHANGED="$(printf '%s\n' "$CHANGED" | grep -E '^(backend/|ai/|frontend/|docker/|docker-compose)' || true)"
+          if [ -n "$APP_CHANGED" ] && ! printf '%s\n' "$CHANGED" | grep -qx 'CHANGELOG.md'; then
+            echo "::error::App/docker files changed but CHANGELOG.md was not updated. Add an entry under [Unreleased] (see CONTRIBUTING.md) before merging."
+            exit 1
+          fi
+          echo "changelog gate OK — CHANGELOG.md iterated with app/docker changes"
+
   publish:
+    needs: changelog-gate
     runs-on: ubuntu-latest
     permissions:
       contents: read

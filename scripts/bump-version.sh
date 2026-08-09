@@ -64,5 +64,7 @@ echo "    docker build -f docker/frontend/Dockerfile --build-arg API_BASE_URL=ht
 echo "    docker build -f docker/frontend/Dockerfile --build-arg API_BASE_URL=https://default.autobrainservice.app/api/v1 --build-arg WS_BASE_URL=wss://default.autobrainservice.app/ws -t cannonfodder151/autobrain-frontend:$V ."
 echo "    docker build -f docker/frontend/Dockerfile --build-arg API_BASE_URL=https://demo.autobrainservice.app/api/v1 --build-arg WS_BASE_URL=wss://demo.autobrainservice.app/ws -t cannonfodder151/autobrain-frontend-demo:$V ."
 echo
-echo "    Reminder: also add the new release to the marketing site"
-echo "    (autobrainservice-website/changelog.html) — it mirrors CHANGELOG.md."
+echo "    The marketing site changelog is updated automatically: the Docker Hub"
+echo "    publish workflow syncs CHANGELOG.md and regenerates changelog.html on main."
+echo "    The CI changelog gate (AUT-168) requires CHANGELOG.md to be iterated"
+echo "    alongside any app/docker change — keep it updated under [Unreleased]."

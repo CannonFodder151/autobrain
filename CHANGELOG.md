@@ -8,6 +8,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > user-facing change ships with an entry here under `[Unreleased]` — see
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
+## [Unreleased]
+
+### Changed
+- Changelog is now mandatory for every app/docker change (AUT-168): CI on
+  `main` fails the Docker Hub publish if `backend/`, `ai/`, `frontend/`,
+  `docker/` or compose files changed without a matching `CHANGELOG.md` entry.
+  The marketing site still auto-syncs `CHANGELOG.md` and regenerates
+  `changelog.html` on every release push, so the website changelog always
+  reflects the shipped code.
+
 ## [0.3.5] - 2026-08-09
 
 ### Added

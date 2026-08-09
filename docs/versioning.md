@@ -15,8 +15,9 @@ one tool that moves the number everywhere in one shot:
 - `autobrain-mobile/pubspec.yaml` — bumped in the same release with `--mobile`
   so the store version always matches the server release.
 - `CHANGELOG.md` — promotes `[Unreleased]` to a dated `[V]` section.
-- Marketing site — mirror the new release into
-  `autobrainservice-website/changelog.html` (the script reminds you).
+- Marketing site — `CHANGELOG.md` is synced to
+  `autobrainservice-website` and `changelog.html` regenerated automatically by
+  the Docker Hub publish workflow on every `main` push (no manual step).
 
 Anything that reports a version (FastAPI `version=`, `/health`, admin banner,
 public config) must come from `APP_VERSION` — never a hardcoded literal.
@@ -34,7 +35,13 @@ public config) must come from `APP_VERSION` — never a hardcoded literal.
 1. Feature branches → PR → review.
 2. `./scripts/bump-version.sh <x.y.z> [--mobile]` then commit.
 3. Merge to `main` → build + deploy via `scripts/deploy.sh`.
-4. Mirror the release into `autobrainservice-website/changelog.html`.
+4. `changelog.html` on the marketing site regenerates automatically from
+   `CHANGELOG.md` on the `main` push (AUT-119/AUT-168).
+
+A CI changelog gate on `main` (AUT-168) fails the Docker Hub publish if any
+`backend/`, `ai/`, `frontend/`, `docker/` or compose file changes without a
+matching `CHANGELOG.md` entry — so the changelog and the website always track
+shipped code.
 
 ## Migration rules
 
