@@ -29,11 +29,12 @@ COPY ai/requirements.txt ./ai_requirements.txt
 
 # Non-root user
 RUN useradd -m -u 1000 autobrain && chown -R autobrain:autobrain /app
-USER autobrain
 
-# MinIO init entrypoint
+# MinIO init entrypoint (before dropping privileges)
 COPY scripts/init-minio.sh /init-minio.sh
 RUN chmod +x /init-minio.sh
+
+USER autobrain
 
 EXPOSE 8000
 
