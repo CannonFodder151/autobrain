@@ -92,6 +92,8 @@ services:
     environment:
       AI_ROUTER_URL: ${AI_ROUTER_URL:-http://your-9router-instance:port}
       AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:-}
+      # Local dev: explicit opt-out from gateway auth (fail-closed by default).
+      AI_ENV: development
     ports:
       - "8001:8001"
     command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload

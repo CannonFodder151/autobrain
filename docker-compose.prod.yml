@@ -16,6 +16,7 @@ x-core-env: &core-env
   REDIS_URL: redis://redis:6379/0
   MINIO_ENDPOINT: minio:9000
   AI_LOCAL_BASE_URL: http://ai:8001
+  AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:?AI_GATEWAY_API_KEY must be set (prod fails closed)}
 
 x-backend-base: &backend-base
   build:
@@ -93,7 +94,7 @@ services:
     env_file: .env
     environment:
       AI_ROUTER_URL: ${AI_ROUTER_URL}
-      AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:-}
+      AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:?AI_GATEWAY_API_KEY must be set (prod fails closed)}
     expose:
       - "8001"
 
