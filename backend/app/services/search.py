@@ -1,6 +1,6 @@
 """Semantic search service — hybrid vector + keyword search across AutoBrain data."""
 
-from sqlalchemy import and_, select, text
+from sqlalchemy import and_, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
@@ -36,15 +36,21 @@ _ENTITY_MAP = {
     },
 }
 
+# Valid entity types, exposed for input validation at the API boundary.
+ENTITY_TYPES = tuple(_ENTITY_MAP.keys())
+
 
 async def semantic_search(
     db: AsyncSession,
     query: str,
-    vehicle_id: str | None = None,
+    vehicle_ids: list[str] | None = None,
     entity_types: list[str] | None = None,
     limit: int = 10,
 ) -> list[dict]:
     """Search across entities using hybrid keyword + vector similarity.
+
+    Scoped to `vehicle_ids` (the requesting user's owned + shared vehicles);
+    pass an empty list to deny all rows, or None to skip scoping (internal use).
 
     Returns results ranked by combined score (keyword match weight + vector
     cosine similarity). Falls back to keyword-only if embeddings are
@@ -61,19 +67,23 @@ async def semantic_search(
         model = cfg["model"]
 
         base_filters = []
-        if vehicle_id:
-            base_filters.append(model.vehicle_id == vehicle_id)
+        if vehicle_ids is not None:
+            base_filters.append(model.vehicle_id.in_(vehicle_ids))
 
-        # Keyword search (ILIKE on text columns) — always runs.
+        # Keyword search (ILIKE on text columns) — always runs. Columns are
+        # OR-ed (match any column); vehicle scope stays AND-ed.
         keyword_conditions = []
         for col_name in cfg["columns"]:
             col = getattr(model, col_name, None)
             if col is not None:
                 keyword_conditions.append(col.ilike(f"%{query}%"))
 
+        filters = base_filters
+        if keyword_conditions:
+            filters = [*base_filters, or_(*keyword_conditions)]
         keyword_stmt = (
             select(model)
-            .where(and_(*base_filters, *keyword_conditions))
+            .where(and_(*filters))
             .limit(limit)
         )
         keyword_rows = (await db.execute(keyword_stmt)).scalars().all()
