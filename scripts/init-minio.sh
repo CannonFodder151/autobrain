@@ -2,8 +2,8 @@
 set -e
 
 ENDPOINT="${MINIO_ENDPOINT:-minio:9000}"
-ACCESS_KEY="${MINIO_ACCESS_KEY:-autobrain}"
-SECRET_KEY="${MINIO_SECRET_KEY:-autobrain}"
+ACCESS_KEY="${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY must be set}"
+SECRET_KEY="${MINIO_SECRET_KEY:?MINIO_SECRET_KEY must be set}"
 BUCKET="${MINIO_BUCKET:-autobrain-assets}"
 
 echo "[init-minio] Waiting for MinIO at $ENDPOINT ..."

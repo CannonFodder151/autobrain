@@ -25,8 +25,8 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
     # Database
-    POSTGRES_USER: str = "autobrain"
-    POSTGRES_PASSWORD: str = "autobrain"
+    POSTGRES_USER: str
+    POSTGRES_PASSWORD: str
     POSTGRES_DB: str = "autobrain"
     POSTGRES_HOST: str = "postgres"
     POSTGRES_PORT: int = 5432
@@ -39,8 +39,8 @@ class Settings(BaseSettings):
 
     # MinIO
     MINIO_ENDPOINT: str = "minio:9000"
-    MINIO_ACCESS_KEY: str = "autobrain"
-    MINIO_SECRET_KEY: str = "autobrain"
+    MINIO_ACCESS_KEY: str
+    MINIO_SECRET_KEY: str
     MINIO_BUCKET: str = "autobrain-assets"
     MINIO_SECURE: bool = False
     MINIO_PUBLIC_ENDPOINT: str = "http://localhost:9000"

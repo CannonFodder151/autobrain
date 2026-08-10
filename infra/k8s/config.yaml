@@ -5,12 +5,15 @@ metadata:
   namespace: autobrain
 type: Opaque
 stringData:
-  # Replace with real values; never commit secrets.
+  # Placeholders only — replace with real values at install (kubectl apply -f
+  # config.yaml after editing, or patch via external secret manager). Never
+  # commit real values. The deployments reference this Secret by name
+  # (secretRef/secretKeyRef), so create/update it out-of-band if you prefer.
   secret-key: "replace-me-with-long-random-string"
-  postgres-user: "autobrain"
-  postgres-password: "autobrain"
-  minio-access-key: "autobrain"
-  minio-secret-key: "autobrain"
+  postgres-user: "replace-me-postgres-user"
+  postgres-password: "replace-me-postgres-password"
+  minio-access-key: "replace-me-minio-access-key"
+  minio-secret-key: "replace-me-minio-secret-key"
 ---
 apiVersion: v1
 kind: ConfigMap

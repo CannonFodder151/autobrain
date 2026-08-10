@@ -6,7 +6,7 @@ Requires the compose Postgres (same as the rest of the suite).
 
 import os
 
-os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://autobrain:autobrain@postgres:5432/autobrain")
+os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test-user:test-password@postgres:5432/autobrain")
 os.environ.setdefault("SECRET_KEY", "test-secret")
 
 import uuid  # noqa: E402
