@@ -8,6 +8,8 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# Auto-cut a release if there are unreleased changes, then gate on consistency.
+"$REPO_ROOT/scripts/auto-bump.sh"
 "$REPO_ROOT/scripts/check-release.sh"
 cd "$REPO_ROOT"
 

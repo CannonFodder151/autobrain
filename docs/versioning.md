@@ -32,10 +32,14 @@ public config) must come from `APP_VERSION` — never a hardcoded literal.
 
 ## Releases
 
-1. Feature branches → PR → review.
-2. `./scripts/bump-version.sh <x.y.z> [--mobile]` then commit.
-3. Merge to `main` — CI publishes images (`dockerhub-publish.yml`) and
-   `scripts/check-release.sh` gates deploys on the changelog/`APP_VERSION`
+1. Feature branches → PR → review. Add changelog entries under `[Unreleased]`.
+2. Merge to `main` — `scripts/auto-bump.sh` (AUT-240) automatically cuts the
+   next patch release (bumps `APP_VERSION`, `pubspec.yaml`, promotes
+   `[Unreleased]` to a dated section, commits) whenever unreleased changes
+   exist, then CI publishes images. No manual bump step needed for patch
+   releases. Cut minor/major explicitly with
+   `./scripts/bump-version.sh <x.y.z> [--mobile]` when warranted.
+3. `scripts/check-release.sh` gates deploys on the changelog/`APP_VERSION`
    matching (run by `deploy.sh` / `publish-images.sh`).
 4. `changelog.html` on the marketing site regenerates automatically from
    `CHANGELOG.md` on the `main` push (AUT-119/AUT-168).

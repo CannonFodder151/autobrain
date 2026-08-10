@@ -3,7 +3,11 @@
 # Usage: ./scripts/deploy.sh <user@host>
 set -euo pipefail
 
-"$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/check-release.sh"
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Auto-cut a release if there are unreleased changes, then gate on consistency.
+"$DIR/auto-bump.sh"
+"$DIR/check-release.sh"
 
 HOST="${1:?Usage: deploy.sh <user@host>}"
 REMOTE_DIR="~/autobrain"
