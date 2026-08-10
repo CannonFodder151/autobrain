@@ -1,6 +1,6 @@
 """Shared FastAPI dependencies."""
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, WebSocket, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,6 +31,43 @@ async def get_current_user(
     user = await db.get(User, user_id)
     if not user or not user.is_active:
         raise _credentials_exc
+    return user
+
+
+def _extract_ws_token(ws: WebSocket) -> str | None:
+    """Pull a bearer token from the handshake: query param or Authorization header.
+
+    The query-param form is accepted for browser-based WS clients that cannot
+    set headers. Tokens are short-lived access JWTs.
+    """
+    token = ws.query_params.get("token")
+    if token:
+        return token
+    auth = ws.headers.get("authorization", "")
+    if auth.lower().startswith("bearer "):
+        return auth[7:].strip()
+    return None
+
+
+async def authenticate_ws(ws: WebSocket, db: AsyncSession) -> User | None:
+    """Authenticate a WebSocket handshake. Returns the User, or None to reject.
+
+    Fail closed: no token, unverifiable token, non-access token, or inactive/
+    unknown user all reject. Identity is taken from the token, never from the
+    URL path.
+    """
+    token = _extract_ws_token(ws)
+    if not token:
+        return None
+    payload = decode_token(token)
+    if not payload or payload.get("type") != "access":
+        return None
+    user_id = payload.get("sub")
+    if not user_id:
+        return None
+    user = await db.get(User, user_id)
+    if not user or not user.is_active:
+        return None
     return user
 
 

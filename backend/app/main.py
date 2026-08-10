@@ -2,14 +2,16 @@
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import authenticate_ws
 from app.api.v1 import api_router
 from app.core.config import settings
 from app.core.logging import get_logger, setup_logging
 from app.core.storage import ensure_bucket
-from app.db.session import init_db
+from app.db.session import get_db, init_db
 from app.ws.manager import manager
 
 logger = get_logger(__name__)
@@ -55,13 +57,21 @@ async def health() -> dict:
 
 
 @app.websocket("/ws/{user_id}")
-async def websocket_endpoint(ws: WebSocket, user_id: str) -> None:
-    await manager.connect(user_id, ws)
+async def websocket_endpoint(
+    ws: WebSocket,
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    user = await authenticate_ws(ws, db)
+    if user is None or user.id != user_id:
+        await ws.close(code=4401)
+        return
+    await manager.connect(user.id, ws)
     try:
         await ws.send_text('{"event":"connected","payload":{}}')
         while True:
             await ws.receive_text()  # keep-alive; server pushes events
     except WebSocketDisconnect:
-        manager.disconnect(user_id, ws)
+        manager.disconnect(user.id, ws)
     except Exception:
-        manager.disconnect(user_id, ws)
+        manager.disconnect(user.id, ws)

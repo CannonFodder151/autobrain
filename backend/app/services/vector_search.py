@@ -67,6 +67,22 @@ def _to_text(entity_type: str, data: dict) -> str:
     return ""
 
 
+def _valid_embedding(value: object) -> list[float] | None:
+    """Validate router embedding output: a non-empty list of numbers only.
+
+    The embedding is later bound into SQL; anything non-numeric must be
+    rejected (never reflected into a query).
+    """
+    if not isinstance(value, list) or not value:
+        return None
+    out: list[float] = []
+    for item in value:
+        if isinstance(item, bool) or not isinstance(item, (int, float)):
+            return None
+        out.append(float(item))
+    return out
+
+
 async def _call_embedding_api(text: str) -> list[float] | None:
     """Get embedding from 9Router (OpenAI-compatible /embeddings endpoint)."""
     url = settings.AI_ROUTER_URL.rstrip("/")
@@ -93,7 +109,7 @@ async def _call_embedding_api(text: str) -> list[float] | None:
             )
             resp.raise_for_status()
             data = resp.json()
-            return data["data"][0]["embedding"]
+            return _valid_embedding(data["data"][0]["embedding"])
     except Exception as exc:
         logger.warning("embedding_api_failed", error=str(exc))
         return None
