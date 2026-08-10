@@ -113,6 +113,66 @@ _AI_IMMUTABLE: dict[str, frozenset[str]] = {
     "fuel-ocr": frozenset({"vendor", "date", "litres", "price_per_litre", "total_cost", "currency"}),
 }
 
+# Per-module output schema whitelist: the only keys the router may contribute,
+# with the accepted value types. Anything outside this list (or of the wrong
+# type) is dropped before merging so a malformed/hallucinated response can never
+# inject junk fields. Mirrors the STRICT JSON contract in _SYSTEM_PROMPTS.
+_SCHEMAS: dict[str, dict[str, tuple]] = {
+    "diagnostics": {
+        "summary": (str,),
+        "severity": (str,),
+        "estimated_cost": (int, float, type(None)),
+        "cost_range": (list, type(None)),
+        "items": (list,),
+        "parts_needed": (list,),
+        "recommended_actions": (list,),
+    },
+    "service-prediction": {
+        "service_type": (str,),
+        "interval_km": (int,),
+        "interval_months": (int,),
+        "due_in_km": (int,),
+        "due_in_days": (int,),
+        "next_due_km": (int,),
+        "next_due_date": (str,),
+        "confidence": (int, float),
+        "reason": (str,),
+    },
+    "ocr": {
+        "vendor": (str, type(None)),
+        "invoice_date": (str, type(None)),
+        "total": (int, float, type(None)),
+        "tax": (int, float, type(None)),
+        "currency": (str,),
+        "items": (list,),
+        "next_recommended_service": (str, type(None)),
+        "warranty_notes": (str, type(None)),
+    },
+    "resale": {
+        "rrp": (int, float, type(None)),
+        "used_price": (int, float, type(None)),
+        "factors": (dict,),
+        "recommendations": (list,),
+        "trend": (list,),
+    },
+    "mod-impact": {
+        "summary": (str,),
+        "performance_score": (int, float, type(None)),
+        "value_impact": (int, float, type(None)),
+        "reliability_impact": (str,),
+        "model": (str,),
+    },
+    "fuel-ocr": {
+        "vendor": (str, type(None)),
+        "date": (str, type(None)),
+        "litres": (int, float, type(None)),
+        "price_per_litre": (int, float, type(None)),
+        "total_cost": (int, float, type(None)),
+        "currency": (str,),
+        "notes": (str, type(None)),
+    },
+}
+
 
 def router_url() -> str:
     return os.getenv("AI_ROUTER_URL", "http://your-9router-instance:port/v1").rstrip("/")
@@ -138,6 +198,15 @@ def _clean_json(text: str) -> dict:
     if start == -1 or end <= start:
         raise ValueError("no JSON object found in model response")
     return json.loads(text[start : end + 1])
+
+
+def _matches_type(value, allowed: tuple) -> bool:
+    """True when value's type is one of the allowed types (None handled explicitly)."""
+    if value is None:
+        return type(None) in allowed
+    if isinstance(value, bool):  # bool is a subclass of int in Python
+        return bool in allowed
+    return isinstance(value, allowed)
 
 
 async def route(module: str, payload: dict) -> dict | None:
@@ -197,10 +266,14 @@ async def enhance(module: str, payload: dict, baseline: dict) -> dict:
         return baseline
 
     immutable = _AI_IMMUTABLE.get(module, frozenset())
+    schema = _SCHEMAS.get(module, {})
     merged = dict(baseline)
     enriched = False
     for key, value in result.items():
         if key == "model" or key in immutable:
+            continue
+        if key not in schema or not _matches_type(value, schema[key]):
+            logger.warning("router_dropped_key", module=module, key=key)
             continue
         merged[key] = value
         enriched = True
