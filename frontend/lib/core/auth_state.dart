@@ -10,12 +10,16 @@ import 'token_store.dart';
 
 enum LoginOutcome { ok, mfaRequired, mfaSetupRequired, failed }
 
+/// Credentials live in secure storage (Keystore/Keychain) so they are not
+/// readable as plaintext on disk / from app backups. Non-sensitive prefs
+/// (dark mode, server picker) stay in SharedPreferences.
 class AuthState extends ChangeNotifier {
   AuthState() {
     _restore();
   }
 
   String? _token;
+  String? _refreshToken;
   String? _role;
   String? _userId;
   String? _mfaToken;
@@ -50,13 +54,14 @@ class AuthState extends ChangeNotifier {
   Future<void> _restore() async {
     final prefs = await SharedPreferences.getInstance();
     await AppConfig.load();
-    final (token, role) = await _tokens.read();
+    final (token, refreshToken, role) = await _tokens.read();
     _token = token;
+    _refreshToken = refreshToken;
     _role = role;
     _darkMode = prefs.getBool('dark_mode') ?? true;
     _loadConfig();
     if (_token != null) {
-      _client = ApiClient(_token);
+      _client = ApiClient(_token, onRefresh: _refreshAccess);
       _refreshProfile();
       notifyListeners();
     }
@@ -79,6 +84,7 @@ class AuthState extends ChangeNotifier {
   /// the client against the new base URL.
   Future<void> serverChanged() async {
     _token = null;
+    _refreshToken = null;
     _role = null;
     _userId = null;
     _client = null;
@@ -94,7 +100,7 @@ class AuthState extends ChangeNotifier {
       final data = await _client!.get('/auth/me') as Map<String, dynamic>;
       _role = data['role'] as String?;
       _userId = data['id'] as String?;
-      await _tokens.write(token: _token!, role: _role ?? 'user');
+      await _tokens.write(token: _token!, refreshToken: _refreshToken, role: _role ?? 'user');
       notifyListeners();
     } catch (_) {}
   }
@@ -202,15 +208,48 @@ class AuthState extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    final refreshToken = _refreshToken;
     _token = null;
+    _refreshToken = null;
     _role = null;
     _userId = null;
     _client = null;
     await _tokens.clear();
+    if (refreshToken != null) {
+      // Best effort, non-blocking: the server bumps the account's
+      // token_version, killing every outstanding token.
+      _anonymous().post('/auth/logout', {'refresh_token': refreshToken}).ignore();
+    }
     notifyListeners();
   }
 
   ApiClient _anonymous() => ApiClient(null);
+
+  /// Exchanges the refresh token for a fresh pair when an access token expires.
+  /// Returns the new access token, or null (forces re-login) on failure.
+  Future<String?> _refreshAccess() async {
+    final refreshToken = _refreshToken;
+    if (refreshToken == null) return null;
+    try {
+      final data = await _anonymous().post(
+        '/auth/refresh',
+        {'refresh_token': refreshToken},
+      ) as Map<String, dynamic>;
+      final access = data['access_token'] as String?;
+      if (access == null) return null;
+      _token = access;
+      _refreshToken = data['refresh_token'] as String?;
+      await _tokens.write(
+        token: access,
+        refreshToken: _refreshToken,
+        role: _role ?? 'user',
+      );
+      notifyListeners();
+      return access;
+    } catch (_) {
+      return null;
+    }
+  }
 
   Future<void> _persist(Map<String, dynamic> map) async {
     final tokenPair = map['token_pair'];
@@ -218,10 +257,11 @@ class AuthState extends ChangeNotifier {
       map = tokenPair;
     }
     _token = map['access_token'] as String?;
+    _refreshToken = map['refresh_token'] as String?;
     _role = ((map['user'] as Map<String, dynamic>?) ?? {})['role'] as String?;
     _userId = ((map['user'] as Map<String, dynamic>?) ?? {})['id'] as String?;
-    _client = ApiClient(_token!);
-    await _tokens.write(token: _token!, role: _role ?? 'user');
+    _client = ApiClient(_token!, onRefresh: _refreshAccess);
+    await _tokens.write(token: _token!, refreshToken: _refreshToken, role: _role ?? 'user');
     notifyListeners();
   }
 }

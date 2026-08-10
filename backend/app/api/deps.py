@@ -33,6 +33,8 @@ async def get_current_user(
     user = await db.get(User, user_id)
     if not user or not user.is_active:
         raise _credentials_exc
+    if payload.get("ver", 0) != user.token_version:
+        raise _credentials_exc
     return user
 
 
@@ -69,6 +71,8 @@ async def authenticate_ws(ws: WebSocket, db: AsyncSession) -> User | None:
         return None
     user = await db.get(User, user_id)
     if not user or not user.is_active:
+        return None
+    if payload.get("ver", 0) != user.token_version:
         return None
     return user
 

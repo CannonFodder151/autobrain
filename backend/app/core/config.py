@@ -22,7 +22,10 @@ class Settings(BaseSettings):
     # Security
     SECRET_KEY: str = "change-me"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7
+    # Short-lived access tokens (minutes) — renewal goes through /auth/refresh
+    # (refresh rotation revokes the previous token). Bump token_version on
+    # logout/password change to revoke all outstanding tokens.
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
     # Database

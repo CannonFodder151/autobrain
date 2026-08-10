@@ -69,8 +69,8 @@ def verify_totp(secret: str | None, code: str) -> bool:
 
 def token_pair(user: User) -> TokenPair:
     return TokenPair(
-        access_token=create_access_token(user.id),
-        refresh_token=create_refresh_token(user.id),
+        access_token=create_access_token(user.id, token_version=user.token_version),
+        refresh_token=create_refresh_token(user.id, token_version=user.token_version),
         user=UserOut.model_validate(user),
     )
 

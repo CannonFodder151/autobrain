@@ -2,11 +2,13 @@
 
 import json as _json
 import time
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import Response
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_admin, require_write
@@ -18,6 +20,7 @@ from app.core.security import (
     hash_password,
 )
 from app.db.session import get_db
+from app.models.refresh_token import RevokedRefreshToken
 from app.models.user import User
 from app.schemas.auth import (
     LoginResult,
@@ -130,13 +133,58 @@ async def mfa_complete_setup(
 
 @router.post("/refresh", response_model=TokenPair)
 async def refresh(payload: RefreshRequest, db: AsyncSession = Depends(get_db)) -> TokenPair:
-    data = _decode_token(payload.refresh_token)
+    """Exchange a refresh token for a fresh access+refresh pair.
+
+    Refresh tokens rotate on every use: the presented token is immediately
+    revoked (recorded in the denylist), so a stolen/replayed token is rejected
+    and each device keeps only the latest pair. A bumped token_version
+    (logout, password change) also rejects every older token outright.
+    """
+    data = decode_token(payload.refresh_token)
+    if not data or data.get("type") != "refresh" or not data.get("jti"):
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+    user = await db.get(User, data.get("sub"))
+    if not user or not user.is_active:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+    if data.get("ver", 0) != user.token_version:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+    jti = data["jti"]
+    if await db.get(RevokedRefreshToken, jti):
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+    try:
+        db.add(
+            RevokedRefreshToken(
+                jti=jti,
+                expires_at=datetime.fromtimestamp(data["exp"], tz=timezone.utc),
+            )
+        )
+        await _prune_revoked_refresh(db)
+        await db.commit()
+    except IntegrityError:
+        # Concurrent replay of the same token: the other request rotated it first.
+        await db.rollback()
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+    return auth_svc.token_pair(user)
+
+
+@router.post("/logout", status_code=200)
+async def logout(payload: RefreshRequest, db: AsyncSession = Depends(get_db)) -> dict:
+    """Revoke the account's sessions by bumping its token_version.
+
+    All outstanding access + refresh tokens for this user are invalidated
+    immediately (stolen tokens included). Logs the user out everywhere.
+    """
+    data = decode_token(payload.refresh_token)
     if not data or data.get("type") != "refresh":
         raise HTTPException(status_code=401, detail="Invalid refresh token")
     user = await db.get(User, data.get("sub"))
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
-    return auth_svc.token_pair(user)
+    if data.get("ver", 0) != user.token_version:
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+    user.token_version += 1
+    await db.commit()
+    return {"message": "Logged out — all sessions were revoked"}
 
 
 @router.get("/config")
@@ -283,6 +331,8 @@ async def confirm_password_reset(
     user.hashed_password = hash_password(payload.new_password)
     if data.get("type") == "invite":
         user.pending = False  # invited user completed registration by setting a password
+    # Password change revokes every outstanding access + refresh token.
+    user.token_version += 1
     await db.commit()
     await db.refresh(user)
     await mail.send_password_changed(user.email, user.display_name)
@@ -424,3 +474,12 @@ def _verify_password(password: str, hashed: str) -> bool:
 def _decode_token(token: str) -> dict[str, Any] | None:
     from app.core.security import decode_token
     return decode_token(token)
+
+
+async def _prune_revoked_refresh(db: AsyncSession) -> None:
+    """Drop denylist rows past their token's natural expiry (keeps the table bounded)."""
+    await db.execute(
+        delete(RevokedRefreshToken).where(
+            RevokedRefreshToken.expires_at < datetime.now(timezone.utc)
+        )
+    )
