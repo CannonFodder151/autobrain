@@ -1,6 +1,6 @@
 """Semantic search service — hybrid vector + keyword search across AutoBrain data."""
 
-from sqlalchemy import and_, select, text
+from sqlalchemy import TextClause, and_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
@@ -86,12 +86,12 @@ async def semantic_search(
             vec_col = cfg["vector_col"]
             vec_filters = base_filters + [getattr(model, vec_col).isnot(None)]
 
-            # PostgreSQL pgvector cosine distance: a <=> b
-            embedding_literal = f"[{','.join(str(v) for v in embedding)}]"
-            similarity_expr = text(f"{vec_col} <=> '{embedding_literal}'::vector")
+            # PostgreSQL pgvector cosine distance: a <=> b (vector passed as a
+            # bound parameter — never interpolated into the SQL string).
+            similarity_expr = _vector_similarity(vec_col, embedding)
 
             vec_stmt = (
-                select(model, similarity_expr.label("distance"))
+                select(model, similarity_expr)
                 .where(and_(*vec_filters))
                 .order_by(similarity_expr)
                 .limit(limit)
@@ -108,6 +108,18 @@ async def semantic_search(
     # Sort by score descending.
     results.sort(key=lambda r: r["score"], reverse=True)
     return results[:limit]
+
+
+def _embedding_literal(embedding: list[float]) -> str:
+    """Serialize a float vector as a pgvector array literal (floats only)."""
+    return "[" + ",".join(repr(float(v)) for v in embedding) + "]"
+
+
+def _vector_similarity(vec_col: str, embedding: list[float]) -> TextClause:
+    """Cosine-distance expression (`a <=> b`) with the vector bound as a parameter."""
+    return text(
+        f"{vec_col} <=> CAST(:embedding AS vector)"
+    ).bindparams(embedding=_embedding_literal(embedding))
 
 
 def _serialise(etype: str, row, *, score: float, method: str) -> dict:
@@ -170,13 +182,12 @@ async def backfill_entity_embedding(
     if embedding is None:
         return False
 
-    embedding_literal = f"[{','.join(str(v) for v in embedding)}]"
-    table = model.__tablename__
+    table = model.__tablename__  # model-defined constant, never user input
     await db.execute(
         text(
-            f"UPDATE {table} SET embedding = '{embedding_literal}'::vector WHERE id = :id"
+            f"UPDATE {table} SET embedding = CAST(:embedding AS vector) WHERE id = :id"
         ),
-        {"id": entity_id},
+        {"embedding": _embedding_literal(embedding), "id": entity_id},
     )
     await db.commit()
     return True
