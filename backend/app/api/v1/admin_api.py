@@ -3,22 +3,30 @@
 Authenticated with the `X-Admin-API-Key` header (ADMIN_API_KEY env var).
 Allows external systems to create users, set permissions (role, vehicle
 quota, free/paid account, OBD access), list, disable and delete users, and
-take full-database backup/restore for off-box retention (autobrain-backup).
+take full-database backup/restore (including MinIO image assets) for
+off-box retention (autobrain-backup).
 """
 
+import asyncio
 import secrets
+import tempfile
+from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_admin_api_key
 from app.core.config import settings
 from app.core.security import hash_password
+from app.core.storage import get_minio
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.auth import AdminUserUpdate, UserAdminOut, UserCreate
 from app.services import email as mail
+from app.services.assets import export_assets, restore_assets
 from app.services.backup import dump_backup, load_backup, restore_all, serialize_all
 
 router = APIRouter(prefix="/admin-api", tags=["admin-api"], dependencies=[Depends(require_admin_api_key)])
@@ -29,13 +37,51 @@ async def download_backup(db: AsyncSession = Depends(get_db)) -> Response:
     """Full database snapshot (JSON) for machine-to-machine off-box retention."""
     data = await serialize_all(db)
     content = dump_backup(data)
-    from datetime import datetime, timezone
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     return Response(
         content=content,
         media_type="application/json",
         headers={"Content-Disposition": f'attachment; filename="autobrain-backup-{stamp}.json"'},
     )
+
+
+@router.get("/assets/backup")
+async def download_assets() -> StreamingResponse:
+    """Tar.gz of every object in MINIO_BUCKET for off-box image retention."""
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    archive = await asyncio.to_thread(export_assets, get_minio())
+    with tempfile.NamedTemporaryFile(prefix="autobrain-assets-", suffix=".tar.gz", delete=False) as tmp:
+        tmp.write(archive)
+        tmp_path = Path(tmp.name)
+    return StreamingResponse(
+        _file_chunks(tmp_path),
+        media_type="application/gzip",
+        headers={"Content-Disposition": f'attachment; filename="autobrain-assets-{stamp}.tar.gz"'},
+    )
+
+
+def _file_chunks(path: Path, size: int = 1 << 20):
+    try:
+        with path.open("rb") as f:
+            while chunk := f.read(size):
+                yield chunk
+    finally:
+        try:
+            path.unlink()
+        except OSError:
+            pass
+
+
+@router.post("/assets/restore")
+async def restore_assets_endpoint(
+    file: UploadFile = File(...),
+) -> dict:
+    """Wipe MINIO_BUCKET and restore its objects from an uploaded tar.gz. DANGEROUS."""
+    raw = await file.read()
+    if len(raw) > 5 * 1024 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Image archive too large")
+    count = await asyncio.to_thread(restore_assets, get_minio(), raw)
+    return {"message": "Assets restore complete", "objects": count}
 
 
 @router.post("/restore")
