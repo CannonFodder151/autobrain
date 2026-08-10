@@ -4,6 +4,24 @@
 
 Chronological log of verified test passes and verification runs. Real state only — mirrors repo `docs/qa-run-logs.md`. Newest first.
 
+## 2026-08-10 — Post-push pass: changes merged since 2026-08-08 (AUT-249, Gate 2)
+
+First post-push pass under the change validation gate (docs/change-validation-gate.md). Changes merged to `main` since the last real app pass (2026-08-08, AUT-45): v0.3.6 release + auto version-cutting (AUT-240), CSP/X-Frame-Options/Referrer-Policy security headers (#32, AUT-236), WS auth fail-close (AUT-203), search SQL parameterization + search IDOR scoping (AUT-203/AUT-134), MinIO asset backup/restore admin endpoints (AUT-194), scripts executable bit (#35).
+
+**Automated suites (run from `main` @ b2ca584, deterministic paths only):**
+
+- AI gateway `ai/tests/` — 31 passed (fallbacks, auth, gateway security; no 9Router needed)
+- Backend `test_config_fail_closed.py` — 3 passed
+- Backend `test_search_sql_injection.py` — 2 passed (AUT-203 SQL param)
+- Backend `test_ws_auth.py` — 5 passed (AUT-203 WS auth fail-close)
+- Backend `test_assets_backup.py` — 2 passed (AUT-194 backup/restore roundtrip + archive members)
+
+**Live tier check (hosted + demo):**
+
+- `app_version` still **0.3.5** on both; `/` serves **no** CSP/X-Frame-Options/Referrer-Policy headers → v0.3.6 + security-header change are merged but **not yet deployed/promoted** to any tier. Promotion (Demo → Default → Hosted) pending deployment.
+
+**Not runnable from this environment:** DB-dependent backend suites (test_search_scope, test_share*, test_api, test_billing, test_service_*, test_logbook_club_reg) need the compose Postgres; dev box SSH (`10.0.3.39`) not reachable this run — deferred to deployment-time pass. No release-blocking bug found in the runnable suites.
+
 ## 2026-08-10 — QA documentation pass (AUT-182)
 
 Established this section. Wrote Test Strategy, QA Run Logs and User Testing Results (verified against the repo, Outline and Paperclip issues). No app changes tested.
