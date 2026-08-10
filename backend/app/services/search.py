@@ -40,6 +40,11 @@ _ENTITY_MAP = {
 ENTITY_TYPES = tuple(_ENTITY_MAP.keys())
 
 
+def _escape_like(value: str) -> str:
+    """Escape LIKE wildcards so user input can't act as SQL patterns."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 async def semantic_search(
     db: AsyncSession,
     query: str,
@@ -71,12 +76,14 @@ async def semantic_search(
             base_filters.append(model.vehicle_id.in_(vehicle_ids))
 
         # Keyword search (ILIKE on text columns) — always runs. Columns are
-        # OR-ed (match any column); vehicle scope stays AND-ed.
+        # OR-ed (match any column); vehicle scope stays AND-ed. `%`/`_` in the
+        # query are escaped so user input can't act as SQL wildcards.
+        escaped = _escape_like(query)
         keyword_conditions = []
         for col_name in cfg["columns"]:
             col = getattr(model, col_name, None)
             if col is not None:
-                keyword_conditions.append(col.ilike(f"%{query}%"))
+                keyword_conditions.append(col.ilike(f"%{escaped}%", escape="\\"))
 
         filters = base_filters
         if keyword_conditions:
