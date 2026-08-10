@@ -76,7 +76,7 @@ services:
     restart: unless-stopped
     environment:
       <<: [*db-env, *core-env]
-      SECRET_KEY: ${SECRET_KEY:-change-me}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in the hosted stack env (Portainer)}
       MINIO_PUBLIC_ENDPOINT: ${APP_BASE_URL:-https://hosted.autobrainservice.app}
       AI_ROUTER_TIMEOUT_SECONDS: 120
       REGO_LOOKUP_URL: ${REGO_LOOKUP_URL:-}
