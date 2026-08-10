@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db, get_current_user
-from app.api.v1.vehicles import _get_accessible_vehicle
+from app.api.v1.ownership import get_accessible_vehicle
 from app.models.share import VehicleShare
 from app.models.user import User
 from app.models.vehicle import Vehicle
@@ -85,7 +85,7 @@ async def search(
             )
 
     if vehicle_id:
-        await _get_accessible_vehicle(db, vehicle_id, user)
+        await get_accessible_vehicle(db, vehicle_id, user)
         vehicle_ids = [vehicle_id]
     else:
         vehicle_ids = await _accessible_vehicle_ids(db, user)
