@@ -34,7 +34,9 @@ public config) must come from `APP_VERSION` — never a hardcoded literal.
 
 1. Feature branches → PR → review.
 2. `./scripts/bump-version.sh <x.y.z> [--mobile]` then commit.
-3. Merge to `main` → build + deploy via `scripts/deploy.sh`.
+3. Merge to `main` — CI publishes images (`dockerhub-publish.yml`) and
+   `scripts/check-release.sh` gates deploys on the changelog/`APP_VERSION`
+   matching (run by `deploy.sh` / `publish-images.sh`).
 4. `changelog.html` on the marketing site regenerates automatically from
    `CHANGELOG.md` on the `main` push (AUT-119/AUT-168).
 

@@ -15,10 +15,12 @@ Vehicle sharing: a user with an accepted share on a vehicle can read and write i
 | POST   | `/auth/mfa/verify` | Complete login with TOTP code |
 | POST   | `/auth/refresh` | Refresh tokens |
 | GET    | `/auth/me` | Current user (role, mfa_enabled, free_account, obd_enabled, obd_auto_connect, vehicle_count) |
-| PATCH  | `/auth/settings` | Self-service toggles: `free_account`, `obd_auto_connect` |
+| PATCH  | `/auth/settings` | Self-service toggles: `obd_auto_connect` (only this field — `free_account` is admin-managed) |
 | GET    | `/auth/export` | Export your whole profile (user + vehicles + records) as JSON |
-| POST   | `/auth/import` | Import an exported profile (creates a new account on this server) |
+| POST   | `/auth/import` | Restore an exported profile **onto the logged-in account** (wipes that user's existing vehicles/records) |
 | GET    | `/auth/mfa/setup` | Generate TOTP secret + QR |
+| POST   | `/auth/mfa/setup-session` | Begin MFA setup (returns a session token) |
+| POST   | `/auth/mfa/complete-setup` | Complete MFA setup with a verified code — returns a token pair |
 | POST   | `/auth/mfa/enable` / `/auth/mfa/disable` | Verify code, enable/disable MFA |
 | POST   | `/auth/password-reset/request` / `/confirm` | Email reset link / confirm |
 | POST   | `/auth/signup` | Self-service Free-tier signup (display name + email; setup link emailed). **403 when `SELF_SIGNUP_ENABLED=false`** |
@@ -32,6 +34,7 @@ Vehicle sharing: a user with an accepted share on a vehicle can read and write i
 | POST   | `/admin/users` | Create user (incl. free_account, obd_enabled, max_vehicles) |
 | PATCH  | `/admin/users/{id}` | Update role/active/password/quota/free_account/obd_enabled |
 | DELETE | `/admin/users/{id}` | Delete user |
+| POST   | `/admin/users/{id}/re-upgrade` | Re-grant a paid tier to an account (default `enabled=true`) |
 | GET    | `/admin/version` | Server version + GitHub latest-release check (up_to_date) |
 | GET    | `/admin/backup` | Download full JSON database snapshot |
 | POST   | `/admin/restore` | Upload a backup to wipe & restore the database (DANGEROUS) |
@@ -45,6 +48,8 @@ Vehicle sharing: a user with an accepted share on a vehicle can read and write i
 | PATCH  | `/admin-api/users/{id}` | Update permissions (role, max_vehicles, free_account, obd_enabled, is_active, password) |
 | POST   | `/admin-api/users/{id}/disable` | Disable an account |
 | DELETE | `/admin-api/users/{id}` | Delete a user |
+| GET    | `/admin-api/backup` | Download full JSON database snapshot (machine-to-machine) |
+| POST   | `/admin-api/restore` | Wipe & restore the database from an uploaded backup (DANGEROUS) |
 
 ## Vehicles
 
@@ -72,7 +77,7 @@ Sharing flow: the owner shares by email → the invitee sees a pending invite wi
 | GET/POST | `` | List / create |
 | GET/PATCH/DELETE | `/{service_id}` | Detail / edit (items replace + status) / delete |
 | POST   | `/predict` | AI next-service prediction |
-| GET    | `/export?fmt=csv\|pdf` | Export completed history |
+| GET    | `/export?fmt=csv\|pdf\|zip` | Export completed history; `zip` bundles the CSV with the receipt/scan images |
 
 Completing a scheduled service created from a diagnostic auto-resolves (green-tick) that diagnostic.
 
@@ -83,7 +88,7 @@ Completing a scheduled service created from a diagnostic auto-resolves (green-ti
 | GET/POST | `` | List / add fill-up (updates vehicle odometer unless a newer logbook trip exists) |
 | PATCH/DELETE | `/{fuel_id}` | Edit / delete a fill-up |
 | GET    | `/stats` | Totals, averages, series |
-| GET    | `/export?fy=` | CSV export per Australian financial year |
+| GET    | `/export?fy=` | CSV export per Australian financial year (also accepts `fmt=zip`) |
 | POST   | `/receipt?ai=true\|false` | Fuel receipt photo. `ai=true` OCR-fills litres & price/L then user enters odometer; `ai=false` stores photo only. |
 
 ## Logbook (`/vehicles/{id}/logbook`) — ATO claiming, non-club-reg vehicles only
@@ -123,12 +128,28 @@ A diagnostic auto-flips to `resolved` when its linked service is completed.
 
 ## Mods, Receipts, Parts, Valuation, Analytics, Notifications
 
-- **Mods** (`/vehicles/{id}/mods`): GET/POST, PATCH/DELETE `/{mod_id}`, POST `/impact` (AI), GET `/export?fmt=csv|pdf`.
+- **Mods** (`/vehicles/{id}/mods`): GET/POST, PATCH/DELETE `/{mod_id}`, POST `/impact` (AI), GET `/export?fmt=csv|pdf|zip`.
 - **Receipts** (`/vehicles/{id}/receipts`): POST (multipart → async OCR), GET, POST `/{id}/apply-to-service`.
-- **Parts** (`/vehicles/{id}/parts`): GET/POST, PATCH/DELETE `/{id}`, POST `/{id}/movement`, GET `/reorder-suggestions` (AI).
+- **Parts** (`/vehicles/{id}/parts`): GET/POST, PATCH/DELETE `/{id}`, POST `/{id}/movement`, GET `/reorder-suggestions` (rule-based: flags parts at or below `min_quantity` — not AI).
 - **Valuation** (`/vehicles/{id}/valuation`): POST (AI — disabled on free accounts), GET `/history`.
 - **Analytics** (`/vehicles/{id}/analytics`): GET (spend, TCO, cost/km, forecast, insights).
-- **Notifications** (`/vehicles/{id}/notifications`): GET/PATCH preferences, POST `/test`.
+- **Notifications** (`/vehicles/{id}/notifications`): GET preferences, PUT update preferences (no `/test` endpoint).
+
+## Billing (`/billing`) — hosted (Stripe)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST   | `/checkout` | Create a Stripe Checkout session for a plan |
+| GET    | `/pricing` | Public pricing (plans, early-adopter promo) |
+| POST   | `/portal` | Open the customer billing portal |
+| POST   | `/cancel` | Cancel the subscription |
+| POST   | `/webhook` | Stripe webhook (subscription lifecycle) |
+
+## Search
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | `/search?q=&entity_types=` | Hybrid search across diagnostics, services, modifications and receipts. Keyword ILIKE always runs; vector cosine similarity layers on top when the embedding router is reachable. `entity_types` is a comma-separated string (e.g. `diagnostic,service`); omit for all. |
 
 ## System
 

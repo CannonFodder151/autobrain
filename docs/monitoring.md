@@ -2,13 +2,14 @@
 
 ## Current monitoring setup
 
-All tiers are managed through **Portainer** (https://portainer.nathanmartina.com):
+All tiers are managed through **Portainer** (managed access point — see the ops
+docs for the URL and endpoints). Portainer shows container state + healthcheck
+badges per service, per environment:
 
-- Endpoint 5 = AutoBrain-Hosted (Oracle Cloud VM).
-- Endpoint 6 = PaperClip-AutoBrain-Dev-Box.
-- Endpoint 2 = Portainer-Host (runs Demo + Default stacks, backup service, Rego Lookup, 9Router).
-
-Portainer shows container state + healthcheck badges per service.
+- **Demo / Default** (dev box).
+- **Hosted** (Oracle Cloud VM).
+- Rego Lookup, backup service and the 9Router instance also run as Portainer
+  stacks and appear in the same view.
 
 ## Logging
 

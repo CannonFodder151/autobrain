@@ -28,9 +28,9 @@ docker compose up -d --build
 backend/   FastAPI + SQLAlchemy + Celery   (app/ = package)
 ai/        inference gateway + fallbacks   (app/ = package)
 frontend/  Flutter web app                 (lib/ = package)
-docker/    build contexts for all images
-infra/     k8s, systemd, nginx
-scripts/   deploy, backup, setup-server, publish-images, bump-version
+docker/    build contexts for all images   (backend/, ai/, frontend/ incl. nginx confs)
+infra/     k8s + systemd manifests
+scripts/   deploy, backup, setup-server, publish-images, bump-version, check-release
 tests/     backend + ai tests
 docs/      markdown mirrors of the wiki
 ```
@@ -44,7 +44,7 @@ docs/      markdown mirrors of the wiki
 
 - **Add an endpoint** → `backend/app/api/v1/<area>.py` + `schemas/<area>.py`, register in `api/v1/__init__.py`.
 - **Add a table** → model in `backend/app/models/`, autogenerate migration.
-- **Add an AI feature** → module in `ai/app/modules/` + fallback in `ai/app/fallbacks.py` + client fn in `backend/app/services/ai_client.py`.
+- **Add an AI feature** → module in `ai/app/modules/` + rule engine in `ai/app/fallbacks/` (deterministic first) + client fn in `backend/app/services/ai_client.py`.
 - **Add a screen** → `frontend/lib/screens/<area>/`.
 
 ### Feature parity (web + mobile)

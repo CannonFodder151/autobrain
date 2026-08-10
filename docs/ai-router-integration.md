@@ -1,17 +1,24 @@
 # AI Router Integration (9Router)
 
-Every AI feature is routed through an external LLM router instance identified
-by the `AI_ROUTER_URL` environment variable. The router is called in OpenAI
-chat-completions format.
+Every AI feature is optionally routed through an external LLM router instance
+identified by the `AI_ROUTER_URL` environment variable. The router is called in
+OpenAI chat-completions format. AutoBrain is **deterministic-first**: the
+rule-based engine always runs and produces the result; 9Router only enriches it
+when reachable, and can never override measured ground-truth values.
 
 ## Requirement
 
 All AI modules **must** read `AI_ROUTER_URL` at runtime. The AI gateway
-(`ai/app/router_client.py`) does this on every request:
+(`ai/app/router_client.py`) does this on every request, and every module must
+work with the router down (deterministic fallback):
 
 ```python
 def router_url() -> str:
     return os.getenv("AI_ROUTER_URL", "http://your-9router-instance:port/v1").rstrip("/")
+
+def router_enabled() -> bool:
+    url = router_url()
+    return bool(url) and "your-9router-instance" not in url
 ```
 
 ## Configuration
@@ -36,18 +43,25 @@ runs end-to-end without a router. Check available models with
 backend (ai_client.py)
   └─ HTTP POST http://ai:8001/v1/{module}   {"payload": {...}}
        └─ modules/{module}.run(payload)
-            ├─ router_client.route(module, payload)
-            │    └─ POST {AI_ROUTER_URL}/chat/completions   (OpenAI format)
-            │         {"model": ..., "messages": [system+user], "stream": false}
+            ├─ fallbacks/{module}.py  → baseline (deterministic, always runs)
+            ├─ router_client.enhance(module, payload, baseline)
+            │    └─ route(): POST {AI_ROUTER_URL}/chat/completions   (OpenAI format)
+            │         {"model": AI_ROUTER_MODEL, "messages": [system+user],
+            │          "temperature": 0, "stream": false}
             │    → parse choices[0].message.content as JSON
-            └─ on failure → fallbacks.py deterministic engine
+            │    → shallow-merge into baseline, skipping _AI_IMMUTABLE keys
+            └─ validated, clamped result
 ```
 
 ## Failure behaviour
 
-- Router unreachable / HTTP error / timeout → `route()` returns `None` →
-  module runs the fallback.
-- Fallback output matches the router output schema (both carry `model`).
+- Router disabled / unreachable / HTTP error / timeout → `route()` returns
+  `None` → the module returns the **deterministic baseline** untouched.
+- `enhance()` protects per-module immutable keys (`_AI_IMMUTABLE`): measured
+  numbers, identifiers, currency and value ranges are ground truth and can
+  never be overridden by the model — it may only fill in gaps and add advice.
+- The `model` field reports the path: `rule-based-fallback` /
+  `rrp-depreciation` (resale baseline) / `rule-based+ai` (enriched).
 - LLM output variance (missing/null optional fields) is absorbed by tolerant
   backend schemas and module-level normalization (e.g. service prediction
   recomputes missing dates).

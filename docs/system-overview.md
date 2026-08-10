@@ -16,7 +16,7 @@ impact analysis.
 | **Redis** | Cache + Celery broker/result backend. |
 | **MinIO** | S3-compatible object storage for receipts and photos. |
 | **Celery worker + beat** | Async OCR processing, scheduled valuations, reorder suggestions. Runs inside the backend container. |
-| **AI gateway (FastAPI)** | Hosts 5 inference modules; routes to 9Router via `AI_ROUTER_URL`. |
+| **AI gateway (FastAPI)** | Hosts 7 deterministic-first inference modules; 9Router enrichment via `AI_ROUTER_URL`. |
 | **9Router** | External LLM router that powers AI modules when configured. |
 
 ## Deployment topologies
@@ -33,11 +33,16 @@ impact analysis.
 
 1. Backend receives a request (e.g. symptoms for diagnosis).
 2. Backend calls the AI gateway at `AI_LOCAL_BASE_URL` (`http://ai:8001`).
-3. The gateway reads `AI_ROUTER_URL` at runtime and POSTs to
-   `{AI_ROUTER_URL}/v1/{module}`.
-4. If the router is unreachable, the gateway runs a deterministic rule-based
-   fallback so the platform never breaks.
+3. The gateway runs its **deterministic rule engine first** (always produces a
+   valid result), then optionally calls 9Router to enrich it when
+   `AI_ROUTER_URL` is reachable — enrichment can never override measured
+   ground-truth values.
+4. If the router is unreachable, the deterministic result is returned as-is, so
+   the platform never breaks.
 5. Results are returned to the backend and stored (e.g. `diagnostics.ai_response`).
+
+The result carries a `model` field (`rule-based-fallback` / `rrp-depreciation` /
+`rule-based+ai`) so callers know which path produced it.
 
 ## Feature areas
 
