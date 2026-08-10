@@ -94,7 +94,8 @@ async def semantic_search(
         # Vector search (cosine similarity) — runs if embedding available.
         if embedding is not None:
             vec_col = cfg["vector_col"]
-            vec_filters = base_filters + [getattr(model, vec_col).isnot(None)]
+            table = model.__tablename__  # model constant, never user input
+            vec_filters = base_filters + [text(f"{table}.{vec_col} IS NOT NULL")]
 
             # PostgreSQL pgvector cosine distance: a <=> b (vector passed as a
             # bound parameter — never interpolated into the SQL string).
