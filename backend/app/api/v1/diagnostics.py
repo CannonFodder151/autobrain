@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_write
-from app.api.v1.ownership import get_accessible_vehicle, require_ai_vehicle
+from app.services.ownership import get_accessible_vehicle, require_ai_vehicle
 from app.db.session import get_db
 from app.models.diagnostic import Diagnostic
 from app.models.service import ServiceItem, ServiceRecord

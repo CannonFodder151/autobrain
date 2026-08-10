@@ -8,8 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_ai, require_write
-from app.api.v1.events import add_event
-from app.api.v1.ownership import get_accessible_vehicle
+from app.services.events import add_event
+from app.services.ownership import get_accessible_vehicle
 from app.core.storage import get_object
 from app.db.session import get_db
 from app.models.mod import Modification

@@ -1,21 +1,18 @@
 """Service routes: CRUD (with items/status), AI prediction, PDF/CSV export."""
 
 import json
-from datetime import date, datetime, timezone
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user, require_write
-from app.api.v1.events import add_event
-from app.api.v1.ownership import get_accessible_vehicle, require_ai_vehicle
+from app.services.ownership import get_accessible_vehicle, require_ai_vehicle
 from app.core.logging import get_logger
 from app.core.storage import get_object
 from app.db.session import get_db
-from app.models.part import Part, PartMovement
 from app.models.service import ServiceItem, ServiceRecord
 from app.models.user import User
 from app.models.vehicle import VehicleEvent
@@ -28,106 +25,17 @@ from app.schemas.service import (
 )
 from app.services.ai_client import predict_service
 from app.services.export import export_service_history_csv, export_service_history_pdf, export_zip
+from app.services.service_records import (
+    finalize_service_side_effects,
+    list_completed_services,
+    load_options,
+    queue_due_notification,
+    reconcile_part_stock,
+    service_or_404,
+)
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/vehicles/{vehicle_id}/services", tags=["services"])
-
-
-def _load_options() -> selectinload:
-    return selectinload(ServiceRecord.items)
-
-
-async def _service_or_404(db: AsyncSession, vehicle_id: str, service_id: str) -> ServiceRecord:
-    record = await db.scalar(
-        select(ServiceRecord)
-        .options(_load_options())
-        .where(ServiceRecord.id == service_id, ServiceRecord.vehicle_id == vehicle_id)
-    )
-    if not record:
-        raise HTTPException(status_code=404, detail="Service not found")
-    return record
-
-
-async def _ensure_completed_event(db: AsyncSession, record: ServiceRecord) -> None:
-    """Sync the timeline event with the service record.
-
-    Completed services appear on the timeline; future/scheduled ones drop off
-    until they are completed again (AUT-18).
-    """
-    existing = await db.scalar(
-        select(VehicleEvent).where(VehicleEvent.source_id == record.id)
-    )
-    if record.status != "completed":
-        if existing:
-            await db.delete(existing)
-        return
-    if existing:
-        existing.title = f"{record.service_type.title()} service @ {record.odometer_km:,} km"
-        existing.occurred_on = record.completed_date or record.service_date
-        existing.odometer_km = record.odometer_km
-        existing.amount = record.cost
-        return
-    await add_event(
-        db, record.vehicle_id, "service",
-        f"{record.service_type.title()} service @ {record.odometer_km:,} km",
-        record.completed_date or record.service_date,
-        record.odometer_km, record.cost, record.id,
-    )
-
-
-async def _resolve_linked_diagnostics(db: AsyncSession, record: ServiceRecord) -> None:
-    """Green-tick diagnostics whose scheduled repair service is now completed."""
-    if record.status != "completed":
-        return
-    from app.models.diagnostic import Diagnostic
-
-    diags = list((await db.scalars(
-        select(Diagnostic).where(Diagnostic.linked_service_id == record.id, Diagnostic.status != "resolved")
-    )).all())
-    for diag in diags:
-        diag.status = "resolved"
-        diag.resolved_at = datetime.now(timezone.utc)
-
-
-async def _reconcile_part_stock(
-    db: AsyncSession, vehicle_id: str, service_id: str, items, deduct: bool
-) -> None:
-    """Keep parts inventory in sync with a completed service.
-
-    Reverses any prior stock movements recorded against this service (so the
-    operation is idempotent across edits), then — when the service is
-    completed — deducts the used quantities and logs a PartMovement per part.
-    """
-    prev = list((await db.scalars(
-        select(PartMovement).where(PartMovement.service_id == service_id)
-    )).all())
-    for mv in prev:
-        part = await db.get(Part, mv.part_id)
-        if part:
-            part.quantity -= mv.delta  # undo: delta is negative for a deduction
-    if prev:
-        await db.execute(
-            PartMovement.__table__.delete().where(PartMovement.service_id == service_id)
-        )
-
-    if not deduct:
-        return
-
-    used: dict[str, int] = {}
-    for it in items:
-        part_id = it.part_id
-        if part_id:
-            used[part_id] = used.get(part_id, 0) + int(it.quantity or 1)
-    for part_id, qty in used.items():
-        part = await db.get(Part, part_id)
-        if not part or part.vehicle_id != vehicle_id:
-            raise HTTPException(status_code=400, detail="Part not found")
-        if part.quantity < qty:
-            raise HTTPException(status_code=400, detail=f"Insufficient stock for {part.name}")
-        part.quantity -= qty
-        db.add(
-            PartMovement(part_id=part_id, delta=-qty, reason="service", service_id=service_id)
-        )
 
 
 @router.get("", response_model=list[ServiceOut])
@@ -139,7 +47,7 @@ async def list_services(
     await get_accessible_vehicle(db, vehicle_id, user)
     rows = await db.scalars(
         select(ServiceRecord)
-        .options(_load_options())
+        .options(load_options())
         .where(ServiceRecord.vehicle_id == vehicle_id)
         .order_by(ServiceRecord.service_date.desc())
     )
@@ -166,14 +74,10 @@ async def create_service(
     for item in payload.items:
         db.add(ServiceItem(service_id=record.id, **item.model_dump()))
     await db.flush()
-    await _reconcile_part_stock(db, vehicle_id, record.id, payload.items, record.status == "completed")
-    await _ensure_completed_event(db, record)
-    await _resolve_linked_diagnostics(db, record)
+    await finalize_service_side_effects(db, vehicle_id, record, payload.items)
     await db.commit()
     await db.refresh(record)
-    if record.next_due_km or record.next_due_date:
-        from app.workers.tasks import check_due_notifications
-        check_due_notifications.delay(vehicle_id)
+    await queue_due_notification(db, vehicle_id, record)
     return record
 
 
@@ -185,16 +89,7 @@ async def export(
     user: User = Depends(get_current_user),
 ) -> Response:
     vehicle = await get_accessible_vehicle(db, vehicle_id, user)
-    rows = await db.scalars(
-        select(ServiceRecord)
-        .options(_load_options())
-        .where(
-            ServiceRecord.vehicle_id == vehicle_id,
-            ServiceRecord.status == "completed",  # future services excluded
-        )
-        .order_by(ServiceRecord.service_date)
-    )
-    records = list(rows)
+    records = await list_completed_services(db, vehicle_id)
     label = f"{vehicle.make or ''} {vehicle.model or ''}".strip() or vehicle.nickname
     if fmt == "csv":
         content = export_service_history_csv(records, label)
@@ -235,7 +130,7 @@ async def get_service(
     user: User = Depends(get_current_user),
 ) -> ServiceRecord:
     await get_accessible_vehicle(db, vehicle_id, user)
-    return await _service_or_404(db, vehicle_id, service_id)
+    return await service_or_404(db, vehicle_id, service_id)
 
 
 @router.patch("/{service_id}", response_model=ServiceOut)
@@ -247,7 +142,7 @@ async def update_service(
     user: User = Depends(require_write),
 ) -> ServiceRecord:
     await get_accessible_vehicle(db, vehicle_id, user)
-    record = await _service_or_404(db, vehicle_id, service_id)
+    record = await service_or_404(db, vehicle_id, service_id)
 
     updates = payload.model_dump(exclude_unset=True)
     items = updates.pop("items", None)
@@ -272,14 +167,10 @@ async def update_service(
     fresh_items = list((await db.scalars(
         select(ServiceItem).where(ServiceItem.service_id == record.id)
     )).all())
-    await _reconcile_part_stock(db, vehicle_id, record.id, fresh_items, record.status == "completed")
-    await _ensure_completed_event(db, record)
-    await _resolve_linked_diagnostics(db, record)
+    await finalize_service_side_effects(db, vehicle_id, record, fresh_items)
     await db.commit()
     await db.refresh(record)
-    if record.next_due_km or record.next_due_date:
-        from app.workers.tasks import check_due_notifications
-        check_due_notifications.delay(vehicle_id)
+    await queue_due_notification(db, vehicle_id, record)
     return record
 
 
@@ -291,8 +182,8 @@ async def delete_service(
     user: User = Depends(require_write),
 ) -> None:
     await get_accessible_vehicle(db, vehicle_id, user)
-    record = await _service_or_404(db, vehicle_id, service_id)
-    await _reconcile_part_stock(db, vehicle_id, service_id, [], deduct=False)
+    record = await service_or_404(db, vehicle_id, service_id)
+    await reconcile_part_stock(db, vehicle_id, service_id, [], deduct=False)
     await db.execute(
         VehicleEvent.__table__.delete().where(VehicleEvent.source_id == service_id)
     )
@@ -319,14 +210,7 @@ async def predict(
     """
     vehicle = await get_accessible_vehicle(db, vehicle_id, user)
     await require_ai_vehicle(db, vehicle, user)
-    history = list((await db.scalars(
-        select(ServiceRecord)
-        .where(
-            ServiceRecord.vehicle_id == vehicle_id,
-            ServiceRecord.status == "completed",
-        )
-        .order_by(ServiceRecord.service_date)
-    )).all())
+    history = await list_completed_services(db, vehicle_id)
     data = payload.model_dump()
     data["make"] = data["make"] or vehicle.make or ""
     data["model"] = data["model"] or vehicle.model or ""
@@ -347,4 +231,3 @@ async def predict(
     if not result:
         raise HTTPException(status_code=503, detail="Prediction engine unavailable")
     return ServicePredictionResponse(**result)
-
