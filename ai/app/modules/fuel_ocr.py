@@ -5,7 +5,7 @@ Output: vendor, date, litres, price_per_litre, total_cost, currency.
 """
 
 from app.fallbacks.fuel_ocr import _fuel_receipt_fallback
-from app.modules.ocr import _tesseract_text, _IMAGE_TYPES
+from app.ocr_utils import _IMAGE_TYPES, _tesseract_text
 from app.router_client import enhance
 
 
