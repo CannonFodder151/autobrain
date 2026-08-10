@@ -68,10 +68,12 @@ def _to_text(entity_type: str, data: dict) -> str:
 
 
 def _valid_embedding(value: object) -> list[float] | None:
-    """Validate router embedding output: a non-empty list of numbers only.
+    """Validate router embedding output: a non-empty list of numbers only,
+    whose length matches EMBEDDING_DIMENSION so it fits the vector(n) columns.
 
-    The embedding is later bound into SQL; anything non-numeric must be
-    rejected (never reflected into a query).
+    The embedding is later bound into SQL; anything non-numeric or the wrong
+    dimension must be rejected (a mismatched-dimension insert would otherwise
+    fail at runtime with 22P02 — skip/fall back instead of 500).
     """
     if not isinstance(value, list) or not value:
         return None
@@ -80,6 +82,13 @@ def _valid_embedding(value: object) -> list[float] | None:
         if isinstance(item, bool) or not isinstance(item, (int, float)):
             return None
         out.append(float(item))
+    if len(out) != _EMBEDDING_DIM:
+        logger.warning(
+            "embedding_dim_mismatch",
+            expected=_EMBEDDING_DIM,
+            got=len(out),
+        )
+        return None
     return out
 
 
