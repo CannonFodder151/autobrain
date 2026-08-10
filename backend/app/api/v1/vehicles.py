@@ -3,7 +3,7 @@
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_write
@@ -123,6 +123,9 @@ async def delete_vehicle(
     user: User = Depends(require_write),
 ) -> None:
     vehicle = await get_owned_vehicle(db, vehicle_id, user)
+    await db.execute(
+        delete(VehicleShare).where(VehicleShare.vehicle_id == vehicle_id)
+    )
     await db.delete(vehicle)
     await db.commit()
 

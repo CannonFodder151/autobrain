@@ -22,6 +22,7 @@ logger = get_logger(__name__)
 _ORDER = [
     "users",
     "vehicles",
+    "vehicle_shares",
     "vehicle_events",
     "service_records",
     "service_items",
@@ -217,6 +218,11 @@ async def delete_user_complete(db: AsyncSession, user_id: str) -> None:
     """
     await _delete_user_data(db, user_id)
     await db.execute(
+        _TABLES["vehicle_shares"].delete().where(
+            _TABLES["vehicle_shares"].c.invitee_user_id == user_id
+        )
+    )
+    await db.execute(
         _TABLES["notification_preferences"].delete().where(
             _TABLES["notification_preferences"].c.user_id == user_id
         )
@@ -261,6 +267,11 @@ async def _delete_user_data(db: AsyncSession, user_id: str) -> None:
     )).scalars().all())
     if not vehicle_ids:
         return
+    await db.execute(
+        _TABLES["vehicle_shares"].delete().where(
+            _TABLES["vehicle_shares"].c.vehicle_id.in_(vehicle_ids)
+        )
+    )
     # Children first (reverse dependency order).
     for name in ("service_items", "obd_codes", "logbook_entries", "notification_preferences",
                  "valuation_snapshots", "extracted_items", "part_movements", "receipts",
