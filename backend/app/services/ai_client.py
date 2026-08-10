@@ -19,9 +19,12 @@ class AIGatewayError(Exception):
 
 async def _call(module: str, payload: dict) -> dict | None:
     url = f"{settings.AI_LOCAL_BASE_URL.rstrip('/')}/v1/{module}"
+    headers = {}
+    if settings.AI_GATEWAY_API_KEY:
+        headers["Authorization"] = f"Bearer {settings.AI_GATEWAY_API_KEY}"
     try:
         async with httpx.AsyncClient(timeout=settings.AI_ROUTER_TIMEOUT_SECONDS) as client:
-            resp = await client.post(url, json={"payload": payload})
+            resp = await client.post(url, json={"payload": payload}, headers=headers)
             resp.raise_for_status()
             data = resp.json()
             return data.get("result") if isinstance(data, dict) and "result" in data else data

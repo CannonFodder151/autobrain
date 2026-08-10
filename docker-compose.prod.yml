@@ -93,6 +93,7 @@ services:
     env_file: .env
     environment:
       AI_ROUTER_URL: ${AI_ROUTER_URL}
+      AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:-}
     expose:
       - "8001"
 
