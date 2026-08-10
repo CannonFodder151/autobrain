@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.fuel import FuelLog
 from app.models.share import VehicleShare
 from app.models.user import User
 from app.models.vehicle import Vehicle
@@ -70,3 +71,21 @@ async def clear_primary(db: AsyncSession, user: User) -> None:
         .where(Vehicle.user_id == user.id)
         .values(is_primary=False)
     )
+
+
+async def sync_odometer_from_fuel(db: AsyncSession, vehicle: Vehicle) -> Vehicle:
+    """Backfill odometer from fuel logs only when the vehicle has none set.
+
+    Manual edits to `odometer_km` are authoritative and are never overridden by
+    fuel data (a user may correct the clock after a gap in logging).
+    """
+    if vehicle.odometer_km:
+        return vehicle
+    latest = await db.scalar(
+        select(FuelLog)
+        .where(FuelLog.vehicle_id == vehicle.id)
+        .order_by(FuelLog.odometer_km.desc())
+    )
+    if latest and latest.odometer_km > 0:
+        vehicle.odometer_km = latest.odometer_km
+    return vehicle

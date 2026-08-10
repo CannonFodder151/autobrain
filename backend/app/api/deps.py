@@ -1,5 +1,7 @@
 """Shared FastAPI dependencies."""
 
+import hmac
+
 from fastapi import Depends, HTTPException, Request, WebSocket, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -120,6 +122,6 @@ async def require_admin_api_key(request: Request) -> None:
     if not settings.ADMIN_API_KEY:
         raise HTTPException(status_code=503, detail="Admin API is not configured")
     supplied = request.headers.get("X-Admin-API-Key", "")
-    if not supplied or supplied != settings.ADMIN_API_KEY:
+    if not supplied or not hmac.compare_digest(supplied, settings.ADMIN_API_KEY):
         raise HTTPException(status_code=401, detail="Invalid or missing admin API key")
     return None

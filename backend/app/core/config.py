@@ -107,6 +107,12 @@ class Settings(BaseSettings):
     # Admin API key: enables machine-to-machine user management via X-Admin-API-Key.
     ADMIN_API_KEY: str = ""  # leave empty to disable the /admin-api endpoints
 
+    # CORS origins: explicit allow-list (JSON list in env, e.g.
+    # CORS_ALLOWED_ORIGINS='["https://app.example.com"]'). Empty list = same-origin
+    # only (the nginx frontend proxies /api, /ws, /ai). Never pair "*" with
+    # allow_credentials=True — browsers reject that combo.
+    CORS_ALLOWED_ORIGINS: list[str] = []
+
     # Self-service signup (hosted). When enabled, anyone can register a
     # Free-tier account via POST /auth/signup. Self-hosted instances keep
     # admin-only provisioning by leaving this off.
