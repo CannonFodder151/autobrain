@@ -8,7 +8,7 @@ reads are ~95% accurate with the deterministic engine, so AI adds nothing.
 """
 
 from app.fallbacks.odometer import _odometer_fallback
-from app.modules.ocr import _tesseract_text, _IMAGE_TYPES
+from app.ocr_utils import _IMAGE_TYPES, _tesseract_text
 
 
 async def run(payload: dict) -> dict:

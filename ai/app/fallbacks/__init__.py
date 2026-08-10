@@ -12,7 +12,8 @@ model — the router path is used whenever it is available.
 from app.fallbacks.diagnose import diagnose_fallback
 from app.fallbacks.fuel_ocr import _fuel_receipt_fallback
 from app.fallbacks.mod_impact import mod_impact_fallback
-from app.fallbacks.ocr import _extract_date, extract_receipt_fallback
+from app.fallbacks.ocr import extract_receipt_fallback
+from app.ocr_utils import _extract_date
 from app.fallbacks.odometer import _odometer_fallback
 from app.fallbacks.resale import estimate_value_fallback, rrp_for
 from app.fallbacks.service_prediction import predict_service_fallback

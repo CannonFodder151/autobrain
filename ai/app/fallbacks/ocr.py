@@ -2,6 +2,8 @@
 
 import re
 
+from app.ocr_utils import _extract_date
+
 _VENDOR_HINTS = ["autobarn", "supercheap", "repco", "bunnings", "kmart", "harley davidson",
                  "toyota", "ford", "nissan", "mitsubishi", "penrite", "castrol"]
 
@@ -63,7 +65,3 @@ def extract_receipt_fallback(text: str, content_type: str = "") -> dict:
         "model": "rule-based-fallback",
     }
 
-
-def _extract_date(text: str) -> str | None:
-    m = re.search(r"(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})", text)
-    return m.group(1) if m else None

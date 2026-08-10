@@ -2,7 +2,7 @@
 
 import re
 
-from app.fallbacks.ocr import _extract_date
+from app.ocr_utils import _extract_date
 
 
 def _num(s) -> float | None:
