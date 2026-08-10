@@ -78,6 +78,26 @@ See `docs/mobile-release.md` for the full runbook. In short:
 `scripts/bump-version.sh <x.y.z> [--mobile]` is the one tool that moves a
 release version everywhere in one shot (see `docs/versioning.md`).
 
+## 2b. Rego-lookup auto-deploy (AUT-264)
+
+`CannonFodder151/rego-lookup-api` deploys automatically on every push to `main`:
+
+1. **Trigger** — push to `main` (or manual `workflow_dispatch`) runs
+   `build.yml` in that repo.
+2. **Build** — multi-arch image pushed as `ghcr.io/cannonfodder151/rego-lookup:hosted`
+   (+ Docker Hub `cannonfodder151/rego-lookup-api:hosted` / `:latest`).
+3. **Deploy** — a `deploy` job then calls Portainer with `PullImage: true` on
+   **both** tiers (no manual step, order irrelevant here since the image is
+   immutable once pushed):
+   - On-prem: Portainer stack `plate-api-scraper` (EP2, `10.0.3.17:8011`), stack id **75**.
+   - Hosted: Portainer stack `rego-lookup` (EP5, `152.69.188.133:8011`), stack id **85**.
+
+Secrets live on the `rego-lookup-api` repo: `PORTAINER_URL`, `PORTAINER_API_KEY`,
+`DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`. The deploy job re-applies each stack's
+current compose (no drift) and treats a reverse-proxy `504` on the PUT as
+"triggered" (Portainer applies server-side). See the rego-lookup-api README
+*Deploy (auto — AUT-264)*.
+
 ## 6. Deploy flow
 
 Deploys are promotion-gated — **Demo → Default → Hosted**, in that order, and a
