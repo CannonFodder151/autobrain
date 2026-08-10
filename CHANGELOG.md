@@ -21,6 +21,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   `changelog.html` on every release push, so the website changelog always
   reflects the shipped code.
 
+### Fixed
+- Asset backup no longer fails on zero-byte MinIO directory-marker objects (`obj.is_dir`/keys ending in `/`): `export_assets` skips them instead of hitting `NoSuchKey` (AUT-194).
+
 ## [0.3.5] - 2026-08-09
 
 ### Added

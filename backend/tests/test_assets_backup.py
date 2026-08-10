@@ -64,6 +64,7 @@ def test_export_validate_restore_roundtrip():
     client = FakeClient()
     client.seed("vehicles/v1/photo.jpg", b"\xff\xd8\xff photo")
     client.seed("receipts/abc.pdf", b"%PDF-1.4 receipt")
+    client.seed("fuel-receipts/", b"")  # zero-byte dir marker must be skipped
 
     archive = export_assets(client)
     assert archive[:2] == b"\x1f\x8b"  # gzip magic

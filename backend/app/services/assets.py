@@ -20,6 +20,8 @@ def export_assets(client) -> bytes:
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
         for obj in client.list_objects(settings.MINIO_BUCKET):
+            if getattr(obj, "is_dir", False) or obj.object_name.endswith("/"):
+                continue  # zero-byte directory marker object; not a file
             resp = client.get_object(settings.MINIO_BUCKET, obj.object_name)
             try:
                 data = resp.read()
