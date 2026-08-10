@@ -26,8 +26,8 @@ gate blocks the release at that tier.
       `/health` + key flows.
 - [ ] 2. **Default** — deploy to `default.autobrainservice.app`; verify startup +
       `/health` + key flows.
-- [ ] 3. **Hosted** — deploy to `hosted.autobrainservice.app` (Portainer
-      endpoint 5); verify startup + `/health` + key flows. **Only when this
+- [ ] 3. **Hosted** — deploy to `hosted.autobrainservice.app` (Oracle Cloud VM,
+      Portainer); verify startup + `/health` + key flows. **Only when this
       passes is the release complete.**
 - [ ] **Verify the feature is actually present** on each tier — exercise the
       flow (open the new screen, hit the new endpoint), not just the version
@@ -91,7 +91,7 @@ Services:
 
 ```bash
 ./scripts/publish-images.sh hosted
-# Then update the Portainer stack on endpoint 5 (AutoBrain-Hosted) to pull new images.
+# Then update the Portainer stack (AutoBrain-Hosted) to pull new images.
 ```
 
 ## Deploy (production, from source)

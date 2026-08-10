@@ -48,7 +48,7 @@ class _ServerSetupScreenState extends State<ServerSetupScreen> {
       return;
     }
     if (!host.contains('://') && !RegExp(r'^[\w.-]+$').hasMatch(host)) {
-      setState(() => _error = 'Enter a hostname or IP (e.g. 10.0.3.39)');
+      setState(() => _error = 'Enter a hostname or IP (e.g. 192.168.1.10)');
       return;
     }
     final port = int.tryParse(_port.text.trim());
@@ -167,7 +167,7 @@ class _ServerSetupScreenState extends State<ServerSetupScreen> {
                           controller: _host,
                           decoration: const InputDecoration(
                             labelText: 'Custom server',
-                            hintText: '10.0.3.39',
+                            hintText: '192.168.1.10',
                             prefixIcon: Icon(Icons.dns_outlined),
                           ),
                         ),
