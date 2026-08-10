@@ -108,15 +108,24 @@ verify these in `autobrain-mobile` — a mismatch is the #1 cause of upload reje
    `com.autobrainservice.app` avoids the "authority in use by other developers"
    rejection. Never add a hardcoded `androidx-startup` provider with the old appId.
 4. Sign with the **machine keystore** (`key.properties` in `android/`), not a
-   different AutoBrain key. AGP signs the `.aab` with the JAR (v1) signature;
-   Play re-signs the derived APKs with the upload key using **v2+v3**, which is
-   what Play actually requires. Verify after the build:
+   different AutoBrain key. The machine upload key is the certificate Play has
+   registered — **signer SHA1 must be
+   `F3:79:19:3F:F7:28:54:BE:46:01:6E:CB:FF:43:DC:15:DF:BF:FB:4C`**
+   (SHA256 `A0:F6:2F:A4:55:D7:8D:BA:11:7F:E8:6E:CE:39:93:39:87:84:EE:38:D2:CC:59:F5:C9:37:00:40:BA:2A:78:5C`,
+   alias `autobrain`). Any other fingerprint — e.g. the generated keystore that
+   was briefly wired into CI (alias `upload`, `35:90:61:…`) — is rejected by
+   Play with "signed with the wrong key". AGP signs the `.aab` with the JAR
+   (v1) signature; Play re-signs the derived APKs with the upload key using
+   **v2+v3**, which is what Play actually requires. Verify after the build:
    `jarsigner -verify <aab>` for the v1 (JAR) signature, plus
    `apksigner verify --verbose --print-certs` on a **same-`signingConfig`
-   release APK** — it must report v2 and v3 (`apksigner` cannot parse `.aab`
-   archives directly, it needs `AndroidManifest.xml`). The release
-   `signingConfig` in `android/app/build.gradle` enables v1+v2+v3 explicitly
-   (`enableV1Signing`/`enableV2Signing`/`enableV3Signing`).
+   release APK** — it must report v2 and v3 and the machine-key SHA-1 digest
+   (`f379193f…`). The release `signingConfig` in `android/app/build.gradle`
+   enables v1+v2+v3 explicitly
+   (`enableV1Signing`/`enableV2Signing`/`enableV3Signing`). CI enforces this
+   too: `release-mobile.yml` aborts the build when the signer fingerprint
+   does not match, so a wrong keystore in the `UPLOAD_KEYSTORE_BASE64` /
+   `KEY_ALIAS` / `KEY_PASSWORD` / `KEY_STORE_PASSWORD` secrets can never ship.
 
 Commit and push any of these changes to `autobrain-mobile` **before** building.
 
