@@ -21,13 +21,31 @@ on:
         default: wss://hosted.autobrainservice.app/ws
 
 jobs:
+  auto-bump:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Cut a release if [Unreleased] has content (AUT-240)
+        run: |
+          set -euo pipefail
+          ./scripts/auto-bump.sh
+          git push origin main
+          echo "==> auto-bump done"
+
   build:
+    needs: auto-bump
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
 
       - uses: docker/setup-qemu-action@v3
         if: ${{ github.event.inputs.platforms != 'linux/amd64' }}

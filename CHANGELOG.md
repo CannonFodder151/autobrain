@@ -14,6 +14,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - MinIO asset backup/restore admin endpoints (AUT-194): `GET /admin-api/assets/backup` streams a tar.gz of every object in the MinIO bucket, `POST /admin-api/assets/restore` validates + restores a gzip tar before wiping, enabling the autobrain-backup service to back up DB snapshots and image assets together.
 
 ### Changed
+- Automatic release cutting (AUT-240): `scripts/auto-bump.sh` now runs before
+  every app/docker build — in CI (`dockerhub-publish.yml`, `build-hosted.yml`)
+  and local (`publish-images.sh`, `deploy.sh`). Whenever `CHANGELOG.md` has a
+  non-empty `[Unreleased]` section, it bumps the patch version
+  (`x.y.z` → `x.y.(z+1)`) via `bump-version.sh`, re-opens `[Unreleased]`, and
+  commits the release — so a change can never ship without a new version.
+  Images are additionally tagged with the release version (e.g. `0.3.6`).
+  No AI agent needed: a deterministic gate is more reliable than an LLM for
+  this, matching the "deterministic paths first" rule.
 - Changelog is now mandatory for every app/docker change (AUT-168): CI on
   `main` fails the Docker Hub publish if `backend/`, `ai/`, `frontend/`,
   `docker/` or compose files changed without a matching `CHANGELOG.md` entry.
