@@ -38,6 +38,17 @@
 - Router payloads never include credentials or raw receipt images by default
   (the OCR module receives file metadata/preview, not secrets).
 
+## AI gateway auth
+
+- The AI gateway's `/v1/*` endpoints require the shared `AI_GATEWAY_API_KEY`
+  (Bearer token, same value the backend sends via `ai_client.py`). This **fails
+  closed** — with the key unset the gateway returns 401 on `/v1/*` unless an
+  explicit dev opt-out is set (`AI_ENV=development` or
+  `AI_GATEWAY_AUTH_DISABLED=1`).
+- Hosted and prod compose refuse to start without it
+  (`${AI_GATEWAY_API_KEY:?...}`). Set the same strong random value for the
+  backend and `ai` services (Portainer stack env on the hosted instance).
+
 ## Network
 
 - Prod runs behind nginx; only :80 exposed. Internal services are not
@@ -59,6 +70,7 @@ See [SECURITY.md](../../SECURITY.md) for the reporting policy.
 
 - [ ] Rotate all default credentials (postgres, minio, SECRET_KEY).
 - [ ] Set a real `AI_ROUTER_URL` and key in prod.
+- [ ] Set a real `AI_GATEWAY_API_KEY` (same value for backend + ai services).
 - [ ] Restrict CORS origins.
 - [ ] Enable HTTPS (TLS termination on nginx or a load balancer).
 - [ ] Restrict SSH (key-only auth).

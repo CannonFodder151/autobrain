@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     AI_ROUTER_API_KEY: str = ""
     AI_ROUTER_TIMEOUT_SECONDS: int = 60
     AI_LOCAL_BASE_URL: str = "http://ai:8001"
+    AI_GATEWAY_API_KEY: str = ""  # shared secret backend->AI gateway (Bearer)
     EMBEDDING_MODEL: str = "text-embedding-3-small"
     EMBEDDING_DIMENSION: int = 1536  # text-embedding-3-small output size
 
