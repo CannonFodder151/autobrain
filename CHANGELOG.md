@@ -34,6 +34,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   reflects the shipped code.
 
 ### Fixed
+- Security headers (AUT-234/236): frontend nginx now sends `Content-Security-Policy`, `X-Frame-Options: DENY` and `Referrer-Policy` on all responses, closing the ZAP CSP + clickjacking findings on `default.autobrainservice.app`; CSP is tuned for the Flutter web renderer (`'wasm-unsafe-eval'`, same-origin `connect-src`).
+- Security (AUT-234/236): server-picker example host changed from `192.168.1.100` to `192.0.2.1` (RFC 5737 TEST-NET-1) so the built `main.dart.js` no longer embeds an RFC1918 private IP.
 - Asset backup no longer fails on zero-byte MinIO directory-marker objects (`obj.is_dir`/keys ending in `/`): `export_assets` skips them instead of hitting `NoSuchKey` (AUT-194).
 - Security: `/ws/{user_id}` WebSocket now requires a valid access JWT and fail-closes; search embedding SQL is bound-parameterized (`CAST(:embedding AS vector)`) instead of interpolated; `/api/v1/search` results are scoped to the requesting user's owned + shared vehicles (IDOR fix) (AUT-203, AUT-134).
 
