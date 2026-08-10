@@ -109,31 +109,47 @@ def process_receipt(receipt_id: str) -> None:
 def refresh_valuations() -> None:
     async def _refresh():
         async with SessionLocal() as db:
-            from sqlalchemy import select
+            from sqlalchemy import func, select
 
-            vehicles = list((await db.scalars(select(Vehicle))).all())
-            for vehicle in vehicles:
-                services = list((await db.scalars(
-                    select(ServiceRecord).where(ServiceRecord.vehicle_id == vehicle.id)
-                )).all())
-                result = await estimate_value({
+            rows = list((await db.execute(
+                select(
+                    Vehicle.id, Vehicle.make, Vehicle.model, Vehicle.year,
+                    Vehicle.odometer_km, Vehicle.condition,
+                    func.count(ServiceRecord.id).label("service_count"),
+                )
+                .outerjoin(ServiceRecord, ServiceRecord.vehicle_id == Vehicle.id)
+                .group_by(Vehicle.id)
+            )).all())
+            # Fleet can be hundreds of vehicles; the AI gateway times out at
+            # 120s, so a serial loop would never finish. Cap concurrency at 4
+            # (the DB session is only touched sequentially above and below).
+            sem = asyncio.Semaphore(4)
+
+            async def _estimate(row):
+                payload = {
                     "vehicle": {
-                        "make": vehicle.make, "model": vehicle.model, "year": vehicle.year,
-                        "odometer_km": vehicle.odometer_km, "condition": vehicle.condition,
+                        "make": row.make, "model": row.model, "year": row.year,
+                        "odometer_km": row.odometer_km, "condition": row.condition,
                     },
-                    "service_count": len(services),
-                })
-                if result:
-                    db.add(
-                        ValuationSnapshot(
-                            vehicle_id=vehicle.id,
-                            estimated_value=result["estimated_value"],
-                            low=result["low"], high=result["high"],
-                            currency=result.get("currency", "AUD"),
-                            factors=json.dumps(result.get("factors", {})),
-                            recommendations=json.dumps(result.get("recommendations", [])),
-                        )
+                    "service_count": row.service_count,
+                }
+                async with sem:
+                    return await estimate_value(payload)
+
+            results = await asyncio.gather(*(_estimate(row) for row in rows))
+            for row, result in zip(rows, results):
+                if not result:
+                    continue
+                db.add(
+                    ValuationSnapshot(
+                        vehicle_id=row.id,
+                        estimated_value=result["estimated_value"],
+                        low=result["low"], high=result["high"],
+                        currency=result.get("currency", "AUD"),
+                        factors=json.dumps(result.get("factors", {})),
+                        recommendations=json.dumps(result.get("recommendations", [])),
                     )
+                )
             await db.commit()
 
     _run(_refresh())
