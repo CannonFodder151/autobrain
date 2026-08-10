@@ -29,6 +29,9 @@ below are mirrors kept in-repo for offline reading and PR review.
 | [backup-strategy.md](backup-strategy.md) | Data backup & restore |
 | [monitoring.md](monitoring.md) | Logging and monitoring |
 | [mobile-release.md](mobile-release.md) | Mobile `.aab` release runbook + Discord change-notes delivery |
+| [test-strategy.md](test-strategy.md) | Test environments, coverage areas, triage flow, sign-off bar |
+| [qa-run-logs.md](qa-run-logs.md) | Chronological verified test passes and verification runs |
+| [user-testing-results.md](user-testing-results.md) | Verified bug reports, feature verification, test-pass outcomes |
 
 **Rule:** when behaviour changes, update the matching Outline document and the
 mirror here in the same change.
