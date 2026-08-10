@@ -2,7 +2,7 @@
 
 import base64
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
@@ -26,6 +26,7 @@ from app.schemas.fuel import (
     FuelReceiptResult,
 )
 from app.services.ai_client import extract_fuel_receipt
+from app.services.dates import current_fy
 from app.services.export import export_fuel_csv, export_zip
 from app.services.odometer import sync_odometer
 
@@ -35,11 +36,6 @@ logger = get_logger(__name__)
 
 ALLOWED_RECEIPT_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/tiff", "application/pdf"}
 MAX_BYTES = 15 * 1024 * 1024
-
-
-def _current_fy() -> int:
-    today = datetime.now(timezone.utc)
-    return today.year + (1 if today.month >= 7 else 0)
 
 
 async def _recompute_efficiency(db: AsyncSession, vehicle_id: str) -> None:
@@ -246,7 +242,7 @@ async def export_fuel_year(
     fmt=zip bundles the CSV (with an Image column) plus the receipt images.
     """
     vehicle = await get_accessible_vehicle(db, vehicle_id, user)
-    fy = fy or _current_fy()
+    fy = fy or current_fy()
     start = datetime(fy - 1, 7, 1)
     end = datetime(fy, 6, 30, 23, 59, 59)
     logs = list((await db.scalars(

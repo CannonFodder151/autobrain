@@ -4,12 +4,14 @@ import base64
 import io
 import secrets
 import time
+import uuid
 from collections import defaultdict, deque
 
 import pyotp
 import qrcode
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import Response
+from redis.asyncio import Redis as AsyncRedis
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -50,7 +52,18 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 MFA_ISSUER = "AutoBrain"
 
 # --- brute-force protection: failed logins per IP ---
-_login_failures: dict[str, deque[float]] = defaultdict(deque)
+# Redis-backed so the counter is shared across workers and pruned by TTL.
+# Falls back to a bounded in-memory store if Redis is unreachable.
+_redis_client: AsyncRedis | None = None
+_fallback_failures: dict[str, deque[float]] = defaultdict(deque)
+_FAILURE_KEY = "login_failures:{ip}"
+
+
+def _redis() -> AsyncRedis | None:
+    global _redis_client
+    if _redis_client is None:
+        _redis_client = AsyncRedis.from_url(settings.REDIS_URL)
+    return _redis_client
 
 
 def _client_ip(request: Request) -> str:
@@ -60,11 +73,35 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def _check_rate_limit(ip: str) -> None:
+def _prune_fallback() -> None:
     now = time.monotonic()
-    q = _login_failures[ip]
-    while q and now - q[0] > settings.LOGIN_WINDOW_SECONDS:
-        q.popleft()
+    for ip in list(_fallback_failures):
+        q = _fallback_failures[ip]
+        while q and now - q[0] > settings.LOGIN_WINDOW_SECONDS:
+            q.popleft()
+        if not q:
+            del _fallback_failures[ip]
+
+
+async def _check_rate_limit(ip: str) -> None:
+    r = _redis()
+    if r is not None:
+        try:
+            now = time.time()
+            key = _FAILURE_KEY.format(ip=ip)
+            await r.zremrangebyscore(key, 0, now - settings.LOGIN_WINDOW_SECONDS)
+            if await r.zcard(key) >= settings.LOGIN_MAX_ATTEMPTS:
+                raise HTTPException(
+                    status_code=429,
+                    detail="Too many failed login attempts. Try again in 3 hours.",
+                )
+            return
+        except HTTPException:
+            raise
+        except Exception:
+            pass  # Redis down → use the in-memory fallback (still bounded)
+    _prune_fallback()
+    q = _fallback_failures[ip]
     if len(q) >= settings.LOGIN_MAX_ATTEMPTS:
         raise HTTPException(
             status_code=429,
@@ -72,12 +109,29 @@ def _check_rate_limit(ip: str) -> None:
         )
 
 
-def _record_failure(ip: str) -> None:
-    _login_failures[ip].append(time.monotonic())
+async def _record_failure(ip: str) -> None:
+    r = _redis()
+    if r is not None:
+        try:
+            key = _FAILURE_KEY.format(ip=ip)
+            await r.zadd(key, {uuid.uuid4().hex: time.time()})
+            await r.expire(key, settings.LOGIN_WINDOW_SECONDS + 60)
+            return
+        except Exception:
+            pass
+    _fallback_failures[ip].append(time.monotonic())
+    _prune_fallback()
 
 
-def _clear_failures(ip: str) -> None:
-    _login_failures.pop(ip, None)
+async def _clear_failures(ip: str) -> None:
+    r = _redis()
+    if r is not None:
+        try:
+            await r.delete(_FAILURE_KEY.format(ip=ip))
+            return
+        except Exception:
+            pass
+    _fallback_failures.pop(ip, None)
 
 
 # --- login / MFA ---
@@ -88,10 +142,10 @@ async def login(
     db: AsyncSession = Depends(get_db),
 ) -> LoginResult:
     ip = _client_ip(request)
-    _check_rate_limit(ip)
+    await _check_rate_limit(ip)
     user = await db.scalar(select(User).where(User.email == payload.email.lower()))
     if not user or not verify_password(payload.password, user.hashed_password):
-        _record_failure(ip)
+        await _record_failure(ip)
         raise HTTPException(status_code=401, detail="Invalid email or password")
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account is disabled")
@@ -107,9 +161,9 @@ async def login(
         if not payload.totp_code:
             return LoginResult(mfa_required=True, mfa_token=create_mfa_token(user.id))
         if not _verify_totp(user.mfa_secret, payload.totp_code):
-            _record_failure(ip)
+            await _record_failure(ip)
             raise HTTPException(status_code=401, detail="Invalid MFA code")
-    _clear_failures(ip)
+    await _clear_failures(ip)
     return LoginResult(token_pair=_token_pair(user))
 
 
@@ -120,7 +174,7 @@ async def mfa_verify(
     db: AsyncSession = Depends(get_db),
 ) -> TokenPair:
     ip = _client_ip(request)
-    _check_rate_limit(ip)
+    await _check_rate_limit(ip)
     data = decode_token(payload.mfa_token)
     if not data or data.get("type") != "mfa":
         raise HTTPException(status_code=401, detail="Invalid or expired MFA session")
@@ -128,9 +182,9 @@ async def mfa_verify(
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="Invalid or expired MFA session")
     if not user.mfa_enabled or not _verify_totp(user.mfa_secret, payload.code):
-        _record_failure(ip)
+        await _record_failure(ip)
         raise HTTPException(status_code=401, detail="Invalid MFA code")
-    _clear_failures(ip)
+    await _clear_failures(ip)
     return _token_pair(user)
 
 
@@ -169,7 +223,7 @@ async def mfa_complete_setup(
 ) -> TokenPair:
     """Activate MFA after a login-in-progress setup session, completing login."""
     ip = _client_ip(request)
-    _check_rate_limit(ip)
+    await _check_rate_limit(ip)
     data = decode_token(payload.mfa_token)
     if not data or data.get("type") != "mfa":
         raise HTTPException(status_code=401, detail="Invalid or expired MFA session")
@@ -179,9 +233,9 @@ async def mfa_complete_setup(
     if user.role == "demo":
         raise HTTPException(status_code=403, detail="Demo accounts cannot set up MFA")
     if not user.mfa_secret or not _verify_totp(user.mfa_secret, payload.code):
-        _record_failure(ip)
+        await _record_failure(ip)
         raise HTTPException(status_code=400, detail="Invalid MFA code")
-    _clear_failures(ip)
+    await _clear_failures(ip)
     user.mfa_enabled = True
     await db.commit()
     await mail.send_security_alert(

@@ -1,23 +1,14 @@
 """Global search endpoint — hybrid keyword + semantic search."""
 
-from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db, get_current_user
 from app.models.user import User
-from app.services.search import semantic_search
+from app.services.search import semantic_search, validate_entity_types
 
 router = APIRouter(prefix="/search", tags=["search"])
-
-
-class SearchRequest(BaseModel):
-    q: str = Field(..., min_length=1, max_length=500, description="Search query")
-    entity_types: list[str] | None = Field(
-        default=None,
-        description="Limit to these entity types (diagnostic/service/modification/receipt)",
-    )
-    limit: int = Field(default=20, ge=1, le=100)
 
 
 class SearchResult(BaseModel):
@@ -52,7 +43,12 @@ async def search(
     user: User = Depends(get_current_user),
 ):
     """Hybrid search across diagnostics, services, modifications, and receipts."""
-    types = [t.strip() for t in entity_types.split(",")] if entity_types else None
+    types = [t.strip() for t in entity_types.split(",") if t.strip()] if entity_types else None
+    if types:
+        try:
+            validate_entity_types(types)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
     results = await semantic_search(
         db=db,
         query=q,

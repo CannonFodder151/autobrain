@@ -1,5 +1,7 @@
 """Semantic search service — hybrid vector + keyword search across AutoBrain data."""
 
+import asyncio
+
 from sqlalchemy import and_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,6 +38,21 @@ _ENTITY_MAP = {
     },
 }
 
+# Valid entity types, exposed for input validation at the API boundary.
+ENTITY_TYPES = tuple(_ENTITY_MAP.keys())
+
+
+def _escape_like(value: str) -> str:
+    """Escape LIKE wildcards so user input can't act as SQL patterns."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def validate_entity_types(types: list[str]) -> None:
+    """Raise ValueError listing entity types that aren't in `ENTITY_TYPES`."""
+    unknown = [t for t in types if t not in ENTITY_TYPES]
+    if unknown:
+        raise ValueError(f"Unknown entity types: {', '.join(unknown)}")
+
 
 async def semantic_search(
     db: AsyncSession,
@@ -50,11 +67,13 @@ async def semantic_search(
     cosine similarity). Falls back to keyword-only if embeddings are
     unavailable.
     """
-    types = entity_types or list(_ENTITY_MAP.keys())
+    types = entity_types or list(ENTITY_TYPES)
     results: list[dict] = []
 
-    # Try vector search first (needs embedding for the query text).
-    embedding = await generate_embedding("query", {"symptoms": query})
+    # Embedding is only needed for the vector phase — start it in the
+    # background so keyword queries (which don't need it) run concurrently
+    # instead of waiting on the embedding API call.
+    embedding_task = asyncio.create_task(generate_embedding("query", {"symptoms": query}))
 
     for etype in types:
         cfg = _ENTITY_MAP[etype]
@@ -64,12 +83,14 @@ async def semantic_search(
         if vehicle_id:
             base_filters.append(model.vehicle_id == vehicle_id)
 
-        # Keyword search (ILIKE on text columns) — always runs.
+        # Keyword search (ILIKE on text columns) — always runs. `%`/`_` in the
+        # query are escaped so user input can't act as SQL wildcards.
+        escaped = _escape_like(query)
         keyword_conditions = []
         for col_name in cfg["columns"]:
             col = getattr(model, col_name, None)
             if col is not None:
-                keyword_conditions.append(col.ilike(f"%{query}%"))
+                keyword_conditions.append(col.ilike(f"%{escaped}%", escape="\\"))
 
         keyword_stmt = (
             select(model)
@@ -81,8 +102,18 @@ async def semantic_search(
         for row in keyword_rows:
             results.append(_serialise(etype, row, score=1.0, method="keyword"))
 
-        # Vector search (cosine similarity) — runs if embedding available.
-        if embedding is not None:
+    embedding = await embedding_task
+
+    # Vector search (cosine similarity) — runs if embedding available.
+    if embedding is not None:
+        for etype in types:
+            cfg = _ENTITY_MAP[etype]
+            model = cfg["model"]
+
+            base_filters = []
+            if vehicle_id:
+                base_filters.append(model.vehicle_id == vehicle_id)
+
             vec_col = cfg["vector_col"]
             vec_filters = base_filters + [getattr(model, vec_col).isnot(None)]
 

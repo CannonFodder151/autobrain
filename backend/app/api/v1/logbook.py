@@ -11,16 +11,16 @@ DELETE stays available on club-reg vehicles so stale entries can be cleaned up.
 """
 
 import base64
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_write
 from app.api.v1.ownership import get_accessible_vehicle, require_ai_vehicle
-from app.core.storage import detect_mime, ensure_bucket, upload_object
+from app.core.storage import detect_mime
 from app.db.session import get_db
 from app.models.logbook import LogEntry
 from app.models.user import User
@@ -32,6 +32,7 @@ from app.schemas.logbook import (
     OdometerPhotoResult,
 )
 from app.services.ai_client import read_odometer
+from app.services.dates import current_fy, fy_bounds
 from app.services.odometer import sync_odometer
 
 router = APIRouter(prefix="/vehicles/{vehicle_id}/logbook", tags=["logbook"])
@@ -46,18 +47,6 @@ def _require_logbook(vehicle) -> None:
                 "disabled (Victoria requires the physical VicRoads club log book)."
             ),
         )
-
-
-def _fy_bounds(fy: int) -> tuple[datetime, datetime]:
-    """Australian financial year ends 30 June. fy=2026 covers 2025-07-01..2026-06-30."""
-    start = datetime(fy - 1, 7, 1, tzinfo=timezone.utc)
-    end = datetime(fy, 6, 30, 23, 59, 59, tzinfo=timezone.utc)
-    return start, end
-
-
-def _current_fy() -> int:
-    today = datetime.now(timezone.utc)
-    return today.year + (1 if today.month >= 7 else 0)
 
 
 async def _recompute_distance(entry: LogEntry) -> None:
@@ -92,7 +81,7 @@ async def list_entries(
     _require_logbook(vehicle)
     stmt = select(LogEntry).where(LogEntry.vehicle_id == vehicle_id)
     if fy:
-        start, end = _fy_bounds(fy)
+        start, end = fy_bounds(fy)
         stmt = stmt.where(LogEntry.started_at >= start, LogEntry.started_at <= end)
     stmt = stmt.order_by(LogEntry.started_at.desc())
     return list((await db.scalars(stmt)).all())
@@ -109,7 +98,7 @@ async def logbook_stats(
     _require_logbook(vehicle)
     stmt = select(LogEntry).where(LogEntry.vehicle_id == vehicle_id)
     if fy:
-        start, end = _fy_bounds(fy)
+        start, end = fy_bounds(fy)
         stmt = stmt.where(LogEntry.started_at >= start, LogEntry.started_at <= end)
     rows = list((await db.scalars(stmt)).all())
     total_km = sum(r.distance_km or 0 for r in rows)
@@ -180,7 +169,7 @@ async def export_logbook(
 
     vehicle = await get_accessible_vehicle(db, vehicle_id, user)
     _require_logbook(vehicle)
-    fy = fy or _current_fy()
+    fy = fy or current_fy()
     rows = list((await db.scalars(
         select(LogEntry)
         .where(LogEntry.vehicle_id == vehicle_id)

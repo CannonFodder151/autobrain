@@ -12,7 +12,6 @@ from app.api.v1.ownership import (
     effective_feature_owner,
     get_accessible_vehicle,
     get_owned_vehicle,
-    sync_odometer_from_fuel,
 )
 from app.core.logging import get_logger
 from app.db.session import get_db
@@ -30,6 +29,7 @@ from app.schemas.vehicle import (
     VehicleOut,
     VehicleUpdate,
 )
+from app.services.odometer import sync_odometer_from_fuel
 from app.services.rego import lookup_rego
 
 logger = get_logger(__name__)
@@ -53,15 +53,15 @@ async def list_vehicles(
         )
         .order_by(Vehicle.created_at.desc())
     )).all()
+    shared_vehicles = [v for v, _owner in shared]
+    await sync_odometer_from_fuel(db, owned + shared_vehicles)
     for v in owned:
-        await sync_odometer_from_fuel(db, v)
         v.is_shared = False
         v.shared_by = None
     for v, owner in shared:
-        await sync_odometer_from_fuel(db, v)
         v.is_shared = True
         v.shared_by = owner.display_name
-    return owned + [v for v, _owner in shared]
+    return owned + shared_vehicles
 
 
 @router.post("", response_model=VehicleOut, status_code=201)
@@ -96,7 +96,7 @@ async def get_vehicle(
     user: User = Depends(get_current_user),
 ) -> Vehicle:
     vehicle = await get_accessible_vehicle(db, vehicle_id, user)
-    return await sync_odometer_from_fuel(db, vehicle)
+    return (await sync_odometer_from_fuel(db, [vehicle]))[0]
 
 
 @router.patch("/{vehicle_id}", response_model=VehicleOut)
