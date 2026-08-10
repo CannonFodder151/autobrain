@@ -1,13 +1,9 @@
 """Authentication routes: login (with MFA), MFA management, admin user creation."""
 
-import base64
-import io
-import secrets
+import json as _json
 import time
-from collections import defaultdict, deque
+from typing import Any
 
-import pyotp
-import qrcode
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import Response
 from sqlalchemy import func, select
@@ -16,14 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, require_admin, require_write
 from app.core.config import settings
 from app.core.security import (
-    create_access_token,
     create_invite_token,
     create_mfa_token,
     create_password_reset_token,
-    create_refresh_token,
-    decode_token,
     hash_password,
-    verify_password,
 )
 from app.db.session import get_db
 from app.models.user import User
@@ -43,41 +35,10 @@ from app.schemas.auth import (
     UserOut,
     UserWithVehicleCount,
 )
+from app.services import auth as auth_svc
 from app.services import email as mail
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-
-MFA_ISSUER = "AutoBrain"
-
-# --- brute-force protection: failed logins per IP ---
-_login_failures: dict[str, deque[float]] = defaultdict(deque)
-
-
-def _client_ip(request: Request) -> str:
-    fwd = request.headers.get("x-forwarded-for")
-    if fwd:
-        return fwd.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
-
-
-def _check_rate_limit(ip: str) -> None:
-    now = time.monotonic()
-    q = _login_failures[ip]
-    while q and now - q[0] > settings.LOGIN_WINDOW_SECONDS:
-        q.popleft()
-    if len(q) >= settings.LOGIN_MAX_ATTEMPTS:
-        raise HTTPException(
-            status_code=429,
-            detail="Too many failed login attempts. Try again in 3 hours.",
-        )
-
-
-def _record_failure(ip: str) -> None:
-    _login_failures[ip].append(time.monotonic())
-
-
-def _clear_failures(ip: str) -> None:
-    _login_failures.pop(ip, None)
 
 
 # --- login / MFA ---
@@ -87,11 +48,11 @@ async def login(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> LoginResult:
-    ip = _client_ip(request)
-    _check_rate_limit(ip)
+    ip = auth_svc.client_ip(request)
+    auth_svc.check_rate_limit(ip)
     user = await db.scalar(select(User).where(User.email == payload.email.lower()))
-    if not user or not verify_password(payload.password, user.hashed_password):
-        _record_failure(ip)
+    if not user or not _verify_password(payload.password, user.hashed_password):
+        auth_svc.record_failure(ip)
         raise HTTPException(status_code=401, detail="Invalid email or password")
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account is disabled")
@@ -106,11 +67,11 @@ async def login(
     if user.mfa_enabled:
         if not payload.totp_code:
             return LoginResult(mfa_required=True, mfa_token=create_mfa_token(user.id))
-        if not _verify_totp(user.mfa_secret, payload.totp_code):
-            _record_failure(ip)
+        if not auth_svc.verify_totp(user.mfa_secret, payload.totp_code):
+            auth_svc.record_failure(ip)
             raise HTTPException(status_code=401, detail="Invalid MFA code")
-    _clear_failures(ip)
-    return LoginResult(token_pair=_token_pair(user))
+    auth_svc.clear_failures(ip)
+    return LoginResult(token_pair=auth_svc.token_pair(user))
 
 
 @router.post("/mfa/verify", response_model=TokenPair)
@@ -119,19 +80,14 @@ async def mfa_verify(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> TokenPair:
-    ip = _client_ip(request)
-    _check_rate_limit(ip)
-    data = decode_token(payload.mfa_token)
-    if not data or data.get("type") != "mfa":
-        raise HTTPException(status_code=401, detail="Invalid or expired MFA session")
-    user = await db.get(User, data.get("sub"))
-    if not user or not user.is_active:
-        raise HTTPException(status_code=401, detail="Invalid or expired MFA session")
-    if not user.mfa_enabled or not _verify_totp(user.mfa_secret, payload.code):
-        _record_failure(ip)
+    ip = auth_svc.client_ip(request)
+    auth_svc.check_rate_limit(ip)
+    user = await auth_svc.resolve_mfa_session(db, payload.mfa_token)
+    if not user.mfa_enabled or not auth_svc.verify_totp(user.mfa_secret, payload.code):
+        auth_svc.record_failure(ip)
         raise HTTPException(status_code=401, detail="Invalid MFA code")
-    _clear_failures(ip)
-    return _token_pair(user)
+    auth_svc.clear_failures(ip)
+    return auth_svc.token_pair(user)
 
 
 @router.post("/mfa/setup-session", response_model=MfaSetupResponse)
@@ -140,25 +96,12 @@ async def mfa_setup_session(
     db: AsyncSession = Depends(get_db),
 ) -> MfaSetupResponse:
     """Enrol a user for MFA during a login in progress (enforced-MFA flow)."""
-    data = decode_token(payload.mfa_token)
-    if not data or data.get("type") != "mfa":
-        raise HTTPException(status_code=401, detail="Invalid or expired MFA session")
-    user = await db.get(User, data.get("sub"))
-    if not user or not user.is_active:
-        raise HTTPException(status_code=401, detail="Invalid or expired MFA session")
+    user = await auth_svc.resolve_mfa_session(db, payload.mfa_token)
     if user.role == "demo":
         raise HTTPException(status_code=403, detail="Demo accounts cannot set up MFA")
-    secret = pyotp.random_base32()
-    totp = pyotp.TOTP(secret)
-    otpauth_url = totp.provisioning_uri(name=user.email, issuer_name=MFA_ISSUER)
-    qr = qrcode.make(otpauth_url)
-    buf = io.BytesIO()
-    qr.save(buf, format="PNG")
-    data_url = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
-    user.mfa_secret = secret
-    user.mfa_enabled = False
+    resp = auth_svc.build_mfa_setup(user)
     await db.commit()
-    return MfaSetupResponse(secret=secret, otpauth_url=otpauth_url, qr_data_url=data_url)
+    return resp
 
 
 @router.post("/mfa/complete-setup", response_model=TokenPair)
@@ -168,38 +111,32 @@ async def mfa_complete_setup(
     db: AsyncSession = Depends(get_db),
 ) -> TokenPair:
     """Activate MFA after a login-in-progress setup session, completing login."""
-    ip = _client_ip(request)
-    _check_rate_limit(ip)
-    data = decode_token(payload.mfa_token)
-    if not data or data.get("type") != "mfa":
-        raise HTTPException(status_code=401, detail="Invalid or expired MFA session")
-    user = await db.get(User, data.get("sub"))
-    if not user or not user.is_active:
-        raise HTTPException(status_code=401, detail="Invalid or expired MFA session")
+    ip = auth_svc.client_ip(request)
+    auth_svc.check_rate_limit(ip)
+    user = await auth_svc.resolve_mfa_session(db, payload.mfa_token)
     if user.role == "demo":
         raise HTTPException(status_code=403, detail="Demo accounts cannot set up MFA")
-    if not user.mfa_secret or not _verify_totp(user.mfa_secret, payload.code):
-        _record_failure(ip)
+    if not user.mfa_secret or not auth_svc.verify_totp(user.mfa_secret, payload.code):
         raise HTTPException(status_code=400, detail="Invalid MFA code")
-    _clear_failures(ip)
+    auth_svc.clear_failures(ip)
     user.mfa_enabled = True
     await db.commit()
     await mail.send_security_alert(
         user.email, user.display_name,
         "Two-factor authentication (MFA) was enabled on your account.",
     )
-    return _token_pair(user)
+    return auth_svc.token_pair(user)
 
 
 @router.post("/refresh", response_model=TokenPair)
 async def refresh(payload: RefreshRequest, db: AsyncSession = Depends(get_db)) -> TokenPair:
-    data = decode_token(payload.refresh_token)
+    data = _decode_token(payload.refresh_token)
     if not data or data.get("type") != "refresh":
         raise HTTPException(status_code=401, detail="Invalid refresh token")
     user = await db.get(User, data.get("sub"))
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
-    return _token_pair(user)
+    return auth_svc.token_pair(user)
 
 
 @router.get("/config")
@@ -275,18 +212,10 @@ async def mfa_setup(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> MfaSetupResponse:
-    secret = pyotp.random_base32()
-    totp = pyotp.TOTP(secret)
-    otpauth_url = totp.provisioning_uri(name=user.email, issuer_name=MFA_ISSUER)
-    qr = qrcode.make(otpauth_url)
-    buf = io.BytesIO()
-    qr.save(buf, format="PNG")
-    data_url = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+    resp = auth_svc.build_mfa_setup(user)
     # Persist the pending secret; enable() verifies then activates it.
-    user.mfa_secret = secret
-    user.mfa_enabled = False
     await db.commit()
-    return MfaSetupResponse(secret=secret, otpauth_url=otpauth_url, qr_data_url=data_url)
+    return resp
 
 
 @router.post("/mfa/enable", response_model=UserOut)
@@ -295,7 +224,7 @@ async def mfa_enable(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> User:
-    if not user.mfa_secret or not _verify_totp(user.mfa_secret, payload.code):
+    if not user.mfa_secret or not auth_svc.verify_totp(user.mfa_secret, payload.code):
         raise HTTPException(status_code=400, detail="Invalid MFA code")
     user.mfa_enabled = True
     await db.commit()
@@ -313,7 +242,7 @@ async def mfa_disable(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> User:
-    if not user.mfa_enabled or not _verify_totp(user.mfa_secret, payload.code):
+    if not user.mfa_enabled or not auth_svc.verify_totp(user.mfa_secret, payload.code):
         raise HTTPException(status_code=400, detail="Invalid MFA code")
     user.mfa_enabled = False
     user.mfa_secret = None
@@ -345,7 +274,7 @@ async def confirm_password_reset(
     payload: PasswordResetConfirm,
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    data = decode_token(payload.token)
+    data = _decode_token(payload.token)
     if not data or data.get("type") not in ("password_reset", "invite"):
         raise HTTPException(status_code=400, detail="Invalid or expired reset token")
     user = await db.get(User, data.get("sub"))
@@ -371,7 +300,7 @@ async def admin_create_user(
         raise HTTPException(status_code=409, detail="Email already registered")
     if not payload.send_invite and not payload.password:
         raise HTTPException(status_code=422, detail="Password required (or enable email invite)")
-    hashed = hash_password(payload.password) if payload.password else hash_password(secrets.token_urlsafe(32))
+    hashed = hash_password(payload.password) if payload.password else auth_svc.random_password()
     user = User(
         email=payload.email.lower(),
         display_name=payload.display_name,
@@ -387,7 +316,7 @@ async def admin_create_user(
         await mail.send_account_invite(user.email, user.display_name, token, settings.APP_BASE_URL, expiry_days=7)
     else:
         await mail.send_welcome(user.email, user.display_name, settings.APP_BASE_URL)
-    return _token_pair(user)
+    return auth_svc.token_pair(user)
 
 
 # --- public self-service signup (hosted Free tier) ---
@@ -416,7 +345,7 @@ async def public_signup(
     user = User(
         email=payload.email.lower(),
         display_name=payload.display_name,
-        hashed_password=hash_password(secrets.token_urlsafe(32)),
+        hashed_password=auth_svc.random_password(),
         role="user",
         max_vehicles=1,
         free_account=True,
@@ -464,8 +393,6 @@ async def import_profile(
     Wipes the current user's vehicles + records and replaces them with the
     profile's data. Account identity (email/password) is unchanged.
     """
-    import json as _json
-
     from app.services.backup import restore_user_data
 
     raw = await file.read()
@@ -485,18 +412,11 @@ async def import_profile(
 
 
 # --- helpers ---
-def _verify_totp(secret: str | None, code: str) -> bool:
-    if not secret:
-        return False
-    try:
-        return pyotp.TOTP(secret).verify(code, valid_window=1)
-    except Exception:
-        return False
+def _verify_password(password: str, hashed: str) -> bool:
+    from app.core.security import verify_password
+    return verify_password(password, hashed)
 
 
-def _token_pair(user: User) -> TokenPair:
-    return TokenPair(
-        access_token=create_access_token(user.id),
-        refresh_token=create_refresh_token(user.id),
-        user=UserOut.model_validate(user),
-    )
+def _decode_token(token: str) -> dict[str, Any] | None:
+    from app.core.security import decode_token
+    return decode_token(token)

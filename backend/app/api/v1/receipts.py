@@ -7,7 +7,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_write
-from app.api.v1.ownership import get_accessible_vehicle
+from app.services.ownership import get_accessible_vehicle
 from app.core.logging import get_logger
 from app.core.storage import delete_object, detect_mime, ensure_bucket, upload_object
 from app.db.session import get_db
