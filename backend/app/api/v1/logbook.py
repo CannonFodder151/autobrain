@@ -15,10 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_write
-from app.api.v1.vehicles import (
-    _get_accessible_vehicle,
-    _require_ai_vehicle,
-)
+from app.api.v1.ownership import get_accessible_vehicle, require_ai_vehicle
 from app.core.storage import detect_mime, ensure_bucket, upload_object
 from app.db.session import get_db
 from app.models.logbook import LogEntry
@@ -68,7 +65,7 @@ async def start_trip(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_write),
 ) -> LogEntry:
-    vehicle = await _get_accessible_vehicle(db, vehicle_id, user)
+    vehicle = await get_accessible_vehicle(db, vehicle_id, user)
     _require_logbook(vehicle)
     entry = LogEntry(vehicle_id=vehicle_id, status="in_progress", **payload.model_dump())
     db.add(entry)
@@ -84,7 +81,7 @@ async def list_entries(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[LogEntry]:
-    await _get_accessible_vehicle(db, vehicle_id, user)
+    await get_accessible_vehicle(db, vehicle_id, user)
     stmt = select(LogEntry).where(LogEntry.vehicle_id == vehicle_id)
     if fy:
         start, end = _fy_bounds(fy)
@@ -100,7 +97,7 @@ async def logbook_stats(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> LogbookStats:
-    await _get_accessible_vehicle(db, vehicle_id, user)
+    await get_accessible_vehicle(db, vehicle_id, user)
     stmt = select(LogEntry).where(LogEntry.vehicle_id == vehicle_id)
     if fy:
         start, end = _fy_bounds(fy)
@@ -127,7 +124,7 @@ async def update_entry(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_write),
 ) -> LogEntry:
-    vehicle = await _get_accessible_vehicle(db, vehicle_id, user)
+    vehicle = await get_accessible_vehicle(db, vehicle_id, user)
     _require_logbook(vehicle)
     entry = await db.get(LogEntry, entry_id)
     if not entry or entry.vehicle_id != vehicle_id:
@@ -154,7 +151,7 @@ async def delete_entry(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_write),
 ) -> None:
-    await _get_accessible_vehicle(db, vehicle_id, user)
+    await get_accessible_vehicle(db, vehicle_id, user)
     entry = await db.get(LogEntry, entry_id)
     if not entry or entry.vehicle_id != vehicle_id:
         raise HTTPException(status_code=404, detail="Log entry not found")
@@ -172,7 +169,7 @@ async def export_logbook(
     """CSV export for ATO logbook claims, per Australian financial year."""
     from app.services.export import export_logbook_csv
 
-    vehicle = await _get_accessible_vehicle(db, vehicle_id, user)
+    vehicle = await get_accessible_vehicle(db, vehicle_id, user)
     _require_logbook(vehicle)
     fy = fy or _current_fy()
     rows = list((await db.scalars(
@@ -196,8 +193,8 @@ async def read_odometer_photo(
     user: User = Depends(get_current_user),
 ) -> OdometerPhotoResult:
     """OCR a dashboard photo to read the odometer (start/end of a trip)."""
-    vehicle = await _get_accessible_vehicle(db, vehicle_id, user)
-    await _require_ai_vehicle(db, vehicle, user)
+    vehicle = await get_accessible_vehicle(db, vehicle_id, user)
+    await require_ai_vehicle(db, vehicle, user)
     data = await file.read()
     if len(data) > 15 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="File too large (max 15MB)")

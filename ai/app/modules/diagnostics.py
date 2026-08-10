@@ -8,7 +8,7 @@ runs and its baseline is returned; 9Router only enriches repair notes / part
 numbers when reachable.
 """
 
-from app.fallbacks import diagnose_fallback
+from app.fallbacks.diagnose import diagnose_fallback
 from app.router_client import enhance
 
 

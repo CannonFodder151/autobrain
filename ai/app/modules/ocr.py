@@ -8,7 +8,7 @@ Output: vendor, date, total, tax, line items (parts/labour), warranty,
 import base64
 import io
 
-from app.fallbacks import extract_receipt_fallback
+from app.fallbacks.ocr import extract_receipt_fallback
 from app.router_client import enhance
 
 _IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/tiff"}

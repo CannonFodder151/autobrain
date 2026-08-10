@@ -7,7 +7,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_write
-from app.api.v1.vehicles import _get_accessible_vehicle
+from app.api.v1.ownership import get_accessible_vehicle
 from app.core.logging import get_logger
 from app.core.storage import delete_object, detect_mime, ensure_bucket, upload_object
 from app.db.session import get_db
@@ -39,7 +39,7 @@ async def upload_receipt(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_write),
 ) -> Receipt:
-    await _get_accessible_vehicle(db, vehicle_id, user)
+    await get_accessible_vehicle(db, vehicle_id, user)
     data = await file.read()
     if len(data) > MAX_BYTES:
         raise HTTPException(status_code=413, detail="File too large (max 15MB)")
@@ -73,7 +73,7 @@ async def list_receipts(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[Receipt]:
-    await _get_accessible_vehicle(db, vehicle_id, user)
+    await get_accessible_vehicle(db, vehicle_id, user)
     rows = await db.scalars(
         select(Receipt).where(Receipt.vehicle_id == vehicle_id).order_by(Receipt.created_at.desc())
     )
@@ -88,7 +88,7 @@ async def delete_receipt(
     user: User = Depends(require_write),
 ) -> None:
     """Delete a scanned receipt (e.g. one stuck on 'pending' after OCR failed)."""
-    await _get_accessible_vehicle(db, vehicle_id, user)
+    await get_accessible_vehicle(db, vehicle_id, user)
     receipt = await db.get(Receipt, receipt_id)
     if not receipt or receipt.vehicle_id != vehicle_id:
         raise HTTPException(status_code=404, detail="Receipt not found")
@@ -118,7 +118,7 @@ async def apply_receipt_to_service(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_write),
 ) -> Receipt:
-    await _get_accessible_vehicle(db, vehicle_id, user)
+    await get_accessible_vehicle(db, vehicle_id, user)
     receipt = await db.get(Receipt, receipt_id)
     if not receipt or receipt.vehicle_id != vehicle_id:
         raise HTTPException(status_code=404, detail="Receipt not found")

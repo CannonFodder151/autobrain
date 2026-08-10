@@ -8,7 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_ai, require_write
-from app.api.v1.vehicles import add_event, _get_accessible_vehicle
+from app.api.v1.events import add_event
+from app.api.v1.ownership import get_accessible_vehicle
 from app.core.storage import get_object
 from app.db.session import get_db
 from app.models.mod import Modification
@@ -32,7 +33,7 @@ async def list_mods(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[Modification]:
-    await _get_accessible_vehicle(db, vehicle_id, user)
+    await get_accessible_vehicle(db, vehicle_id, user)
     rows = await db.scalars(
         select(Modification)
         .where(Modification.vehicle_id == vehicle_id)
@@ -48,7 +49,7 @@ async def create_mod(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_write),
 ) -> Modification:
-    await _get_accessible_vehicle(db, vehicle_id, user)
+    await get_accessible_vehicle(db, vehicle_id, user)
     mod = Modification(vehicle_id=vehicle_id, **payload.model_dump())
     db.add(mod)
     await db.flush()
@@ -71,7 +72,7 @@ async def update_mod(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_write),
 ) -> Modification:
-    await _get_accessible_vehicle(db, vehicle_id, user)
+    await get_accessible_vehicle(db, vehicle_id, user)
     mod = await db.get(Modification, mod_id)
     if not mod or mod.vehicle_id != vehicle_id:
         raise HTTPException(status_code=404, detail="Modification not found")
@@ -89,7 +90,7 @@ async def delete_mod(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_write),
 ) -> None:
-    await _get_accessible_vehicle(db, vehicle_id, user)
+    await get_accessible_vehicle(db, vehicle_id, user)
     mod = await db.get(Modification, mod_id)
     if not mod or mod.vehicle_id != vehicle_id:
         raise HTTPException(status_code=404, detail="Modification not found")
@@ -119,7 +120,7 @@ async def export_build_sheet(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Response:
-    vehicle = await _get_accessible_vehicle(db, vehicle_id, user)
+    vehicle = await get_accessible_vehicle(db, vehicle_id, user)
     rows = await db.scalars(
         select(Modification).where(Modification.vehicle_id == vehicle_id).order_by(Modification.created_at)
     )

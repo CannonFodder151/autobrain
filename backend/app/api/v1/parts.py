@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_write
-from app.api.v1.vehicles import _get_accessible_vehicle
+from app.api.v1.ownership import get_accessible_vehicle
 from app.db.session import get_db
 from app.models.part import Part, PartMovement
 from app.models.user import User
@@ -26,7 +26,7 @@ async def list_parts(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[Part]:
-    await _get_accessible_vehicle(db, vehicle_id, user)
+    await get_accessible_vehicle(db, vehicle_id, user)
     rows = await db.scalars(
         select(Part).where(Part.vehicle_id == vehicle_id).order_by(Part.name)
     )
@@ -40,7 +40,7 @@ async def create_part(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_write),
 ) -> Part:
-    await _get_accessible_vehicle(db, vehicle_id, user)
+    await get_accessible_vehicle(db, vehicle_id, user)
     part = Part(vehicle_id=vehicle_id, **payload.model_dump())
     db.add(part)
     await db.flush()
@@ -58,7 +58,7 @@ async def update_part(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_write),
 ) -> Part:
-    await _get_accessible_vehicle(db, vehicle_id, user)
+    await get_accessible_vehicle(db, vehicle_id, user)
     part = await db.get(Part, part_id)
     if not part or part.vehicle_id != vehicle_id:
         raise HTTPException(status_code=404, detail="Part not found")
@@ -77,7 +77,7 @@ async def add_movement(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_write),
 ) -> Part:
-    await _get_accessible_vehicle(db, vehicle_id, user)
+    await get_accessible_vehicle(db, vehicle_id, user)
     part = await db.get(Part, part_id)
     if not part or part.vehicle_id != vehicle_id:
         raise HTTPException(status_code=404, detail="Part not found")
@@ -102,7 +102,7 @@ async def delete_part(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_write),
 ) -> None:
-    await _get_accessible_vehicle(db, vehicle_id, user)
+    await get_accessible_vehicle(db, vehicle_id, user)
     part = await db.get(Part, part_id)
     if not part or part.vehicle_id != vehicle_id:
         raise HTTPException(status_code=404, detail="Part not found")
@@ -116,7 +116,7 @@ async def reorder_suggestions(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[ReorderSuggestion]:
-    await _get_accessible_vehicle(db, vehicle_id, user)
+    await get_accessible_vehicle(db, vehicle_id, user)
     rows = await db.scalars(
         select(Part).where(
             Part.vehicle_id == vehicle_id,

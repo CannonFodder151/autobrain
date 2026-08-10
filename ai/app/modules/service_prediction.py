@@ -7,7 +7,7 @@ Deterministic-first: manufacturer schedules + measured intervals from history
 produce the baseline; 9Router only supplies supplementary interval adjustment.
 """
 
-from app.fallbacks import predict_service_fallback
+from app.fallbacks.service_prediction import predict_service_fallback
 from app.router_client import enhance
 
 

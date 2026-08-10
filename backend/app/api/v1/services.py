@@ -10,11 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user, require_write
-from app.api.v1.vehicles import (
-    _get_accessible_vehicle,
-    _require_ai_vehicle,
-    add_event,
-)
+from app.api.v1.events import add_event
+from app.api.v1.ownership import get_accessible_vehicle, require_ai_vehicle
 from app.core.logging import get_logger
 from app.core.storage import get_object
 from app.db.session import get_db
@@ -139,7 +136,7 @@ async def list_services(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[ServiceRecord]:
-    await _get_accessible_vehicle(db, vehicle_id, user)
+    await get_accessible_vehicle(db, vehicle_id, user)
     rows = await db.scalars(
         select(ServiceRecord)
         .options(_load_options())
@@ -156,7 +153,7 @@ async def create_service(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_write),
 ) -> ServiceRecord:
-    await _get_accessible_vehicle(db, vehicle_id, user)
+    await get_accessible_vehicle(db, vehicle_id, user)
     data = payload.model_dump(exclude={"items", "steps"})
     if payload.steps:
         data["steps"] = json.dumps(payload.steps)
@@ -187,7 +184,7 @@ async def export(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Response:
-    vehicle = await _get_accessible_vehicle(db, vehicle_id, user)
+    vehicle = await get_accessible_vehicle(db, vehicle_id, user)
     rows = await db.scalars(
         select(ServiceRecord)
         .options(_load_options())
@@ -237,7 +234,7 @@ async def get_service(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> ServiceRecord:
-    await _get_accessible_vehicle(db, vehicle_id, user)
+    await get_accessible_vehicle(db, vehicle_id, user)
     return await _service_or_404(db, vehicle_id, service_id)
 
 
@@ -249,7 +246,7 @@ async def update_service(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_write),
 ) -> ServiceRecord:
-    await _get_accessible_vehicle(db, vehicle_id, user)
+    await get_accessible_vehicle(db, vehicle_id, user)
     record = await _service_or_404(db, vehicle_id, service_id)
 
     updates = payload.model_dump(exclude_unset=True)
@@ -293,7 +290,7 @@ async def delete_service(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_write),
 ) -> None:
-    await _get_accessible_vehicle(db, vehicle_id, user)
+    await get_accessible_vehicle(db, vehicle_id, user)
     record = await _service_or_404(db, vehicle_id, service_id)
     await _reconcile_part_stock(db, vehicle_id, service_id, [], deduct=False)
     await db.execute(
@@ -320,8 +317,8 @@ async def predict(
     derived from how this vehicle is actually maintained, not just the last
     service or a generic manufacturer schedule.
     """
-    vehicle = await _get_accessible_vehicle(db, vehicle_id, user)
-    await _require_ai_vehicle(db, vehicle, user)
+    vehicle = await get_accessible_vehicle(db, vehicle_id, user)
+    await require_ai_vehicle(db, vehicle, user)
     history = list((await db.scalars(
         select(ServiceRecord)
         .where(
