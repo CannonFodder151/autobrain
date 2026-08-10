@@ -89,11 +89,13 @@ def process_receipt(receipt_id: str) -> None:
                     )
                 )
             await db.commit()
-            await manager.send_to_user(
-                receipt.vehicle_id,
-                "receipt.processed",
-                {"receipt_id": receipt.id, "status": "done", "total": receipt.total},
-            )
+            vehicle = await db.get(Vehicle, receipt.vehicle_id)
+            if vehicle:
+                await manager.send_to_user(
+                    vehicle.user_id,
+                    "receipt.processed",
+                    {"receipt_id": receipt.id, "status": "done", "total": receipt.total},
+                )
 
     _run(_process())
 
