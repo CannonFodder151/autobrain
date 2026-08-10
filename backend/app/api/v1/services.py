@@ -33,6 +33,7 @@ from app.services.service_records import (
     reconcile_part_stock,
     service_or_404,
 )
+from app.workers.tasks import queue_embedding
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/vehicles/{vehicle_id}/services", tags=["services"])
@@ -78,6 +79,7 @@ async def create_service(
     await db.commit()
     await db.refresh(record)
     await queue_due_notification(db, vehicle_id, record)
+    queue_embedding("service", str(record.id))
     return record
 
 
@@ -171,6 +173,7 @@ async def update_service(
     await db.commit()
     await db.refresh(record)
     await queue_due_notification(db, vehicle_id, record)
+    queue_embedding("service", str(record.id))
     return record
 
 

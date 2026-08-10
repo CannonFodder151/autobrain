@@ -31,5 +31,9 @@ celery_app.conf.update(
             "task": "app.workers.tasks.scheduled_backup",
             "schedule": 60 * 60 * 24,
         },
+        "embedding-backfill": {
+            "task": "app.workers.tasks.backfill_entity_embeddings",
+            "schedule": 60 * 60 * 24,
+        },
     },
 )

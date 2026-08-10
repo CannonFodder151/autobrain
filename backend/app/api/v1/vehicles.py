@@ -14,6 +14,7 @@ from app.services.ownership import (
 )
 from app.core.logging import get_logger
 from app.db.session import get_db
+from app.models.share import VehicleShare
 from app.models.user import User
 from app.models.vehicle import Vehicle
 from app.schemas.vehicle import (

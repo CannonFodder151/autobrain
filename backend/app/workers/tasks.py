@@ -17,6 +17,7 @@ from app.models.service import ServiceRecord
 from app.models.valuation import ValuationSnapshot
 from app.models.vehicle import Vehicle
 from app.services.ai_client import extract_receipt, estimate_value
+from app.services.search import backfill_entity_embedding
 from app.ws.manager import manager
 
 logger = logging.getLogger("autobrain.workers")
@@ -96,6 +97,10 @@ def process_receipt(receipt_id: str) -> None:
                     "receipt.processed",
                     {"receipt_id": receipt.id, "status": "done", "total": receipt.total},
                 )
+            try:
+                await backfill_entity_embedding(db, "receipt", receipt.id)
+            except Exception:
+                logger.exception("receipt_embed_failed")
 
     _run(_process())
 
@@ -211,6 +216,44 @@ def scheduled_backup() -> None:
             logger.exception("backup_prune_failed")
 
     _run(_run())
+
+
+@shared_task
+def embed_entity(entity_type: str, entity_id: str) -> bool:
+    """Generate and store the embedding for one searchable entity."""
+    async def _embed():
+        from app.services.search import backfill_entity_embedding
+
+        async with SessionLocal() as db:
+            return await backfill_entity_embedding(db, entity_type, entity_id)
+
+    return _run(_embed())
+
+@shared_task
+def backfill_entity_embeddings() -> None:
+    """Sweep: embed every row missing a vector across all entity types."""
+    async def _backfill():
+        from sqlalchemy import text
+
+        from app.services.search import _ENTITY_MAP, backfill_entity_embedding
+
+        async with SessionLocal() as db:
+            for etype, cfg in _ENTITY_MAP.items():
+                table = cfg["model"].__tablename__  # model constant, never user input
+                rows = (await db.execute(
+                    text(f"SELECT id FROM {table} WHERE {cfg['vector_col']} IS NULL")
+                )).all()
+                for (entity_id,) in rows:
+                    await backfill_entity_embedding(db, etype, entity_id)
+
+    _run(_backfill())
+
+def queue_embedding(entity_type: str, entity_id: str) -> None:
+    """Best-effort async embed trigger; a broker hiccup never breaks write paths."""
+    try:
+        embed_entity.delay(entity_type, entity_id)
+    except Exception:
+        logger.exception("embed_queue_failed")
 
 
 def _pdf_text(data: bytes) -> str:

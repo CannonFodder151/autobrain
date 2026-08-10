@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, require_ai, require_write
 from app.services.events import add_event
 from app.services.ownership import get_accessible_vehicle
+from app.workers.tasks import queue_embedding
 from app.core.storage import get_object
 from app.db.session import get_db
 from app.models.mod import Modification
@@ -61,6 +62,7 @@ async def create_mod(
         )
     await db.commit()
     await db.refresh(mod)
+    queue_embedding("modification", str(mod.id))
     return mod
 
 
@@ -80,6 +82,7 @@ async def update_mod(
         setattr(mod, key, value)
     await db.commit()
     await db.refresh(mod)
+    queue_embedding("modification", str(mod.id))
     return mod
 
 

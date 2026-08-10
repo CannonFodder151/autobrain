@@ -18,6 +18,7 @@ from app.models.fuel import FuelLog
 from app.models.receipt import Receipt
 from app.schemas.fuel import FuelLogOut, FuelStats
 from app.services.ai_client import extract_fuel_receipt
+from app.workers.tasks import queue_embedding
 
 logger = get_logger(__name__)
 
@@ -169,6 +170,7 @@ async def upload_fuel_receipt(
         receipt.ocr_status = "done"
     await db.commit()
     await db.refresh(receipt)
+    queue_embedding("receipt", str(receipt.id))
     return receipt, url, parsed
 
 

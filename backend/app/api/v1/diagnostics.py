@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_write
 from app.services.ownership import get_accessible_vehicle, require_ai_vehicle
+from app.workers.tasks import queue_embedding
 from app.db.session import get_db
 from app.models.diagnostic import Diagnostic
 from app.models.service import ServiceItem, ServiceRecord
@@ -67,6 +68,7 @@ async def diagnose(
     db.add(record)
     await db.commit()
     await db.refresh(record)
+    queue_embedding("diagnostic", str(record.id))
     return DiagnosticResponse(**result)
 
 
@@ -138,6 +140,8 @@ async def add_to_service(
     diag.linked_service_id = service.id
     await db.commit()
     await db.refresh(diag)
+    queue_embedding("service", str(service.id))
+    queue_embedding("diagnostic", str(diag.id))
     return diag
 
 
