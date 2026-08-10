@@ -10,10 +10,10 @@ Define how AutoBrain is tested across the backend, AI gateway and frontend, what
 
 | Environment | Where | Purpose |
 |-------------|-------|---------|
-| Dev box | `10.0.3.39` (Portainer endpoint 6, PaperClip-AutoBrain-Dev-Box) | Primary test target for agent test passes |
+| Dev box | `192.168.1.100` (Portainer endpoint 6, PaperClip-AutoBrain-Dev-Box) | Primary test target for agent test passes |
 | Demo | `demo.autobrainservice.app` (demo@autobrainservice.app / demo) | Promotion tier 1 |
 | Default | Default deployment tier | Promotion tier 2 |
-| Hosted | `hosted.autobrainservice.app` (Oracle 152.69.188.133, Portainer endpoint 5) | Production |
+| Hosted | `hosted.autobrainservice.app` (Oracle VM, Portainer endpoint 5) | Production |
 
 Mandatory promotion order **Demo → Default → Hosted** (per AUT-107). No tier is skipped when shipping.
 
