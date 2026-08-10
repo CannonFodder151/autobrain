@@ -7,6 +7,7 @@ real .env; individual test modules may override DATABASE_URL/SECRET_KEY.
 
 import os
 
+os.environ.setdefault("ENVIRONMENT", "development")
 os.environ.setdefault("POSTGRES_USER", "test-postgres-user")
 os.environ.setdefault("POSTGRES_PASSWORD", "test-postgres-password")
 os.environ.setdefault("POSTGRES_DB", "test-postgres-db")

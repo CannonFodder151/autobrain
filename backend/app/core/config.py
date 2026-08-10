@@ -5,6 +5,7 @@ All settings are read from environment variables (see .env.example).
 
 from functools import lru_cache
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,7 +14,7 @@ class Settings(BaseSettings):
 
     # Core
     PROJECT_NAME: str = "AutoBrain"
-    ENVIRONMENT: str = "development"
+    ENVIRONMENT: str  # required; "development" is the only env that allows default creds
     LOG_LEVEL: str = "INFO"
     API_V1_PREFIX: str = "/api/v1"
     DEBUG: bool = False
@@ -132,6 +133,26 @@ class Settings(BaseSettings):
     STRIPE_PROMO_EARLY_ADOPTER: str = ""      # promotion code id (promo_...)
     STRIPE_PROMO_EARLY_ADOPTER_CODE: str = "EARLY40"
     STRIPE_SALE_ENDS_AT: str = ""             # ISO date (YYYY-MM-DD); empty = sale on
+
+    @model_validator(mode="after")
+    def _refuse_default_creds_outside_dev(self) -> "Settings":
+        if self.ENVIRONMENT == "development":
+            return self
+        defaults = {
+            "SECRET_KEY": "change-me",
+            "POSTGRES_PASSWORD": "autobrain",
+            "MINIO_SECRET_KEY": "autobrain",
+        }
+        offenders = [
+            name for name, default in defaults.items() if getattr(self, name) == default
+        ]
+        if offenders:
+            raise ValueError(
+                f"environment '{self.ENVIRONMENT}' refuses default credentials: "
+                + ", ".join(offenders)
+                + " — set real values in the deployment env (see .env.example)"
+            )
+        return self
 
     @property
     def sqlalchemy_database_uri(self) -> str:
