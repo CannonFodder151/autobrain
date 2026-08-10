@@ -68,7 +68,7 @@ Vehicle sharing: a user with an accepted share on a vehicle can read and write i
 
 Sharing flow: the owner shares by email → the invitee sees a pending invite with **Accept/Deny** in the Vehicles screen → only after accepting does the car appear in their garage (labelled `Invited by <owner>`), and either party can later remove access. Pending invites grant no data access.
 
-`club_reg: bool` — club-registered vehicles disable the ATO logbook feature.
+`club_reg: bool` — club-registered vehicles have the **digital logbook disabled** (product rule [PR-1](product-rules.md#pr-1--club-reg-disables-the-digital-logbook-victoria): Victoria requires the physical VicRoads club log book).
 
 ## Services (`/vehicles/{id}/services`)
 
@@ -92,6 +92,8 @@ Completing a scheduled service created from a diagnostic auto-resolves (green-ti
 | POST   | `/receipt?ai=true\|false` | Fuel receipt photo. `ai=true` OCR-fills litres & price/L then user enters odometer; `ai=false` stores photo only. |
 
 ## Logbook (`/vehicles/{id}/logbook`) — ATO claiming, non-club-reg vehicles only
+
+Product rule [PR-1](product-rules.md#pr-1--club-reg-disables-the-digital-logbook-victoria): club-reg vehicles return `403` on every logbook route (create, list, stats, update, export, odometer-photo); only `DELETE` stays open for cleanup.
 
 | Method | Path | Description |
 |--------|------|-------------|

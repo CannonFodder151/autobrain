@@ -1,9 +1,13 @@
 """Logbook (ATO trip) routes.
 
-Only available on vehicles WITHOUT club reg (club-registered vehicles are not
-used for ATO logbook claims). Trips can be started with time/date/GPS/odo and
+Only available on vehicles WITHOUT club reg. Product rule [PR-1] (see
+docs/product-rules.md): in Victoria, club-permit vehicles must keep the
+physical VicRoads club log book, so the digital logbook is disabled for
+club-registered vehicles. Trips can be started with time/date/GPS/odo and
 completed later with an end time/date/odo — completing a trip updates the
 vehicle odometer (a logbook reading is authoritative over older fuel entries).
+
+DELETE stays available on club-reg vehicles so stale entries can be cleaned up.
 """
 
 import base64
@@ -37,7 +41,10 @@ def _require_logbook(vehicle) -> None:
     if vehicle.club_reg:
         raise HTTPException(
             status_code=403,
-            detail="This vehicle is club-registered — the logbook feature is disabled.",
+            detail=(
+                "This vehicle is club-registered — the digital logbook is "
+                "disabled (Victoria requires the physical VicRoads club log book)."
+            ),
         )
 
 
@@ -81,7 +88,8 @@ async def list_entries(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[LogEntry]:
-    await get_accessible_vehicle(db, vehicle_id, user)
+    vehicle = await get_accessible_vehicle(db, vehicle_id, user)
+    _require_logbook(vehicle)
     stmt = select(LogEntry).where(LogEntry.vehicle_id == vehicle_id)
     if fy:
         start, end = _fy_bounds(fy)
@@ -97,7 +105,8 @@ async def logbook_stats(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> LogbookStats:
-    await get_accessible_vehicle(db, vehicle_id, user)
+    vehicle = await get_accessible_vehicle(db, vehicle_id, user)
+    _require_logbook(vehicle)
     stmt = select(LogEntry).where(LogEntry.vehicle_id == vehicle_id)
     if fy:
         start, end = _fy_bounds(fy)
@@ -194,6 +203,7 @@ async def read_odometer_photo(
 ) -> OdometerPhotoResult:
     """OCR a dashboard photo to read the odometer (start/end of a trip)."""
     vehicle = await get_accessible_vehicle(db, vehicle_id, user)
+    _require_logbook(vehicle)
     await require_ai_vehicle(db, vehicle, user)
     data = await file.read()
     if len(data) > 15 * 1024 * 1024:

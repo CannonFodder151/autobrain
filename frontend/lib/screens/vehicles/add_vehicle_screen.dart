@@ -337,8 +337,8 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Club registration'),
                 subtitle: const Text(
-                    'Club-registered vehicles are not used for ATO logbook '
-                    'claims, so the logbook feature is disabled.'),
+                    'Victoria requires a physical paper logbook for '
+                    'club-registered vehicles, so the digital logbook is disabled.'),
                 value: _clubReg,
                 onChanged: (v) => setState(() => _clubReg = v ?? false),
               ),

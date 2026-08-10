@@ -36,7 +36,7 @@ id (PK), email (unique), display_name, hashed_password (bcrypt), role (admin/use
 
 id (PK), user_id (FK), nickname, rego, vin, make, model, vehicle_type (car/motorcycle), colour, body_type, engine, transmission, year, odometer_km, condition, is_primary, club_reg, created_at, updated_at.
 
-`vehicle_type` (default `car`) is enforced on add/edit before rego lookup and passed to the AI agents. `club_reg` (bool) — club-registered vehicles disable the ATO logbook feature.
+`vehicle_type` (default `car`) is enforced on add/edit before rego lookup and passed to the AI agents. `club_reg` (bool) — club-registered vehicles have the digital logbook disabled (product rule [PR-1](product-rules.md#pr-1--club-reg-disables-the-digital-logbook-victoria)).
 
 ## vehicle_shares
 
@@ -104,7 +104,7 @@ id, vehicle_id (FK), kind, channels, sent_at. UNIQUE(vehicle_id, kind).
 
 id, vehicle_id (FK), started_at, ended_at, start_odometer_km, end_odometer_km, distance_km, purpose (work/private), reason, start_location, end_location, start_lat, start_lng, end_lat, end_lng, start_photo_key, end_photo_key, status (in_progress/completed), created_at.
 
-ATO logbook trips for non-club-reg vehicles. Completing a trip updates the vehicle odometer.
+ATO logbook trips for non-club-reg vehicles only (rule [PR-1](product-rules.md#pr-1--club-reg-disables-the-digital-logbook-victoria)). Completing a trip updates the vehicle odometer.
 
 ## obd_codes
 

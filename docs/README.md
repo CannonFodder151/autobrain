@@ -11,6 +11,7 @@ below are mirrors kept in-repo for offline reading and PR review.
 | [architecture.md](architecture.md) | Component architecture + diagrams |
 | [api-spec.md](api-spec.md) | REST + WebSocket API reference |
 | [database-schema.md](database-schema.md) | PostgreSQL schema |
+| [product-rules.md](product-rules.md) | Board/product rules that constrain app behaviour (PR-1: club reg disables digital logbook) |
 | [ai-models.md](ai-models.md) | AI module descriptions |
 | [module-breakdown.md](module-breakdown.md) | AI gateway — per-module breakdown (deterministic-first) |
 | [ai-router-integration.md](ai-router-integration.md) | 9Router / AI_ROUTER_URL integration |
