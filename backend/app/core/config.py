@@ -88,7 +88,7 @@ class Settings(BaseSettings):
     SMTP_USERNAME: str = ""
     SMTP_PASSWORD: str = ""
     SMTP_USE_TLS: bool = True  # STARTTLS (TLS on connect when False → SSL)
-    SMTP_FROM_EMAIL: str = "noreply@nathanmartina.com"
+    SMTP_FROM_EMAIL: str = "noreply@example.com"
     SMTP_FROM_NAME: str = "AutoBrain"
     # Public base URL used to build password-reset links (no trailing slash)
     APP_BASE_URL: str = "http://localhost:8000"

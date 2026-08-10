@@ -145,24 +145,11 @@ curl -s -X POST "<upload_url>?name=app-release.aab" \
 
 ### 5. Post change notes to Discord (via n8n Reporter)
 
-Public, customer-facing — **`changelog`**:
-
-```bash
-curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
-  -H "Content-Type: application/json" \
-  -d '{"channel":"changelog","title":"AutoBrain app v1.2.3+10 released","description":"<what changed, 1-4 lines>","color":"0x2ECC71","author":"Founding Engineer","fields":[{"name":"Download","value":"https://github.com/CannonFodder151/autobrain-mobile/releases/tag/v1.2.3+10","inline":true},{"name":"Platform","value":"Android (.aab)","inline":true}]}'
-```
-
-Short staff summary — **`updates`** (color `0x3498DB`):
-
-```bash
-curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
-  -H "Content-Type: application/json" \
-  -d '{"channel":"updates","title":"Mobile .aab v1.2.3+10 released","description":"Release notes + .aab live.","color":"0x3498DB","author":"Founding Engineer","fields":[{"name":"Artifact","value":"app-release.aab","inline":true},{"name":"Notes","value":"#changelog + GitHub Releases","inline":true}]}'
-```
-
-No auth needed on the reporter webhook. Keep embeds tight: `title` ≤ 90 chars,
-`description` 1–4 lines, `fields` ≤ 4.
+Internal runbook — the reporter webhook URL and exact embed payloads live in
+the Outline wiki (AutoBrain collection, "Discord reporter" doc), not in this
+public repo. Payloads target the public **`changelog`** channel and the staff
+**`updates`** channel. Keep embeds tight: `title` ≤ 90 chars, `description` 1–4
+lines, `fields` ≤ 4.
 
 ### 6. Mirror the release into the marketing site changelog
 
@@ -194,10 +181,11 @@ Automated pipeline now lives at `CannonFodder151/autobrain-mobile`
 7. Publishes a **draft** GitHub Release (`softprops/action-gh-release@v2`) on
    tag `v<X.Y.Z>+<build>` with the shared `CHANGELOG.md` top entry as the body
    and `app-release.aab` attached. Publish the draft when the CEO/CTO approves.
-8. Posts the n8n `discord-report` webhook embeds: `changelog` (public,
-   `0x2ECC71`) and `updates` (staff, `0x3498DB`). Payloads are built with `jq`
+8. Posts the release embeds to Discord via the internal reporter webhook (see
+   the Outline "Discord reporter" doc): `changelog` (public, `0x2ECC71`) and
+   `updates` (staff, `0x3498DB`). Payloads are built with `jq`
    (changelog text contains quotes that break inline JSON) and are best-effort
-   (`|| true` so a transient n8n outage never fails a release).
+   (`|| true` so a transient reporter outage never fails a release).
 
 Run it from the repo Actions tab (or `gh workflow run release-mobile.yml -f
 version=v<X.Y.Z>+<build>`).

@@ -27,7 +27,7 @@ graph TD
     Backend --> RedisH[(Redis)]
     Backend --> MinIOH[(MinIO)]
     Backend -->|Celery worker + beat in-container| RedisH
-    AI --> Router[9Router :20128]
+    AI --> Router[9Router]
 ```
 
 ## Container image graph
