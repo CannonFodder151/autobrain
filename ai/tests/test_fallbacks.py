@@ -9,6 +9,7 @@ import pytest  # noqa: E402
 from app import modules  # noqa: E402
 from app.fallbacks import (  # noqa: E402
     diagnose_fallback,
+    estimate_condition,
     estimate_value_fallback,
     extract_receipt_fallback,
     mod_impact_fallback,
@@ -324,3 +325,52 @@ def test_resale_market_data_tiny_sample_ignored() -> None:
         "market": {"source": "carsales", "sample_size": 2, "median_price": 300000.0},
     }, used_price=57800.0)
     assert 0.8 * det <= out["estimated_value"] <= 1.2 * det
+
+
+def test_condition_clean_well_serviced() -> None:
+    out = estimate_condition({
+        "vehicle": {"make": "Toyota", "odometer_km": 40000, "year": 2020},
+        "service_count": 6,
+        "total_service_cost": 4000.0,
+        "last_service_days_ago": 60,
+        "diagnostics": [],
+    })
+    assert out["condition"] in ("excellent", "good")
+    assert out["confidence"] > 0.7
+
+
+def test_condition_open_critical_issue_poor() -> None:
+    out = estimate_condition({
+        "vehicle": {"make": "Yamaha", "odometer_km": 30000, "year": 2018, "vehicle_type": "motorcycle"},
+        "diagnostics": [{"severity": "critical", "status": "open"}],
+        "service_count": 0,
+        "last_service_days_ago": None,
+    })
+    assert out["condition"] == "poor"
+    assert any("open issue" in s for s in out["factors"]["signals"])
+    assert "critical fault present" in out["factors"]["signals"]
+
+
+def test_condition_bike_km_scale_differs() -> None:
+    # 30k km on a 4-yr-old bike = high vs expected (~24k) but not crazy for a
+    # car — the motorcycle km/year scale must apply.
+    car = estimate_condition({
+        "vehicle": {"make": "Honda", "odometer_km": 30000, "year": 2022, "vehicle_type": "car"},
+        "service_count": 4, "last_service_days_ago": 100,
+    })
+    bike = estimate_condition({
+        "vehicle": {"make": "Honda", "odometer_km": 30000, "year": 2022, "vehicle_type": "motorcycle"},
+        "service_count": 4, "last_service_days_ago": 100,
+    })
+    assert car["score"] > bike["score"]
+
+
+def test_condition_user_override_not_overwritten_by_resale() -> None:
+    # When the user supplies a condition, resale keeps it (no estimate step).
+    out = estimate_value_fallback({
+        "vehicle": {"make": "Toyota", "model": "Crown", "year": 1997,
+                    "odometer_km": 120000, "condition": "excellent"},
+        "diagnostics": [{"severity": "critical", "status": "open"}],
+    })
+    assert out["factors"]["condition"] == "excellent"
+    assert "condition_estimate" not in out["factors"]

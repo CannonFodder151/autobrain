@@ -1,10 +1,11 @@
 """AI module registry."""
 
-from app.modules import diagnostics, fuel_ocr, mod_impact, ocr, odometer, resale, service_prediction, social_image
+from app.modules import condition, diagnostics, fuel_ocr, mod_impact, ocr, odometer, resale, service_prediction, social_image
 
 MODULES = {
     "diagnostics": diagnostics.run,
     "service-prediction": service_prediction.run,
+    "condition": condition.run,
     "ocr": ocr.run,
     "fuel-ocr": fuel_ocr.run,
     "odometer": odometer.run,

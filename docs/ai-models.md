@@ -13,7 +13,8 @@ rule-based engine that always produces a valid result, then optionally lets
 | Diagnostics | `/v1/diagnostics` | symptom keyword rules + OBD code table (P0300, P0420, P0171, …) → causes, parts, costs | Repair notes, real-world part numbers |
 | Service prediction | `/v1/service-prediction` | manufacturer schedule table per service type, make-specific interval multipliers, measured history intervals | Supplementary interval adjustment |
 | OCR | `/v1/ocr` | line-scan heuristics for vendor, date, total, items; local Tesseract for image text | Structured line items |
-| Resale | `/v1/resale` | RRP-anchored depreciation curves (base value per make/model, age + odometer + condition + history multipliers) | Market facts only: `rrp`, `used_price`, AU advice/trend |
+| Resale | `/v1/resale` | RRP-anchored depreciation curves (base value per make/model, age + odometer + condition + history multipliers); live market-data median anchors the number | Market facts only: `rrp`, `used_price`, AU advice/trend |
+| Condition | `/v1/condition` | rule-based estimator from diagnostics (severity-weighted) + service history + odometer vs age (car vs motorcycle scales) | Narrative `summary` only — the label is never overridden |
 | Mod impact | `/v1/mod-impact` | per-category performance/value/reliability table | Advice prose |
 | Fuel receipt | `/v1/fuel-ocr` | line-scan for vendor, date, litres, price-per-litre, total | Fills only missing optional fields |
 | Odometer | `/v1/odometer` | local Tesseract + regex digit scan on the dashboard photo | **None — deterministic-only** |
@@ -45,8 +46,8 @@ The response includes a `model` field so callers know which path produced it:
 ## Fallback engines
 
 `ai/app/fallbacks/` implements the deterministic engines, one module per
-feature (`diagnose.py`, `service_prediction.py`, `ocr.py`, `resale.py`,
-`mod_impact.py`, `fuel_ocr.py`, `odometer.py`).
+feature (`condition.py`, `diagnose.py`, `service_prediction.py`, `ocr.py`,
+`resale.py`, `mod_impact.py`, `fuel_ocr.py`, `odometer.py`).
 
 - **Diagnostics:** keyword rules for symptoms (brakes, vibration, leaks,
   noises…) + OBD code table mapped to parts/costs.
@@ -56,6 +57,9 @@ feature (`diagnose.py`, `service_prediction.py`, `ocr.py`, `resale.py`,
   for image input.
 - **Resale:** RRP-anchored base value per make/model, age + odometer
   depreciation curves, condition and service-history multipliers.
+- **Condition:** severity-weighted open-issue penalty + service coverage /
+  recency + odometer vs age (cars 15k km/yr, bikes 6k km/yr) → label
+  (excellent/good/fair/poor) + confidence + evidence signals.
 - **Mod impact:** per-category performance/value/reliability table.
 - **Fuel OCR / Odometer:** line-scan and Tesseract+regex respectively.
 

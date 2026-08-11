@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.services.ownership import get_accessible_vehicle
 from app.db.session import get_db
+from app.models.diagnostic import Diagnostic
 from app.models.fuel import FuelLog
 from app.models.mod import Modification
 from app.models.service import ServiceRecord
@@ -84,7 +85,14 @@ async def valuate(
     fuel = list((await db.scalars(
         select(FuelLog).where(FuelLog.vehicle_id == vehicle_id).order_by(FuelLog.fill_date)
     )).all())
-    market = await get_market_data(db, vehicle.make, vehicle.model, vehicle.year)
+    diagnostics = list((await db.scalars(
+        select(Diagnostic).where(Diagnostic.vehicle_id == vehicle_id)
+    )).all())
+    market = await get_market_data(db, vehicle.make, vehicle.model, vehicle.year, vehicle.vehicle_type)
+    last_service_days = None
+    if services:
+        last_service = max(s.service_date for s in services)
+        last_service_days = (date.today() - last_service).days
     data = {
         "vehicle": {
             "make": vehicle.make, "model": vehicle.model, "year": vehicle.year,
@@ -94,6 +102,11 @@ async def valuate(
         },
         "service_count": len(services),
         "total_service_cost": sum(s.cost for s in services),
+        "last_service_days_ago": last_service_days,
+        "diagnostics": [
+            {"severity": d.severity, "status": d.status, "estimated_cost": d.estimated_cost}
+            for d in diagnostics
+        ],
         "mods": [{"name": m.name, "category": m.category, "cost": m.cost} for m in mods],
         "fuel_avg_l_per_100km": (
             round(sum(f.l_per_100km for f in fuel if f.l_per_100km) / sum(1 for f in fuel if f.l_per_100km), 2)
@@ -151,7 +164,7 @@ async def vehicle_market_data(
 ) -> dict:
     """Live CarsGuide/CarSales market data for this vehicle (cached 24h)."""
     vehicle = await get_accessible_vehicle(db, vehicle_id, user)
-    data = await get_market_data(db, vehicle.make, vehicle.model, vehicle.year, refresh=refresh)
+    data = await get_market_data(db, vehicle.make, vehicle.model, vehicle.year, vehicle.vehicle_type, refresh=refresh)
     data["query"] = f"{vehicle.make} {vehicle.model} {vehicle.year}".strip()
     return data
 

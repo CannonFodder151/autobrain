@@ -84,6 +84,15 @@ _SYSTEM_PROMPTS: dict[str, str] = {
         '"reliability_impact": "None"|"Minor"|"Medium"|"High", '
         '"model": "9router"}'
     ),
+    "condition": (
+        "You are a used-vehicle condition assessor. The deterministic engine has "
+        "already inferred a condition label (excellent/good/fair/poor) from "
+        "diagnostics and service history — do NOT change the label or score. "
+        "Your job is only to write a concise narrative summary of the evidence "
+        "(open issues, service coverage, kilometres, modifications) that a "
+        "buyer would understand. "
+        'Return STRICT JSON: {"summary": string}'
+    ),
     "fuel-ocr": (
         "You are a fuel station receipt OCR extractor. From the receipt text "
         "extract the fuel purchase. "
@@ -161,6 +170,9 @@ _SCHEMAS: dict[str, dict[str, tuple]] = {
         "value_impact": (int, float, type(None)),
         "reliability_impact": (str,),
         "model": (str,),
+    },
+    "condition": {
+        "summary": (str,),
     },
     "fuel-ocr": {
         "vendor": (str, type(None)),

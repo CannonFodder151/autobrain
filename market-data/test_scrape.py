@@ -1,12 +1,19 @@
 """Runnable self-check (no test framework): `python3 test_scrape.py`.
 
 1. Unit: _map_listing + _filter_year on synthetic payloads.
-2. Live smoke: search_carsguide("toyota camry") must return >=3 priced listings.
+2. Unit: bikesguide gate detection + empty deterministic fallback.
+3. Live smoke: search_carsguide("toyota camry") must return >=3 priced listings.
 """
 
 import asyncio
 
+import bikesguide
 import carsguide
+
+_GATED_HTML = """<html><head><title>bikesguide.com.au</title>
+<script src="/js/fingerprint/iife.min.js"></script>
+<script>var redirect_link='http://www.bikesguide.com.au/search?query=x&tr_uuid=abc';</script>
+</head></html>"""
 
 
 def test_map_and_filter():
@@ -35,6 +42,12 @@ def test_map_and_filter():
     print("unit tests OK")
 
 
+def test_bikesguide_gate():
+    assert bikesguide._gated(_GATED_HTML) is True
+    assert bikesguide._gated('<script id="__NUXT_DATA__">[]</script>') is False
+    print("bikesguide gate detection OK")
+
+
 async def live_smoke():
     result = await carsguide.search_carsguide("toyota camry")
     assert result["source"] == "carsguide", result
@@ -47,7 +60,17 @@ async def live_smoke():
     return result
 
 
+async def bikesguide_smoke():
+    result = await bikesguide.search_bikesguide("yamaha mt07")
+    assert result["source"] == "bikesguide", result
+    assert "listings" in result, result
+    print(f"bikesguide smoke OK: {len(result['listings'])} listings, note={result.get('note')}")
+    return result
+
+
 if __name__ == "__main__":
     test_map_and_filter()
+    test_bikesguide_gate()
     asyncio.run(live_smoke())
+    asyncio.run(bikesguide_smoke())
     print("ALL OK")

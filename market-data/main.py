@@ -17,11 +17,12 @@ import httpx
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
+from bikesguide import search_bikesguide
 from carsguide import search_carsguide
 
-app = FastAPI(title="Market Data API", version="1.0.0")
+app = FastAPI(title="Market Data API", version="1.1.0")
 
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 API_KEY = os.getenv("API_KEY", "")
 
 
@@ -30,11 +31,13 @@ class SearchRequest(BaseModel):
     make: str = ""
     model: str = ""
     year: int | None = None
+    vehicle_type: str = "car"
 
 
 class SearchResponse(BaseModel):
     source: str
     listings: list[dict]
+    note: str | None = None
 
 
 @app.get("/health")
@@ -49,7 +52,10 @@ async def search(req: SearchRequest, x_api_key: str | None = Header(None)):
     query = (req.query or " ".join(x for x in (req.make, req.model) if x)).strip()
     if not query:
         raise HTTPException(status_code=400, detail="query or make/model required")
+    vehicle_type = (req.vehicle_type or "car").lower()
     try:
+        if vehicle_type in ("motorcycle", "bike", "motorbike"):
+            return await search_bikesguide(query, req.year)
         return await search_carsguide(query, req.year)
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"upstream error: {exc}")

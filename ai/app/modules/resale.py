@@ -13,6 +13,7 @@ The output is validated and clamped so estimates stay sane and consistent:
 low <= estimated <= high, values bounded to a realistic AUD range.
 """
 
+from app.fallbacks.condition import estimate_condition
 from app.fallbacks.resale import estimate_value_fallback, rrp_for
 from app.router_client import enhance
 
@@ -70,8 +71,23 @@ async def run(payload: dict) -> dict:
     rrp = rrp_for(vehicle)
     if rrp is None:
         rrp = _f(merged.get("rrp"))
+    # Condition: rule-based estimate from diagnostics + service history when
+    # the user hasn't supplied one — never an AI guess. The AI may later add a
+    # narrative summary but the label stays deterministic.
+    condition_estimate = None
+    if isinstance(vehicle, dict) and not vehicle.get("condition"):
+        condition_estimate = estimate_condition(payload)
+        vehicle = dict(vehicle)
+        vehicle["condition"] = condition_estimate["condition"]
+        payload = dict(payload)
+        payload["vehicle"] = vehicle
     try:
         result = estimate_value_fallback(payload, rrp=rrp, used_price=used_price)
+        if condition_estimate is not None:
+            result.setdefault("factors", {})["condition_estimate"] = condition_estimate["condition"]
+            result["factors"]["condition_confidence"] = condition_estimate["confidence"]
+            result["factors"]["condition_score"] = condition_estimate["score"]
+            result["factors"]["condition_signals"] = ", ".join(condition_estimate["factors"].get("signals", []))
         if market.get("sample_size"):
             result.setdefault("factors", {})["market_median"] = market.get("median_price")
             result["factors"]["market_source"] = market.get("source")

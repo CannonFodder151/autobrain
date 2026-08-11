@@ -1,8 +1,9 @@
-# Market data & stable valuations (AUT-287)
+# Market data & stable valuations (AUT-287 / AUT-298)
 
-The resale valuation feeds on live used-car market data from **CarsGuide** and
-**CarSales** so the estimate matches what buyers are actually paying — and
-stays *stable* between runs.
+The resale valuation feeds on live used-vehicle market data — **CarsGuide** and
+**CarSales** for cars, **BikeGuide / BikesSales** for motorcycles — so the
+estimate matches what buyers are actually paying, and stays *stable* between
+runs.
 
 ## Why this exists
 
@@ -39,10 +40,14 @@ called directly from AutoBrain — the backend POSTs:
 ```
 POST {MARKET_DATA_URL}/search
 X-API-Key: <key>
-{ "query": "toyota crown", "make": "toyota", "model": "crown", "year": 1997 }
+{ "query": "toyota crown", "make": "toyota", "model": "crown", "year": 1997,
+  "vehicle_type": "car" }
 ```
 
-Expected response (alias-resilient parsing — field names may vary):
+`vehicle_type` (`car` | `motorcycle`) routes the scraper to the right portal
+(CarsGuide for cars, BikeGuide for motorcycles). The backend sends its
+`vehicle.vehicle_type` field. Expected response (alias-resilient parsing —
+field names may vary):
 
 ```json
 {
@@ -55,6 +60,21 @@ Expected response (alias-resilient parsing — field names may vary):
 ```
 
 Aggregates (median / low / high / sample_size) are computed server-side.
+
+## Providers & scraping status
+
+| Portal | Protocol | Status |
+|--------|----------|--------|
+| CarsGuide | Nuxt SSR `__NUXT_DATA__` over plain HTTP | ✅ live |
+| CarSales | Akamai-protected | ⏳ needs a browser/undetected channel |
+| BikeGuide (motorcycles) | same Nuxt stack as CarsGuide, but behind a **FingerprintJS redirect gate** | ⏳ gated — returns an empty listing set + `note` deterministically so the pipeline degrades cleanly, never errors |
+| BikeSales (motorcycles) | Akamai-protected | ⏳ needs a browser/undetected channel |
+
+`market-data/bikesguide.py` reuses the CarsGuide Nuxt parser and detects the
+FingerprintJS gate (no `__NUXT_DATA__` + fingerprint/`tr_uuid` markers),
+returning `{"source": "bikesguide", "listings": [], "note": "gated: ..."}`
+so valuations still complete offline. A Playwright/undetected-chromium channel
+(like the rego-lookup API) is the upgrade path for BikeGuide and BikeSales.
 
 ## API
 

@@ -128,7 +128,7 @@ def _aggregate(listings: list[dict]) -> dict:
     }
 
 
-async def _fetch_provider(query: str, make: str, model: str, year: int | None) -> dict | None:
+async def _fetch_provider(query: str, make: str, model: str, year: int | None, vehicle_type: str = "car") -> dict | None:
     """POST /search to the self-hosted market-data API. None on any failure."""
     if not settings.MARKET_DATA_URL:
         return None
@@ -137,7 +137,8 @@ async def _fetch_provider(query: str, make: str, model: str, year: int | None) -
         async with httpx.AsyncClient(timeout=60) as client:
             resp = await client.post(
                 url,
-                json={"query": query, "make": make, "model": model, "year": year},
+                json={"query": query, "make": make, "model": model, "year": year,
+                      "vehicle_type": vehicle_type},
                 headers={"X-API-Key": settings.MARKET_DATA_API_KEY} if settings.MARKET_DATA_API_KEY else {},
             )
             resp.raise_for_status()
@@ -152,6 +153,7 @@ async def get_market_data(
     make: str,
     model: str,
     year: int | None = None,
+    vehicle_type: str = "car",
     refresh: bool = False,
 ) -> dict:
     """Cached market data for a make/model/year. Always returns a dict."""
@@ -168,7 +170,7 @@ async def get_market_data(
         if row is not None and _fresh(row):
             return _serialise(row, stale=False)
 
-    provider = await _fetch_provider(query, make_l, model_l, year)
+    provider = await _fetch_provider(query, make_l, model_l, year, vehicle_type)
     data = _build(provider)
     await _store(db, make_l, model_l, year, data)
     return data

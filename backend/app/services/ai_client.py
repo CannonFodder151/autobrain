@@ -59,3 +59,6 @@ async def estimate_value(payload: dict) -> dict | None:
 
 async def mod_impact(payload: dict) -> dict | None:
     return await _call("mod-impact", payload)
+
+async def estimate_condition(payload: dict) -> dict | None:
+    return await _call("condition", payload)

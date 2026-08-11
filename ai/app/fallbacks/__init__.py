@@ -9,6 +9,7 @@ schedules, depreciation curves). They are the *fallback*, not the primary
 model — the router path is used whenever it is available.
 """
 
+from app.fallbacks.condition import estimate_condition
 from app.fallbacks.diagnose import diagnose_fallback
 from app.fallbacks.fuel_ocr import _fuel_receipt_fallback
 from app.fallbacks.mod_impact import mod_impact_fallback
@@ -20,6 +21,7 @@ from app.fallbacks.service_prediction import predict_service_fallback
 
 __all__ = [
     "diagnose_fallback",
+    "estimate_condition",
     "estimate_value_fallback",
     "extract_receipt_fallback",
     "mod_impact_fallback",

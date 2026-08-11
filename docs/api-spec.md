@@ -133,7 +133,7 @@ A diagnostic auto-flips to `resolved` when its linked service is completed.
 - **Mods** (`/vehicles/{id}/mods`): GET/POST, PATCH/DELETE `/{mod_id}`, POST `/impact` (AI), GET `/export?fmt=csv|pdf|zip`.
 - **Receipts** (`/vehicles/{id}/receipts`): POST (multipart → async OCR), GET, POST `/{id}/apply-to-service`.
 - **Parts** (`/vehicles/{id}/parts`): GET/POST, PATCH/DELETE `/{id}`, POST `/{id}/movement`, GET `/reorder-suggestions` (rule-based: flags parts at or below `min_quantity` — not AI).
-- **Valuation** (`/vehicles/{id}/valuation`): POST (AI — disabled on free accounts), GET `/history`, GET `/market` (live CarsGuide/CarSales market data for the vehicle, cached 24h), GET `/market/search?q=` (search live listings across an arbitrary query, cached 24h).
+- **Valuation** (`/vehicles/{id}/valuation`): POST (AI — disabled on free accounts), GET `/history`, GET `/market` (live CarsGuide/CarSales market data for the vehicle, cached 24h; `vehicle_type` routes cars vs motorcycles), GET `/market/search?q=` (search live listings across an arbitrary query, cached 24h). The estimate is anchored on the cached market median; when the user hasn't supplied a condition, it is inferred deterministically from diagnostics + service history (`condition` module) and surfaced in the response `factors` (`condition_estimate`, `condition_confidence`, `condition_score`, `condition_signals`).
 - **Analytics** (`/vehicles/{id}/analytics`): GET (spend, TCO, cost/km, forecast, insights).
 - **Notifications** (`/vehicles/{id}/notifications`): GET preferences, PUT update preferences (no `/test` endpoint).
 
