@@ -20,7 +20,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.18] - 2026-08-11
 
 ### Fixed
 - Frontend nginx now re-resolves the `backend` upstream via Docker's embedded
