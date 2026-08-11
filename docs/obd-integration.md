@@ -36,13 +36,51 @@ Frontend (`frontend/lib/screens/obd/obd_screen.dart`): "Work in progress" banner
 
 Verified: `flutter analyze` clean for OBD files, `flutter test` 25 passing, debug APK builds.
 
+## What exists now (mobile app — AUT-362, auto trip recording)
+
+VGate iCar Pro (passive ELM327 v1.5 BT-Classic bridge, no onboard storage) works as
+a leave-in trip logger, GoFar-style, entirely app-side:
+
+- **`lib/services/obd/obd_trip_recorder.dart`** — pure-Dart ignition-heuristic engine:
+  fed battery voltage (mode 01 PID `0142`) + engine RPM (`010C`) + BT link state, it
+  starts a logbook trip on ignition-on and closes it on ignition-off/link-drop, with
+  hysteresis + debounce (no flapping at the 12.8-13.2 V band). The in-progress trip is
+  buffered to SharedPreferences so a mid-drive app kill does not lose it, and finished
+  trips queue for a retrying backend sync (`source=obd_auto` so users can tell them
+  apart from manual entries). Unit-tested (`test/obd_trip_recorder_test.dart`).
+- **`lib/services/obd/obd_trip_monitor.dart`** — singleton orchestrator: one 2 s poll
+  loop feeds both the live PID screen and the recorder (no double Bluetooth traffic),
+  auto-connects to the remembered adapter at app start, auto-reconnects with 30 s
+  backoff, and treats a BT link-drop as ignition-off.
+- **`lib/services/obd/obd_keepalive*.dart`** — Android foreground service
+  (`connectedDevice`, via `flutter_foreground_task`) that keeps the app process alive
+  while a session or trip is live, so recording survives backgrounding. Stops itself
+  when there is nothing to record (car off, adapter asleep) to avoid battery drain.
+- **Backend** — `logbook_entries.source` column (`manual` default / `obd_auto`) added
+  via Alembic migration; the mobile logbook screen labels auto trips "auto (OBD)".
+- Guardrails: auto-recording only runs when `obd_enabled` + `obd_auto_connect` are on;
+  the adapter still sleeps on ignition-off (we never ping it awake); iOS is out of
+  scope for the iCar Pro (see below).
+
 ## Next steps (mobile app)
 
-1. **Adapter + protocol** — pick a generic ELM327/OBDLink adapter supporting logging and sleep-on-idle; log standard OBD-II PIDs; validate the (non-universal) odometer PID per make; plan dashboard-photo OCR / manual entry fallbacks.
+1. **Adapter + protocol** — pick a generic ELM327/OBDLink adapter supporting logging and sleep-on-idle; log standard OBD-II PIDs; validate the (non-universal) odometer PID per make; plan dashboard-photo OCR / manual entry fallbacks. ✅ ELM327 SPP on Android shipped (AUT-362).
 2. **Bluetooth transport** — Android: Bluetooth Classic SPP/RFCOMM (ELM327 serial profile) ✅ shipped. iOS: Bluetooth Classic is not public; use a BLE ELM327 (UART GATT) — the key platform divergence.
-3. **Realtime logging to logbook** — background sampling on Android; ignition-on starts a trip, ignition-off completes it (time, GPS, odo, distance).
+3. **Realtime logging to logbook** — background sampling on Android ✅ shipped (AUT-362); ignition-on starts a trip, ignition-off completes it (time, GPS, odo, distance).
 4. **VIN + fault codes** — read VIN (mode 09) on first connect ✅ shipped; read DTCs (mode 03/07) ✅ shipped, save, and offer "Diagnose with AI".
 5. **Account gating** — read `/obd/settings`; show lock screen when `!enabled` ✅ shipped.
+
+## iOS note (AUT-362) — do not implement on BT Classic
+
+- The VGate iCar Pro is **Bluetooth Classic**, which iOS apps cannot use (no public
+  BT-Classic API). iOS parity requires a **BLE ELM327 adapter** (e.g. **VLinker MC+**,
+  a BLE/BTClassic combo — pair it in BLE mode).
+- Even with a BLE adapter, iOS **background execution limits** (no sustained
+  background BLE/UART polling without a permitted background mode) prevent the same
+  leave-in-the-phone auto-recording that Android gets from its foreground service.
+  Expect iOS auto-trip recording to be session-limited (trip must start/end with the
+  app foregrounded) or gated behind a connected-mode entitlement — full parity is not
+  achievable on iOS today.
 
 ## Risks / notes
 

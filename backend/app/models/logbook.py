@@ -32,6 +32,7 @@ class LogEntry(Base):
 
     purpose: Mapped[str] = mapped_column(String(12), default="private")  # work/private
     reason: Mapped[str | None] = mapped_column(String(500))
+    source: Mapped[str] = mapped_column(String(20), default="manual")  # manual/obd_auto
 
     start_location: Mapped[str | None] = mapped_column(String(255))
     end_location: Mapped[str | None] = mapped_column(String(255))
