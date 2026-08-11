@@ -21,7 +21,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.19] - 2026-08-11
 
 ### Security
 - MinIO bucket no longer anonymously readable (AUT-321): `autobrain-assets` anonymous `download` policy removed from `docker-compose.hosted.yml` and `scripts/init-minio.sh` (init now forces `anonymous set none`). `upload_object` returns a 1-hour presigned GET URL instead of a world-readable URL, and the frontend nginx proxies `/autobrain-assets/` to MinIO while preserving the signed Host header. Existing buckets are re-privatized on redeploy.
