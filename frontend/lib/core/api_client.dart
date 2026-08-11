@@ -43,9 +43,13 @@ class ApiException implements Exception {
 }
 
 class ApiClient {
-  ApiClient(this._token);
-  final String? _token;
+  /// [onRefresh] returns a fresh access token (or null if refresh fails).
+  /// Invoked once when a request comes back 401; the request is then retried.
+  ApiClient(String? token, {this.onRefresh}) : _token = token;
+  String? _token;
+  final Future<String?> Function()? onRefresh;
   static const Duration _timeout = Duration(seconds: 30);
+  Future<String?>? _inflightRefresh;
 
   Future<dynamic> get(String path) => _send('GET', path);
   Future<dynamic> post(String path, [Object? body]) => _send('POST', path, body);
@@ -66,6 +70,22 @@ class ApiClient {
       ));
     final streamed = await request.send().timeout(_timeout);
     final response = await http.Response.fromStream(streamed).timeout(_timeout);
+    if (response.statusCode == 401 && _token != null && onRefresh != null) {
+      final newToken = await _refresh();
+      if (newToken != null) {
+        _token = newToken;
+        final retry = http.MultipartRequest('POST', uri)
+          ..headers['Authorization'] = 'Bearer $_token'
+          ..files.add(http.MultipartFile.fromBytes(
+            'file',
+            bytes,
+            filename: filename,
+            contentType: MediaType.parse(contentType),
+          ));
+        final retried = await retry.send().timeout(_timeout);
+        return _decode(await http.Response.fromStream(retried).timeout(_timeout));
+      }
+    }
     return _decode(response);
   }
 
@@ -75,28 +95,41 @@ class ApiClient {
       'Content-Type': 'application/json',
       if (_token != null) 'Authorization': 'Bearer $_token',
     };
-    late http.Response response;
+    var response = await _raw(method, uri, headers, body);
+    if (response.statusCode == 401 && _token != null && onRefresh != null) {
+      final newToken = await _refresh();
+      if (newToken != null) {
+        _token = newToken;
+        headers['Authorization'] = 'Bearer $_token';
+        response = await _raw(method, uri, headers, body);
+      }
+    }
+    return _decode(response);
+  }
+
+  Future<http.Response> _raw(String method, Uri uri,
+      Map<String, String> headers, Object? body) {
     final encoded = body == null ? null : jsonEncode(body);
     switch (method) {
       case 'GET':
-        response = await http.get(uri, headers: headers).timeout(_timeout);
-        break;
+        return http.get(uri, headers: headers).timeout(_timeout);
       case 'DELETE':
-        response = await http.delete(uri, headers: headers).timeout(_timeout);
-        break;
+        return http.delete(uri, headers: headers).timeout(_timeout);
       case 'POST':
-        response = await http.post(uri, headers: headers, body: encoded).timeout(_timeout);
-        break;
+        return http.post(uri, headers: headers, body: encoded).timeout(_timeout);
       case 'PATCH':
-        response = await http.patch(uri, headers: headers, body: encoded).timeout(_timeout);
-        break;
+        return http.patch(uri, headers: headers, body: encoded).timeout(_timeout);
       case 'PUT':
-        response = await http.put(uri, headers: headers, body: encoded).timeout(_timeout);
-        break;
+        return http.put(uri, headers: headers, body: encoded).timeout(_timeout);
       default:
         throw ApiException(400, 'Unsupported method');
     }
-    return _decode(response);
+  }
+
+  /// Single in-flight refresh: concurrent 401s share one refresh call.
+  Future<String?> _refresh() {
+    return _inflightRefresh ??=
+        onRefresh!().whenComplete(() => _inflightRefresh = null);
   }
 
   dynamic _decode(http.Response response) {
@@ -117,9 +150,16 @@ class ApiClient {
   /// Download a raw byte payload (e.g. PDF/CSV export).
   Future<List<int>> export(String path) async {
     final uri = Uri.parse('${AppConfig.apiBase}$path');
-    final response = await http.get(uri, headers: {
-      if (_token != null) 'Authorization': 'Bearer $_token',
-    }).timeout(_timeout);
+    var headers = {if (_token != null) 'Authorization': 'Bearer $_token'};
+    var response = await http.get(uri, headers: headers).timeout(_timeout);
+    if (response.statusCode == 401 && _token != null && onRefresh != null) {
+      final newToken = await _refresh();
+      if (newToken != null) {
+        _token = newToken;
+        headers = {'Authorization': 'Bearer $_token'};
+        response = await http.get(uri, headers: headers).timeout(_timeout);
+      }
+    }
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return response.bodyBytes;
     }

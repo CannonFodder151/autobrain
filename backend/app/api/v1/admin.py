@@ -144,6 +144,8 @@ async def update_user(
     if "password" in updates:
         updates["hashed_password"] = hash_password(updates.pop("password"))
         updates["pending"] = False  # admin-set credential completes provisioning
+        # Password change revokes every outstanding access + refresh token.
+        user.token_version += 1
     for key, value in updates.items():
         setattr(user, key, value)
     await db.commit()

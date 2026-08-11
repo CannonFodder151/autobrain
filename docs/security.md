@@ -3,8 +3,13 @@
 ## Authentication & sessions
 
 - Passwords hashed with bcrypt (`passlib`), pinned `bcrypt==4.0.1` for compatibility.
-- JWT access tokens (7-day default; configurable) + refresh tokens (30 days).
-- Refresh tokens are validated for type; invalid tokens are rejected.
+- JWT access tokens (30-minute default; configurable) + refresh tokens (30 days).
+- Access and refresh tokens carry a `ver` claim = the user's `token_version` at
+  issue time. Bumping `token_version` (logout, password change) instantly revokes
+  every outstanding token. Old tokens without a `ver` claim still validate
+  (they decode as version 0), so the rollout is backwards compatible.
+- Refresh tokens rotate on every `/auth/refresh`: the used token's `jti` is
+  denylisted, so a replayed/stolen token is rejected.
 - All `/api/v1/*` routes except auth require a bearer token.
 
 ## Multi-factor authentication (MFA)

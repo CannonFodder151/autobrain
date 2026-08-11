@@ -24,7 +24,8 @@ Only the latest release (`main` branch) receives security patches. The hosted in
 ## Architecture security notes
 
 - Passwords: bcrypt (`passlib`, `bcrypt==4.0.1`)
-- Sessions: JWT access (7d) + refresh (30d); refresh tokens are type-validated
+- Sessions: JWT access (30min) + refresh (30d); refresh tokens rotate on use
+  (denylisted `jti`) and are revoked by logout/password change via `token_version`
 - MFA: TOTP (RFC 6238); MFA tokens are short-lived (5min) and scoped
 - No self-signup by default — admin-provisioned accounts only
 - `.env` never committed; secrets injected via env vars at runtime

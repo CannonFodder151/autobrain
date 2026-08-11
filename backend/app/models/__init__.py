@@ -13,6 +13,7 @@ from app.models.receipt import Receipt, ExtractedItem
 from app.models.valuation import ValuationSnapshot
 from app.models.notification import NotificationPreference, NotificationDelivery
 from app.models.share import VehicleShare
+from app.models.refresh_token import RevokedRefreshToken
 
 __all__ = [
     "User",
@@ -33,4 +34,5 @@ __all__ = [
     "NotificationPreference",
     "NotificationDelivery",
     "VehicleShare",
+    "RevokedRefreshToken",
 ]
