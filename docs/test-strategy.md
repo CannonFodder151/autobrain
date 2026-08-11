@@ -70,4 +70,4 @@ Run against the dev box and recorded on each test pass:
 
 ## Sign-off bar
 
-A release ships when: automated suites pass in the stack, the manual coverage areas pass against the dev box, promotion order is followed, and no release-blocking (must-fix) bugs remain open.
+A release ships when: automated suites pass in the stack, the manual coverage areas pass against the dev box, promotion order is followed, and no release-blocking (must-fix) bugs remain open. Every change also passes the two-gate change validation process (Security before build, QA immediately after push) defined in `docs/change-validation-gate.md` (AUT-241).

@@ -44,6 +44,8 @@ Thanks for contributing! Please read the [developer onboarding guide](docs/devel
 - Backend: `tests/backend/` — run `docker compose exec backend pytest`.
 - AI: `tests/ai/` — run `docker compose exec ai pytest`.
 - Frontend: `frontend/test/` — run `flutter test` from the `frontend/` directory.
+- QA & User Testing runs a post-push test pass for every change immediately
+  after merge (Gate 2, `docs/change-validation-gate.md`).
 
 ## Documentation
 
@@ -53,6 +55,9 @@ change behaviour. The API spec is generated from OpenAPI and stored in
 
 ## Security
 
+- Every change needs Security sign-off BEFORE implementation starts (Gate 1,
+  `docs/change-validation-gate.md`). Security-critical changes (auth, payments,
+  data access, secrets, network) get a full review, not an auto-pass.
 - Never commit `.env` or secrets.
 - Add new environment variables to `.env.example`.
 - Secrets must be injected via env vars at runtime only.
