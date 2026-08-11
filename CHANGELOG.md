@@ -11,7 +11,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.9] - 2026-08-11
 
 ### Added
 - Market-data scraper API (AUT-290): self-hosted `market-data` service scrapes live CarsGuide listings (no browser, via the site's SSR `__NUXT_DATA__` payload) and serves `POST /search` with `{query, make, model, year}` behind an API key — the same protocol rego-lookup uses. Wired into the hosted stack as `MARKET_DATA_URL`/`MARKET_DATA_API_KEY`, so valuations now anchor on real listings instead of showing "provider not configured".
