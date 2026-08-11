@@ -28,9 +28,11 @@ Ownership split defined by the CTO in the Mobile packaging issue (Paperclip
 
 **Canonical home for `.aab` change notes:**
 - **`CHANGELOG.md` in the `autobrain` monorepo is the single shared changelog for BOTH the hosted (web) app and the mobile app.** Mobile has no changelog of its own — GitHub Releases here use the shared changelog, so its contents are mirrored into this repo on every sync.
-- Discord **`#changelog`** on AutoBrain HQ (public, customer-facing) — link + notes.
+- Discord **`#changelog`** on AutoBrain HQ (public, customer-facing) — link +
+  summarized notes, posted **only when a new semantic version ships**
+  (`0.3.6` → `0.3.7`), not per-build.
 - **GitHub Releases** on `CannonFodder151/autobrain-mobile` — the `.aab` artifact + full notes from the shared changelog.
-- A short staff summary also posts to Discord **`#updates`**.
+- A short staff summary also posts to Discord **`#updates`** on every build.
 
 ## Repos
 
@@ -227,13 +229,16 @@ Automated pipeline now lives at `CannonFodder151/autobrain-mobile`
 6. Signing guard: `jarsigner -verify` the `.aab` (v1) and `apksigner verify`
    the APK for v2+v3 (Play-required), with the upload certificate.
 7. Publishes a **draft** GitHub Release (`softprops/action-gh-release@v2`) on
-   tag `v<X.Y.Z>+<build>` with the shared `CHANGELOG.md` top entry as the body
+   tag `v<X.Y.Z>+<build>` with that version's `CHANGELOG.md` section as the body
    and `app-release.aab` attached. Publish the draft when the CEO/CTO approves.
 8. Posts the release embeds to Discord via the internal reporter webhook (see
    the Outline "Discord reporter" doc): `changelog` (public, `0x2ECC71`) and
    `updates` (staff, `0x3498DB`). Payloads are built with `jq`
    (changelog text contains quotes that break inline JSON) and are best-effort
    (`|| true` so a transient reporter outage never fails a release).
+   The `changelog` embed only fires when the semantic version iterates
+   (e.g. `0.3.6` → `0.3.7`) — build-only bumps of the same version skip it —
+   and carries a summarized changelog (top bullets of the version's section).
 
 Run it from the repo Actions tab (or `gh workflow run release-mobile.yml -f
 version=v<X.Y.Z>+<build>`).
