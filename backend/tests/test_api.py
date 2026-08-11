@@ -5,7 +5,6 @@ import os
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test-user:test-password@postgres:5432/autobrain")
 os.environ.setdefault("SECRET_KEY", "test-secret")
 
-import asyncio  # noqa: E402
 import uuid  # noqa: E402
 
 import pytest  # noqa: E402
@@ -61,6 +60,16 @@ def test_user_create_invite_allows_no_password() -> None:
     invite = UserCreate(email="invite@example.com", display_name="I", send_invite=True)
     assert invite.password is None
     assert invite.send_invite is True
+
+
+def test_user_pending_defaults_and_admin_out() -> None:
+    from app.schemas.auth import UserAdminOut
+
+    assert "pending" in User.__table__.columns
+    assert UserAdminOut(id="1", email="p@example.com", display_name="P", role="user",
+                        is_active=True, mfa_enabled=False, pending=True).pending is True
+    assert UserAdminOut(id="1", email="p@example.com", display_name="P", role="user",
+                        is_active=True, mfa_enabled=False).pending is False
 
 
 def test_vehicle_schema_accepts_limit() -> None:

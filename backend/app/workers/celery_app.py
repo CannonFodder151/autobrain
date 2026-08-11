@@ -35,5 +35,9 @@ celery_app.conf.update(
             "task": "app.workers.tasks.backfill_entity_embeddings",
             "schedule": 60 * 60 * 24,
         },
+        "purge-stale-pending-accounts": {
+            "task": "app.workers.tasks.purge_stale_pending_accounts",
+            "schedule": 60 * 60 * 6,
+        },
     },
 )

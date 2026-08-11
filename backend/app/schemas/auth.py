@@ -120,6 +120,7 @@ class UserAdminOut(BaseModel):
     obd_enabled: bool = False
     obd_auto_connect: bool = False
     created_at: datetime | None = None
+    pending: bool = False
 
     model_config = {"from_attributes": True}
 

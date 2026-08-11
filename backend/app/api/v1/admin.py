@@ -118,6 +118,7 @@ async def create_user(
         max_vehicles=payload.max_vehicles,
         free_account=payload.free_account,
         obd_enabled=payload.obd_enabled,
+        pending=payload.send_invite,
     )
     db.add(user)
     await db.commit()
@@ -142,6 +143,7 @@ async def update_user(
     updates = payload.model_dump(exclude_unset=True)
     if "password" in updates:
         updates["hashed_password"] = hash_password(updates.pop("password"))
+        updates["pending"] = False  # admin-set credential completes provisioning
     for key, value in updates.items():
         setattr(user, key, value)
     await db.commit()

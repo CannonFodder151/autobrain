@@ -23,6 +23,9 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(20), default="user", nullable=False)  # admin/user
     max_vehicles: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     is_active: Mapped[bool] = mapped_column(default=True)
+    # Invited/self-signed-up but never completed registration (set a password).
+    # Cleared when the invite token is consumed; purged after retention window.
+    pending: Mapped[bool] = mapped_column(default=False)
     free_account: Mapped[bool] = mapped_column(default=False)  # disables AI and rego lookup
     obd_enabled: Mapped[bool] = mapped_column(default=False)  # admin-granted OBD access
     obd_auto_connect: Mapped[bool] = mapped_column(default=False)  # auto-connect Bluetooth OBD
