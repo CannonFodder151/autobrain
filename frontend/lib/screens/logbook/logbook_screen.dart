@@ -6,6 +6,7 @@ import '../../core/auth_state.dart';
 import '../../core/download.dart';
 import '../../core/geoloc.dart';
 import '../../core/models.dart';
+import '../../core/trip_datetime.dart';
 
 class LogbookScreen extends StatefulWidget {
   const LogbookScreen({super.key, required this.vehicleId});
@@ -141,14 +142,20 @@ class _LogbookScreenState extends State<LogbookScreen> {
                       Expanded(
                         child: TextFormField(
                           controller: dateCtrl,
-                          decoration: const InputDecoration(labelText: 'Date'),
+                          decoration: const InputDecoration(
+                            labelText: 'Date',
+                            hintText: '11/08/2026',
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: TextFormField(
                           controller: timeCtrl,
-                          decoration: const InputDecoration(labelText: 'Time'),
+                          decoration: const InputDecoration(
+                            labelText: 'Time',
+                            hintText: '3:30 pm',
+                          ),
                         ),
                       ),
                     ],
@@ -258,9 +265,8 @@ class _LogbookScreenState extends State<LogbookScreen> {
             FilledButton(
               onPressed: () async {
                 if (!formKey.currentState!.validate()) return;
-                final time = timeCtrl.text.trim().isEmpty ? '00:00' : timeCtrl.text.trim();
                 final startedAt =
-                    DateTime.tryParse('${dateCtrl.text.trim()} $time');
+                    parseLogbookDateTime(dateCtrl.text, timeCtrl.text);
                 if (startedAt == null) {
                   ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
                       content: Text('Invalid start date/time')));
