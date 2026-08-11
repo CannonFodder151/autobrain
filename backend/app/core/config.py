@@ -102,6 +102,7 @@ class Settings(BaseSettings):
     APP_VERSION: str = "0.3.16"  # mirror frontend/pubspec.yaml version
     GITHUB_REPO: str = "CannonFodder151/autobrain"
     GITHUB_TOKEN: str = ""  # optional, raises the GitHub API rate limit for release checks
+    MOBILE_GITHUB_REPO: str = "CannonFodder151/autobrain-mobile"  # private; needs GITHUB_TOKEN
 
     # Scheduled backup (daily). When set, beats stores a full JSON snapshot to MinIO.
     BACKUP_ENABLED: bool = True
