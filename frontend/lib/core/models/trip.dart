@@ -7,6 +7,7 @@ class LogEntry {
   final double? distanceKm;
   final String purpose; // work/private
   final String? reason;
+  final String source; // manual/obd_auto
   final String? startLocation, endLocation;
   final double? startLat, startLng, endLat, endLng;
   final String status; // in_progress/completed
@@ -20,6 +21,7 @@ class LogEntry {
     this.distanceKm,
     this.purpose = 'private',
     this.reason,
+    this.source = 'manual',
     this.startLocation,
     this.endLocation,
     this.startLat,
@@ -30,6 +32,7 @@ class LogEntry {
   });
 
   bool get isComplete => status == 'completed';
+  bool get isAutoLogged => source == 'obd_auto';
 
   factory LogEntry.fromJson(Map<String, dynamic> j) => LogEntry(
         id: j['id'] as String,
@@ -40,6 +43,7 @@ class LogEntry {
         distanceKm: (j['distance_km'] as num?)?.toDouble(),
         purpose: j['purpose'] as String? ?? 'private',
         reason: j['reason'] as String?,
+        source: j['source'] as String? ?? 'manual',
         startLocation: j['start_location'] as String?,
         endLocation: j['end_location'] as String?,
         startLat: (j['start_lat'] as num?)?.toDouble(),
