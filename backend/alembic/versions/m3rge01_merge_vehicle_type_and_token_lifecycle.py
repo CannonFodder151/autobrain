@@ -19,7 +19,7 @@ from alembic import op
 
 
 revision: str = 'm3rge01'
-down_revision: Union[str, Sequence[str], None] = ('h2j3k4l5m6n7', 'b2c3d4e5f6a8', 'h1i2j3k4l5m6', 'e7f8a9b0c1d2')
+down_revision: Union[str, Sequence[str], None] = ('h2j3k4l5m6n7', 'e7f8a9b0c1d2', 'h1i2j3k4l5m6', 'h1i2j3k4l5m7')
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
