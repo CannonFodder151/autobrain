@@ -14,7 +14,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.12] - 2026-08-11
 
 ### Security
 - Rego provider logs redacted (AUT-324): `rego_provider_lookup` logs only mapped fields (make/model/year/status) instead of the raw provider payload, so registration data and VINs never reach log storage.
