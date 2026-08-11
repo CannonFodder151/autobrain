@@ -393,7 +393,7 @@ class _LogbookScreenState extends State<LogbookScreen> {
                   ),
                   subtitle: Text(
                     '${e.purpose}'
-                    '${e.isAutoLogged ? ' · auto (OBD)' : ''}'
+                    '${e.isAutoLogged ? ' · ${e.autoSourceLabel}' : ''}'
                     '${e.startOdometerKm != null ? ' · ${e.startOdometerKm} km' : ''}'
                     '${e.endOdometerKm != null ? ' → ${e.endOdometerKm} km' : ''}'
                     '${e.distanceKm != null ? ' · ${e.distanceKm!.toStringAsFixed(0)} km' : ''}'

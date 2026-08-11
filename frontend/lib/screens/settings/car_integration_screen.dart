@@ -17,6 +17,8 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/auth_state.dart';
+import '../../services/car/car_kit_service.dart';
+import '../../services/car/car_kit_trip_monitor.dart';
 import '../../services/obd/obd_connection.dart';
 import '../../services/obd/obd_trip_monitor.dart';
 
@@ -28,26 +30,38 @@ String carIntegrationStatusLine({
   required bool tripActive,
   DateTime? tripStartedAt,
   DateTime? lastTripAt,
+  CarKitLinkState carKitLink = CarKitLinkState.disconnected,
 }) {
+  final carKit = switch (carKitLink) {
+    CarKitLinkState.connected => 'Car-kit connected',
+    CarKitLinkState.disconnected => null,
+  };
   final connection = switch (connectionStatus) {
     ObdStatus.connected =>
       adapterLabel == null || adapterLabel.isEmpty
           ? 'Connected to car adapter'
           : 'Connected — $adapterLabel',
     ObdStatus.connecting => 'Connecting…',
-    ObdStatus.off => 'Not connected',
+    ObdStatus.off => null,
     ObdStatus.error => 'Adapter error',
+  };
+  // Prefer whatever signal is live; "Not connected" only when neither is.
+  final base = switch ((connection, carKit)) {
+    (final String c, final String k) => '$c · $k',
+    (final String c, null) => c,
+    (null, final String k) => k,
+    (null, null) => 'Not connected',
   };
   if (tripActive) {
     final t = tripStartedAt?.toLocal();
     return t == null
-        ? '$connection · recording'
-        : '$connection · recording since ${_fmtTrip(t)}';
+        ? '$base · recording'
+        : '$base · recording since ${_fmtTrip(t)}';
   }
   if (lastTripAt != null) {
-    return '$connection · last auto trip ${_fmtTrip(lastTripAt.toLocal())}';
+    return '$base · last auto trip ${_fmtTrip(lastTripAt.toLocal())}';
   }
-  return connection;
+  return base;
 }
 
 String _fmtTrip(DateTime t) {
@@ -74,6 +88,8 @@ class _CarIntegrationScreenState extends State<CarIntegrationScreen> {
 
   late final ObdTripMonitor _monitor =
       widget.monitor ?? ObdTripMonitor.instance;
+  late final CarKitTripMonitor? _carKitMonitor =
+      CarKitTripMonitorService.instance.monitor;
 
   bool _autoLogging = false;
   bool _obdEnabled = true;
@@ -83,12 +99,14 @@ class _CarIntegrationScreenState extends State<CarIntegrationScreen> {
   void initState() {
     super.initState();
     _monitor.addListener(_onChanged);
+    _carKitMonitor?.addListener(_onChanged);
     _load();
   }
 
   @override
   void dispose() {
     _monitor.removeListener(_onChanged);
+    _carKitMonitor?.removeListener(_onChanged);
     super.dispose();
   }
 
@@ -114,39 +132,46 @@ class _CarIntegrationScreenState extends State<CarIntegrationScreen> {
   }
 
   Future<void> _setAutoLogging(bool value) async {
-    if (value && !_obdEnabled) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text(
-              'Requires OBD access — enable OBD features from the OBD screen '
-              'and pair a Bluetooth adapter first.')));
-      return;
-    }
     final prefs = await SharedPreferences.getInstance();
     setState(() => _autoLogging = value);
     await prefs.setBool(prefKey, value);
-    // The current car-connection trigger is the OBD adapter link (AUT-362).
-    // ponytail: AUT-364 T3 adds car-kit Bluetooth detection — this master
-    // switch then gates that path too, instead of mirroring obd_auto_connect.
-    await prefs.setBool('obd_auto_connect', value);
-    _monitor.setAutoConnect(value);
-    try {
-      await context
-          .read<AuthState>()
-          .api
-          .patch('/auth/settings', {'obd_auto_connect': value});
-    } catch (_) {}
+    // The master switch gates BOTH auto-trip trigger paths: the OBD adapter
+    // link (AUT-362) and the phone car-kit BT + GPS path (AUT-367). The phone
+    // path needs no OBD adapter, so it is armed whenever the switch is on.
+    await CarKitTripMonitorService.instance.setEnabled(value);
+    if (value && _obdEnabled) {
+      await prefs.setBool('obd_auto_connect', true);
+      _monitor.setAutoConnect(true);
+      try {
+        await context
+            .read<AuthState>()
+            .api
+            .patch('/auth/settings', {'obd_auto_connect': true});
+      } catch (_) {}
+    } else {
+      await prefs.setBool('obd_auto_connect', value && _obdEnabled);
+      _monitor.setAutoConnect(value && _obdEnabled);
+      try {
+        await context
+            .read<AuthState>()
+            .api
+            .patch('/auth/settings', {'obd_auto_connect': value && _obdEnabled});
+      } catch (_) {}
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final c = _monitor.connection;
     final r = _monitor.recorder;
+    final carKitLink = _carKitMonitor?.link ?? CarKitLinkState.disconnected;
     final status = carIntegrationStatusLine(
       connectionStatus: c.status,
       adapterLabel: c.adapterLabel,
       tripActive: r.isTripActive,
       tripStartedAt: r.activeTrip?.startedAt,
       lastTripAt: _lastTripAt,
+      carKitLink: carKitLink,
     );
     return Scaffold(
       appBar: AppBar(title: const Text('Car Play / Android Auto')),
@@ -162,8 +187,10 @@ class _CarIntegrationScreenState extends State<CarIntegrationScreen> {
               title: const Text('Auto trip logging'),
               subtitle: const Text(
                   'When your phone connects to the car, drives are logged to '
-                  'the logbook automatically. Works on Android today via a '
-                  'Bluetooth OBD adapter.'),
+                  'the logbook automatically. Android: when the phone links to '
+                  'the car\'s Bluetooth (head unit / car-kit), a drive is '
+                  'logged once moving — no Android Auto approval or OBD adapter '
+                  'needed.'),
             ),
           ),
           const SizedBox(height: 16),
@@ -204,7 +231,8 @@ class _CarIntegrationScreenState extends State<CarIntegrationScreen> {
               title: const Text('Auto-start trip logging when connected '
                   'to the car'),
               subtitle: Text(_autoLogging
-                  ? 'On — trips start when the car\'s ignition does.'
+                  ? 'On — trips start when the phone connects to the car and '
+                      'it starts moving.'
                   : 'Off — trips are only logged manually.'),
               value: _autoLogging,
               onChanged: _setAutoLogging,

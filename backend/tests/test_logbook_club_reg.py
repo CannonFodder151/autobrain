@@ -146,3 +146,41 @@ async def test_obd_auto_source_flag_round_trips() -> None:
     assert any(e["source"] == "obd_auto" for e in listed.json()), listed.text
 
     await client.aclose()
+
+@pytest.mark.asyncio
+async def test_car_auto_source_with_gps_distance_round_trips() -> None:
+    """AUT-367 phone path: car_auto source + GPS odometer diff distance."""
+    world = await _setup("carauto", club_reg=False)
+    headers = {"Authorization": f"Bearer {world['token']}"}
+    client: AsyncClient = world["client"]
+    base = f"/api/v1/vehicles/{world['vehicle_id']}/logbook"
+
+    created = await client.post(
+        base,
+        json={
+            "started_at": "2026-08-01T09:00:00Z",
+            "source": "car_auto",
+            "reason": "Auto-logged (Car Kit)",
+        },
+        headers=headers,
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["source"] == "car_auto", created.text
+
+    done = await client.patch(
+        f"{base}/{created.json()['id']}",
+        json={
+            "ended_at": "2026-08-01T10:00:00Z",
+            "status": "completed",
+            "distance_km": 42.5,
+        },
+        headers=headers,
+    )
+    assert done.status_code == 200, done.text
+    assert done.json()["status"] == "completed", done.text
+    assert done.json()["source"] == "car_auto", done.text
+    # Caller-provided GPS distance is authoritative (not recomputed from odo).
+    assert done.json()["distance_km"] == 42.5, done.text
+
+    await client.aclose()
+

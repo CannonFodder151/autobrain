@@ -29,16 +29,29 @@ class IgnitionSample {
 
 enum IgnitionState { unknown, off, on }
 
+/// The shared "car connected" abstraction. Both auto-trip trigger paths emit
+/// this into the same recorder (the auto start/stop service):
+///  - OBD/VGate dongle path (AUT-362): ignition voltage/RPM → connected/disconnected
+///  - Phone/car-kit path (AUT-367): head-unit BT link + GPS speed guard
+///    (see [CarKitTripMonitor]) → connected/disconnected
+enum CarConnectionState { disconnected, connected }
+
 /// An in-progress trip kept in the local buffer.
 class ActiveTrip {
-  const ActiveTrip({required this.vehicleId, required this.startedAt});
+  const ActiveTrip({
+    required this.vehicleId,
+    required this.startedAt,
+    this.source = 'obd_auto',
+  });
 
   final String vehicleId;
   final DateTime startedAt;
+  final String source;
 
   Map<String, dynamic> toJson() => {
         'vehicleId': vehicleId,
         'startedAt': startedAt.toIso8601String(),
+        'source': source,
       };
 
   static ActiveTrip? fromJson(Map<String, dynamic>? j) {
@@ -46,7 +59,10 @@ class ActiveTrip {
     final started = DateTime.tryParse(j['startedAt'] as String? ?? '');
     final vehicleId = j['vehicleId'] as String?;
     if (vehicleId == null || started == null) return null;
-    return ActiveTrip(vehicleId: vehicleId, startedAt: started);
+    return ActiveTrip(
+        vehicleId: vehicleId,
+        startedAt: started,
+        source: j['source'] as String? ?? 'obd_auto');
   }
 }
 
@@ -56,16 +72,28 @@ class PendingTrip {
     required this.vehicleId,
     required this.startedAt,
     required this.endedAt,
+    this.distanceKm,
+    this.source = 'obd_auto',
   });
 
   final String vehicleId;
   final DateTime startedAt;
   final DateTime endedAt;
 
+  /// Trip distance in km (GPS odometer diff on the phone path, null on the
+  /// OBD path which has no odometer).
+  final double? distanceKm;
+
+  /// Backend `source` tag: `obd_auto` (VGate dongle, AUT-362) or `car_auto`
+  /// (phone car-kit path, AUT-367).
+  final String source;
+
   Map<String, dynamic> toJson() => {
         'vehicleId': vehicleId,
         'startedAt': startedAt.toIso8601String(),
         'endedAt': endedAt.toIso8601String(),
+        if (distanceKm != null) 'distanceKm': distanceKm,
+        'source': source,
       };
 
   static PendingTrip? fromJson(Map<String, dynamic>? j) {
@@ -75,7 +103,12 @@ class PendingTrip {
     final vehicleId = j['vehicleId'] as String?;
     if (vehicleId == null || started == null || ended == null) return null;
     return PendingTrip(
-        vehicleId: vehicleId, startedAt: started, endedAt: ended);
+      vehicleId: vehicleId,
+      startedAt: started,
+      endedAt: ended,
+      distanceKm: (j['distanceKm'] as num?)?.toDouble(),
+      source: j['source'] as String? ?? 'obd_auto',
+    );
   }
 }
 
@@ -208,6 +241,28 @@ class ObdTripRecorder {
     await _endTrip();
   }
 
+  /// Shared "car connected" feed — both auto-trip trigger paths converge here.
+  ///
+  /// The phone/car-kit path (AUT-367) feeds this with the outcome of its BT
+  /// connection + GPS speed guard; the OBD path (AUT-362) reaches the same
+  /// start/stop lifecycle through [feed] and [onLinkDrop]. Connected starts a
+  /// trip, disconnected closes it (with an optional GPS-odometer distance).
+  ///
+  /// The caller owns debounce/speed-guard policy; this is the plain start/stop
+  /// seam so both triggers drive one recorder.
+  Future<void> feedCarConnection(
+    CarConnectionState state, {
+    double? distanceKm,
+    String source = 'obd_auto',
+  }) async {
+    switch (state) {
+      case CarConnectionState.connected:
+        await _startTrip(source: source);
+      case CarConnectionState.disconnected:
+        await _endTrip(distanceKm: distanceKm);
+    }
+  }
+
   IgnitionState _intent(IgnitionSample s) {
     if (s.rpm != null && s.rpm! > 0) return IgnitionState.on;
     final v = s.voltage;
@@ -217,20 +272,27 @@ class ObdTripRecorder {
     return IgnitionState.unknown; // 12.8-13.2 V band: hold
   }
 
-  Future<void> _startTrip() async {
+  Future<void> _startTrip({String source = 'obd_auto'}) async {
     if (_active != null) return;
     if (_vehicleId == null) return; // nothing bound yet
-    _active = ActiveTrip(vehicleId: _vehicleId!, startedAt: now());
+    _active = ActiveTrip(
+        vehicleId: _vehicleId!, startedAt: now(), source: source);
     await _writeActive();
   }
 
-  Future<void> _endTrip() async {
+  Future<void> _endTrip({double? distanceKm}) async {
     final t = _active;
     if (t == null) return;
     _active = null;
     _pending = [
       ..._pending,
-      PendingTrip(vehicleId: t.vehicleId, startedAt: t.startedAt, endedAt: now()),
+      PendingTrip(
+        vehicleId: t.vehicleId,
+        startedAt: t.startedAt,
+        endedAt: now(),
+        distanceKm: distanceKm,
+        source: t.source,
+      ),
     ];
     await _writeActive();
     await _writePending();

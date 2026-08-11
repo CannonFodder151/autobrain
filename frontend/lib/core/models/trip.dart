@@ -7,7 +7,7 @@ class LogEntry {
   final double? distanceKm;
   final String purpose; // work/private
   final String? reason;
-  final String source; // manual/obd_auto
+  final String source; // manual/obd_auto/car_auto
   final String? startLocation, endLocation;
   final double? startLat, startLng, endLat, endLng;
   final String status; // in_progress/completed
@@ -32,7 +32,12 @@ class LogEntry {
   });
 
   bool get isComplete => status == 'completed';
-  bool get isAutoLogged => source == 'obd_auto';
+  bool get isAutoLogged =>
+      source == 'obd_auto' || source == 'car_auto';
+
+  /// Short label shown next to auto-logged trips (AUT-362 OBD / AUT-367 car-kit).
+  String get autoSourceLabel =>
+      source == 'car_auto' ? 'auto (car kit)' : 'auto (OBD)';
 
   factory LogEntry.fromJson(Map<String, dynamic> j) => LogEntry(
         id: j['id'] as String,

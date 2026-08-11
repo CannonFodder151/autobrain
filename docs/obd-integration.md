@@ -66,6 +66,18 @@ a leave-in trip logger, GoFar-style, entirely app-side:
   the adapter still sleeps on ignition-off (we never ping it awake); iOS is out of
   scope for the iCar Pro (see below).
 
+## Phone path (AUT-367) — car-kit Bluetooth, no OBD adapter
+
+Complementary to the VGate path and sharing the SAME auto start/stop recorder
+(`feedCarConnection` on `ObdTripRecorder`): when the phone links to the car's
+head-unit/car-kit Bluetooth (Android ACL broadcasts over a platform event
+channel), a trip is armed, then starts once GPS speed is sustained above a
+threshold (`lib/services/car/car_kit_trip_monitor.dart`); the link dropping or
+the car going quiet closes the trip with distance from the GPS odometer diff.
+Requires no Android Auto approval (it is phone-side only). Backend accepts
+`source=car_auto` trips and a caller-provided `distance_km` on logbook update;
+the logbook labels these "auto (car kit)". Deterministic, no AI.
+
 ## Next steps (mobile app)
 
 1. **Adapter + protocol** — pick a generic ELM327/OBDLink adapter supporting logging and sleep-on-idle; log standard OBD-II PIDs; validate the (non-universal) odometer PID per make; plan dashboard-photo OCR / manual entry fallbacks. ✅ ELM327 SPP on Android shipped (AUT-362).
