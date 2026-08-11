@@ -93,11 +93,12 @@ jobs:
           set -euo pipefail
           VERSION="$(grep -E 'APP_VERSION: str' backend/app/core/config.py | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/')"
           echo "==> building images tagged with version $VERSION"
-          for svc in backend ai frontend; do
+          for svc in backend ai frontend market-data; do
             case "$svc" in
               backend)  ctx=.;        df=docker/backend/Dockerfile;   args="";;
               ai)       ctx=./ai;     df=docker/ai/Dockerfile;         args="";;
               frontend) ctx=.;        df=docker/frontend/Dockerfile;   args="--build-arg API_BASE_URL=${API_BASE_URL} --build-arg WS_BASE_URL=${WS_BASE_URL}";;
+              market-data) ctx=./market-data; df=market-data/Dockerfile; args="";;
             esac
             for tag in latest hosted "$VERSION"; do
               echo "==> building autobrain-${svc}:${tag}"
