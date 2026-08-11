@@ -102,3 +102,22 @@ endpoint. Market data is best-effort — never blocks the estimate.
 `sample_size=0`, and valuation behaves exactly as before (deterministic model
 + AI advice). Everything works offline; the search UI shows "provider not
 configured".
+
+## Deploying the scraper (AUT-290)
+
+The scraper lives in the monorepo as `market-data/` (FastAPI + `carsguide.py`).
+Image: `cannonfodder151/autobrain-market-data:hosted` (Docker Hub, multi-arch)
+or `ghcr.io/cannonfodder151/autobrain-market-data:hosted` (GHCR).
+
+- **Dev box mirror:** Portainer stack `market-data` on EP6, `:8003`.
+- **Hosted:** a `market-data` service inside the `autobrain-hosted` stack
+  (EP5), reachable by the backend as `http://market-data:8000`; the backend is
+  wired via `MARKET_DATA_URL`/`MARKET_DATA_API_KEY` (stack env).
+- **Gotcha:** the current backend config refuses *default* credentials in
+  `production` (`POSTGRES_PASSWORD`/`MINIO_SECRET_KEY` = `autobrain`,
+  `SECRET_KEY` = `change-me`). Before the hosted backend can boot on the
+  current image the stack's postgres role and MinIO root password must be
+  rotated to real values AND reflected in the stack env — rotate the Postgres
+  role with `ALTER USER ... PASSWORD '...'` and MinIO with
+  `mc admin user set-password`, then redeploy. The demo/default tiers have the
+  same latent debt.
