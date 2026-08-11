@@ -42,7 +42,7 @@ async def check_latest_release() -> dict:
                 result["published_at"] = release.get("published_at")
                 result["html_url"] = release.get("html_url")
                 if tag:
-                    result["up_to_date"] = _compare(current_version(), tag) <= 0
+                    result["up_to_date"] = _compare(current_version(), tag) >= 0
                 return result
 
             # 2) No releases yet — fall back to the latest commit on main.
@@ -60,7 +60,7 @@ async def check_latest_release() -> dict:
                 repo_version = _pubspec_version(pubspec)
                 if repo_version:
                     result["repo_version"] = repo_version
-                    result["up_to_date"] = _compare(current_version(), repo_version) <= 0
+                    result["up_to_date"] = _compare(current_version(), repo_version) >= 0
                 return result
 
             # GitHub reachable but neither releases nor commits found.
