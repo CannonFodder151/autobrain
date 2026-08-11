@@ -228,7 +228,7 @@ def estimate_value_fallback(payload: dict, rrp: float | None = None,
         "factors": factors,
         "recommendations": recommendations,
         "trend": [],
-        "model": "rrp-depreciation" if use_rrp else "rule-based-fallback",
+        "model": "market-anchored" if "market_median" in factors else ("rrp-depreciation" if use_rrp else "rule-based-fallback"),
     }
 
 
