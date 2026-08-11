@@ -19,7 +19,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.17] - 2026-08-11
 
 ### Added
 - Public `GET /api/v1/version/mobile` endpoint that reports the latest
