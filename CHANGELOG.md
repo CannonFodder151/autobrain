@@ -12,6 +12,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- Live used-car market data for valuations (AUT-287): resale estimates now anchor on real CarsGuide/CarSales listings fetched through a self-hosted market-data API (`MARKET_DATA_URL` + `MARKET_DATA_API_KEY`), cached 24h per make/model/year so repeated valuations return identical numbers. `GET /api/v1/vehicles/{id}/valuation/market` returns the listings + median/low/high aggregates; `.../valuation/market/search` searches live listings. When no provider is configured the deterministic model + AI advice path still runs with `source=fallback`.
+
 ## [0.3.7] - 2026-08-11
 
 ### Added
