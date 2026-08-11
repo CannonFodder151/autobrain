@@ -90,7 +90,8 @@ release version everywhere in one shot (see `docs/versioning.md`).
    **both** tiers (no manual step, order irrelevant here since the image is
    immutable once pushed):
    - On-prem: Portainer stack `plate-api-scraper` (EP2, `10.0.3.17:8011`), stack id **75**.
-   - Hosted: Portainer stack `rego-lookup` (EP5, `152.69.188.133:8011`), stack id **85**.
+   - Hosted: Portainer stack `rego-lookup` (EP5, `152.69.188.133:8011`), stack id **85** —
+     port is bound to `127.0.0.1` only (loopback, AUT-316), never a public IP.
 
 Secrets live on the `rego-lookup-api` repo: `PORTAINER_URL`, `PORTAINER_API_KEY`,
 `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`. The deploy job re-applies each stack's
