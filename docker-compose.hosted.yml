@@ -91,7 +91,7 @@ services:
       AI_ROUTER_TIMEOUT_SECONDS: 120
       REGO_LOOKUP_URL: ${REGO_LOOKUP_URL:-}
       REGO_LOOKUP_API_KEY: ${REGO_LOOKUP_API_KEY:-}
-      MARKET_DATA_URL: ${MARKET_DATA_URL:-}
+      MARKET_DATA_URL: ${MARKET_DATA_URL:-http://market-data:8000}
       MARKET_DATA_API_KEY: ${MARKET_DATA_API_KEY:-}
       AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:?AI_GATEWAY_API_KEY must be set in the hosted stack env (Portainer)}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@autobrain.io}
@@ -141,6 +141,14 @@ services:
       AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:?AI_GATEWAY_API_KEY must be set in the hosted stack env (Portainer)}
     expose:
       - "8001"
+
+  market-data:
+    image: ghcr.io/cannonfodder151/autobrain-market-data:hosted
+    restart: unless-stopped
+    environment:
+      API_KEY: ${MARKET_DATA_API_KEY:-}
+    expose:
+      - "8000"
 
   worker:
     image: ghcr.io/cannonfodder151/autobrain-worker:hosted
