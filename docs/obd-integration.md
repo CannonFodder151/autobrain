@@ -24,13 +24,25 @@ Backend (`backend/app/api/v1/obd.py`, `/vehicles/{id}/obd`):
 
 Frontend (`frontend/lib/screens/obd/obd_screen.dart`): "Work in progress" banner + codes library, VIN autofill, auto-connect switch, admin-gate lock screen.
 
+## What exists now (mobile app — AUT-272)
+
+`autobrain-mobile` (private repo, split from `frontend/`):
+
+- **`lib/services/obd/elm327.dart`** — pure-Dart ELM327/OBD-II protocol layer (transport-agnostic): AT init, mode 01 PID decode (10 live PIDs incl. RPM/speed/coolant/MAF/throttle), supported-PID probing, mode 03/07 DTC decode with a deterministic code→meaning table, mode 09 VIN decode. Unit-tested (`test/elm327_test.dart`) against captured adapter replies — no hardware needed.
+- **`lib/services/obd/obd_bt_transport.dart`** — Bluetooth Classic SPP transport via `flutter_bluetooth_serial_plus` (AGP-8-compatible fork; the original 0.4.0 package lacks `namespace` and fails modern Gradle builds). Android only — iOS has no public Bluetooth Classic.
+- **`lib/services/obd/obd_connection.dart`** — connection lifecycle (enable BT, list bonded devices, connect, init session, remember last adapter in prefs for auto-connect).
+- **`lib/screens/obd/obd_screen.dart`** — live connect card: adapter picker (bonded list), connect/disconnect, live PID chips (polled every 2 s), "Read fault codes" (mode 03+07 → saved to backend, deduped), auto VIN autofill on first connect, auto-connect when `obd_auto_connect` is on. Existing codes library + "Diagnose with AI" retained.
+- Android manifest gained `BLUETOOTH`/`BLUETOOTH_ADMIN` (≤API 30) + `BLUETOOTH_CONNECT`/`BLUETOOTH_SCAN`.
+
+Verified: `flutter analyze` clean for OBD files, `flutter test` 25 passing, debug APK builds.
+
 ## Next steps (mobile app)
 
 1. **Adapter + protocol** — pick a generic ELM327/OBDLink adapter supporting logging and sleep-on-idle; log standard OBD-II PIDs; validate the (non-universal) odometer PID per make; plan dashboard-photo OCR / manual entry fallbacks.
-2. **Bluetooth transport** — Android: Bluetooth Classic SPP/RFCOMM (ELM327 serial profile). iOS: Bluetooth Classic is not public; use a BLE ELM327 (UART GATT) — the key platform divergence.
+2. **Bluetooth transport** — Android: Bluetooth Classic SPP/RFCOMM (ELM327 serial profile) ✅ shipped. iOS: Bluetooth Classic is not public; use a BLE ELM327 (UART GATT) — the key platform divergence.
 3. **Realtime logging to logbook** — background sampling on Android; ignition-on starts a trip, ignition-off completes it (time, GPS, odo, distance).
-4. **VIN + fault codes** — read VIN (mode 09) on first connect; read DTCs (mode 03/07), save, and offer "Diagnose with AI".
-5. **Account gating** — read `/obd/settings`; show lock screen when `!enabled`.
+4. **VIN + fault codes** — read VIN (mode 09) on first connect ✅ shipped; read DTCs (mode 03/07) ✅ shipped, save, and offer "Diagnose with AI".
+5. **Account gating** — read `/obd/settings`; show lock screen when `!enabled` ✅ shipped.
 
 ## Risks / notes
 
