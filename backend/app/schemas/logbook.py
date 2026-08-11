@@ -13,7 +13,7 @@ class LogEntryCreate(BaseModel):
     start_lng: float | None = None
     purpose: str = Field(default="private", pattern="^(work|private)$")
     reason: str | None = None
-    source: str = Field(default="manual", pattern="^(manual|obd_auto)$")
+    source: str = Field(default="manual", pattern="^(manual|obd_auto|car_auto)$")
 
 
 class LogEntryUpdate(BaseModel):
@@ -21,6 +21,7 @@ class LogEntryUpdate(BaseModel):
     ended_at: datetime | None = None
     start_odometer_km: int | None = None
     end_odometer_km: int | None = None
+    distance_km: float | None = None
     start_location: str | None = None
     end_location: str | None = None
     start_lat: float | None = None
@@ -29,7 +30,7 @@ class LogEntryUpdate(BaseModel):
     end_lng: float | None = None
     purpose: str | None = Field(default=None, pattern="^(work|private)$")
     reason: str | None = None
-    source: str | None = Field(default=None, pattern="^(manual|obd_auto)$")
+    source: str | None = Field(default=None, pattern="^(manual|obd_auto|car_auto)$")
     status: str | None = Field(default=None, pattern="^(in_progress|completed)$")
 
 

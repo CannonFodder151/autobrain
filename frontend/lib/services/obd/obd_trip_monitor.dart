@@ -293,14 +293,16 @@ class ObdTripMonitor extends ChangeNotifier {
     final base = '/vehicles/${trip.vehicleId}/logbook';
     final created = await api.post(base, {
       'started_at': trip.startedAt.toUtc().toIso8601String(),
-      'reason': 'Auto-logged (OBD)',
-      'source': 'obd_auto',
+      'reason':
+          trip.source == 'car_auto' ? 'Auto-logged (Car Kit)' : 'Auto-logged (OBD)',
+      'source': trip.source,
     });
     final id = (created as Map<String, dynamic>)['id'] as String;
     await api.patch('$base/$id', {
       'ended_at': trip.endedAt.toUtc().toIso8601String(),
       'status': 'completed',
-      'source': 'obd_auto',
+      'source': trip.source,
+      if (trip.distanceKm != null) 'distance_km': trip.distanceKm,
     });
     // Remember the latest synced auto trip for the settings status line
     // (AUT-366 Car Play / Android Auto submenu).
