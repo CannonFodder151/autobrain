@@ -14,7 +14,10 @@ class ValuationScreen extends StatefulWidget {
 
 class _ValuationScreenState extends State<ValuationScreen> {
   Valuation? _valuation;
+  MarketData? _market;
   bool _loading = false;
+  bool _marketLoading = false;
+  final _searchCtrl = TextEditingController();
 
   Future<void> _estimate() async {
     final api = context.read<AuthState>().api;
@@ -33,6 +36,40 @@ class _ValuationScreenState extends State<ValuationScreen> {
       }
     } finally {
       setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadMarket({bool refresh = false}) async {
+    final api = context.read<AuthState>().api;
+    setState(() => _marketLoading = true);
+    try {
+      final data = await api.get(
+          '/vehicles/${widget.vehicleId}/valuation/market'
+          '${refresh ? '?refresh=true' : ''}') as Map<String, dynamic>;
+      setState(() => _market = MarketData.fromJson(data));
+    } catch (_) {
+      // Market data is best-effort; never block the estimate on it.
+    } finally {
+      setState(() => _marketLoading = false);
+    }
+  }
+
+  Future<void> _searchMarket() async {
+    final q = _searchCtrl.text.trim();
+    final api = context.read<AuthState>().api;
+    setState(() => _marketLoading = true);
+    try {
+      final data = await api.get(
+          '/vehicles/${widget.vehicleId}/valuation/market/search?q='
+          '${Uri.encodeQueryComponent(q)}') as Map<String, dynamic>;
+      setState(() => _market = MarketData.fromJson(data));
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Market search unavailable')));
+      }
+    } finally {
+      setState(() => _marketLoading = false);
     }
   }
 
@@ -74,6 +111,17 @@ class _ValuationScreenState extends State<ValuationScreen> {
               ),
             ),
           ),
+          const SizedBox(height: 12),
+          _MarketSearch(
+            controller: _searchCtrl,
+            loading: _marketLoading,
+            onSearch: _searchMarket,
+            onRefresh: () => _loadMarket(refresh: true),
+          ),
+          if (_market != null) ...[
+            const SizedBox(height: 12),
+            _MarketCard(data: _market!),
+          ],
           if (_loading)
             const Padding(
               padding: EdgeInsets.all(24),
@@ -160,4 +208,142 @@ class _FactorTable extends StatelessWidget {
   String _pretty(String k) =>
       k.replaceAll('_', ' ').split(' ').map((w) =>
           w.isEmpty ? w : w[0].toUpperCase() + w.substring(1)).join(' ');
+}
+
+class _MarketSearch extends StatelessWidget {
+  const _MarketSearch({
+    required this.controller,
+    required this.loading,
+    required this.onSearch,
+    required this.onRefresh,
+  });
+  final TextEditingController controller;
+  final bool loading;
+  final VoidCallback onSearch;
+  final VoidCallback onRefresh;
+
+  @override
+  Widget build(BuildContext context) => Card(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  textInputAction: TextInputAction.search,
+                  onSubmitted: (_) => onSearch(),
+                  decoration: const InputDecoration(
+                    hintText: 'Search CarsGuide / CarSales…',
+                    isDense: true,
+                    border: InputBorder.none,
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: loading ? null : onSearch,
+                icon: const Icon(Icons.search),
+                tooltip: 'Search live listings',
+              ),
+              IconButton(
+                onPressed: loading ? null : onRefresh,
+                icon: const Icon(Icons.refresh),
+                tooltip: 'Refresh market data',
+              ),
+            ],
+          ),
+        ),
+      );
+}
+
+class _MarketCard extends StatelessWidget {
+  const _MarketCard({required this.data});
+  final MarketData data;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text('Live market data',
+                    style: theme.textTheme.titleMedium),
+                const Spacer(),
+                Text(
+                  data.source,
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (data.hasData) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: _Stat(label: 'Median', value: '\$${data.medianPrice!.round()}'),
+                  ),
+                  Expanded(
+                    child: _Stat(
+                        label: 'Range',
+                        value: '\$${data.lowPrice!.round()}–\$${data.highPrice!.round()}'),
+                  ),
+                  Expanded(
+                    child: _Stat(label: 'Listings', value: '${data.sampleSize}'),
+                  ),
+                ],
+              ),
+              if (data.stale)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text('Cached data (24h)', style: theme.textTheme.bodySmall),
+                ),
+            ] else
+              Text(
+                'No live listings yet — provider not configured. '
+                'Valuation uses the built-in model.',
+                style: theme.textTheme.bodySmall,
+              ),
+            if (data.listings.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              for (final l in data.listings.take(5))
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Text(
+                    '${l.year ?? ''} ${l.title}'
+                    '${l.price != null ? ' — \$${l.price!.round()}' : ''}'
+                    '${l.odometerKm != null ? ' · ${l.odometerKm} km' : ''}',
+                    style: theme.textTheme.bodySmall,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Stat extends StatelessWidget {
+  const _Stat({required this.label, required this.value});
+  final String label, value;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: Theme.of(context).textTheme.bodySmall),
+          Text(value,
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.bold)),
+        ],
+      );
 }

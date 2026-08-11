@@ -15,8 +15,14 @@ from app.models.mod import Modification
 from app.models.service import ServiceRecord
 from app.models.user import User
 from app.models.valuation import ValuationSnapshot
-from app.schemas.valuation import ValuationOut, ValuationRequest, ValuationResponse
+from app.schemas.valuation import (
+    MarketDataResponse,
+    ValuationOut,
+    ValuationRequest,
+    ValuationResponse,
+)
 from app.services.ai_client import estimate_value
+from app.services.market_data import get_market_data, search_market
 
 router = APIRouter(prefix="/vehicles/{vehicle_id}/valuation", tags=["valuation"])
 
@@ -78,6 +84,7 @@ async def valuate(
     fuel = list((await db.scalars(
         select(FuelLog).where(FuelLog.vehicle_id == vehicle_id).order_by(FuelLog.fill_date)
     )).all())
+    market = await get_market_data(db, vehicle.make, vehicle.model, vehicle.year)
     data = {
         "vehicle": {
             "make": vehicle.make, "model": vehicle.model, "year": vehicle.year,
@@ -92,11 +99,13 @@ async def valuate(
             round(sum(f.l_per_100km for f in fuel if f.l_per_100km) / sum(1 for f in fuel if f.l_per_100km), 2)
             if any(f.l_per_100km for f in fuel) else None
         ),
+        "market": market,
         **((payload.extra_context or {})),
     }
     result = await estimate_value(data)
     if not result:
         raise HTTPException(status_code=503, detail="Valuation engine unavailable")
+    result["market"] = market
     snapshot = ValuationSnapshot(
         vehicle_id=vehicle_id,
         estimated_value=result["estimated_value"],
@@ -131,4 +140,34 @@ async def valuation_history(
         .order_by(ValuationSnapshot.created_at.desc())
     )
     return list(rows)
+
+
+@router.get("/market", response_model=MarketDataResponse)
+async def vehicle_market_data(
+    vehicle_id: str,
+    refresh: bool = False,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Live CarsGuide/CarSales market data for this vehicle (cached 24h)."""
+    vehicle = await get_accessible_vehicle(db, vehicle_id, user)
+    data = await get_market_data(db, vehicle.make, vehicle.model, vehicle.year, refresh=refresh)
+    data["query"] = f"{vehicle.make} {vehicle.model} {vehicle.year}".strip()
+    return data
+
+
+@router.get("/market/search", response_model=MarketDataResponse)
+async def market_search(
+    vehicle_id: str,
+    q: str = "",
+    refresh: bool = False,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Search live CarsGuide/CarSales listings (cached 24h per query)."""
+    vehicle = await get_accessible_vehicle(db, vehicle_id, user)
+    query = q.strip() or f"{vehicle.make} {vehicle.model}".strip()
+    data = await search_market(db, query, refresh=refresh)
+    data["query"] = query
+    return data
 

@@ -240,5 +240,87 @@ async def test_resale_run_enrichment_computes_once(monkeypatch) -> None:
     assert out["recommendations"][0] == "Sell now"
 
 
+@pytest.mark.asyncio
+async def test_resale_run_market_data_computes_once(monkeypatch) -> None:
+    # AUT-287: real market median is the used_price the single compute sees.
+    from app.modules import resale as resale_mod
+
+    calls: list = []
+    real = resale_mod.estimate_value_fallback
+
+    def counting(*args, **kwargs):
+        result = real(*args, **kwargs)
+        calls.append((args, kwargs, result))
+        return result
+
+    monkeypatch.setattr(resale_mod, "estimate_value_fallback", counting)
+    monkeypatch.setattr(resale_mod, "enhance", _async_identity)
+
+    out = await resale_mod.run({
+        "vehicle": {"make": "Toyota", "model": "Crown", "year": 1997,
+                    "odometer_km": 120000, "condition": "good"},
+        "market": {"source": "carsguide", "sample_size": 6, "median_price": 15000.0},
+    })
+    assert len(calls) == 1
+    assert calls[0][1]["used_price"] == 15000.0
+    assert out["factors"]["market_median"] == 15000.0
+
+
 async def _async_identity(module, payload, baseline):
     return baseline
+
+
+def test_resale_market_data_anchors_crown() -> None:
+    # Regression for AUT-287: the deterministic model undervalues a Toyota
+    # Crown (~8k via the make-default anchor). Real CarsGuide/CarSales listings
+    # (median ~15k) must anchor the estimate instead.
+    out = estimate_value_fallback({
+        "vehicle": {"make": "Toyota", "model": "Crown", "year": 1997,
+                    "odometer_km": 120000, "condition": "good"},
+        "market": {"source": "carsguide", "sample_size": 6,
+                   "median_price": 15000.0, "low_price": 12000.0, "high_price": 18000.0},
+    })
+    assert out["factors"]["market_median"] == 15000.0
+    assert 10000 <= out["estimated_value"] <= 17000
+    assert out["factors"]["market_sample"] == 6
+
+
+def test_resale_market_data_stable_across_calls() -> None:
+    # Cached market data must produce the same number every call (no AI wobble).
+    payload = {
+        "vehicle": {"make": "Toyota", "model": "Crown", "year": 1997,
+                    "odometer_km": 120000, "condition": "good"},
+        "market": {"source": "carsales", "sample_size": 8, "median_price": 15100.0},
+    }
+    first = estimate_value_fallback(payload)["estimated_value"]
+    second = estimate_value_fallback(payload)["estimated_value"]
+    assert first == second
+
+
+def test_resale_market_data_bad_median_floored() -> None:
+    # An absurd median can't collapse the estimate below half the
+    # deterministic model's own number.
+    det = estimate_value_fallback({
+        "vehicle": {"make": "Toyota", "model": "Crown", "year": 1997,
+                    "odometer_km": 120000, "condition": "good"},
+    })["estimated_value"]
+    out = estimate_value_fallback({
+        "vehicle": {"make": "Toyota", "model": "Crown", "year": 1997,
+                    "odometer_km": 120000, "condition": "good"},
+        "market": {"source": "carsguide", "sample_size": 10, "median_price": 100.0},
+    })
+    assert out["estimated_value"] >= 0.5 * det
+
+
+def test_resale_market_data_tiny_sample_ignored() -> None:
+    # <3 listings is not a reliable market — fall back to the AI used_price band.
+    det = estimate_value_fallback({
+        "vehicle": {"make": "Ford", "model": "Everest Trend", "year": 2025,
+                    "odometer_km": 5000, "condition": "good"},
+    })["estimated_value"]
+    out = estimate_value_fallback({
+        "vehicle": {"make": "Ford", "model": "Everest Trend", "year": 2025,
+                    "odometer_km": 5000, "condition": "good"},
+        "market": {"source": "carsales", "sample_size": 2, "median_price": 300000.0},
+    }, used_price=57800.0)
+    assert 0.8 * det <= out["estimated_value"] <= 1.2 * det

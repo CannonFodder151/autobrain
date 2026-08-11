@@ -11,6 +11,28 @@ class ValuationRequest(BaseModel):
     extra_context: dict | None = None
 
 
+class MarketListing(BaseModel):
+    title: str = ""
+    price: float | None = None
+    year: int | None = None
+    odometer_km: int | None = None
+    source: str = ""
+    url: str = ""
+
+
+class MarketDataResponse(BaseModel):
+    query: str = ""
+    source: str = "fallback"
+    listings: list[MarketListing] = []
+    median_price: float | None = None
+    low_price: float | None = None
+    high_price: float | None = None
+    sample_size: int = 0
+    as_of: str | None = None
+    stale: bool = False
+    note: str | None = None
+
+
 class ValuationResponse(BaseModel):
     estimated_value: float
     low: float
@@ -20,6 +42,7 @@ class ValuationResponse(BaseModel):
     recommendations: list[str]
     trend: list[dict]
     model: str
+    market: MarketDataResponse | None = None
 
 
 class ValuationOut(BaseModel):

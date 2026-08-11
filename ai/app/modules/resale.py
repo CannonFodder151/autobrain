@@ -61,13 +61,21 @@ async def run(payload: dict) -> dict:
     # end with whatever facts are available — never twice.
     merged = await enhance("resale", payload, {})
     vehicle = payload.get("vehicle", {})
+    market = payload.get("market") if isinstance(payload.get("market"), dict) else {}
+    # Deterministic market data (CarsGuide/CarSales listings median) wins over
+    # the AI's guessed used_price: real, cached, stable across calls. The AI
+    # guess only fills in when no live listings are available.
+    used_price = market.get("median_price") or merged.get("used_price")
     # Deterministic table RRP wins; AI rrp fills gaps for unknown recent models.
     rrp = rrp_for(vehicle)
     if rrp is None:
         rrp = _f(merged.get("rrp"))
-    used_price = _f(merged.get("used_price"))
     try:
         result = estimate_value_fallback(payload, rrp=rrp, used_price=used_price)
+        if market.get("sample_size"):
+            result.setdefault("factors", {})["market_median"] = market.get("median_price")
+            result["factors"]["market_source"] = market.get("source")
+            result["factors"]["market_sample"] = market.get("sample_size")
         # Preserve AI-enriched advice/trend where provided.
         for key in ("recommendations", "trend"):
             if merged.get(key) is not None:

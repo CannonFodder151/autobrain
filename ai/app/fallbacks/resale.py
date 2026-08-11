@@ -176,9 +176,32 @@ def estimate_value_fallback(payload: dict, rrp: float | None = None,
     factors["service_records"] = payload.get("service_count", 0)
     factors["modification_value_delta"] = round(mods_value, 0)
 
+    # Real market data (CarsGuide/CarSales listings median) anchors the
+    # estimate — it is the ground truth for a used car. The deterministic
+    # model stays as a sanity floor so a bad median can't collapse the value.
+    # This also makes consecutive valuations stable: the median is cached, so
+    # the number no longer re-rolls with every AI inference.
+    market = payload.get("market") if isinstance(payload.get("market"), dict) else {}
+    if market.get("sample_size", 0) >= 3 and market.get("median_price"):
+        median = float(market["median_price"])
+        km_mult = 1.0
+        if odo:
+            expected_km = max(age * 15000, 1)
+            km_ratio = odo / expected_km
+            if km_ratio > 1.1:
+                km_mult = max(1.0 - (km_ratio - 1) * 0.10, 0.6)
+            elif km_ratio < 0.9:
+                km_mult = 1.0 + (0.9 - km_ratio) * 0.08
+        value = max(median * cond_mult * km_mult + mods_value, value * 0.5)
+        factors["market_median"] = round(median, 2)
+        factors["market_source"] = str(market.get("source", "provider"))
+        factors["market_sample"] = market.get("sample_size", 0)
+        confidence = 0.92
+
     # AI-supplied current selling price refines the estimate, clamped to a
     # sane band around the deterministic number so a bad fact can't skew it.
-    if used_price and used_price > 0:
+    # (Unused when real market data above already anchored the value.)
+    if used_price and used_price > 0 and "market_median" not in factors:
         band_low, band_high = value * 0.85, value * 1.15
         value = min(max(used_price, band_low), band_high)
 

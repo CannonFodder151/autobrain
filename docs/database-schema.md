@@ -92,6 +92,10 @@ id, receipt_id (FK), kind (part/labour), name, quantity, unit_cost, warranty_mon
 
 id, vehicle_id (FK), estimated_value, low, high, currency, factors (JSON), recommendations (JSON), created_at.
 
+## market_listing_cache
+
+id, make, model, year, source, listings (JSON), median_price, low_price, high_price, sample_size, fetched_at. UNIQUE(make, model, year). 24h cache of CarsGuide/CarSales market data feeding resale valuations (see market-data.md).
+
 ## notification_preferences
 
 id, user_id (FK), vehicle_id (FK), push/email/discord_enabled, service_due_days, service_due_km, fuel_gap_km, discord_webhook_url, fcm_token, created_at, updated_at. UNIQUE(user_id, vehicle_id).
