@@ -20,18 +20,18 @@ void main() {
 
   test('write then read round-trips token and role', () async {
     await store.write(token: 'jwt-abc', role: 'admin');
-    expect(await store.read(), ('jwt-abc', 'admin'));
+    expect(await store.read(), ('jwt-abc', null, 'admin'));
   });
 
   test('role defaults to user when not supplied', () async {
     await store.write(token: 'jwt-abc');
-    expect(await store.read(), ('jwt-abc', 'user'));
+    expect(await store.read(), ('jwt-abc', null, 'user'));
   });
 
   test('clear removes the stored session', () async {
     await store.write(token: 'jwt-abc', role: 'admin');
     await store.clear();
-    expect(await store.read(), (null, null));
+    expect(await store.read(), (null, null, null));
   });
 
   test('migrates legacy SharedPreferences session into secure storage', () async {
@@ -41,7 +41,7 @@ void main() {
       'dark_mode': true,
     });
 
-    expect(await store.read(), ('legacy-jwt', 'demo'));
+    expect(await store.read(), ('legacy-jwt', null, 'demo'));
 
     expect(secure['auth_token'], 'legacy-jwt');
     expect(secure['auth_role'], 'demo');

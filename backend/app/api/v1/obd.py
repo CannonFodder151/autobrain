@@ -2,7 +2,8 @@
 
 Fault codes captured from a Bluetooth OBD2 adapter can be saved here and
 pushed into the existing diagnostic AI tool. OBD access is admin-granted per
-account; a VIN read from the adapter backfills the vehicle if missing.
+account; the VIN is updated only on explicit user action (manual entry or the
+"Update VIN" button in the app), never silently on connect.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -54,8 +55,8 @@ async def set_obd_vin(
 ) -> Vehicle:
     vehicle = await get_accessible_vehicle(db, vehicle_id, user)
     _require_obd(user, vehicle)
-    if vehicle.vin and len(vehicle.vin) >= 5:
-        raise HTTPException(status_code=409, detail="Vehicle already has a VIN")
+    # Explicit user action (manual entry or the "Update VIN" OBD button), so an
+    # existing VIN is replaced rather than rejected (AUT-361).
     vehicle.vin = payload.vin
     await db.commit()
     await db.refresh(vehicle)
