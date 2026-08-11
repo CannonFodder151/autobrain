@@ -82,6 +82,10 @@ class Settings(BaseSettings):
     MFA_ENFORCED: bool = False  # force MFA setup for all accounts except demo
     LOGIN_MAX_ATTEMPTS: int = 5  # failed logins allowed per IP before lockout
     LOGIN_WINDOW_SECONDS: int = 3 * 60 * 60  # lockout window (3 hours)
+    # Per-IP burst limit for unauthenticated auth endpoints (signup, password
+    # reset) — slows account enumeration, signup spam and mail-bomb DoS (AUT-304).
+    AUTH_BURST_LIMIT: int = 5  # requests allowed per window
+    AUTH_BURST_WINDOW_SECONDS: int = 60  # sliding window for the burst limit
 
     # Push notifications (Firebase Cloud Messaging). Optional — push alerts are
     # skipped when unset; email/discord still work.

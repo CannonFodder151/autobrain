@@ -26,6 +26,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- Security (AUT-304): `POST /auth/signup` revealed registered emails (409 "Email already registered" vs 201 for new accounts) and neither signup nor `POST /auth/password-reset/request` was rate-limited, enabling account enumeration, signup spam and SMTP mail-bomb DoS. Signup now returns the same 201 + generic body for an already-registered email (no email sent, response never reveals account existence), and both endpoints enforce a per-IP burst limit (`AUTH_BURST_LIMIT`=5 requests per `AUTH_BURST_WINDOW_SECONDS`=60s sliding window in Redis, using the trusted `X-Real-IP` client-IP helper) that answers >5 rapid requests with 429.
+
 ## [0.3.21] - 2026-08-12
 
 ### Fixed
