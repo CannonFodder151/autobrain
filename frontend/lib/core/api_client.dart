@@ -45,6 +45,7 @@ class ApiException implements Exception {
 class ApiClient {
   ApiClient(this._token);
   final String? _token;
+  static const Duration _timeout = Duration(seconds: 30);
 
   Future<dynamic> get(String path) => _send('GET', path);
   Future<dynamic> post(String path, [Object? body]) => _send('POST', path, body);
@@ -63,8 +64,8 @@ class ApiClient {
         filename: filename,
         contentType: MediaType.parse(contentType),
       ));
-    final streamed = await request.send();
-    final response = await http.Response.fromStream(streamed);
+    final streamed = await request.send().timeout(_timeout);
+    final response = await http.Response.fromStream(streamed).timeout(_timeout);
     return _decode(response);
   }
 
@@ -78,19 +79,19 @@ class ApiClient {
     final encoded = body == null ? null : jsonEncode(body);
     switch (method) {
       case 'GET':
-        response = await http.get(uri, headers: headers);
+        response = await http.get(uri, headers: headers).timeout(_timeout);
         break;
       case 'DELETE':
-        response = await http.delete(uri, headers: headers);
+        response = await http.delete(uri, headers: headers).timeout(_timeout);
         break;
       case 'POST':
-        response = await http.post(uri, headers: headers, body: encoded);
+        response = await http.post(uri, headers: headers, body: encoded).timeout(_timeout);
         break;
       case 'PATCH':
-        response = await http.patch(uri, headers: headers, body: encoded);
+        response = await http.patch(uri, headers: headers, body: encoded).timeout(_timeout);
         break;
       case 'PUT':
-        response = await http.put(uri, headers: headers, body: encoded);
+        response = await http.put(uri, headers: headers, body: encoded).timeout(_timeout);
         break;
       default:
         throw ApiException(400, 'Unsupported method');
@@ -118,7 +119,7 @@ class ApiClient {
     final uri = Uri.parse('${AppConfig.apiBase}$path');
     final response = await http.get(uri, headers: {
       if (_token != null) 'Authorization': 'Bearer $_token',
-    });
+    }).timeout(_timeout);
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return response.bodyBytes;
     }
