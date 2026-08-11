@@ -15,6 +15,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- Hosted/default blank white screen (AUT-339): frontend CSP now allowlists `https://www.gstatic.com` in `script-src`/`connect-src`/`img-src`/`font-src` so the Flutter CanvasKit engine bundle can load; previously `script-src 'self'` and `connect-src 'self'` blocked `canvaskit.js`/`canvaskit.wasm`, so the web app never bootstrapped.
+
 ## [0.3.10] - 2026-08-11
 
 ### Fixed
