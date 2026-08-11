@@ -32,6 +32,10 @@ gate blocks the release at that tier.
 - [ ] **Verify the feature is actually present** on each tier — exercise the
       flow (open the new screen, hit the new endpoint), not just the version
       banner.
+- [ ] **Post-deploy prune** — run `scripts/prune-images.sh` to drop dangling
+      build-layer images on EP2 (Portainer-Host) + EP5 (AutoBrain-Hosted).
+      Deploys are the main source of dangling images (AUT-350); prune every
+      release so ~30-70GB does not accumulate between weekly prunes.
 - [ ] Note promotion order + verification result in the issue / `#updates`
       channel.
 
