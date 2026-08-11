@@ -1,11 +1,7 @@
-# AutoBrain HOSTED stack — self-service Free signup + Stripe subscriptions.
-# Deployed via Portainer (endpoint 5) on the Oracle Cloud VM.
-# Uses prebuilt `cannonfodder151/autobrain-*:hosted` Docker Hub images.
-# Frontend nginx on :8086 → box reverse proxy → hosted.autobrainservice.app.
-# Self-signup enabled, MFA enforced, LICENSE_ENABLED=true.
-#
-# Secrets interpolated from Portainer stack env vars or local .env.
-# Never commit real values.
+# AutoBrain HOSTED stack — Portainer stack "autobrain-hosted" (EP5, Oracle Cloud 152.69.188.133)
+# Restored to match the actual running services (AUT-101). Project name: autobrain-hosted.
+# App images from GHCR (what the host actually runs). Secrets interpolated from Portainer stack env.
+# Env must stay applied via the stack so redeploys never revert SMTP2GO/SMTP_* (see AUT-97/AUT-101).
 
 x-core-env: &core-env
   REDIS_URL: redis://redis:6379/0
@@ -16,9 +12,6 @@ x-core-env: &core-env
   MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY must be set}
   MINIO_BUCKET: ${MINIO_BUCKET:-autobrain-assets}
   AI_LOCAL_BASE_URL: http://ai:8001
-  AI_ROUTER_URL: ${AI_ROUTER_URL:-http://your-9router-instance:port/v1}
-  AI_ROUTER_API_KEY: ${AI_ROUTER_API_KEY:-}
-  AI_ROUTER_MODEL: ${AI_ROUTER_MODEL:-General-Use}
 
 x-db-env: &db-env
   ENVIRONMENT: production
@@ -27,10 +20,14 @@ x-db-env: &db-env
   POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
   POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB must be set}
 
+x-router-env: &router-env
+  AI_ROUTER_URL: ${AI_ROUTER_URL:-http://9router:20128/v1}
+  AI_ROUTER_API_KEY: ${AI_ROUTER_API_KEY:-}
+  AI_ROUTER_MODEL: ${AI_ROUTER_MODEL:-General-Use}
+
 services:
-  # ── Datastores ──────────────────────────────────────────────
   postgres:
-    image: pgvector/pgvector:pg16
+    image: postgres:16-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be set}
@@ -70,12 +67,25 @@ services:
       timeout: 5s
       retries: 10
 
-  # ── App services (prebuilt images from Docker Hub) ─────────
+  minio-init:
+    image: minio/mc:latest
+    restart: "no"
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 autobrain autobrain &&
+      mc mb -p local/autobrain-assets || true &&
+      mc anonymous set download local/autobrain-assets || true;
+      "
+
   backend:
-    image: cannonfodder151/autobrain-backend:hosted
+    image: ghcr.io/cannonfodder151/autobrain-backend:hosted
     restart: unless-stopped
+    command: sh -c "python -m app.db.bootstrap && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
-      <<: [*db-env, *core-env]
+      <<: [*db-env, *core-env, *router-env]
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in the hosted stack env (Portainer)}
       MINIO_PUBLIC_ENDPOINT: ${APP_BASE_URL:-https://hosted.autobrainservice.app}
       AI_ROUTER_TIMEOUT_SECONDS: 120
@@ -89,10 +99,10 @@ services:
       ADMIN_INITIAL_PASSWORD: ${ADMIN_INITIAL_PASSWORD:-}
       DEMO_MODE: "false"
       SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: 25
-      SMTP_USE_TLS: "true"
-      SMTP_USERNAME: ""
-      SMTP_PASSWORD: ""
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-no-reply@autobrainservice.app}
       SMTP_FROM_NAME: AutoBrain
       APP_BASE_URL: ${APP_BASE_URL:-https://hosted.autobrainservice.app}
@@ -102,7 +112,6 @@ services:
       ADMIN_API_KEY: ${ADMIN_API_KEY:-}
       SELF_SIGNUP_ENABLED: ${SELF_SIGNUP_ENABLED:-true}
       LICENSE_ENABLED: "true"
-  # Stripe billing — hosted instance enables the License page.
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       STRIPE_PRICE_ENTHUSIAST_MONTHLY: ${STRIPE_PRICE_ENTHUSIAST_MONTHLY:-}
@@ -124,18 +133,43 @@ services:
       - "8000"
 
   ai:
-    image: cannonfodder151/autobrain-ai:hosted
+    image: ghcr.io/cannonfodder151/autobrain-ai:hosted
     restart: unless-stopped
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8001
     environment:
-      AI_ROUTER_URL: ${AI_ROUTER_URL:-http://your-9router-instance:port/v1}
-      AI_ROUTER_API_KEY: ${AI_ROUTER_API_KEY:-}
-      AI_ROUTER_MODEL: ${AI_ROUTER_MODEL:-General-Use}
+      <<: *router-env
       AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:?AI_GATEWAY_API_KEY must be set in the hosted stack env (Portainer)}
     expose:
       - "8001"
 
+  worker:
+    image: ghcr.io/cannonfodder151/autobrain-worker:hosted
+    restart: unless-stopped
+    command: celery -A app.workers.celery_app:celery_app worker -l info --concurrency=2
+    environment:
+      <<: [*db-env, *core-env, *router-env]
+      PYTHONPATH: /app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  beat:
+    image: ghcr.io/cannonfodder151/autobrain-worker:hosted
+    restart: unless-stopped
+    command: celery -A app.workers.celery_app:celery_app beat -l info
+    environment:
+      <<: [*db-env, *core-env]
+      PYTHONPATH: /app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   frontend:
-    image: cannonfodder151/autobrain-frontend:hosted
+    image: ghcr.io/cannonfodder151/autobrain-frontend:hosted
     restart: unless-stopped
     ports:
       - "8086:80"
