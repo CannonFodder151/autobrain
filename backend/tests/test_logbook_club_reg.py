@@ -111,3 +111,38 @@ async def test_toggling_club_reg_on_disables_logbook() -> None:
     assert blocked.status_code == 403, blocked.text
 
     await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_obd_auto_source_flag_round_trips() -> None:
+    world = await _setup("autosrc", club_reg=False)
+    headers = {"Authorization": f"Bearer {world['token']}"}
+    client: AsyncClient = world["client"]
+    base = f"/api/v1/vehicles/{world['vehicle_id']}/logbook"
+
+    created = await client.post(
+        base,
+        json={
+            "started_at": "2026-08-01T09:00:00Z",
+            "source": "obd_auto",
+            "reason": "Auto-logged (OBD)",
+        },
+        headers=headers,
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["source"] == "obd_auto", created.text
+
+    done = await client.patch(
+        f"{base}/{created.json()['id']}",
+        json={"ended_at": "2026-08-01T09:30:00Z", "status": "completed"},
+        headers=headers,
+    )
+    assert done.status_code == 200, done.text
+    assert done.json()["status"] == "completed", done.text
+    assert done.json()["source"] == "obd_auto", done.text
+
+    listed = await client.get(base, headers=headers)
+    assert listed.status_code == 200, listed.text
+    assert any(e["source"] == "obd_auto" for e in listed.json()), listed.text
+
+    await client.aclose()
