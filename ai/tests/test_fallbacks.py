@@ -182,3 +182,63 @@ def test_resale_validate_clamps() -> None:
     assert out["low"] <= out["estimated_value"] <= out["high"]
     assert out["low"] == 27000.0  # 10% below the estimate when the range is invalid
     assert out["currency"] == "AUD"
+
+
+@pytest.mark.asyncio
+async def test_resale_run_computes_fallback_once(monkeypatch) -> None:
+    # AUT-210: the deterministic fallback must run exactly once, not once for
+    # the AI baseline and again after rrp/used_price enrichment.
+    from app.modules import resale as resale_mod
+
+    calls: list = []
+    real = resale_mod.estimate_value_fallback
+
+    def counting(*args, **kwargs):
+        result = real(*args, **kwargs)
+        calls.append((args, kwargs, result))
+        return result
+
+    monkeypatch.setattr(resale_mod, "estimate_value_fallback", counting)
+    monkeypatch.setattr(resale_mod, "enhance", _async_identity)  # router down
+
+    out = await resale_mod.run({
+        "vehicle": {"make": "Toyota", "model": "Camry", "year": 2021,
+                    "odometer_km": 30000, "condition": "good"},
+        "service_count": 3,
+    })
+    assert len(calls) == 1
+    assert out["estimated_value"] == calls[0][2]["estimated_value"]
+    assert out["model"].startswith("rule-based") or out["model"] == "rrp-depreciation"
+
+
+@pytest.mark.asyncio
+async def test_resale_run_enrichment_computes_once(monkeypatch) -> None:
+    # With AI-supplied facts, the single compute receives the enriched values.
+    from app.modules import resale as resale_mod
+
+    calls: list = []
+    real = resale_mod.estimate_value_fallback
+
+    def counting(*args, **kwargs):
+        result = real(*args, **kwargs)
+        calls.append((args, kwargs, result))
+        return result
+
+    monkeypatch.setattr(resale_mod, "estimate_value_fallback", counting)
+
+    async def fake_enhance(module, payload, baseline):
+        return {"used_price": 9999.0, "recommendations": ["Sell now"], "trend": []}
+
+    monkeypatch.setattr(resale_mod, "enhance", fake_enhance)
+
+    out = await resale_mod.run({
+        "vehicle": {"make": "Ford", "model": "Everest Trend", "year": 2025,
+                    "odometer_km": 5000, "condition": "good"},
+    })
+    assert len(calls) == 1
+    assert calls[0][1]["used_price"] == 9999.0
+    assert out["recommendations"][0] == "Sell now"
+
+
+async def _async_identity(module, payload, baseline):
+    return baseline

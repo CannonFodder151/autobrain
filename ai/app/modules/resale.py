@@ -56,8 +56,10 @@ def _validate(result: dict) -> dict:
 
 
 async def run(payload: dict) -> dict:
-    baseline = estimate_value_fallback(payload)
-    merged = await enhance("resale", payload, baseline)
+    # Router first: 9Router may supply market facts (rrp/used_price) and
+    # advice/trend. The deterministic number is computed exactly once at the
+    # end with whatever facts are available — never twice.
+    merged = await enhance("resale", payload, {})
     vehicle = payload.get("vehicle", {})
     # Deterministic table RRP wins; AI rrp fills gaps for unknown recent models.
     rrp = rrp_for(vehicle)
@@ -72,4 +74,4 @@ async def run(payload: dict) -> dict:
                 result[key] = merged[key]
         return _validate(result)
     except (ValueError, KeyError, TypeError):
-        return baseline
+        return estimate_value_fallback(payload)
