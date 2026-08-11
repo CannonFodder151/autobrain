@@ -2,6 +2,10 @@
 
 Live OBD-II logging via a Bluetooth OBD2 adapter is an in-progress roadmap item for the Android & iPhone apps. The backend/API seam and a "Work in progress" UI already landed; this page captures the plan and next steps (mirror of the Outline doc).
 
+## Phone-free trip logging (firmware PoC)
+
+See [`firmware/README.md`](/firmware/README.md) and [`firmware/DECISION.md`](/firmware/DECISION.md) for the full build-vs-buy picture (AUT-363 research → AUT-369 firmware PoC). Short version: ESP32 DIY board (US$15–30) with TWAI CAN + DS3231 RTC captures phone-dead trips to on-board flash; Freematics ONE+ (US$135) is the reference buy path. Firmware is written and compile-verified for the DIY path.
+
 ## Goal
 
 Allow a user with an admin-enabled account to plug in a Bluetooth OBD2 adapter and log drives automatically into the AutoBrain logbook, read the VIN (auto-filling the vehicle if missing), and capture fault codes that can be pushed into the existing diagnostic AI tool.
