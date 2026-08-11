@@ -3,6 +3,29 @@
 Run this whenever frontend/app changes ship so AutoBrain's Android app is updated,
 a release `.aab` is produced, and Nathan knows where the change notes live.
 
+## Ownership
+
+**Mobile Release Engineer** owns mobile packaging + releases end to end:
+
+- version bumps (`scripts/bump-version.sh --mobile`) + `versionCode` rules
+- Flutter lineage sync from the monorepo `frontend/` into `autobrain-mobile`
+- `.aab` / `.apk` builds + machine-keystore signing
+- GitHub Releases on `autobrain-mobile`
+- Play Console upload prep (artifact + changelog, pinged to Nathan to upload)
+- Discord `#changelog` / `#updates` notes
+- `docs/mobile-release.md` + the release workflow
+
+**Founding Engineer** owns mobile **feature code** only (Flutter `frontend/` in the
+monorepo and the mirrored mobile repo); hands off release-ready code. No version
+bumps, no releases.
+
+**Deployment** owns infra / containers / CI for backend + hosted services,
+including the hosted API endpoints the app targets
+(`https://hosted.autobrainservice.app/…`). It does **not** own mobile builds.
+
+Ownership split defined by the CTO in the Mobile packaging issue (Paperclip
+`AUT-145`).
+
 **Canonical home for `.aab` change notes:**
 - **`CHANGELOG.md` in the `autobrain` monorepo is the single shared changelog for BOTH the hosted (web) app and the mobile app.** Mobile has no changelog of its own — GitHub Releases here use the shared changelog, so its contents are mirrored into this repo on every sync.
 - Discord **`#changelog`** on AutoBrain HQ (public, customer-facing) — link + notes.
@@ -129,6 +152,20 @@ verify these in `autobrain-mobile` — a mismatch is the #1 cause of upload reje
 
 Commit and push any of these changes to `autobrain-mobile` **before** building.
 
+### 3c. (Optional) Build a release `.apk` for sideload/test
+
+`.aab` is the Play artifact; the `.apk` is optional and for sideloading/testing only:
+
+```bash
+cd autobrain-mobile
+flutter build apk --release \
+  --dart-define=API_BASE_URL=https://hosted.autobrainservice.app/api/v1 \
+  --dart-define=WS_BASE_URL=wss://hosted.autobrainservice.app/ws
+```
+
+Artifact: `build/app/outputs/flutter-apk/app-release.apk`. Same version/versionCode
+rules as the `.aab`.
+
 ### 4. Create a GitHub Release and attach the `.aab`
 
 ```bash
@@ -142,6 +179,17 @@ curl -s -X POST "<upload_url>?name=app-release.aab" \
   --data-binary @build/app/outputs/bundle/release/app-release.aab
 # Publish the release
 ```
+
+### 4b. Coordinate the Play Console upload (Nathan uploads)
+
+The Release Engineer does **not** hold the Play Console / Google account. After the
+GitHub Release above:
+
+1. Prepare the upload package: the signed `app-release.aab` + the release notes
+   (top entry of the shared `CHANGELOG.md`).
+2. Ping **Nathan** (owner of the Play listing / Google account) to upload the `.aab`
+   to Play Console and promote it.
+3. Nathan confirms when the upload is live.
 
 ### 5. Post change notes to Discord (via n8n Reporter)
 
@@ -195,5 +243,6 @@ version=v<X.Y.Z>+<build>`).
 - **Change notes:** Discord **`#changelog`** on AutoBrain HQ (public) + GitHub Releases on
   `CannonFodder151/autobrain-mobile`.
 - **Artifact:** `app-release.aab` attached to the matching GitHub Release
-  (`https://github.com/CannonFodder151/autobrain-mobile/releases`).
+  (`https://github.com/CannonFodder151/autobrain-mobile/releases`), then uploaded to
+  Play Console by Nathan.
 - Staff summary: Discord **`#updates`**.
