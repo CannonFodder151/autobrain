@@ -259,9 +259,11 @@ async def lookup_rego(rego: str, jurisdiction: str = "AU", state: str = "VIC",
                     headers={"X-API-Key": settings.REGO_LOOKUP_API_KEY} if settings.REGO_LOOKUP_API_KEY else {},
                 )
                 data = resp.json()
-            logger.info("rego_provider_raw", rego=clean, state=state, status=resp.status_code, raw=data)
             mapped = _map_provider(data, clean, state)
             if mapped is not None:
+                logger.info("rego_provider_lookup",
+                            rego=clean, state=state, status=resp.status_code,
+                            make=mapped["make"], model=mapped["model"], year=mapped["year"])
                 return mapped
             if resp.status_code >= 400:
                 logger.warning("rego_provider_rejected", rego=clean, state=state, status=resp.status_code)
