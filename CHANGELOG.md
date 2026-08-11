@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- OBD-II integration (mobile-only, AUT-272): connect a Bluetooth ELM327 adapter (tested with VGate iCar Pro) from the OBD screen — adapter picker, connect + auto-connect toggle, live PID polling every 2s, fault-code read (modes 03 + 07, deduped to the backend) and VIN autofill on connect. The ELM327 protocol layer is pure Dart with 22 golden-adapter unit tests.
+
 ## [0.3.6] - 2026-08-10
 
 ### Added
