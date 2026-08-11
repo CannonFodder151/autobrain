@@ -4,6 +4,32 @@
 
 Chronological log of verified test passes and verification runs. Real state only — mirrors repo `docs/qa-run-logs.md`. Newest first.
 
+## 2026-08-11 — Post-push pass: AUT-218 search fix + AUT-205 merges (AUT-276, Gate 2)
+
+Second post-push pass under the change validation gate. Covers commits merged to `main` after the AUT-249 base `b2ca584` (range `b2ca584..29f8c09`): the AUT-218 search-500 fix `da12cdf` (raw `IS NOT NULL` embedding filter — the ORM models don't map the pgvector column, so `getattr(model, vec_col).isnot(None)` raised `AttributeError`) and the AUT-205 batch — AUT-136 (push `receipt.processed` to the vehicle owner, not the vehicle id), AUT-141 (AI router response key/type whitelist), AUT-142 (OCR helpers → `app/ocr_utils.py`), AUT-143 (inline router logic → `services/`, incl. `search.py` import fix), AUT-200 (fail closed on default creds), AUT-137 (embedding backfill worker + queue on entity create/update + daily sweep).
+
+**Automated suites (deterministic paths, run from `main` @ 29f8c09; no compose DB):**
+
+- AI gateway `ai/tests/` — 35 passed (incl. new AUT-141 `test_router_validation.py`; AUT-142 OCR refactor green; AUT-249 baseline was 31)
+- Backend `test_workers.py` — 1 passed (AUT-136: `receipt.processed` targets vehicle owner; exercises AUT-137 embed path)
+- Backend `test_services_extraction.py` — 9 passed (AUT-143 extracted services: fuel stats, timeline, vehicle limit, share invites)
+- Backend `test_config_prod_guard.py` — 7 passed (AUT-200 fail-closed default creds)
+- Backend `test_config_fail_closed.py` — 3 passed
+- Backend `test_search_sql_injection.py` — 2 passed
+- Backend `test_ws_auth.py` — 5 passed
+- Backend `test_assets_backup.py` — 2 passed
+
+**Targeted verification — AUT-218 search fix (`da12cdf`):**
+
+- Confirmed no `embedding` attribute exists on the entity models (root cause of the 500); no `getattr(model, vec_col).isnot(None)` remains.
+- Fixed filter `text("{table}.{vec_col} IS NOT NULL")` compiles clean for the PostgreSQL dialect; `table`/`vec_col` come from the constant `_ENTITY_MAP` (never user input — no injection).
+- Keyword path E2E against sqlite: scoped diagnostic returned, no 500 (deterministic fallback when embeddings are unavailable).
+- Live 9Router `/embeddings` (`text-embedding-3-small`) returns a 1536-dim float vector; `generate_embedding()` works → vector path is live and additive to keyword.
+
+**Live tier status:** the tested commits are merged under v0.3.7 — not yet deployed anywhere (demo still **0.3.6**, hosted still **0.3.5**). Promotion (Demo → Default → Hosted) pending deployment.
+
+**Findings:** none release-blocking. Minor pre-existing lint F401 (`select as sa_select`, `workers/tasks.py:164`, commit `a795b4f6` — predates this scope). Test-isolation note: running `test_config_prod_guard.py` in the same pytest session as the sqlite-backed suites pollutes `os.environ` and forces a Postgres connect (DNS fail); the suites pass when run per-file — suite hygiene, not an app defect. DB-dependent suites (test_search_scope, test_share*, test_api, test_billing, test_service_*, test_logbook_club_reg) still need the compose Postgres; dev box SSH (`10.0.3.39`) not reachable this run — deferred to deployment-time pass.
+
 ## 2026-08-10 — Post-push pass: changes merged since 2026-08-08 (AUT-249, Gate 2)
 
 First post-push pass under the change validation gate (docs/change-validation-gate.md). Changes merged to `main` since the last real app pass (2026-08-08, AUT-45): v0.3.6 release + auto version-cutting (AUT-240), CSP/X-Frame-Options/Referrer-Policy security headers (#32, AUT-236), WS auth fail-close (AUT-203), search SQL parameterization + search IDOR scoping (AUT-203/AUT-134), MinIO asset backup/restore admin endpoints (AUT-194), scripts executable bit (#35).
