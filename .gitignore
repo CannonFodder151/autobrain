@@ -55,3 +55,8 @@ Thumbs.db
 # Logs
 *.log
 logs/
+
+# PlatformIO / ESP32 firmware
+.pio/
+.pioenvs/
+firmware/**/test/self_check
