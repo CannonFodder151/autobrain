@@ -3,10 +3,16 @@
 import sqlalchemy as sa
 from alembic import op
 
+# Build the vector dimension from config so the schema can't drift from
+# EMBEDDING_DIMENSION (env.py already imports app settings for the DB URL).
+from app.core.config import settings  # noqa: E402
+
 revision = "g7h8i9j0k1l2"
 down_revision = "e6f7a8b9c0d1"
 branch_labels = None
 depends_on = None
+
+_DIM = settings.EMBEDDING_DIMENSION
 
 
 def upgrade() -> None:
@@ -14,37 +20,18 @@ def upgrade() -> None:
     # use pgvector/pgvector:pg16 Docker image).
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
 
-    # Add embedding columns (1536-dim, matches text-embedding-3-small output size).
-    op.execute(
-        "ALTER TABLE diagnostics ADD COLUMN embedding vector(1536)"
-    )
-    op.execute(
-        "ALTER TABLE service_records ADD COLUMN embedding vector(1536)"
-    )
-    op.execute(
-        "ALTER TABLE modifications ADD COLUMN embedding vector(1536)"
-    )
-    op.execute(
-        "ALTER TABLE receipts ADD COLUMN embedding vector(1536)"
-    )
+    # Add embedding columns (dimension from config, matches the embedding model).
+    for table in ("diagnostics", "service_records", "modifications", "receipts"):
+        op.execute(f"ALTER TABLE {table} ADD COLUMN embedding vector({_DIM})")
 
-    # Create HNSW-style IVFFlat indexes for efficient similarity search.
-    op.execute(
-        "CREATE INDEX idx_diagnostics_embedding ON diagnostics "
-        "USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)"
-    )
-    op.execute(
-        "CREATE INDEX idx_service_records_embedding ON service_records "
-        "USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)"
-    )
-    op.execute(
-        "CREATE INDEX idx_modifications_embedding ON modifications "
-        "USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)"
-    )
-    op.execute(
-        "CREATE INDEX idx_receipts_embedding ON receipts "
-        "USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)"
-    )
+    # HNSW index (pgvector >= 0.5): no training data or tuning required, and on
+    # small per-user tables it beats IVFFlat — which needs lists tuned to row
+    # count and a training probe pass. Cosine ops matches search's `a <=> b`.
+    for table in ("diagnostics", "service_records", "modifications", "receipts"):
+        op.execute(
+            f"CREATE INDEX idx_{table}_embedding ON {table} "
+            "USING hnsw (embedding vector_cosine_ops)"
+        )
 
 
 def downgrade() -> None:
