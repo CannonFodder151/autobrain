@@ -22,6 +22,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- Frontend nginx now re-resolves the `backend` upstream via Docker's embedded
+  DNS (`resolver 127.0.0.11` + variable `proxy_pass`) so public `/health`,
+  `/api/` and `/ws/` survive backend container recreates without a manual
+  frontend restart (AUT-373).
+
 ## [0.3.17] - 2026-08-11
 
 ### Added
