@@ -20,6 +20,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- Hosted/Default blank page (AUT-347): the CSP allowlisted `www.gstatic.com` but not `fonts.gstatic.com`, so CanvasKit's startup font fetch stalled the Flutter engine before the first frame. `fonts.gstatic.com` is now allowed in `font-src` + `connect-src`; text/images render again.
+
 ## [0.3.15] - 2026-08-11
 
 ### Fixed
