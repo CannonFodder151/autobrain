@@ -26,6 +26,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security
+- AI rate limiting (AUT-302): every AI endpoint (diagnostics, service prediction, valuation, mod impact, odometer OCR, receipt OCR, fuel-receipt OCR) now enforces per-user burst + daily caps via Redis (defaults 10/min and 50/day, env-tunable) and returns `429` on exceed. The AI gateway adds an in-memory per-IP + global window as defense in depth. Fails closed (503) if Redis is unreachable so un-metered 9Router spend is never possible.
+
 ## [0.3.21] - 2026-08-12
 
 ### Fixed
@@ -95,7 +98,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 - Alembic migration chain (AUT-290): `market_listing_cache` and the HNSW embedding-index migrations shared the same revision id `h1i2j3k4l5m6`, which broke `alembic upgrade head` (boot fell back to `create_all`, leaving `users.pending`/`users.token_version` and other columns unapplied). Renamed the market-cache revision to `h1i2j3k4l5m7` and folded it into the `m3rge01` merge so the chain has a single head.
-
+ 
 ## [0.3.9] - 2026-08-11
 
 ### Added
