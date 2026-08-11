@@ -14,7 +14,7 @@ docker compose exec -T postgres pg_dump -U "${POSTGRES_USER:?POSTGRES_USER must 
 echo "==> Backing up MinIO bucket"
 docker run --rm --network autobrain_default \
   -v "$OUT:/backup" \
-  minio/mc:latest \
+  minio/mc:RELEASE.2025-08-13T08-35-41Z \
   /bin/sh -c "mc alias set local http://minio:9000 ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY must be set} ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY must be set} && \
   mc mirror --overwrite local/${MINIO_BUCKET:-autobrain-assets} /backup" \
   > /dev/null 2>&1 || echo " (minio backup skipped)"
