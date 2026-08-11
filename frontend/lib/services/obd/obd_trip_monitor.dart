@@ -302,6 +302,10 @@ class ObdTripMonitor extends ChangeNotifier {
       'status': 'completed',
       'source': 'obd_auto',
     });
+    // Remember the latest synced auto trip for the settings status line
+    // (AUT-366 Car Play / Android Auto submenu).
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('car_last_trip_at', trip.endedAt.toIso8601String());
   }
 }
 
