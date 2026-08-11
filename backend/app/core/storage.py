@@ -1,8 +1,8 @@
 """MinIO (S3-compatible) storage helpers."""
 
 import asyncio
+from datetime import timedelta
 from io import BytesIO
-from typing import BinaryIO
 
 from minio import Minio
 
@@ -82,19 +82,34 @@ def _ensure_bucket_sync() -> None:
 
 
 async def upload_object(key: str, data: bytes, content_type: str) -> str:
-    def _upload() -> None:
-        get_minio().put_object(
+    def _upload() -> str:
+        client = get_minio()
+        client.put_object(
             settings.MINIO_BUCKET,
             key,
             BytesIO(data),
             length=len(data),
             content_type=content_type,
         )
+        return client.presigned_get_object(settings.MINIO_BUCKET, key, expires=timedelta(hours=1))
 
-    await asyncio.to_thread(_upload)
+    url = await asyncio.to_thread(_upload)
+    return _externalize_url(url)
+
+
+def _externalize_url(url: str) -> str:
+    """Swap the internal MinIO host for the externally reachable public endpoint.
+
+    The presigned URL is signed against the host the client connected to
+    (``MINIO_ENDPOINT``, e.g. ``minio:9000``), so the external proxy must
+    preserve that Host header for the signature to validate — see the
+    ``/autobrain-assets/`` location in ``docker/frontend/nginx.conf``.
+    """
     scheme = "https" if settings.MINIO_SECURE else "http"
-    host = settings.MINIO_PUBLIC_ENDPOINT.rstrip("/")
-    return f"{host}/{settings.MINIO_BUCKET}/{key}"
+    internal = f"{scheme}://{settings.MINIO_ENDPOINT}"
+    if url.startswith(internal):
+        return settings.MINIO_PUBLIC_ENDPOINT.rstrip("/") + url[len(internal):]
+    return url
 
 
 async def get_object(key: str) -> bytes:

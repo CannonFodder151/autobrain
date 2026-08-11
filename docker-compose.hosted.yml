@@ -75,9 +75,9 @@ services:
         condition: service_healthy
     entrypoint: >
       /bin/sh -c "
-      mc alias set local http://minio:9000 autobrain autobrain &&
-      mc mb -p local/autobrain-assets || true &&
-      mc anonymous set download local/autobrain-assets || true;
+      mc alias set local http://minio:9000 ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY must be set} ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY must be set} &&
+      mc mb -p local/${MINIO_BUCKET:-autobrain-assets} || true &&
+      mc anonymous set none local/${MINIO_BUCKET:-autobrain-assets} || true;
       "
 
   backend:

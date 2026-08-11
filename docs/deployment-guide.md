@@ -54,7 +54,7 @@ Oracle VM; the stack frontend nginx exposes `:8086`.
 | postgres | `postgres:16-alpine` | healthcheck `pg_isready`; volume `postgres-data` |
 | redis | `redis:7-alpine` | healthcheck `redis-cli ping`; volume `redis-data` |
 | minio | `minio/minio:latest` | healthcheck `mc ready local`; volume `minio-data` |
-| minio-init | `minio/mc:latest` | one-shot bucket create + anonymous download |
+| minio-init | `minio/mc:latest` | one-shot bucket create; forces `anonymous set none` (bucket stays private, AUT-321) |
 | backend | `autobrain-backend:<tag>` | API on `:8000` (internal); `/health` |
 | worker / beat | `autobrain-worker:<tag>` | Celery worker + beat, separate containers |
 | ai | `autobrain-ai:<tag>` | AI gateway on `:8001` (internal); `/health` |
