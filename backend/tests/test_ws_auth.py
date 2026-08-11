@@ -24,6 +24,7 @@ class _FakeUser:
     def __init__(self, user_id: str, is_active: bool = True) -> None:
         self.id = user_id
         self.is_active = is_active
+        self.token_version = 0
 
 
 class _StubDB:

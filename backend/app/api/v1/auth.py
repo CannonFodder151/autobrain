@@ -140,7 +140,7 @@ async def refresh(payload: RefreshRequest, db: AsyncSession = Depends(get_db)) -
     and each device keeps only the latest pair. A bumped token_version
     (logout, password change) also rejects every older token outright.
     """
-    data = decode_token(payload.refresh_token)
+    data = _decode_token(payload.refresh_token)
     if not data or data.get("type") != "refresh" or not data.get("jti"):
         raise HTTPException(status_code=401, detail="Invalid refresh token")
     user = await db.get(User, data.get("sub"))
@@ -174,7 +174,7 @@ async def logout(payload: RefreshRequest, db: AsyncSession = Depends(get_db)) ->
     All outstanding access + refresh tokens for this user are invalidated
     immediately (stolen tokens included). Logs the user out everywhere.
     """
-    data = decode_token(payload.refresh_token)
+    data = _decode_token(payload.refresh_token)
     if not data or data.get("type") != "refresh":
         raise HTTPException(status_code=401, detail="Invalid refresh token")
     user = await db.get(User, data.get("sub"))

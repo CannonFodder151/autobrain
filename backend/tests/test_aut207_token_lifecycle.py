@@ -50,11 +50,11 @@ async def _make_user(email: str = "tok") -> User:
 
 
 async def _login(user: User) -> dict:
-    from app.api.v1.auth import _token_pair
+    from app.services.auth import token_pair
 
     async with SessionLocal() as db:
         fresh = await db.get(User, user.id)
-        pair = _token_pair(fresh)
+        pair = token_pair(fresh)
         await db.commit()
     return {"access": pair.access_token, "refresh": pair.refresh_token}
 
