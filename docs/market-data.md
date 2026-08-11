@@ -67,14 +67,30 @@ Aggregates (median / low / high / sample_size) are computed server-side.
 |--------|----------|--------|
 | CarsGuide | Nuxt SSR `__NUXT_DATA__` over plain HTTP | ✅ live |
 | CarSales | Akamai-protected | ⏳ needs a browser/undetected channel |
-| BikeGuide (motorcycles) | same Nuxt stack as CarsGuide, but behind a **FingerprintJS redirect gate** | ⏳ gated — returns an empty listing set + `note` deterministically so the pipeline degrades cleanly, never errors |
-| BikeSales (motorcycles) | Akamai-protected | ⏳ needs a browser/undetected channel |
+| BikeGuide (motorcycles) | same Nuxt stack as CarsGuide, but behind a **FingerprintJS redirect gate** — and the domain is now parked ("may be for sale", AboveDomains host) | 🔴 **parked** — no listings exist; browser channel (Playwright) is wired but deterministically returns an empty set + `note` |
+| BikeSales (motorcycles) | PerimeterX hold-to-confirm + browser fingerprinting | 🔴 **gated** — real browser was verified against it (AUT-314); the challenge does not clear for this infra, so the provider stays deterministic-degraded |
 
 `market-data/bikesguide.py` reuses the CarsGuide Nuxt parser and detects the
-FingerprintJS gate (no `__NUXT_DATA__` + fingerprint/`tr_uuid` markers),
-returning `{"source": "bikesguide", "listings": [], "note": "gated: ..."}`
-so valuations still complete offline. A Playwright/undetected-chromium channel
-(like the rego-lookup API) is the upgrade path for BikeGuide and BikeSales.
+FingerprintJS gate (no `__NUXT_DATA__` + fingerprint/`tr_uuid` markers) and the
+parked page ("may be for sale"/`abovedomains`), returning
+`{"source": "bikesguide", "listings": [], "note": "parked|gated: ..."}` so
+valuations still complete offline. A Playwright channel
+(`market-data/browser.py`, subprocess worker mirroring the rego-lookup-api
+pattern) is wired behind the provider: plain HTTP runs first (fast, catches the
+parked page without spawning a browser), then the browser worker when the page
+looks like a live gate. BikesSales' PerimeterX challenge was probed with a real
+Chromium browser (hold gesture + fingerprint) and does not clear from the
+dev/hosted networks; that remains a documented blocker, not a data source.
+
+### Motorcycle valuation reality (AUT-314)
+
+Neither AU motorcycle portal is reachable for live listings right now:
+`bikesguide.com.au` is parked (no data exists) and `bikesales.com.au` sits
+behind a PerimeterX interactive challenge. Motorcycle valuations therefore
+resolve via the deterministic degradation path (`sample_size=0` → AI used-price
+path clamped ±15%), exactly as designed for a gated provider. The browser
+channel ships so the moment either portal opens (or a clean IP / undetected
+tier is available) real listings flow with no backend change.
 
 ## API
 

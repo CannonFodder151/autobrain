@@ -4,19 +4,28 @@ BikesGuide is CarsGuide's motorcycle arm and runs the same Nuxt SSR stack, so
 the __NUXT_DATA__ parsing logic is shared with carsguide.py. The listing
 schema is identical (manu_year, odometer, make/model/variant, url_cg).
 
-Gate: unlike CarsGuide, the bikesguide.com.au search path sits behind a
-FingerprintJS redirect challenge. A plain HTTP client receives a small
-fingerprint/redirect page with no __NUXT_DATA__ payload instead of the SSR
-markup. We detect that and return an empty listing set deterministically (with
-a note) so the valuation pipeline falls back cleanly instead of erroring.
+Gate: bikesguide.com.au sits behind a FingerprintJS redirect challenge on
+plain HTTP (a small fingerprint/redirect page with no __NUXT_DATA__). As of
+AUT-314 the domain is also parked ("may be for sale", served from an
+AboveDomains parking host) — there are no listings behind the gate at all.
+This provider therefore degrades deterministically: plain HTTP first (fast,
+catches the parked page without spawning a browser), then the Playwright
+channel (browser.py) when the page looks like a live gate, then an empty
+listing set + note. The valuation pipeline never errors and never sees a
+bogus sample.
 
-ponytail: a browser channel (Playwright/undetected-chromium, same tier as the
-CarsSales/Akamai upgrade path) is required to pass the fingerprint gate and get
-live listings. BikesSales.com.au is likewise Akamai-protected. Until then this
-provider is the deterministic degradation path, not a data source.
+ponytail: bikesales.com.au (the live AU bike marketplace) sits behind a
+PerimeterX hold-to-confirm challenge that is not passable from this infra;
+documented in docs/market-data.md. An undetected-chromium tier is the upgrade
+path if PerimeterX clears.
 """
 
+import asyncio
+import json
 import os
+import re
+import subprocess
+import sys
 
 import httpx
 
@@ -29,6 +38,9 @@ USER_AGENT = (
     "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
 )
 MAX_LISTINGS = int(os.getenv("BIKEGUIDE_MAX_LISTINGS", "12"))
+BROWSER_ENABLED = os.getenv("BIKEGUIDE_BROWSER", "1").lower() in ("1", "true", "yes")
+
+_PARKED_MARKS = ("domain may be for sale", "may be for sale", "abovedomains")
 
 
 def _gated(html: str) -> bool:
@@ -38,19 +50,53 @@ def _gated(html: str) -> bool:
     return "fingerprint" in html.lower() or "tr_uuid" in html
 
 
+def _parked(html: str) -> bool:
+    return any(m in html.lower() for m in _PARKED_MARKS)
+
+
+def _empty(note: str) -> dict:
+    return {"source": "bikesguide", "listings": [], "note": note}
+
+
+async def _browser_search(query: str, year: int | None) -> dict | None:
+    """Run the Playwright worker in a subprocess (fresh process = reliable timeouts)."""
+    cmd = [sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "browser.py"),
+           "bikesguide", query, str(year or "")]
+    try:
+        cp = await asyncio.to_thread(
+            subprocess.run, cmd, stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL, text=True, timeout=100)
+    except subprocess.TimeoutExpired:
+        return _empty("gated: bikesguide browser channel timed out")
+    stdout = (cp.stdout or "").strip()
+    try:
+        data = json.loads(stdout.splitlines()[-1])
+    except Exception:
+        return _empty("gated: bikesguide browser worker failed")
+    if data.get("ok"):
+        return {"source": "bikesguide", "listings": data.get("listings", [])}
+    note = data.get("note") or f"gated: bikesguide ({data.get('kind')})"
+    return _empty(note)
+
+
 async def search_bikesguide(query: str, year: int | None = None) -> dict:
     params = {"query": query}
     headers = {"User-Agent": USER_AGENT, "Accept-Language": "en-AU,en;q=0.9"}
-    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT, follow_redirects=True) as client:
-        resp = await client.get(SEARCH_URL, params=params, headers=headers)
-        resp.raise_for_status()
-        html = resp.text
+    try:
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT, follow_redirects=True) as client:
+            resp = await client.get(SEARCH_URL, params=params, headers=headers)
+            resp.raise_for_status()
+            html = resp.text
+    except httpx.HTTPError as exc:
+        return _empty(f"gated: bikesguide request failed ({exc.__class__.__name__})")
+
+    if _parked(html):
+        return _empty("parked: bikesguide.com.au domain is parked (for sale); no listings exist")
     if _gated(html):
-        return {
-            "source": "bikesguide",
-            "listings": [],
-            "note": "gated: bikesguide requires a browser channel (FingerprintJS); see docs/market-data.md",
-        }
+        if BROWSER_ENABLED:
+            return await _browser_search(query, year)
+        return _empty("gated: bikesguide requires a browser channel (FingerprintJS); see docs/market-data.md")
+
     listings = []
     for raw in _parse_nuxt_listings(html):
         listing = _map_listing(raw)

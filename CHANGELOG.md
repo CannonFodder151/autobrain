@@ -17,6 +17,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- Market-data browser channel (AUT-314): a Playwright chromium worker (`market-data/browser.py`, subprocess pattern mirrored from rego-lookup-api) is wired behind the BikeGuide provider so the FingerprintJS-gated motorcycle portal gets a real-browser scrape path. Plain HTTP still runs first (fast), the browser only spawns when the page looks like a live gate, and every path degrades to a deterministic empty listing set + `note` — valuations never error. Both AU motorcycle portals were probed with a real Chromium browser: `bikesguide.com.au` is a parked/for-sale domain (no listings exist) and `bikesales.com.au` sits behind a PerimeterX hold-to-confirm challenge that does not clear from the dev/hosted networks; motorcycle valuations therefore stay on the deterministic degradation path (`sample_size=0`) until a portal opens.
+
+### Fixed
+- Market-data parser (AUT-314): `carsguide._parse_nuxt_listings` crashed with `AttributeError: 'list' object has no attribute 'get'` when a query returned `marketplace` as a list (e.g. motorcycle searches on carsguide.com.au). Non-dict `marketplace` values are now treated as "no listings" instead of 500ing the scraper.
+
 ## [0.3.12] - 2026-08-11
 
 ### Security

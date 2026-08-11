@@ -20,9 +20,9 @@ from pydantic import BaseModel
 from bikesguide import search_bikesguide
 from carsguide import search_carsguide
 
-app = FastAPI(title="Market Data API", version="1.1.0")
+app = FastAPI(title="Market Data API", version="1.2.0")
 
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.0"
 API_KEY = os.getenv("API_KEY", "")
 
 

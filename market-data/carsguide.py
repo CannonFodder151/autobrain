@@ -65,6 +65,8 @@ def _parse_nuxt_listings(html: str) -> list[dict]:
             if "siteWideSearch" not in key:
                 continue
             mp = (value or {}).get("data", {}).get("marketplace", {})
+            if not isinstance(mp, dict):
+                continue
             for idx in mp.get("data") or []:
                 raw = _resolve(arr, idx)
                 if isinstance(raw, dict) and "_source" in raw:
