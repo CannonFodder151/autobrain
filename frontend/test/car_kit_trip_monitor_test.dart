@@ -2,8 +2,6 @@
 // car-kit BT connection + GPS speed-guard state machine that drives the shared
 // ObdTripRecorder. Pure Dart, no platform channels.
 
-import 'dart:async';
-
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:autobrain/services/car/car_kit_trip_monitor.dart';
