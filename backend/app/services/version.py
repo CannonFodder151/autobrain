@@ -22,6 +22,35 @@ def current_version() -> str:
     return settings.APP_VERSION
 
 
+async def check_mobile_latest_release() -> dict:
+    """Latest published mobile-app release from GitHub.
+
+    The mobile repo (`CannonFodder151/autobrain-mobile`) is private, so this
+    must be read server-side with GITHUB_TOKEN and proxied to the app. Unlike
+    `check_latest_release`, there is no `up_to_date` comparison here: the app
+    compares the tag against its own installed version. Never raises.
+    """
+    result: dict = {"reachable": True, "latest_version": None, "html_url": None}
+    try:
+        async with httpx.AsyncClient(timeout=12, headers=_headers()) as client:
+            release = await _get(
+                client,
+                f"https://api.github.com/repos/{settings.MOBILE_GITHUB_REPO}/releases/latest",
+            )
+            if release:
+                tag = (release.get("tag_name") or "").lstrip("v")
+                result["latest_version"] = tag or release.get("tag_name")
+                result["html_url"] = release.get("html_url")
+                result["published_at"] = release.get("published_at")
+                return result
+            # GitHub reachable but no published release yet.
+            result["latest_version"] = None
+            return result
+    except Exception as exc:
+        logger.warning("github_mobile_check_failed", error=str(exc))
+        return {"latest_version": None, "html_url": None, "reachable": False}
+
+
 def _headers() -> dict:
     headers = {"Accept": "application/vnd.github+json", "User-Agent": "autobrain"}
     if settings.GITHUB_TOKEN:

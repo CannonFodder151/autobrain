@@ -32,6 +32,10 @@ gate blocks the release at that tier.
 - [ ] **Verify the feature is actually present** on each tier — exercise the
       flow (open the new screen, hit the new endpoint), not just the version
       banner.
+- [ ] **Post-deploy prune** — run `scripts/prune-images.sh` to drop dangling
+      build-layer images on EP2 (Portainer-Host) + EP5 (AutoBrain-Hosted).
+      Deploys are the main source of dangling images (AUT-350); prune every
+      release so ~30-70GB does not accumulate between weekly prunes.
 - [ ] Note promotion order + verification result in the issue / `#updates`
       channel.
 
@@ -53,8 +57,8 @@ Oracle VM; the stack frontend nginx exposes `:8086`.
 |---------|-------|-------|
 | postgres | `postgres:16-alpine` | healthcheck `pg_isready`; volume `postgres-data` |
 | redis | `redis:7-alpine` | healthcheck `redis-cli ping`; volume `redis-data` |
-| minio | `minio/minio:latest` | healthcheck `mc ready local`; volume `minio-data` |
-| minio-init | `minio/mc:latest` | one-shot bucket create + anonymous download |
+| minio | `minio/minio:RELEASE.2025-09-07T16-13-09Z` | pinned (AUT-322); healthcheck `mc ready local`; volume `minio-data` |
+| minio-init | `minio/mc:RELEASE.2025-08-13T08-35-41Z` | one-shot bucket create; forces `anonymous set none` (bucket stays private, AUT-321) |
 | backend | `autobrain-backend:<tag>` | API on `:8000` (internal); `/health` |
 | worker / beat | `autobrain-worker:<tag>` | Celery worker + beat, separate containers |
 | ai | `autobrain-ai:<tag>` | AI gateway on `:8001` (internal); `/health` |

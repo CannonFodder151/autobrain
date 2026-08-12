@@ -17,7 +17,46 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
+
+
+
+
 ## [Unreleased]
+
+### Fixed
+- "Get the mobile app" menu item no longer shows on the mobile app itself (AUT-399): `HomeScreen` only renders the download entry when not running natively on Android/iOS. `AppConfig._isMobile` → public `AppConfig.isMobile`.
+
+## [0.3.19] - 2026-08-11
+
+### Security
+- MinIO bucket no longer anonymously readable (AUT-321): `autobrain-assets` anonymous `download` policy removed from `docker-compose.hosted.yml` and `scripts/init-minio.sh` (init now forces `anonymous set none`). `upload_object` returns a 1-hour presigned GET URL instead of a world-readable URL, and the frontend nginx proxies `/autobrain-assets/` to MinIO while preserving the signed Host header. Existing buckets are re-privatized on redeploy.
+
+## [0.3.18] - 2026-08-11
+
+### Fixed
+- Frontend nginx now re-resolves the `backend` upstream via Docker's embedded
+  DNS (`resolver 127.0.0.11` + variable `proxy_pass`) so public `/health`,
+  `/api/` and `/ws/` survive backend container recreates without a manual
+  frontend restart (AUT-373).
+
+## [0.3.17] - 2026-08-11
+
+### Added
+- Public `GET /api/v1/version/mobile` endpoint that reports the latest
+  published `autobrain-mobile` release (read from GitHub server-side, since the
+  mobile repo is private). The mobile app consumes it via the connected server
+  for its version banner (AUT-365).
+
+## [0.3.16] - 2026-08-11
+
+### Fixed
+- Hosted/Default blank page (AUT-347): the CSP allowlisted `www.gstatic.com` but not `fonts.gstatic.com`, so CanvasKit's startup font fetch stalled the Flutter engine before the first frame. `fonts.gstatic.com` is now allowed in `font-src` + `connect-src`; text/images render again.
+
+## [0.3.15] - 2026-08-11
+
+### Fixed
+- Car valuation now reports `market-anchored` (not `rule-based-fallback`) when live market listings anchor the estimate (AUT-354).
 
 ## [0.3.14] - 2026-08-11
 
@@ -66,7 +105,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [0.3.6] - 2026-08-10
 
 ### Added
-- MinIO asset backup/restore admin endpoints (AUT-194): `GET /admin-api/assets/backup` streams a tar.gz of every object in the MinIO bucket, `POST /admin-api/assets/restore` validates + restores a gzip tar before wiping, enabling the autobrain-backup service to back up DB snapshots and image assets together.
+- MinIO asset backup/restore admin endpoints (AUT-194): `GET /admin-api/assets/backup` streams a tar.gz of every object in the MinIO bucket, `POST /admin-api/assets/restore` validates + restores a gzip tar before wiping,    enabling the autobrain-backup service to back up DB snapshots and image assets together.
 
 ### Changed
 - Automatic release cutting (AUT-240): `scripts/auto-bump.sh` now runs before
