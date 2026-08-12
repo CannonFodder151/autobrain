@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_premium, require_write
+from app.api.deps import require_premium, require_premium_write
 from app.core.logging import get_logger
 from app.db.session import get_db
 from app.models.user import User
@@ -204,7 +204,7 @@ async def feed(
 async def create_post(
     payload: PostCreate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_write),
+    user: User = Depends(require_premium_write),
 ) -> dict:
     vehicle = await get_accessible_vehicle(db, payload.vehicle_id, user)
     scope = SocialShareScope(**payload.share_scope.model_dump())
@@ -263,7 +263,7 @@ async def add_comment(
     post_id: str,
     payload: CommentIn,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_write),
+    user: User = Depends(require_premium_write),
 ) -> dict:
     build = await _get_published(db, post_id)
     cfg = await get_server_config(db)
@@ -315,7 +315,7 @@ async def list_comments(
 async def toggle_like(
     post_id: str,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_write),
+    user: User = Depends(require_premium_write),
 ) -> dict:
     build = await _get_published(db, post_id)
     cfg = await get_server_config(db)
@@ -377,7 +377,7 @@ async def _push_event_safe(db: AsyncSession, build: SocialBuild, kind: str, payl
 async def create_share_link(
     post_id: str,
     db: AsyncSession = Depends(get_db),
-    _user: User = Depends(require_write),
+    _user: User = Depends(require_premium_write),
 ) -> dict:
     build = await _get_published(db, post_id)
     if build.origin == "remote":
@@ -406,7 +406,7 @@ async def resolve_share_link(
 async def upload(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_write),
+    user: User = Depends(require_premium_write),
 ) -> dict:
     data = await file.read()
     try:
@@ -423,7 +423,7 @@ async def upload(
 async def delete_post(
     post_id: str,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_write),
+    user: User = Depends(require_premium_write),
 ) -> None:
     """Unshare a build (takedown propagates locally)."""
     build = await _get_published(db, post_id)

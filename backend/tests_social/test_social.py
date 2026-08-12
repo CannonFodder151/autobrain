@@ -178,6 +178,51 @@ async def test_free_account_locked_out() -> None:
 
 
 @pytest.mark.asyncio
+async def test_free_account_cannot_write() -> None:
+    """Rev 4: every social write route is premium-gated (no paywall bypass)."""
+    await _enable_feature(True)
+    async with _SessionLocal() as db:
+        free = await _new_user(db, "free2@example.com", "Free2", free=True)
+        owner = await _new_user(db, "owner2@example.com", "Owner2")
+        vehicle = await _new_vehicle(db, owner.id)
+        token = create_access_token(free.id)
+        vehicle_id = vehicle.id
+    async with await _client(token) as c:
+        for method, path, json_body in [
+            ("POST", "/api/v1/social/posts", {"vehicle_id": vehicle_id}),
+            ("POST", "/api/v1/social/posts/p1/comments", {"body": "hi"}),
+            ("POST", "/api/v1/social/posts/p1/likes", None),
+            ("POST", "/api/v1/social/posts/p1/share-link", None),
+            ("DELETE", "/api/v1/social/posts/p1", None),
+        ]:
+            resp = await c.request(method, path, json=json_body)
+            assert resp.status_code == 403, (method, path, resp.text)
+            assert "premium" in resp.json()["detail"].lower()
+    # upload is also premium-gated
+    async with await _client(token) as c:
+        resp = await c.post("/api/v1/social/uploads",
+                            files={"file": ("a.png", b"xx", "image/png")})
+        assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_demo_read_only() -> None:
+    await _enable_feature(True)
+    async with _SessionLocal() as db:
+        demo = await _new_user(db, "demo@example.com", "Demo", role="demo")
+        owner = await _new_user(db, "owner3@example.com", "Owner3")
+        vehicle = await _new_vehicle(db, owner.id)
+        demo_token = create_access_token(demo.id)
+        vehicle_id = vehicle.id
+    async with await _client(demo_token) as c:
+        feed = await c.get("/api/v1/social/feed")
+        assert feed.status_code == 200  # demo can read
+        created = await c.post("/api/v1/social/posts", json={"vehicle_id": vehicle_id})
+        assert created.status_code == 403  # demo cannot write
+        assert "read-only" in created.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
 async def test_unauthenticated_rejected() -> None:
     async with await _client() as c:
         resp = await c.get("/api/v1/social/feed")
