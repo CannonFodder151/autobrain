@@ -45,13 +45,18 @@ the snapshot is built/served — never stored without consent.
 
 ## Federation client (`app/social/federation.py`)
 
-Origin-server side only. Contract with the hub (Deployment Lead's service):
+Origin-server side only, matching the hub service contract (`hub/`, AUT-333):
 
-- `POST {hub}/v1/register` `{server_name, server_email}` → `{server_id, api_key}`
-- `POST {hub}/v1/outbox` (auth: `X-Server-Id` + `X-API-Key`) build metadata +
-  signed photo URLs
-- `GET {hub}/v1/inbox` → `{builds: [...]}` (remote builds, stored as
-  `origin="remote"` with their snapshot JSON; media fetched on demand)
+- `POST {hub}/v1/register` `{server_name, email, public_key, hosted}` →
+  `{server_id, api_key}`. `public_key` is a hex ed25519 key the client
+  generates at registration; `api_key` is shown once and stored. `hosted`
+  (`SOCIAL_FEDERATION_HOSTED`) marks AutoBrain-hosted servers (licensed free).
+- Signed federation requests carry `X-Server-Id`, `X-Timestamp`,
+  `X-Signature` (ed25519 over `<method>\n<path>\n<timestamp>\n<sha256(body)>`)
+  and `X-Api-Key` — the same scheme `hub/app/security.py` verifies.
+- `POST {hub}/v1/outbox` build metadata + signed photo URLs; `GET {hub}/v1/inbox`
+  → `{builds: [...]}` (remote builds stored as `origin="remote"` with their
+  snapshot JSON; media fetched on demand). Hub write ops require a valid license.
 
 Every hub call is resilient — failures are logged and never break the local
 feed. Remote builds are never re-federated (no loops). **Zero billing code on

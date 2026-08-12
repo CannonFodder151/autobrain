@@ -31,6 +31,7 @@ def upgrade() -> None:
         sa.Column("hub_status", sa.String(20), nullable=False, server_default="unregistered"),
         sa.Column("hub_server_id", sa.String(64), nullable=True),
         sa.Column("hub_api_key", sa.String(128), nullable=True),
+        sa.Column("hub_private_key", sa.String(128), nullable=True),
         sa.Column("last_inbox_sync", sa.DateTime(timezone=True), nullable=True),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
     )

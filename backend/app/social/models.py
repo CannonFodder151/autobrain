@@ -127,6 +127,7 @@ class SocialServerConfig(Base):
     hub_status: Mapped[str] = mapped_column(String(20), default="unregistered")  # unregistered/registered/error
     hub_server_id: Mapped[str | None] = mapped_column(String(64))
     hub_api_key: Mapped[str | None] = mapped_column(String(128))
+    hub_private_key: Mapped[str | None] = mapped_column(String(128))  # ed25519, hub auth
     last_inbox_sync: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

@@ -303,8 +303,9 @@ async def register_social_server(db: AsyncSession = Depends(get_db)) -> dict:
             status_code=400,
             detail="Set server_name and server_email first (PATCH /admin/social)",
         )
+    private_key, public_key = fed.generate_keypair()
     try:
-        result = await fed.register(cfg, cfg.server_name, cfg.server_email)
+        result = await fed.register(cfg, cfg.server_name, cfg.server_email, public_key)
     except fed.FederationUnavailable as exc:
         cfg.hub_status = "error"
         await db.commit()
@@ -312,6 +313,7 @@ async def register_social_server(db: AsyncSession = Depends(get_db)) -> dict:
     cfg.hub_status = "registered"
     cfg.hub_server_id = str(result.get("server_id"))
     cfg.hub_api_key = str(result.get("api_key"))
+    cfg.hub_private_key = private_key
     await db.commit()
     return {
         "hub_status": cfg.hub_status,
@@ -328,5 +330,6 @@ async def unregister_social_server(db: AsyncSession = Depends(get_db)) -> dict:
     cfg.hub_status = "unregistered"
     cfg.hub_server_id = None
     cfg.hub_api_key = None
+    cfg.hub_private_key = None
     await db.commit()
     return {"message": "Server removed from the federation hub", "hub_status": cfg.hub_status}

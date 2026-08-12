@@ -138,6 +138,7 @@ class Settings(BaseSettings):
     SOCIAL_FEATURE_ENABLED: bool = False
     SOCIAL_FEDERATION_ENABLED: bool = False
     SOCIAL_FEDERATION_HUB_URL: str = ""  # federation hub base URL (hub is a separate service)
+    SOCIAL_FEDERATION_HOSTED: bool = False  # AutoBrain-hosted = licensed free on the hub
 
     # Stripe billing (hosted subscriptions). Price IDs come from the Stripe
     # Dashboard (or scripts/stripe-setup.py). Leave empty to disable /billing.
