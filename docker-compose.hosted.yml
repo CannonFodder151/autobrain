@@ -191,7 +191,7 @@ services:
     # Community Garage federation hub (AUT-333) — deploy config only.
     # Hub internals live in the PRIVATE repo autobrain-federation-hub
     # (board rev 8): private code, private GHCR image. Nothing here is hub code.
-    image: ghcr.io/cannonfodder151/autobrain-hub:hosted
+    image: ghcr.io/cannonfodder151/autobrain-federation-hub:hosted
     restart: unless-stopped
     environment:
       DATABASE_PATH: /data/hub.db
