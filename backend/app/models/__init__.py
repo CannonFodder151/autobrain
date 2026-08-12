@@ -15,6 +15,14 @@ from app.models.market_listing import MarketListingCache
 from app.models.notification import NotificationPreference, NotificationDelivery
 from app.models.share import VehicleShare
 from app.models.refresh_token import RevokedRefreshToken
+from app.social.models import (
+    SocialBuild,
+    SocialComment,
+    SocialLike,
+    SocialPhoto,
+    SocialServerConfig,
+    SocialShareScope,
+)
 
 __all__ = [
     "User",
@@ -37,4 +45,10 @@ __all__ = [
     "NotificationDelivery",
     "VehicleShare",
     "RevokedRefreshToken",
+    "SocialBuild",
+    "SocialPhoto",
+    "SocialComment",
+    "SocialLike",
+    "SocialShareScope",
+    "SocialServerConfig",
 ]

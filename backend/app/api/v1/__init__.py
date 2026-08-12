@@ -19,6 +19,7 @@ from app.api.v1 import (
     search,
     services,
     shares,
+    social,
     valuation,
     vehicles,
     version,
@@ -44,4 +45,5 @@ api_router.include_router(valuation.router)
 api_router.include_router(analytics.router)
 api_router.include_router(notifications.router)
 api_router.include_router(search.router)
+api_router.include_router(social.router)
 api_router.include_router(version.router)

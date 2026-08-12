@@ -24,6 +24,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- Community Garage backend (AUT-332): social models/API/media under `backend/app/social/` — build posts (vehicle snapshot from existing specs + mods, deterministic — no AI), photo upload with on-upload webp compression + signed short-lived MinIO URLs, comments, likes, share links, and a federation hub client (register / outbox / inbox; the hub itself ships separately). Routes: `/social/feed`, `/social/posts`, `/social/posts/{id}/comments`, `/social/posts/{id}/likes`, `/social/posts/{id}/share-link`, `/social/uploads`.
+- Premium entitlement guard on all social routes (rev 4): free accounts are locked out server-side; demo accounts keep read-only access.
+- Two admin toggles via `/admin/social` (GET/PATCH + register/unregister): federated on/off (off = local-only feed, no hub calls) and feature on/off (off = "Disabled by your admin"). Overrides persist in `social_server_config`, seeded from env settings.
+- Demo seeding (req 10): `DEMO_MODE` seeds curated demo builds (feature on, federation off) with a demo photo.
+- `pillow` pinned in backend requirements; social tables added to the backup/restore order and user-deletion cleanup.
+
 ## [0.3.19] - 2026-08-11
 
 ### Security

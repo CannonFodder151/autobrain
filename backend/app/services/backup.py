@@ -22,6 +22,12 @@ logger = get_logger(__name__)
 _ORDER = [
     "users",
     "vehicles",
+    "social_builds",
+    "social_share_scopes",
+    "social_photos",
+    "social_comments",
+    "social_likes",
+    "social_server_config",
     "vehicle_shares",
     "vehicle_events",
     "service_records",
@@ -265,7 +271,64 @@ async def _delete_user_data(db: AsyncSession, user_id: str) -> None:
     vehicle_ids = list((await db.execute(
         select(_TABLES["vehicles"].c.id).where(_TABLES["vehicles"].c.user_id == user_id)
     )).scalars().all())
+
+    # Community Garage (AUT-332): remove the user's social footprint first.
+    build_ids = []
+    if vehicle_ids:
+        build_ids = list((await db.execute(
+            select(_TABLES["social_builds"].c.id).where(
+                _TABLES["social_builds"].c.vehicle_id.in_(vehicle_ids)
+            )
+        )).scalars().all())
+    if build_ids:
+        await db.execute(
+            _TABLES["social_share_scopes"].delete().where(
+                _TABLES["social_share_scopes"].c.build_id.in_(build_ids)
+            )
+        )
+        await db.execute(
+            _TABLES["social_photos"].delete().where(
+                _TABLES["social_photos"].c.build_id.in_(build_ids)
+            )
+        )
+        await db.execute(
+            _TABLES["social_comments"].delete().where(
+                _TABLES["social_comments"].c.build_id.in_(build_ids)
+            )
+        )
+        await db.execute(
+            _TABLES["social_likes"].delete().where(
+                _TABLES["social_likes"].c.build_id.in_(build_ids)
+            )
+        )
+    # The user's own photos/comments/likes on other people's builds.
+    if "social_photos" in _TABLES:
+        await db.execute(
+            _TABLES["social_photos"].delete().where(
+                _TABLES["social_photos"].c.uploader_user_id == user_id
+            )
+        )
+    if build_ids:
+        await db.execute(
+            _TABLES["social_builds"].delete().where(
+                _TABLES["social_builds"].c.id.in_(build_ids)
+            )
+        )
+    if "social_comments" in _TABLES:
+        await db.execute(
+            _TABLES["social_comments"].delete().where(
+                _TABLES["social_comments"].c.author_user_id == user_id
+            )
+        )
+    if "social_likes" in _TABLES:
+        await db.execute(
+            _TABLES["social_likes"].delete().where(
+                _TABLES["social_likes"].c.author_user_id == user_id
+            )
+        )
+
     if not vehicle_ids:
+        await db.flush()
         return
     await db.execute(
         _TABLES["vehicle_shares"].delete().where(
