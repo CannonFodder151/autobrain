@@ -63,6 +63,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showDownload() {
+    if (!AppConfig.isMobile) return;
     showDialog<void>(
       context: context,
       builder: (_) => const DownloadAppDialog(),

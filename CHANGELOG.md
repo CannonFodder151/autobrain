@@ -34,6 +34,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - OBD automatic trip recording (AUT-362, Android): GoFar-style auto start/stop logbook trips. With the VGate iCar Pro adapter left in the car and `Auto-connect OBD` on, a foreground service keeps the app alive in the background, ignition is detected from battery voltage (PID 0142) + engine RPM (010C) + BT link-drop, and each drive lands in the logbook automatically — marked "auto (OBD)" so manual trips stay distinguishable. A mid-drive app kill no longer loses a trip (buffered locally, synced on next open). Backend: `logbook_entries.source` column (`manual`/`obd_auto`) via Alembic migration.
 - Logbook screen (mobile + web): auto-logged trips are labelled "auto (OBD)" in the trip list.
 
+### Fixed
+- "Get the mobile app" is fully inert inside the mobile app (AUT-428): the menu item is already gated on `!AppConfig.isMobile` (AUT-399), and the download dialog is now also guarded the same way (defense in depth). Regression test added under `frontend/test/home_download_menu_test.dart` asserting the item is absent on mobile builds.
+
 ## [0.3.26] - 2026-08-13
 ### Fixed
 - AI service prediction now uses the selected vehicle (AUT-398): the prediction screen fetched `GET /vehicles` and used the first entry, so it could predict for the wrong car (e.g. the Fazer) when the crown-selected vehicle was not first in the list. It now fetches `GET /vehicles/{id}` for the vehicle the user opened from.
