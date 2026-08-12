@@ -2,7 +2,19 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.services.trip_gps import clean_samples
+
+
+class GpsSample(BaseModel):
+    """One GPS fix on a trip route. `t` is epoch seconds, lat/lon in degrees
+    (WGS84). Raw NEO-8M board samples arrive as x10^7 integers with `0,0`
+    meaning "no fix" — the parser ([app.services.trip_gps]) normalises those."""
+
+    t: int
+    lat: float
+    lon: float
 
 
 class LogEntryCreate(BaseModel):
@@ -13,6 +25,12 @@ class LogEntryCreate(BaseModel):
     start_lng: float | None = None
     purpose: str = Field(default="private", pattern="^(work|private)$")
     reason: str | None = None
+    gps_samples: list[GpsSample] | None = None
+
+    @field_validator("gps_samples")
+    @classmethod
+    def _clean(cls, v: list[GpsSample] | None) -> list[GpsSample] | None:
+        return clean_samples(v)
 
 
 class LogEntryUpdate(BaseModel):
@@ -29,6 +47,12 @@ class LogEntryUpdate(BaseModel):
     purpose: str | None = Field(default=None, pattern="^(work|private)$")
     reason: str | None = None
     status: str | None = Field(default=None, pattern="^(in_progress|completed)$")
+    gps_samples: list[GpsSample] | None = None
+
+    @field_validator("gps_samples")
+    @classmethod
+    def _clean(cls, v: list[GpsSample] | None) -> list[GpsSample] | None:
+        return clean_samples(v)
 
 
 class LogEntryOut(BaseModel):
@@ -51,6 +75,13 @@ class LogEntryOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class LogEntryDetail(LogEntryOut):
+    """Full trip incl. the GPS route (only returned on the detail endpoint so
+    the list stays light — a year of trips with samples would be heavy)."""
+
+    gps_samples: list[GpsSample] = Field(default_factory=list)
 
 
 class OdometerPhotoResult(BaseModel):

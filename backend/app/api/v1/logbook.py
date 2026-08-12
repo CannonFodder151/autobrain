@@ -26,6 +26,7 @@ from app.models.logbook import LogEntry
 from app.models.user import User
 from app.schemas.logbook import (
     LogEntryCreate,
+    LogEntryDetail,
     LogEntryOut,
     LogEntryUpdate,
     LogbookStats,
@@ -217,3 +218,20 @@ async def read_odometer_photo(
     if not result:
         raise HTTPException(status_code=503, detail="Odometer OCR engine unavailable")
     return OdometerPhotoResult(**result)
+
+
+@router.get("/{entry_id}", response_model=LogEntryDetail)
+async def get_entry(
+    vehicle_id: str,
+    entry_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> LogEntry:
+    """One trip incl. its GPS route. The samples stay out of the list response
+    so a year of trips with routes doesn't blow up the payload."""
+    vehicle = await get_accessible_vehicle(db, vehicle_id, user)
+    _require_logbook(vehicle)
+    entry = await db.get(LogEntry, entry_id)
+    if not entry or entry.vehicle_id != vehicle_id:
+        raise HTTPException(status_code=404, detail="Log entry not found")
+    return entry

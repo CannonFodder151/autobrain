@@ -24,6 +24,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- Logbook trip routes on a map (AUT-395): trips recorded with GPS now carry a deterministic polyline of `lat,lon` samples (`logbook_entries.gps_samples`, JSON). Phone/car-kit auto trips buffer fixes while driving (survive app kills; ~1 fix/s, capped) and sync them on completion; the board CSV schema `epoch,...,lat,lon` (raw degrees x10^7, `0,0` = no fix) is a valid source via `backend/app/services/trip_gps.py::parse_board_csv` (invalid/out-of-range fixes dropped server-side — no AI). The logbook shows a "View route" button per trip → a full-screen OpenStreetMap route (flutter_map) with start/end markers, skipping no-fix samples. Detail endpoint `GET /vehicles/{id}/logbook/{entry_id}` returns `gps_samples` so the list stays light.
+- Community Garage backend (AUT-332): social models/API/media under `backend/app/social/` — build posts (vehicle snapshot from existing specs + mods, deterministic — no AI), photo upload with on-upload webp compression + signed short-lived MinIO URLs, comments, likes, share links, and a federation hub client (register / outbox / inbox; the hub itself ships separately). Routes: `/social/feed`, `/social/posts`, `/social/posts/{id}/comments`, `/social/posts/{id}/likes`, `/social/posts/{id}/share-link`, `/social/uploads`.
+- Premium entitlement guard on all social routes (rev 4): free accounts are locked out server-side; demo accounts keep read-only access.
+- Two admin toggles via `/admin/social` (GET/PATCH + register/unregister): federated on/off (off = local-only feed, no hub calls) and feature on/off (off = "Disabled by your admin"). Overrides persist in `social_server_config`, seeded from env settings.
+- Demo seeding (req 10): `DEMO_MODE` seeds curated demo builds (feature on, federation off) with a demo photo.
+- `pillow` pinned in backend requirements; social tables added to the backup/restore order and user-deletion cleanup.
+
 ## [0.3.19] - 2026-08-11
 
 ### Security

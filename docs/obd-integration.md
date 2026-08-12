@@ -55,6 +55,20 @@ Verified: `flutter analyze` clean for OBD files, `flutter test` 25 passing, debu
 - ELM327 adapters are widely cloned with varying firmware — test auto-sleep per unit.
 - Prefer adapters with sleep-on-idle / auto-off to avoid battery drain.
 
+## Trip routes on the map (AUT-395)
+
+Headline OBD2-port feature: drives recorded with GPS (the phone car-kit path, or
+the DIY board's NEO-8M GPS later via BLE sync) render their route in the logbook.
+Deterministic — raw `lat,lon` samples → polyline, no AI.
+
+- Storage: `logbook_entries.gps_samples` JSON — `[{"t": epoch, "lat": deg, "lon": deg}]`.
+- Ingestion: the board CSV `epoch,...,lat,lon` (raw degrees x10^7, `0,0` = no fix)
+  is a valid source via `backend/app/services/trip_gps.py::parse_board_csv`;
+  the phone path sends samples on the trip PATCH.
+- Render: logbook trip detail → `GET /vehicles/{id}/logbook/{entry_id}` → flutter_map
+  route; `0,0`/out-of-range samples dropped server-side.
+
+
 ## Definition of done
 
 - Bluetooth auto-connect on app open when enabled.
