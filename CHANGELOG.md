@@ -23,7 +23,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.21] - 2026-08-12
 
 ### Fixed
 - AI service prediction now predicts for the selected vehicle (AUT-429): it always used the first vehicle in the list, so with a different vehicle selected (e.g. your Crown) it showed the wrong one (e.g. your Fazer).
