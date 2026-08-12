@@ -14,12 +14,13 @@
 
 #include <Arduino.h>
 #include "driver/twai.h"
-#include "esp_sleep.h"
 #include "config.h"
 #include "obd_pids.h"
 #include "rtc_ds3231.h"
 #include "trip_store.h"
 #include "ble_sync.h"
+#include "sleep_heuristics.h"
+#include "power.h"
 
 using namespace autobrain;
 
@@ -88,6 +89,7 @@ static void run_trip() {
         Serial.println("ERR: cannot open trip file");
         return;
     }
+    ble.begin(APP_NAME);  // BLE radio only while capturing — off during sleep/probes
     ble.publishTrips(trips.index());
 
     uint32_t quiet = 0;
@@ -99,7 +101,6 @@ static void run_trip() {
             bool have_spd = pid_request(0x0D, spd);
             bool acc = digitalRead(ACC_PIN) == HIGH;
             if (have_rpm || have_spd || acc) {
-                quiet = 0;
                 char row[48];
                 format_trip_row(row, sizeof row, rtc.unixTime(),
                                 have_rpm ? pid_rpm(rpm[2], rpm[3]) : 0,
@@ -110,15 +111,16 @@ static void run_trip() {
             }
         } else if (digitalRead(ACC_PIN) == HIGH) {
             // CAN absent: fall back to ACC-only heartbeat rows.
-            quiet = 0;
             char row[48];
             format_trip_row(row, sizeof row, rtc.unixTime(), 0, 0, 0, 0);
             trips.appendRow(row);
             any = true;
         }
 
-        if (!any) quiet += SAMPLE_MS;
-        if (quiet >= TRIP_END_MS) break;  // sustained silence => engine off
+        // Trip-gating invariant (sleep_heuristics.h): any activity resets the
+        // quiet window, so sleep only becomes eligible between trips.
+        quiet = next_quiet(quiet, any, SAMPLE_MS);
+        if (should_sleep(quiet, TRIP_END_MS)) break;  // sustained silence => engine off
         delay(SAMPLE_MS);
     }
 
@@ -128,28 +130,21 @@ static void run_trip() {
     }
 }
 
-// ---------- Deep sleep ----------
-static void sleep_until_ignition() {
-    // Timer wake: re-probe even if ACC pin never rises (some cars wake CAN only).
-    esp_sleep_enable_timer_wakeup((uint64_t)SLEEP_CHECK_MS * 1000ULL);
-    // GPIO wake: ACC rising edge catches engine start instantly.
-    gpio_wakeup_enable((gpio_num_t)ACC_PIN, GPIO_INTR_HIGH_LEVEL);
-    esp_sleep_enable_gpio_wakeup();
-    esp_deep_sleep_start();  // never returns; reboot re-runs setup()
-}
-
 // ---------- Setup ----------
 void setup() {
     Serial.begin(115200);
     delay(200);
 
+    Serial.printf("%s v%s boot — wake cause: %s\n", APP_NAME, APP_VERSION,
+                  autobrain::wake_cause_str());
+
     pinMode(ACC_PIN, INPUT_PULLDOWN);
+    can_standby(false);  // transceiver back to high-speed mode before probing
 
     if (!rtc.begin(Wire, I2C_SDA_PIN, I2C_SCL_PIN)) {
         Serial.println("WARN: DS3231 not found — timestamps will be 0");
     }
     trips.begin();
-    ble.begin(APP_NAME);
     can_init();
 
     Serial.printf("%s v%s boot — probing ignition...\n", APP_NAME, APP_VERSION);
@@ -160,7 +155,7 @@ void setup() {
     } else {
         Serial.println("ignition OFF — sleeping");
     }
-    sleep_until_ignition();
+    autobrain::sleep_until_ignition();
 }
 
 void loop() {}  // unused; setup() deep-sleeps or loops in run_trip

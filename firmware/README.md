@@ -16,7 +16,7 @@ nothing is left to inference.
 
 1. **Ignition detect** — CAN bus responds to an OBD PID probe (and/or ACC pin high) ⇒ ignition ON. Sustained silence for `TRIP_END_MS` ⇒ OFF.
 2. **Trip capture** — while ON, sample RPM + speed every second, append a CSV row to on-board flash (LittleFS) / SD. No phone, no network needed.
-3. **Low power** — when OFF, deep-sleep and wake only on a timer (re-probe) or ACC GPIO edge. Target 10 µA–1 mA so the always-on 12V feed never drains the car battery.
+3. **Low power / auto-sleep** — when OFF, deep-sleep and wake only on ACC high or a timer re-probe. The CAN transceiver goes to standby (RS held high via `gpio_hold`) during sleep, BLE runs only while capturing, and the target quiescent draw is ~0.2–1 mA so the always-on 12V feed never drains the car battery. Full design + bench test plan in [`esp32-diy/docs/auto-sleep.md`](esp32-diy/docs/auto-sleep.md) (AUT-387).
 4. **BLE sync** — PoC exposes the trip index over BLE; full file transfer is the app-side sync phase.
 
 ## Row schema (shared by both paths)
@@ -57,6 +57,11 @@ without a car (simulate "ignition" by injecting CAN traffic / raising ACC).
 | DS3231 + battery | battery-backed RTC for epoch timestamps | US$2–3 |
 | 12V→5V DC-DC buck (e.g. MP1584) | always-on OBD power, survives crank dips | US$1–2 |
 | Voltage divider + OBD-2 female plug | ACC sense + bus tap | US$1–3 |
+
+Wiring note: wire the transceiver **RS** pin to **GPIO18** (`CAN_STBY_PIN`) so
+auto-sleep can put it in low-power standby (see
+[`esp32-diy/docs/auto-sleep.md`](esp32-diy/docs/auto-sleep.md)); set the pin to
+`-1` in `config.h` if unwired.
 
 See the full research memo + component table in the Outline doc
 _2026-W33 OBD Dongle Research (AUT-363)_.

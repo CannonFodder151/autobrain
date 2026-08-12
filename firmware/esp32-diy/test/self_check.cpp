@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "../src/obd_pids.h"
+#include "../src/sleep_heuristics.h"
 using namespace autobrain;
 
 // Mirror of the DS3231 epoch conversions (kept here so the pure math is
@@ -70,6 +71,21 @@ int main() {
     assert(toEpoch(2026, 1, 1, 0, 0, 0) == 1767225600u);
     assert(toEpoch(1970, 1, 1, 0, 0, 0) == 0u);
     assert(toEpoch(2000, 2, 29, 12, 0, 0) == 951825600u);  // leap day
+
+    // auto-sleep trip-gating invariants: any activity resets the quiet window,
+    // so sleep is only eligible between trips, never mid-log.
+    assert(next_quiet(0, false, 1000) == 1000);
+    assert(next_quiet(44000, false, 1000) == 45000);
+    assert(next_quiet(44000, true, 1000) == 0);      // activity resets window
+    assert(next_quiet(0, true, 1000) == 0);          // activity while logging keeps logging
+    assert(!should_sleep(44999, 45000));             // below threshold: trip stays open
+    assert(should_sleep(45000, 45000));              // at threshold: eligible to sleep
+    assert(should_sleep(0, 0));                      // zero threshold: immediate
+    assert(!should_sleep(0, 45000));                 // fresh trip: never sleep mid-log
+    // invariant: a row is written iff activity, and activity forces quiet=0,
+    // so no log row is ever lost to a mid-trip sleep.
+    for (uint32_t q = 0; q <= 50000; q += 1000)
+        assert(next_quiet(q, true, 1000) == 0);
 
     printf("all self-checks passed\n");
     return 0;

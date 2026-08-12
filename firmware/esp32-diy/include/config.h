@@ -7,6 +7,11 @@
 #define CAN_TX_PIN 5
 #define CAN_RX_PIN 4
 
+// CAN transceiver standby control. Wire MCP2551 RS (pin 8) / SN65HVD230 RS
+// (pin 1) to a GPIO and set it here to cut transceiver current (~5mA) down to
+// ~10uA during deep sleep. Set to -1 if RS is not wired.
+#define CAN_STBY_PIN 18
+
 // ---- I2C (DS3231 RTC) ----
 #define I2C_SDA_PIN 21
 #define I2C_SCL_PIN 22
@@ -23,3 +28,4 @@
 
 // ---- Deep sleep ----
 #define SLEEP_CHECK_MS (2u * 60u * 1000u)  // periodic wake to re-probe ignition
+                                          // (CAN-only cars with no ACC line)
