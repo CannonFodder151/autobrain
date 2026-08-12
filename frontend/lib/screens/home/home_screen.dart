@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/auth_state.dart';
+import '../../core/config.dart';
 import '../../core/models.dart';
 import '../../widgets/vehicle_selector.dart';
 import '../admin/admin_screen.dart';
@@ -125,7 +126,8 @@ class _HomeScreenState extends State<HomeScreen> {
             },
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'settings', child: Text('Settings & security')),
-              const PopupMenuItem(value: 'download', child: Text('Get the mobile app')),
+              if (!AppConfig.isMobile)
+                const PopupMenuItem(value: 'download', child: Text('Get the mobile app')),
               if (auth.licenseEnabled)
                 const PopupMenuItem(value: 'license', child: Text('License')),
               if (auth.isAdmin)

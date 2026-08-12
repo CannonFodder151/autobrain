@@ -24,6 +24,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- "Get the mobile app" menu item no longer shows on the mobile app itself (AUT-399): `HomeScreen` only renders the download entry when not running natively on Android/iOS. `AppConfig._isMobile` → public `AppConfig.isMobile`.
+
 ## [0.3.19] - 2026-08-11
 
 ### Security
