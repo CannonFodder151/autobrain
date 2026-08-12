@@ -26,6 +26,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- Hosted frontend now pins a static container IP (172.18.0.14) on the pinned default network (AUT-372): host-level nginx-proxy-manager caches the frontend's resolved IP, so a recreated frontend with a new IP returned 502 until npm was restarted. Frontend recreates now keep the same IP and the site stays up with no npm restart.
+
 ## [0.3.21] - 2026-08-12
 
 ### Fixed
