@@ -63,6 +63,7 @@ Oracle VM; the stack frontend nginx exposes `:8086`.
 | worker / beat | `autobrain-worker:<tag>` | Celery worker + beat, separate containers |
 | ai | `autobrain-ai:<tag>` | AI gateway on `:8001` (internal); `/health` |
 | frontend | `autobrain-frontend:<tag>` | nginx serves Flutter web + proxies `/api/*`, `/ws/*`, `/ai/*` |
+| hub | `ghcr.io/cannonfodder151/autobrain-federation-hub:<tag>` | federation hub (Community Garage); built + pushed from the PRIVATE repo `autobrain-federation-hub` (board rev 8); deploy config only in this repo |
 
 Only the frontend publishes a port; all internal services stay on the Compose
 network.
