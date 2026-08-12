@@ -110,7 +110,7 @@ def test_federation_signing_interop() -> None:
     canonical = _canonical("POST", "/v1/outbox", ts, body)
     sig = _sign(priv, canonical)
 
-    # Mirror of hub/app/security.py::verify_signature
+    # Mirror of autobrain-federation-hub app/security.py::verify_signature
     pk = Ed25519PublicKey.from_public_bytes(bytes.fromhex(pub))
     pk.verify(base64.b64decode(sig), canonical)
 

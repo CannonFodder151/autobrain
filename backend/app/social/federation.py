@@ -1,6 +1,6 @@
 """Federation hub client matching the hub service contract (AUT-333).
 
-The hub itself lives in `hub/` (Deployment Lead's workstream). This module is
+The hub itself lives in the private repo `autobrain-federation-hub` (AUT-333). This module is
 the origin-server side: keypair + registration, signed outbox pushes and inbox
 pulls. Every call is resilient — hub failures are logged and never break the
 local feed (AUT-294 §4 / req 15).

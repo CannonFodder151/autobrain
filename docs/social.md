@@ -45,7 +45,8 @@ the snapshot is built/served — never stored without consent.
 
 ## Federation client (`app/social/federation.py`)
 
-Origin-server side only, matching the hub service contract (`hub/`, AUT-333):
+Origin-server side only, matching the hub service contract (private repo
+`autobrain-federation-hub`, AUT-333):
 
 - `POST {hub}/v1/register` `{server_name, email, public_key, hosted}` →
   `{server_id, api_key}`. `public_key` is a hex ed25519 key the client
@@ -53,7 +54,7 @@ Origin-server side only, matching the hub service contract (`hub/`, AUT-333):
   (`SOCIAL_FEDERATION_HOSTED`) marks AutoBrain-hosted servers (licensed free).
 - Signed federation requests carry `X-Server-Id`, `X-Timestamp`,
   `X-Signature` (ed25519 over `<method>\n<path>\n<timestamp>\n<sha256(body)>`)
-  and `X-Api-Key` — the same scheme `hub/app/security.py` verifies.
+  and `X-Api-Key` — the same scheme the hub verifies (see the private repo).
 - `POST {hub}/v1/outbox` build metadata + signed photo URLs; `GET {hub}/v1/inbox`
   → `{builds: [...]}` (remote builds stored as `origin="remote"` with their
   snapshot JSON; media fetched on demand). Hub write ops require a valid license.
