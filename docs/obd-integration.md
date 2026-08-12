@@ -4,7 +4,7 @@ Live OBD-II logging via a Bluetooth OBD2 adapter is an in-progress roadmap item 
 
 ## Phone-free trip logging (firmware PoC)
 
-See [`firmware/README.md`](/firmware/README.md) and [`firmware/DECISION.md`](/firmware/DECISION.md) for the full build-vs-buy picture (AUT-363 research → AUT-369 firmware PoC). Short version: ESP32 DIY board (US$15–30) with TWAI CAN + DS3231 RTC captures phone-dead trips to on-board flash; Freematics ONE+ (US$135) is the reference buy path. Firmware is written and compile-verified for the DIY path.
+See [`README.md`](https://github.com/CannonFodder151/autobrain-obd2-diy) and `DECISION.md` in the private firmware repo `CannonFodder151/autobrain-obd2-diy` for the full build-vs-buy picture (AUT-363 research → AUT-369 firmware PoC). Short version: ESP32 DIY board (US$15–30) with TWAI CAN + DS3231 RTC captures phone-dead trips to on-board flash; Freematics ONE+ (US$135) is the reference buy path. Firmware is written and compile-verified for the DIY path.
 
 ## Goal
 
