@@ -85,8 +85,12 @@ class _ServicePredictionScreenState extends State<ServicePredictionScreen> {
       body: FutureBuilder(
         future: context.read<AuthState>().api.get('/vehicles'),
         builder: (context, snap) {
-          final Vehicle? vehicle = snap.hasData && (snap.data as List).isNotEmpty
-              ? Vehicle.fromJson((snap.data as List).first as Map<String, dynamic>)
+          final Vehicle? vehicle = snap.hasData
+              ? Vehicle.byId(
+                  (snap.data as List)
+                      .map((e) => Vehicle.fromJson(e as Map<String, dynamic>))
+                      .toList(),
+                  widget.vehicleId)
               : null;
           return ListView(
             padding: const EdgeInsets.all(16),

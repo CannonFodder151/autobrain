@@ -62,6 +62,15 @@ class Vehicle {
     return vehicles.isEmpty ? null : vehicles.first;
   }
 
+  /// Resolves the live vehicle for [vehicleId] from [vehicles], falling back to
+  /// the primary (then first) vehicle when [vehicleId] isn't in the list.
+  static Vehicle? byId(List<Vehicle> vehicles, String vehicleId) {
+    for (final v in vehicles) {
+      if (v.id == vehicleId) return v;
+    }
+    return resolveSelection(vehicles, null);
+  }
+
   factory Vehicle.fromJson(Map<String, dynamic> j) => Vehicle(
         id: j['id'] as String,
         nickname: j['nickname'] as String,
