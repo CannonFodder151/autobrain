@@ -33,6 +33,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+## [Unreleased]
+### Fixed
+- Alembic migration chain (AUT-450): `a5b6c7d8e9f0` (logbook `gps_samples`, AUT-395) referenced a never-existent down_revision `n4p5q6r7s8t9`, so `alembic upgrade head` crashed with `KeyError` on every boot, the create_all fallback silently skipped it, and the `source` column (AUT-362) never applied on fresh DBs (demo/hosted) — demo seed then crash-looped. Reparented to `k2l3m4n5o6p7` so the chain is linear and both columns apply.
+
 ## [0.3.31] - 2026-08-13
 ### Security
 - Dependency bump (AUT-301): `pypdf` pinned `6.14.2` → `6.15.0` in `backend/requirements.txt` and `ai/requirements.txt`, fixing two DoS CVEs in crafted-PDF parsing (CVE-2026-71852 large CID font width ranges, CVE-2026-71870 large /ToUnicode streams) reachable via user-uploaded receipt PDFs in the Celery worker.
