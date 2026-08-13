@@ -112,6 +112,10 @@ services:
       LOGIN_MAX_ATTEMPTS: 5
       LOGIN_WINDOW_SECONDS: 10800
       ADMIN_API_KEY: ${ADMIN_API_KEY:-}
+      # Community Garage (AUT-468): flipped live on AutoBrain-Hosted 2026-08-13.
+      # Hub URL + hosted flag are set once below (AUT-532) to avoid dup keys.
+      SOCIAL_FEATURE_ENABLED: ${SOCIAL_FEATURE_ENABLED:-true}
+      SOCIAL_FEDERATION_ENABLED: ${SOCIAL_FEDERATION_ENABLED:-true}
       SELF_SIGNUP_ENABLED: ${SELF_SIGNUP_ENABLED:-true}
       LICENSE_ENABLED: "true"
       # Community Garage federation hub (AUT-532): the hub is a sibling service
