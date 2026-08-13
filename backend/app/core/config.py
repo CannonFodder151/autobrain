@@ -104,13 +104,8 @@ class Settings(BaseSettings):
     # Public base URL used to build password-reset links (no trailing slash)
     APP_BASE_URL: str = "http://localhost:8000"
 
-    # Versioning + GitHub release checking
+    # Versioning (local only; the GitHub update check was removed — AUT-461)
     APP_VERSION: str = "0.3.44"  # mirror frontend/pubspec.yaml version
-    GITHUB_REPO: str = "CannonFodder151/autobrain"
-    # Mobile repo identifier reported by /version/mobile. Its release info is
-    # published to the PUBLIC autobrain repo (mobile/latest.json) and read
-    # unauthenticated — no GitHub token lives on the server.
-    MOBILE_GITHUB_REPO: str = "CannonFodder151/autobrain-mobile"
 
     # Scheduled backup (daily). When set, beats stores a full JSON snapshot to MinIO.
     BACKUP_ENABLED: bool = True

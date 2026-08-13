@@ -16,7 +16,6 @@ Vehicle sharing: a user with an accepted share on a vehicle can read and write i
 |--------|------|-------------|
 | POST   | `/auth/login` | Login; returns `token_pair` or `{mfa_required, mfa_token}` when MFA enabled |
 | GET    | `/auth/config` | Public client config: `{signup_enabled, mfa_enforced}` (drives the app's signup button) |
-| GET    | `/version/mobile` | Latest `autobrain-mobile` release via public manifest (`mobile/latest.json` in the autobrain repo; `{repo, reachable, latest_version, html_url}`) |
 | POST   | `/auth/mfa/verify` | Complete login with TOTP code |
 | POST   | `/auth/refresh` | Refresh tokens |
 | GET    | `/auth/me` | Current user (role, mfa_enabled, free_account, obd_enabled, obd_auto_connect, vehicle_count) |
@@ -40,7 +39,7 @@ Vehicle sharing: a user with an accepted share on a vehicle can read and write i
 | PATCH  | `/admin/users/{id}` | Update role/active/password/quota/free_account/obd_enabled |
 | DELETE | `/admin/users/{id}` | Delete user |
 | POST   | `/admin/users/{id}/re-upgrade` | Re-grant a paid tier to an account (default `enabled=true`) |
-| GET    | `/admin/version` | Server version + GitHub latest-release check (up_to_date) |
+| GET    | `/admin/version` | Server version (local only — no GitHub check) |
 | GET    | `/admin/backup` | Download full JSON database snapshot |
 | POST   | `/admin/restore` | Upload a backup to wipe & restore the database (DANGEROUS) |
 
