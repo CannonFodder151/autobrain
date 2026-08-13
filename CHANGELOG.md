@@ -25,6 +25,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Fixed
+- Security (AUT-303): login brute-force rate limit was bypassable by spoofing `X-Forwarded-For` (the backend trusted the client-controlled leading hop, so an attacker could rotate the header and never hit `LOGIN_MAX_ATTEMPTS`). The client IP is now derived from the trusted proxy header `X-Real-IP` (nginx sets `X-Real-IP $remote_addr`) and never from `X-Forwarded-For`. Failure counters moved from process memory to Redis (shared across workers, survive restarts) and now also count per-email as defense in depth against a misconfigured proxy.
+
 
 ## [0.3.21] - 2026-08-12
 
@@ -94,7 +97,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [0.3.10] - 2026-08-11
 
 ### Fixed
-- Security (AUT-303): login brute-force rate limit was bypassable by spoofing `X-Forwarded-For` (the backend trusted the client-controlled leading hop, so an attacker could rotate the header and never hit `LOGIN_MAX_ATTEMPTS`). The client IP is now derived from the trusted proxy header `X-Real-IP` (nginx sets `X-Real-IP $remote_addr`) and never from `X-Forwarded-For`. Failure counters moved from process memory to Redis (shared across workers, survive restarts) and now also count per-email as defense in depth against a misconfigured proxy.
 - Alembic migration chain (AUT-290): `market_listing_cache` and the HNSW embedding-index migrations shared the same revision id `h1i2j3k4l5m6`, which broke `alembic upgrade head` (boot fell back to `create_all`, leaving `users.pending`/`users.token_version` and other columns unapplied). Renamed the market-cache revision to `h1i2j3k4l5m7` and folded it into the `m3rge01` merge so the chain has a single head.
 
 ## [0.3.9] - 2026-08-11
