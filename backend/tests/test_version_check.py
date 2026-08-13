@@ -8,7 +8,7 @@ os.environ.setdefault("SECRET_KEY", "test-secret")
 
 import pytest  # noqa: E402
 
-from app.services.version import _compare, check_latest_release  # noqa: E402
+from app.services.version import _compare, check_latest_release, check_mobile_latest_release  # noqa: E402
 
 
 class _FakeResp:
@@ -26,8 +26,9 @@ class _FakeResp:
 
 
 class _FakeClient:
-    def __init__(self, responses: dict[str, _FakeResp]) -> None:
+    def __init__(self, responses: dict[str, _FakeResp], headers: dict | None = None) -> None:
         self._responses = responses
+        self.headers = headers or {}
 
     async def __aenter__(self) -> "_FakeClient":
         return self
@@ -101,3 +102,58 @@ def test_uptodate_true_when_matching_repo(monkeypatch) -> None:
     result = asyncio.run(check_latest_release())
     assert result["up_to_date"] is True
     assert result["repo_version"] == "0.3.10"
+
+
+def test_public_repo_check_never_sends_token(monkeypatch) -> None:
+    """AUT-442: GITHUB_TOKEN must NOT be sent on public autobrain requests."""
+    monkeypatch.setattr("app.services.version.settings.GITHUB_TOKEN", "ghp_secret")
+    client = _FakeClient(
+        {
+            "https://api.github.com/repos/CannonFodder151/autobrain/releases/latest": _FakeResp(
+                404
+            ),
+            "https://api.github.com/repos/CannonFodder151/autobrain/commits/main": _FakeResp(
+                payload={"sha": "abc", "commit": {"message": "x"}}
+            ),
+            "https://raw.githubusercontent.com/CannonFodder151/autobrain/main/frontend/pubspec.yaml": _FakeResp(
+                text="version: 0.3.10+15"
+            ),
+        }
+    )
+
+    def _ctor(**kwargs):
+        client.headers = kwargs.get("headers") or {}
+        return client
+
+    monkeypatch.setattr("app.services.version.httpx.AsyncClient", _ctor)
+
+    asyncio.run(check_latest_release())
+
+    assert "Authorization" not in client.headers
+    assert "ghp_secret" not in str(client.headers)
+
+
+def test_mobile_repo_check_requires_token(monkeypatch) -> None:
+    """AUT-442: private mobile repo check still authenticates with the token."""
+    monkeypatch.setattr("app.services.version.settings.GITHUB_TOKEN", "ghp_secret")
+    client = _FakeClient(
+        {
+            "https://api.github.com/repos/CannonFodder151/autobrain-mobile/releases/latest": _FakeResp(
+                payload={
+                    "tag_name": "v1.2.3",
+                    "html_url": "https://github.com/CannonFodder151/autobrain-mobile/releases/tag/v1.2.3",
+                    "published_at": "2026-01-01T00:00:00Z",
+                }
+            )
+        }
+    )
+    def _ctor(**kwargs):
+        client.headers = kwargs.get("headers") or {}
+        return client
+
+    monkeypatch.setattr("app.services.version.httpx.AsyncClient", _ctor)
+
+    result = asyncio.run(check_mobile_latest_release())
+
+    assert result["latest_version"] == "1.2.3"
+    assert client.headers.get("Authorization") == "Bearer ghp_secret"
