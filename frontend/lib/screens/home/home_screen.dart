@@ -110,11 +110,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const SettingsScreen()),
                   );
-                case 'community':
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                        builder: (_) => const CommunityGarageScreen()),
-                  );
                 case 'download':
                   _showDownload();
                 case 'license':
@@ -133,7 +128,6 @@ class _HomeScreenState extends State<HomeScreen> {
             },
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'settings', child: Text('Settings & security')),
-              const PopupMenuItem(value: 'community', child: Text('Community Garage')),
               if (kIsWeb)
                 const PopupMenuItem(value: 'download', child: Text('Get the mobile app')),
               if (auth.licenseEnabled)
@@ -328,6 +322,8 @@ class _FeatureGrid extends StatelessWidget {
       if (!kIsWeb)
         _Feature('OBD', Icons.settings_input_component, const Color(0xFF334155),
             ObdScreen(vehicleId: vehicle.id)),
+      const _Feature('Community Garage', Icons.groups, Color(0xFF0D9488),
+          CommunityGarageScreen()),
     ];
     return GridView.count(
       crossAxisCount: 3,
