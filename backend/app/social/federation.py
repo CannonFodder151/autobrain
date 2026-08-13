@@ -122,6 +122,7 @@ async def register(
         "email": server_email,
         "public_key": public_key_hex,
         "hosted": bool(settings.SOCIAL_FEDERATION_HOSTED),
+        "registration_key": settings.SOCIAL_FEDERATION_HOSTED_REGISTRATION_KEY,
     }
     body = json.dumps(payload).encode()
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:

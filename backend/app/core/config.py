@@ -142,6 +142,11 @@ class Settings(BaseSettings):
     SOCIAL_FEDERATION_ENABLED: bool = False
     SOCIAL_FEDERATION_HUB_URL: str = ""  # federation hub base URL (hub is a separate service)
     SOCIAL_FEDERATION_HOSTED: bool = False  # AutoBrain-hosted = licensed free on the hub
+    # Proof-of-hosting key for the hub (AUT-525): Paperclip secret injected ONLY
+    # into AutoBrain-hosted stacks. Empty on self-hosted servers — sent to the
+    # hub as-is, which then requires it for `hosted=true` registrations. Never
+    # default this to a real value; never store it in the repo.
+    SOCIAL_FEDERATION_HOSTED_REGISTRATION_KEY: str = ""
 
     # Stripe billing (hosted subscriptions). Price IDs come from the Stripe
     # Dashboard (or scripts/stripe-setup.py). Leave empty to disable /billing.

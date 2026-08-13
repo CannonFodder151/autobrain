@@ -106,17 +106,70 @@ def test_federation_signing_interop() -> None:
     priv, pub = generate_keypair()
     assert len(pub) == 64  # hex-encoded ed25519 public key
     ts = "1234567890"
+    nonce = "abcd"
     body = b'{"build_id":"b1","title":"hi"}'
-    canonical = _canonical("POST", "/v1/outbox", ts, body)
+    canonical = _canonical("POST", "/v1/outbox", ts, nonce, body)
     sig = _sign(priv, canonical)
 
     # Mirror of autobrain-federation-hub app/security.py::verify_signature
     pk = Ed25519PublicKey.from_public_bytes(bytes.fromhex(pub))
     pk.verify(base64.b64decode(sig), canonical)
 
-    tampered = _canonical("POST", "/v1/outbox", ts, b'{"build_id":"b1","title":"EVIL"}')
+    tampered = _canonical("POST", "/v1/outbox", ts, nonce, b'{"build_id":"b1","title":"EVIL"}')
     with pytest.raises(InvalidSignature):
         pk.verify(base64.b64decode(_sign(priv, tampered)), canonical)
+
+
+def test_federation_register_sends_hosted_registration_key(monkeypatch) -> None:
+    """AUT-525: register() must forward the hosted registration key to the hub.
+
+    Self-hosted servers send an empty string (hub rejects `hosted=true` without
+    a valid key); hosted stacks inject the Paperclip secret at deploy time.
+    """
+    import asyncio
+    import json
+
+    import httpx
+
+    from app.core.config import settings
+    from app.social import federation
+    from app.social.models import SocialServerConfig
+
+    captured: dict = {}
+
+    async def _handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = str(request.url)
+        captured["body"] = request.content.decode()
+        return httpx.Response(200, json={"server_id": "abcd", "api_key": "k"})
+
+    monkeypatch.setattr(settings, "SOCIAL_FEDERATION_HOSTED", True)
+    monkeypatch.setattr(settings, "SOCIAL_FEDERATION_HOSTED_REGISTRATION_KEY", "hub-secret")
+    monkeypatch.setattr(
+        federation, "_hub_url", lambda cfg: "https://hub.example.invalid"
+    )
+    _orig_client = httpx.AsyncClient
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kw: _orig_client(transport=httpx.MockTransport(_handler)))
+
+    async def _run():
+        await federation.register(
+            SocialServerConfig(id=1, feature_enabled=True, federation_enabled=True),
+            "my-server", "me@example.com", "a" * 64,
+        )
+
+    asyncio.run(_run())
+    assert captured["url"].endswith("/v1/register")
+    payload = json.loads(captured["body"])
+    assert payload["hosted"] is True
+    assert payload["registration_key"] == "hub-secret"
+
+    # self-hosted: key defaults to empty, never a hardcoded secret
+    monkeypatch.setattr(settings, "SOCIAL_FEDERATION_HOSTED", False)
+    monkeypatch.setattr(settings, "SOCIAL_FEDERATION_HOSTED_REGISTRATION_KEY", "")
+    captured.clear()
+    asyncio.run(_run())
+    payload = json.loads(captured["body"])
+    assert payload["hosted"] is False
+    assert payload["registration_key"] == ""
 
 
 def test_compress_to_webp() -> None:
