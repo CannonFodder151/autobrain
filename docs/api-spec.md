@@ -102,9 +102,12 @@ Product rule [PR-1](product-rules.md#pr-1--club-reg-disables-the-digital-logbook
 | GET    | `?fy=` | List trips per financial year |
 | GET    | `/stats?fy=` | Trip / distance / work % totals |
 | PATCH  | `/{entry_id}` | Edit trip; set end time/date/odometer to complete (updates the vehicle odometer) |
+| GET    | `/{entry_id}` | Single trip incl. `gps_samples` route (list stays light — no samples) |
 | DELETE | `/{entry_id}` | Delete a trip |
 | GET    | `/export?fy=` | ATO logbook CSV per financial year |
 | POST   | `/odometer-photo` | OCR a dashboard photo → odometer reading (AI, paid) |
+
+Trips may carry a GPS route: `gps_samples` is a list of `{"t": <epoch seconds>, "lat": deg, "lon": deg}` points (WGS84) accepted on POST/PATCH. Invalid `0,0` (no-fix) and out-of-range points are dropped server-side (deterministic, no AI). The board CSV schema `epoch,...,lat,lon` (raw degrees x10^7) is accepted by `backend/app/services/trip_gps.py::parse_board_csv`.
 
 ## OBD-II (`/vehicles/{id}/obd`)
 
