@@ -16,8 +16,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
-## [Unreleased]
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+## [Unreleased]
 ### Added
 - "Car Play / Android Auto Integration" settings submenu (AUT-366, mobile-only): honest explainer of what works (auto trip logging) vs what doesn't (head-unit OBD gauges, CarPlay OBD — Google/Apple category policy + Android-only Bluetooth SPP stack), an "Auto-start trip logging when connected to the car" toggle (wired to the OBD adapter car-connection service), and a live connection / last-trip status line. Hidden on web.
 - OBD automatic trip recording (AUT-362, Android): GoFar-style auto start/stop logbook trips. With the VGate iCar Pro adapter left in the car and `Auto-connect OBD` on, a foreground service keeps the app alive in the background, ignition is detected from battery voltage (PID 0142) + engine RPM (010C) + BT link-drop, and each drive lands in the logbook automatically — marked "auto (OBD)" so manual trips stay distinguishable. A mid-drive app kill no longer loses a trip (buffered locally, synced on next open). Backend: `logbook_entries.source` column (`manual`/`obd_auto`) via Alembic migration.
@@ -28,6 +41,96 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Version banner inverted (AUT-346): a server behind the repo (e.g. v0.3.6 vs repo v0.3.10) was shown as "Up to date"; the `up_to_date` comparison was reversed. The banner now correctly reports "Update available" when the running server is behind.
 - "Get the mobile app" no longer shows inside the mobile app (AUT-428): the home-screen menu item and its download dialog are now hidden on Android/iOS builds and only offered on the web app, where downloading the app actually makes sense.
 
+### Added
+- "Car Play / Android Auto Integration" settings submenu (AUT-366, mobile-only): honest explainer of what works (auto trip logging) vs what doesn't (head-unit OBD gauges, CarPlay OBD — Google/Apple category policy + Android-only Bluetooth SPP stack), an "Auto-start trip logging when connected to the car" toggle (wired to the OBD adapter car-connection service), and a live connection / last-trip status line. Hidden on web.
+- OBD automatic trip recording (AUT-362, Android): GoFar-style auto start/stop logbook trips. With the VGate iCar Pro adapter left in the car and `Auto-connect OBD` on, a foreground service keeps the app alive in the background, ignition is detected from battery voltage (PID 0142) + engine RPM (010C) + BT link-drop, and each drive lands in the logbook automatically — marked "auto (OBD)" so manual trips stay distinguishable. A mid-drive app kill no longer loses a trip (buffered locally, synced on next open). Backend: `logbook_entries.source` column (`manual`/`obd_auto`) via Alembic migration.
+- Phone-side auto trip logging (AUT-367, Android): auto start/stop logbook trips with no OBD adapter and no Android Auto approval. When the phone links to the car's Bluetooth (head-unit / car-kit) a trip is armed, then starts once GPS speed is sustained above a threshold (a passenger in a bus never starts one); the link dropping or the car going quiet stops and closes the trip with distance from the GPS odometer diff. Both this phone path and the VGate/OBD path (AUT-362) drive one shared auto start/stop recorder. Backend: `source=car_auto` trips and caller-provided `distance_km` accepted on logbook update. Logbook marks these "auto (car kit)".
+- Logbook screen (mobile + web): auto-logged trips are labelled "auto (OBD)" / "auto (car kit)" in the trip list.
+
+## [0.3.27] - 2026-08-13
+### Added
+- "Car Play / Android Auto Integration" settings submenu (AUT-366, mobile-only): honest explainer of what works (auto trip logging) vs what doesn't (head-unit OBD gauges, CarPlay OBD — Google/Apple category policy + Android-only Bluetooth SPP stack), an "Auto-start trip logging when connected to the car" toggle (wired to the OBD adapter car-connection service), and a live connection / last-trip status line. Hidden on web.
+- OBD automatic trip recording (AUT-362, Android): GoFar-style auto start/stop logbook trips. With the VGate iCar Pro adapter left in the car and `Auto-connect OBD` on, a foreground service keeps the app alive in the background, ignition is detected from battery voltage (PID 0142) + engine RPM (010C) + BT link-drop, and each drive lands in the logbook automatically — marked "auto (OBD)" so manual trips stay distinguishable. A mid-drive app kill no longer loses a trip (buffered locally, synced on next open). Backend: `logbook_entries.source` column (`manual`/`obd_auto`) via Alembic migration.
+- Logbook screen (mobile + web): auto-logged trips are labelled "auto (OBD)" in the trip list.
+
+### Added
+- OBD automatic trip recording (AUT-362, Android): GoFar-style auto start/stop logbook trips. With the VGate iCar Pro adapter left in the car and `Auto-connect OBD` on, a foreground service keeps the app alive in the background, ignition is detected from battery voltage (PID 0142) + engine RPM (010C) + BT link-drop, and each drive lands in the logbook automatically — marked "auto (OBD)" so manual trips stay distinguishable. A mid-drive app kill no longer loses a trip (buffered locally, synced on next open). Backend: `logbook_entries.source` column (`manual`/`obd_auto`) via Alembic migration.
+- Logbook screen (mobile + web): auto-logged trips are labelled "auto (OBD)" in the trip list.
+
+## [0.3.26] - 2026-08-13
+### Fixed
+- AI service prediction now uses the selected vehicle (AUT-398): the prediction screen fetched `GET /vehicles` and used the first entry, so it could predict for the wrong car (e.g. the Fazer) when the crown-selected vehicle was not first in the list. It now fetches `GET /vehicles/{id}` for the vehicle the user opened from.
+
+## [0.3.25] - 2026-08-13
+### Security
+- AI rate limiting (AUT-302): every AI endpoint (diagnostics, service prediction, valuation, mod impact, odometer OCR, receipt OCR, fuel-receipt OCR) now enforces per-user burst + daily caps via Redis (defaults 10/min and 50/day, env-tunable) and returns `429` on exceed. The AI gateway adds an in-memory per-IP + global window as defense in depth. Fails closed (503) if Redis is unreachable so un-metered 9Router spend is never possible.
+
+## [0.3.24] - 2026-08-13
+### Added
+- OBD clear codes (AUT-360): `DELETE /vehicles/{id}/obd/codes` clears every saved fault code for a vehicle (per-code delete unchanged). Mobile OBD screen gets a "Clear codes" action on the saved fault codes library (with confirmation) and on the live adapter card, which sends ELM327 mode 04 to clear the ECU's stored DTCs and re-reads the codes.
+
+## [0.3.23] - 2026-08-13
+### Fixed
+- OBD is hidden on web builds (AUT-364): Bluetooth Classic SPP is Android-only, so the home-screen OBD tile and the Settings "OBD features" chip no longer render on the Flutter web app (kIsWeb-gated). Mobile (autobrain-mobile) OBD is untouched.
+
+
+## [0.3.22] - 2026-08-13
+### Fixed
+- Security (AUT-303): login brute-force rate limit was bypassable by spoofing `X-Forwarded-For` (the backend trusted the client-controlled leading hop, so an attacker could rotate the header and never hit `LOGIN_MAX_ATTEMPTS`). The client IP is now derived from the trusted proxy header `X-Real-IP` (nginx sets `X-Real-IP $remote_addr`) and never from `X-Forwarded-For`. Failure counters moved from process memory to Redis (shared across workers, survive restarts) and now also count per-email as defense in depth against a misconfigured proxy.
+
+
+### Changed
+- OBD VIN updates are manual only (AUT-361): connecting the adapter no longer silently writes the stored VIN. The OBD screen's Vehicle VIN card gains an **Update VIN** button that reads mode 09 PID 02 and saves it behind a confirmation, with busy + success/failure feedback (manual "Set VIN" entry kept). `POST /vehicles/{id}/obd/vin` now replaces an existing VIN instead of rejecting it with 409.
+
+### Fixed
+- Hosted frontend now pins a static container IP (172.18.0.14) on the pinned default network (AUT-372): host-level nginx-proxy-manager caches the frontend's resolved IP, so a recreated frontend with a new IP returned 502 until npm was restarted. Frontend recreates now keep the same IP and the site stays up with no npm restart.
+
+## [0.3.21] - 2026-08-12
+
+### Fixed
+- AI service prediction now predicts for the selected vehicle (AUT-429): it always used the first vehicle in the list, so with a different vehicle selected (e.g. your Crown) it showed the wrong one (e.g. your Fazer).
+
+## [0.3.20] - 2026-08-12
+
+### Fixed
+- "Get the mobile app" menu item no longer shows on the mobile app itself (AUT-399): `HomeScreen` only renders the download entry when not running natively on Android/iOS. `AppConfig._isMobile` → public `AppConfig.isMobile`.
+
+## [0.3.19] - 2026-08-11
+
+### Security
+- MinIO bucket no longer anonymously readable (AUT-321): `autobrain-assets` anonymous `download` policy removed from `docker-compose.hosted.yml` and `scripts/init-minio.sh` (init now forces `anonymous set none`). `upload_object` returns a 1-hour presigned GET URL instead of a world-readable URL, and the frontend nginx proxies `/autobrain-assets/` to MinIO while preserving the signed Host header. Existing buckets are re-privatized on redeploy.
+
+## [0.3.18] - 2026-08-11
+
+### Fixed
+- Frontend nginx now re-resolves the `backend` upstream via Docker's embedded
+  DNS (`resolver 127.0.0.11` + variable `proxy_pass`) so public `/health`,
+  `/api/` and `/ws/` survive backend container recreates without a manual
+  frontend restart (AUT-373).
+
+## [0.3.17] - 2026-08-11
+
+### Added
+- Public `GET /api/v1/version/mobile` endpoint that reports the latest
+  published `autobrain-mobile` release (read from GitHub server-side, since the
+  mobile repo is private). The mobile app consumes it via the connected server
+  for its version banner (AUT-365).
+
+## [0.3.16] - 2026-08-11
+
+### Fixed
+- Hosted/Default blank page (AUT-347): the CSP allowlisted `www.gstatic.com` but not `fonts.gstatic.com`, so CanvasKit's startup font fetch stalled the Flutter engine before the first frame. `fonts.gstatic.com` is now allowed in `font-src` + `connect-src`; text/images render again.
+
+## [0.3.15] - 2026-08-11
+
+### Fixed
+- Car valuation now reports `market-anchored` (not `rule-based-fallback`) when live market listings anchor the estimate (AUT-354).
+
+## [0.3.14] - 2026-08-11
+
+### Fixed
+- Version banner inverted (AUT-346): a server behind the repo (e.g. v0.3.6 vs repo v0.3.10) was shown as "Up to date"; the `up_to_date` comparison was reversed. The banner now correctly reports "Update available" when the running server is behind.
+
 ## [0.3.13] - 2026-08-11
 
 ### Added
@@ -35,6 +138,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 - Market-data parser (AUT-314): `carsguide._parse_nuxt_listings` crashed with `AttributeError: 'list' object has no attribute 'get'` when a query returned `marketplace` as a list (e.g. motorcycle searches on carsguide.com.au). Non-dict `marketplace` values are now treated as "no listings" instead of 500ing the scraper.
+- Market-data browser worker (AUT-314): the Playwright worker passed the search query via a non-existent `page.goto(params=...)` kwarg, so the BikeGuide browser channel failed with `TypeError`. The search URL is now built with `urlencode`; the channel verifiably reaches the parked-page path.
 
 ## [0.3.12] - 2026-08-11
 
@@ -69,7 +173,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [0.3.6] - 2026-08-10
 
 ### Added
-- MinIO asset backup/restore admin endpoints (AUT-194): `GET /admin-api/assets/backup` streams a tar.gz of every object in the MinIO bucket, `POST /admin-api/assets/restore` validates + restores a gzip tar before wiping, enabling the autobrain-backup service to back up DB snapshots and image assets together.
+- MinIO asset backup/restore admin endpoints (AUT-194): `GET /admin-api/assets/backup` streams a tar.gz of every object in the MinIO bucket, `POST /admin-api/assets/restore` validates + restores a gzip tar before wiping,    enabling the autobrain-backup service to back up DB snapshots and image assets together.
 
 ### Changed
 - Automatic release cutting (AUT-240): `scripts/auto-bump.sh` now runs before

@@ -25,6 +25,7 @@ from app.schemas.service import (
 )
 from app.services.ai_client import predict_service
 from app.services.export import export_service_history_csv, export_service_history_pdf, export_zip
+from app.services.rate_limit import require_ai_rate_limit
 from app.services.service_records import (
     finalize_service_side_effects,
     list_completed_services,
@@ -204,6 +205,7 @@ async def predict(
     payload: ServicePredictionRequest,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
+    _: User = Depends(require_ai_rate_limit),
 ) -> ServicePredictionResponse:
     """AI service prediction using ALL past services + odometer + schedule.
 

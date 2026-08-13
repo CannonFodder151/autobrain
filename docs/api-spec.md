@@ -12,6 +12,7 @@ Vehicle sharing: a user with an accepted share on a vehicle can read and write i
 |--------|------|-------------|
 | POST   | `/auth/login` | Login; returns `token_pair` or `{mfa_required, mfa_token}` when MFA enabled |
 | GET    | `/auth/config` | Public client config: `{signup_enabled, mfa_enforced}` (drives the app's signup button) |
+| GET    | `/version/mobile` | Public latest `autobrain-mobile` release (server-side GitHub check; `{repo, reachable, latest_version, html_url}`) |
 | POST   | `/auth/mfa/verify` | Complete login with TOTP code |
 | POST   | `/auth/refresh` | Refresh tokens |
 | GET    | `/auth/me` | Current user (role, mfa_enabled, free_account, obd_enabled, obd_auto_connect, vehicle_count) |

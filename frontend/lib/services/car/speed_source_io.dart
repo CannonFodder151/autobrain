@@ -27,7 +27,7 @@ class _GeolocatorSpeedSource implements SpeedSource {
       ),
     );
     return stream
-        .where((p) => p.speed != null && p.speed >= 0)
-        .map((p) => p.speed! * 3.6); // m/s → km/h
+        .where((p) => p.speed >= 0)
+        .map((p) => p.speed * 3.6); // m/s → km/h
   }
 }

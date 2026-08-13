@@ -265,6 +265,7 @@ async def test_resale_run_market_data_computes_once(monkeypatch) -> None:
     assert len(calls) == 1
     assert calls[0][1]["used_price"] == 15000.0
     assert out["factors"]["market_median"] == 15000.0
+    assert out["model"] == "market-anchored"
 
 
 async def _async_identity(module, payload, baseline):
@@ -284,6 +285,7 @@ def test_resale_market_data_anchors_crown() -> None:
     assert out["factors"]["market_median"] == 15000.0
     assert 10000 <= out["estimated_value"] <= 17000
     assert out["factors"]["market_sample"] == 6
+    assert out["model"] == "market-anchored"
 
 
 def test_resale_market_data_stable_across_calls() -> None:

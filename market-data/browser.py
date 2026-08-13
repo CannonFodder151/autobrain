@@ -21,6 +21,7 @@ import asyncio
 import json
 import re
 import sys
+from urllib.parse import urlencode
 
 import carsguide
 from carsguide import _NUXT_SCRIPT
@@ -70,10 +71,9 @@ async def scrape_bikesguide(query: str, year: int | None) -> dict:
                 user_agent=UA, locale="en-AU",
                 viewport={"width": 1280, "height": 900})
             page = await ctx.new_page()
-            url = "https://www.bikesguide.com.au/search"
+            url = "https://www.bikesguide.com.au/search?" + urlencode({"query": query})
             try:
-                await page.goto(url, params={"query": query},
-                                wait_until="domcontentloaded",
+                await page.goto(url, wait_until="domcontentloaded",
                                 timeout=PAGE_TIMEOUT_MS)
             except Exception as exc:
                 return {"ok": False, "kind": "error",
