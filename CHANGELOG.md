@@ -33,7 +33,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.32] - 2026-08-13
 ### Fixed
 - Alembic migration chain (AUT-450): `a5b6c7d8e9f0` (logbook `gps_samples`, AUT-395) referenced a never-existent down_revision `n4p5q6r7s8t9`, so `alembic upgrade head` crashed with `KeyError` on every boot, the create_all fallback silently skipped it, and the `source` column (AUT-362) never applied on fresh DBs (demo/hosted) — demo seed then crash-looped. Reparented to `k2l3m4n5o6p7` so the chain is linear and both columns apply.
 
