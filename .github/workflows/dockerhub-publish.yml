@@ -23,6 +23,12 @@ jobs:
             echo "changelog gate skipped outside pull_request (AUT-451)"
             exit 0
           fi
+          # Dependabot bumps never touch CHANGELOG.md; forcing it reds every
+          # dependency PR forever (AUT-540).
+          if [ "${{ github.actor }}" = "dependabot[bot]" ]; then
+            echo "dependabot PR — skipping changelog gate"
+            exit 0
+          fi
           BASE="${{ github.event.pull_request.base.sha }}"
           if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
             echo "no usable base SHA — skipping changelog gate"
@@ -38,7 +44,7 @@ jobs:
 
   auto-bump:
     needs: changelog-gate
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -49,6 +55,8 @@ jobs:
       - name: Cut a release if [Unreleased] has content (AUT-240)
         run: |
           set -euo pipefail
+          git config user.name "AutoBrain Release Bot"
+          git config user.email "release@autobrainservice.app"
           ./scripts/auto-bump.sh
           # Concurrent workflow runs can race the auto-bump push; rebase onto
           # the latest main and retry instead of failing the run (AUT-451).

@@ -54,6 +54,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- GitHub Actions "run failed" noise (AUT-540): the publish workflow only auto-cuts releases when the ref is `main` (a `workflow_dispatch` on a feature branch no longer tries to push to `main` and fail), git identity is set before the auto-bump push/rebase retry, and the changelog gate is skipped for `dependabot[bot]` PRs (they never modify CHANGELOG.md).
+
 ## [0.3.50] - 2026-08-13
 
 ### Fixed
