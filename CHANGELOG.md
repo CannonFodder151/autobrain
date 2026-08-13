@@ -55,6 +55,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- License opens an external browser tab on store-published mobile builds (AUT-531): the mobile License button launches the web License screen at `https://<api-origin>/#/license` in the OS browser, and the web app deep-links `/#/license` straight to the License screen. Avoids in-app purchase billing for app-store subscriptions (Apple/Google 30% IAP).
+
 ## [0.3.51] - 2026-08-13
 
 ### Fixed
