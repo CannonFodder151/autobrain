@@ -34,7 +34,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.33] - 2026-08-13
 
 ### Changed
 - Deployment (AUT-450): hosted stack `docker-compose.hosted.yml` now references Docker Hub images (`cannonfodder151/autobrain-*:hosted`, matching the live stack) and pins the backend to static IP `172.18.0.15` (AUT-439). Deploy log added to `docs/deployment-guide.md`.
