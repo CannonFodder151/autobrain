@@ -27,6 +27,7 @@ x-backend-base: &backend-base
   env_file: .env
   environment:
     POSTGRES_HOST: postgres
+    GITHUB_TOKEN: ${GITHUB_TOKEN:-}  # PAT for release checks; keep in sync after rotation (AUT-439)
     <<: *core-env
   depends_on:
     postgres:
