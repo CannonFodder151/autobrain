@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "text-embedding-3-small"
     EMBEDDING_DIMENSION: int = 1536  # text-embedding-3-small output size
 
+    # AI usage caps (AUT-302): per-user fixed-window burst + UTC-day total,
+    # Redis-backed and enforced before any 9Router spend. 429 once exceeded.
+    AI_RATE_LIMIT_PER_WINDOW: int = 10
+    AI_RATE_WINDOW_SECONDS: int = 60
+    AI_DAILY_LIMIT: int = 50
+
     # External providers (optional)
     REGO_LOOKUP_URL: str = ""
     REGO_LOOKUP_API_KEY: str = ""

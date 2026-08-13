@@ -28,6 +28,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Security
+- AI rate limiting (AUT-302): every AI endpoint (diagnostics, service prediction, valuation, mod impact, odometer OCR, receipt OCR, fuel-receipt OCR) now enforces per-user burst + daily caps via Redis (defaults 10/min and 50/day, env-tunable) and returns `429` on exceed. The AI gateway adds an in-memory per-IP + global window as defense in depth. Fails closed (503) if Redis is unreachable so un-metered 9Router spend is never possible.
 
 ## [0.3.24] - 2026-08-13
 ### Added
