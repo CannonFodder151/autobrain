@@ -186,8 +186,11 @@ services:
   frontend:
     image: cannonfodder151/autobrain-frontend:hosted
     restart: unless-stopped
+    # AUT-473: localhost-bound. External clients reach the app via Cloudflare ->
+    # npm (:443), which proxies to the frontend over the docker network. Never
+    # re-expose 8086 to 0.0.0.0 (origin bypasses Cloudflare/WAF).
     ports:
-      - "8086:80"
+      - "127.0.0.1:8086:80"
     networks:
       default:
         ipv4_address: 172.18.0.14
@@ -218,11 +221,34 @@ services:
       timeout: 5s
       retries: 5
 
+  # 9Router AI router (AUT-473). Localhost-bound on :20128 — the admin dashboard
+  # and API are NOT internet-reachable. backend/ai consume it via docker DNS
+  # (http://9router:20128/v1); ops reach the dashboard via SSH tunnel only.
+  # Data lives in the external `9router-data` volume (created by the original
+  # standalone container) so provider/API-key config persists across recreates.
+  9router:
+    image: decolua/9router:latest
+    restart: unless-stopped
+    entrypoint: ["/entrypoint.sh"]
+    command: ["node", "custom-server.js"]
+    environment:
+      NODE_ENV: production
+      PORT: 20128
+      HOSTNAME: 0.0.0.0
+      NEXT_TELEMETRY_DISABLED: "1"
+      DATA_DIR: /app/data
+    volumes:
+      - 9router-data:/app/data
+    ports:
+      - "127.0.0.1:20128:20128"
+
 volumes:
    postgres-data:
    redis-data:
    minio-data:
    hub-data:
+   9router-data:
+     external: true
 
 # AUT-372: pin the default network subnet + a static frontend IP. The host-level
 # nginx-proxy-manager (npm) caches the resolved frontend container IP, so a
