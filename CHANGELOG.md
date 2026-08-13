@@ -24,10 +24,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
-## [Unreleased]
 
+
+## [Unreleased]
 ### Added
 - OBD clear codes (AUT-360): `DELETE /vehicles/{id}/obd/codes` clears every saved fault code for a vehicle (per-code delete unchanged). Mobile OBD screen gets a "Clear codes" action on the saved fault codes library (with confirmation) and on the live adapter card, which sends ELM327 mode 04 to clear the ECU's stored DTCs and re-reads the codes.
+
+## [0.3.23] - 2026-08-13
+### Fixed
+- OBD is hidden on web builds (AUT-364): Bluetooth Classic SPP is Android-only, so the home-screen OBD tile and the Settings "OBD features" chip no longer render on the Flutter web app (kIsWeb-gated). Mobile (autobrain-mobile) OBD is untouched.
+
+
+## [0.3.22] - 2026-08-13
+### Fixed
+- Security (AUT-303): login brute-force rate limit was bypassable by spoofing `X-Forwarded-For` (the backend trusted the client-controlled leading hop, so an attacker could rotate the header and never hit `LOGIN_MAX_ATTEMPTS`). The client IP is now derived from the trusted proxy header `X-Real-IP` (nginx sets `X-Real-IP $remote_addr`) and never from `X-Forwarded-For`. Failure counters moved from process memory to Redis (shared across workers, survive restarts) and now also count per-email as defense in depth against a misconfigured proxy.
+
 
 ## [0.3.21] - 2026-08-12
 
