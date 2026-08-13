@@ -4,7 +4,7 @@ Sanitised public mirror of the internal Finance doc. No secrets, no internal lin
 
 ## Plans & pricing
 
-Two paid tiers plus a free tier. Prices in USD; source of truth is `scripts/stripe-setup.py` and the `STRIPE_PRICE_*` env on the hosted stack.
+Two paid tiers plus a free tier. Prices in AUD (AUT-523); source of truth is `scripts/stripe-setup.py` and the `STRIPE_PRICE_*` env on the hosted stack.
 
 | Plan | Monthly | Yearly | Max vehicles |
 |---|---|---|---|

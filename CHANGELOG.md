@@ -49,6 +49,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Fixed
+- Subscription billing is now in **AUD** (AUT-523): `/billing/pricing` returns `currency: aud`, the license screen renders `A$` prices, and `scripts/stripe-setup.py` provisions/verifies Stripe prices in AUD (archiving the old USD prices). Stripe `STRIPE_PRICE_*` env values must be refreshed from a re-run of the script before checkout goes live.
 
 ## [0.3.46] - 2026-08-13
 

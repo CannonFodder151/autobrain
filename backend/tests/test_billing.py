@@ -188,7 +188,7 @@ async def _checkout(fake: _FakeStripe, plan="enthusiast", billing="monthly", pro
 
 def test_pricing_matches_approved_plan(sale) -> None:
     data = svc.pricing()
-    assert data["currency"] == "usd"
+    assert data["currency"] == "aud"
     assert data["sale"]["active"] is True
     assert data["sale"]["code"] == "EARLY40"
     assert data["sale"]["percent_off"] == 40

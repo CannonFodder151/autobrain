@@ -26,10 +26,12 @@ PLANS: dict[str, dict] = {
     "garage": {"name": "Garage", "max_vehicles": 5},
 }
 
-# Display amounts in US cents — the approved prices (AUT-93 plan c36dbe7d).
-# The Stripe price objects created by scripts/stripe-setup.py are the source of
-# truth at checkout; these mirror them for the /billing/pricing endpoint so the
-# frontend renders prices without a live Stripe round-trip.
+# Display amounts in AUD cents — the approved prices (AUT-93 plan c36be7d;
+# AUD per AUT-523). The Stripe price objects created by scripts/stripe-setup.py
+# are the source of truth at checkout; these mirror them for the
+# /billing/pricing endpoint so the frontend renders prices without a live
+# Stripe round-trip.
+CURRENCY = "aud"
 PLAN_AMOUNTS: dict[str, dict[str, int]] = {
     "enthusiast": {"monthly": 900, "yearly": 8400},
     "garage": {"monthly": 1900, "yearly": 16800},
@@ -115,7 +117,7 @@ def pricing() -> dict:
         if sale["active"]:
             entry["sale_monthly"] = _discounted(amounts["monthly"], SALE_PERCENT_OFF)
         plans.append(entry)
-    return {"currency": "usd", "sale": sale, "plans": plans}
+    return {"currency": CURRENCY, "sale": sale, "plans": plans}
 
 
 def _discounted(amount_cents: int, percent_off: int) -> int:
