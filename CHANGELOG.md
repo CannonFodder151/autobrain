@@ -49,6 +49,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Removed
+- Server version check removed entirely (AUT-461): the GitHub update check (`/api/v1/version/mobile`, the GitHub portion of `/admin/version`, and `backend/app/services/version.py`) is gone. The server no longer touches the GitHub API at all — no PAT, no anonymous rate-limit usage. `/admin/version` still returns the local server version string; the admin UI shows it without any update banner. The mobile app's release banner now uses only the release advertised by its server (`/auth/config app_version`).
+
 ## [0.3.45] - 2026-08-13
 
 ### Fixed

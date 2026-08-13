@@ -22,7 +22,6 @@ from app.api.v1 import (
     social,
     valuation,
     vehicles,
-    version,
 )
 
 api_router = APIRouter()
@@ -46,4 +45,3 @@ api_router.include_router(analytics.router)
 api_router.include_router(notifications.router)
 api_router.include_router(search.router)
 api_router.include_router(social.router)
-api_router.include_router(version.router)

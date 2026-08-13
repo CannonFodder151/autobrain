@@ -17,7 +17,6 @@ from app.models.user import User
 from app.schemas.auth import AdminUserUpdate, UserAdminOut, UserCreate, UserPage
 from app.services import email as mail
 from app.services.backup import dump_backup, load_backup, restore_all, serialize_all
-from app.services.version import check_latest_release, current_version
 
 logger = get_logger(__name__)
 
@@ -29,15 +28,8 @@ admin_ops = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(req
 
 @admin_ops.get("/version")
 async def server_version() -> dict:
-    """Current server version + GitHub latest-release check."""
-    version = current_version()
-    release = await check_latest_release()
-    return {
-        "version": version,
-        "repo": settings.GITHUB_REPO,
-        **release,
-        "up_to_date": release["up_to_date"] if release.get("up_to_date") is not None else None,
-    }
+    """Current server version (local only — no GitHub update check)."""
+    return {"version": settings.APP_VERSION}
 
 
 @admin_ops.get("/backup")
