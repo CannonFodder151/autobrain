@@ -53,6 +53,6 @@ def test_upload_object_returns_presigned_url():
 
     assert captured["put"] == (settings.MINIO_BUCKET, "receipts/v/x.pdf", 8, "application/pdf")
     assert url.startswith(f"https://hosted.autobrainservice.app/{settings.MINIO_BUCKET}/receipts/v/x.pdf?")
-    assert "X-Amz-Expires=3600" in url
+    assert "X-Amz-Expires=900" in url
     assert "Signature" in url
-    print("ok: upload_object returns a time-limited presigned GET URL, bucket stays private")
+    print("ok: upload_object returns a 15-minute presigned GET URL, bucket stays private")

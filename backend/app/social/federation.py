@@ -9,6 +9,7 @@ local feed (AUT-294 §4 / req 15).
 import base64
 import hashlib
 import json
+import secrets
 import time
 
 import httpx
@@ -30,8 +31,8 @@ def _sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def _canonical(method: str, path: str, timestamp: str, body: bytes) -> bytes:
-    return f"{method}\n{path}\n{timestamp}\n{_sha256_hex(body)}".encode()
+def _canonical(method: str, path: str, timestamp: str, nonce: str, body: bytes) -> bytes:
+    return f"{method}\n{path}\n{timestamp}\n{nonce}\n{_sha256_hex(body)}".encode()
 
 
 def _sign(private_key_hex: str, canonical: bytes) -> str:
@@ -71,11 +72,13 @@ def _headers(cfg: SocialServerConfig, method: str, path: str, body: bytes) -> di
     if not (cfg.hub_server_id and cfg.hub_api_key and cfg.hub_private_key):
         raise FederationUnavailable("server not registered with the hub")
     timestamp = str(int(time.time()))
-    canonical = _canonical(method, path, timestamp, body)
+    nonce = secrets.token_hex(16)
+    canonical = _canonical(method, path, timestamp, nonce, body)
     return {
         "Content-Type": "application/json",
         "X-Server-Id": cfg.hub_server_id,
         "X-Timestamp": timestamp,
+        "X-Nonce": nonce,
         "X-Signature": _sign(cfg.hub_private_key, canonical),
         "X-Api-Key": cfg.hub_api_key,
     }
@@ -94,11 +97,11 @@ async def _post(cfg: SocialServerConfig, path: str, payload: dict) -> dict:
     return resp.json()
 
 
-async def _get(cfg: SocialServerConfig, path: str) -> dict:
+async def _get(cfg: SocialServerConfig, path: str, params: dict | None = None) -> dict:
     headers = _headers(cfg, "GET", path, b"")
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
         try:
-            resp = await client.get(_hub_url(cfg) + path, headers=headers)
+            resp = await client.get(_hub_url(cfg) + path, params=params, headers=headers)
         except httpx.HTTPError as exc:
             raise FederationUnavailable(str(exc)) from exc
     if resp.status_code >= 300:
@@ -138,7 +141,25 @@ async def push_outbox(cfg: SocialServerConfig, build_id: str, payload: dict) -> 
     await _post(cfg, "/v1/outbox", {"build_id": build_id, "build": payload})
 
 
+async def push_event(cfg: SocialServerConfig, build_id: str, event_type: str, payload: dict) -> None:
+    """Fan a comment/like event out so remote copies of a build stay in sync.
+
+    `build_id` is the id on the event's origin server; receiving servers match
+    it to their local id or remote_build_id.
+    """
+    await _post(cfg, "/v1/events", {
+        "event_type": event_type,
+        "payload": {"build_id": build_id, **payload},
+    })
+
+
 async def pull_inbox(cfg: SocialServerConfig) -> list[dict]:
     """Fetch remote builds the hub routes to this server."""
     data = await _get(cfg, "/v1/inbox")
     return data.get("builds", []) if isinstance(data, dict) else []
+
+
+async def pull_events(cfg: SocialServerConfig, after: int) -> dict:
+    """Pull comment/like events for this server, resuming from the cursor."""
+    data = await _get(cfg, "/v1/events", params={"after": after})
+    return data if isinstance(data, dict) else {}

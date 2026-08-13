@@ -91,7 +91,7 @@ async def upload_object(key: str, data: bytes, content_type: str) -> str:
             length=len(data),
             content_type=content_type,
         )
-        return client.presigned_get_object(settings.MINIO_BUCKET, key, expires=timedelta(hours=1))
+        return client.presigned_get_object(settings.MINIO_BUCKET, key, expires=timedelta(minutes=15))
 
     url = await asyncio.to_thread(_upload)
     return _externalize_url(url)
@@ -112,7 +112,7 @@ def _externalize_url(url: str) -> str:
     return url
 
 
-async def presigned_url(key: str, expires: timedelta = timedelta(hours=1)) -> str:
+async def presigned_url(key: str, expires: timedelta = timedelta(minutes=15)) -> str:
     """Short-lived presigned GET URL (externalized for the public endpoint)."""
     url = await asyncio.to_thread(
         get_minio().presigned_get_object, settings.MINIO_BUCKET, key, expires=expires
