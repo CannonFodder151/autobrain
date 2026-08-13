@@ -41,7 +41,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.40] - 2026-08-13
 
 ### Security
 - Hosted stack port lockdown (AUT-473): the 9Router admin dashboard + OpenAI-compatible API (`:20128`) and the app origin (`:8086`) are now bound to `127.0.0.1` only on AutoBrain-Hosted. Backend/ai reach 9Router over docker DNS (`http://9router:20128/v1`), and all client traffic is forced through Cloudflare; no plaintext origin bypass remains. Data persists on the external `9router-data` volume. See `docs/deployment-guide.md` (security/lockdown section + redeploy rules).
