@@ -13,7 +13,6 @@ x-backend-base: &backend-base
   env_file: .env
   environment:
     POSTGRES_HOST: postgres
-
     REDIS_URL: redis://redis:6379/0
     MINIO_ENDPOINT: minio:9000
     AI_ROUTER_URL: ${AI_ROUTER_URL:-http://your-9router-instance:port}

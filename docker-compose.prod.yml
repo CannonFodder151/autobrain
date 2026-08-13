@@ -27,7 +27,6 @@ x-backend-base: &backend-base
   env_file: .env
   environment:
     POSTGRES_HOST: postgres
-
     <<: *core-env
   depends_on:
     postgres:
