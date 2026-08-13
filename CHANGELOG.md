@@ -57,7 +57,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.56] - 2026-08-13
 
 ### Fixed
 - Social uploads no longer buffer the full request body before size validation (AUT-597): `POST /api/v1/social/uploads` rejects oversize `Content-Length` with 413 before reading, and a bounded read loop aborts with 415 once buffered bytes exceed the 5MB cap.
