@@ -24,6 +24,7 @@ from app.schemas.valuation import (
 )
 from app.services.ai_client import estimate_value
 from app.services.market_data import get_market_data, search_market
+from app.services.rate_limit import require_ai_rate_limit
 
 router = APIRouter(prefix="/vehicles/{vehicle_id}/valuation", tags=["valuation"])
 
@@ -34,6 +35,7 @@ async def valuate(
     payload: ValuationRequest,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
+    _: User = Depends(require_ai_rate_limit),
 ) -> ValuationResponse:
     vehicle = await get_accessible_vehicle(db, vehicle_id, user)
 

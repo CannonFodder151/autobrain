@@ -24,6 +24,7 @@ from app.schemas.mod import (
 )
 from app.services.ai_client import mod_impact
 from app.services.export import export_build_sheet_csv, export_build_sheet_pdf, export_zip
+from app.services.rate_limit import require_ai_rate_limit
 
 router = APIRouter(prefix="/vehicles/{vehicle_id}/mods", tags=["mods"])
 
@@ -105,6 +106,7 @@ async def delete_mod(
 async def get_impact(
     payload: ModImpactRequest,
     _user: User = Depends(require_ai),
+    _: User = Depends(require_ai_rate_limit),
 ) -> ModImpactResponse:
     """AI summary of a modification's impact on performance and value."""
     data = payload.model_dump()

@@ -34,6 +34,7 @@ from app.schemas.logbook import (
 )
 from app.services.ai_client import read_odometer
 from app.services.odometer import sync_odometer
+from app.services.rate_limit import require_ai_rate_limit
 
 router = APIRouter(prefix="/vehicles/{vehicle_id}/logbook", tags=["logbook"])
 
@@ -145,7 +146,10 @@ async def update_entry(
     if entry.ended_at or entry.status == "completed":
         entry.status = "completed"
         entry.ended_at = entry.ended_at or datetime.now(timezone.utc)
-    await _recompute_distance(entry)
+    # A caller-provided distance (e.g. GPS odometer diff from the phone car-kit
+    # path, AUT-367) is authoritative; otherwise derive from the odometer diff.
+    if "distance_km" not in data:
+        await _recompute_distance(entry)
     await db.flush()
     if entry.status == "completed" and entry.end_odometer_km:
         await sync_odometer(db, vehicle, entry.end_odometer_km, entry.ended_at)
@@ -201,6 +205,7 @@ async def read_odometer_photo(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
+    _: User = Depends(require_ai_rate_limit),
 ) -> OdometerPhotoResult:
     """OCR a dashboard photo to read the odometer (start/end of a trip)."""
     vehicle = await get_accessible_vehicle(db, vehicle_id, user)

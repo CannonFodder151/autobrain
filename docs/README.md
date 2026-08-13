@@ -10,6 +10,7 @@ below are mirrors kept in-repo for offline reading and PR review.
 | [system-overview.md](system-overview.md) | What AutoBrain is and how it fits together |
 | [architecture.md](architecture.md) | Component architecture + diagrams |
 | [api-spec.md](api-spec.md) | REST + WebSocket API reference |
+| [integrating-autobrain.md](integrating-autobrain.md) | Human-readable guide for integrating other software (global API: users + auth, with examples) |
 | [database-schema.md](database-schema.md) | PostgreSQL schema |
 | [market-data.md](market-data.md) | CarsGuide/CarSales market data + stable valuations (AUT-287) |
 | [product-rules.md](product-rules.md) | Board/product rules that constrain app behaviour (PR-1: club reg disables digital logbook) |

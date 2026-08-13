@@ -37,6 +37,22 @@
 - Kubernetes secrets (`infra/k8s/config.yaml`) contain placeholders only —
   replace at install, never commit real values.
 
+## Git operations (credential-safe cloning)
+
+The GitHub `github_pat` (classic PAT, full access) is injected as the env var
+`GITHUB_TOKEN` (or fetched via the Paperclip secrets API). All git operations
+MUST follow this procedure:
+
+- **Clone with the plain HTTPS URL only** — never embed the token:
+  `git clone https://github.com/CannonFodder151/<repo>.git`.
+- Auth is injected at fetch time by the gh credential helper (configured
+  globally on the dev box) or by `GIT_ASKPASS` reading `$GITHUB_TOKEN` from
+  env. The token never appears in the URL.
+- **Never** use `https://<user>:<token>@github.com/...` — git persists the
+  remote URL (token included) into `<repo>/.git/config`, leaking the secret to
+  disk (see [AUT-323](/AUT/issues/AUT-323)).
+- Purge scratch clones with `rm -rf` when done; never leave clones in `/tmp`.
+
 ## AI router
 
 - `AI_ROUTER_API_KEY` (optional) is sent as a bearer token to the router.

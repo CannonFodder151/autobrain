@@ -64,6 +64,9 @@ class BluetoothElmTransport implements Elm327Transport {
   }
 
   @override
+  bool get isConnected => _connection.isConnected;
+
+  @override
   Future<void> close() async {
     await _sub?.cancel();
     await _connection.close();
