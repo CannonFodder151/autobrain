@@ -160,6 +160,36 @@ Rules:
   as external containers; never let compose try to recreate that network
   (marking it `external` or changing its IPAM fails or tears the stack down).
 
+## Security: management surface lockdown (AUT-473)
+
+The AutoBrain-Hosted VM (152.69.188.133) exposed several management/origin
+surfaces directly to the internet. Fixed and enforced via compose:
+
+- **`9router` (`:20128`)** — bound to `127.0.0.1` only. The Next.js admin
+  dashboard and the OpenAI-compatible API are not internet-reachable. Backend/ai
+  call it over the docker network (`http://9router:20128/v1`), which is
+  unaffected by the host binding. Ops access the dashboard via SSH tunnel.
+  Data volume `9router-data` is **external** (created by the original standalone
+  container) — keep it external, never let compose create a fresh prefixed
+  volume or the provider/API-key config is lost.
+- **`frontend` origin (`:8086`)** — bound to `127.0.0.1` only. All client
+  traffic goes through Cloudflare → npm (`:443`), which proxies to the frontend
+  over the docker network. Never re-expose `8086` to `0.0.0.0`; that was a
+  plaintext origin bypassing Cloudflare's WAF/rate limiting.
+- **Port `:80`** — npm's default "Default Site" welcome page still serves
+  unmatched hosts. Cosmetic info disclosure only (Cloudflare has Always Use
+  HTTPS, so real clients never hit origin `:80`). Replace via npm Settings →
+  Default Site when npm admin creds are available.
+- **TLS/HSTS** — confirmed: HSTS `max-age=31536000; includeSubDomains; preload`
+  at the Cloudflare edge; origin `:443` serves TLS.
+- **Residual (needs OCI security list)** — `:9001` Portainer agent must stay
+  reachable from the central Portainer host; restrict the OCI ingress rule for
+  `9001` to the Portainer host IP only. `22`/`443` remain open (SSH + TLS).
+
+Redeploy rule: keep these localhost bindings and the external `9router-data`
+volume in `docker-compose.hosted.yml` and the live stack; a stack deploy that
+reverts them re-opens the exposed surface.
+
 ## Deploy (production, from source)
 
 ```bash
