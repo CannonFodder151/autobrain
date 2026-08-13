@@ -39,6 +39,24 @@ jobs:
         working-directory: autobrain
         run: ./scripts/sync-mobile.sh "$GITHUB_WORKSPACE/autobrain-mobile"
 
+      - name: Compile-guard the synced tree before committing
+        # A stale mobile-only delta (e.g. auth_state.dart) can silently miss
+        # getters the synced screens now use — never commit or release a tree
+        # that does not analyze clean (AUT-522).
+        if: github.event_name == 'push'
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Analyze synced tree
+        if: github.event_name == 'push'
+        working-directory: autobrain-mobile
+        run: |
+          set -euo pipefail
+          flutter pub get
+          flutter analyze
+
       - name: Commit and push if changed
         id: commit
         working-directory: autobrain-mobile
