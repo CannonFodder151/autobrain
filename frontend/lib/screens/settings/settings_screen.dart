@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -304,16 +305,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   trailing: _countChip(_vehiclesUsed, _maxVehicles),
                 ),
                 const Divider(height: 1),
-                ListTile(
-                  leading: Icon(_obdEnabled ? Icons.settings_input_component : Icons.settings_input_component_outlined,
-                      color: _obdEnabled ? Colors.green : Colors.grey),
-                  title: const Text('OBD features'),
-                  subtitle: Text(
-                      _obdEnabled
-                          ? 'Enabled — Bluetooth adapter + fault codes'
-                          : 'Disabled on this account'),
-                  trailing: _chip(_obdEnabled),
-                ),
+                if (!kIsWeb)
+                  ListTile(
+                    leading: Icon(_obdEnabled ? Icons.settings_input_component : Icons.settings_input_component_outlined,
+                        color: _obdEnabled ? Colors.green : Colors.grey),
+                    title: const Text('OBD features'),
+                    subtitle: Text(
+                        _obdEnabled
+                            ? 'Enabled — Bluetooth adapter + fault codes'
+                            : 'Disabled on this account'),
+                    trailing: _chip(_obdEnabled),
+                  ),
                 const Divider(height: 1),
                 ListTile(
                   leading: const Icon(Icons.verified_user_outlined),
