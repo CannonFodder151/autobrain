@@ -22,6 +22,10 @@ abstract class Elm327Transport {
   /// when the adapter replies `?`.
   Future<String> send(String cmd);
 
+  /// True while the underlying serial link is up (false after the adapter
+  /// sleeps/reboots — the VGate iCar Pro drops the link after ignition-off).
+  bool get isConnected;
+
   /// Tears the serial connection down.
   Future<void> close();
 }
@@ -61,6 +65,7 @@ class ObdPid {
   static num celsius(List<int> b) => b[0] - 40;
   static num rpm(List<int> b) => ((b[0] << 8) | b[1]) / 4;
   static num per100(List<int> b) => ((b[0] << 8) | b[1]) / 100;
+  static num millivoltsToVolts(List<int> b) => ((b[0] << 8) | b[1]) / 1000;
 }
 
 /// Live PIDs polled while driving (generic OBD-II, J1979 mode 01).
@@ -74,6 +79,7 @@ const livePids = <ObdPid>[
   ObdPid('0110', 'MAF airflow', 'g/s', 2, decode: ObdPid.per100),
   ObdPid('0111', 'Throttle position', '%', 1, decode: ObdPid.pct),
   ObdPid('012F', 'Fuel level', '%', 1, decode: ObdPid.pct),
+  ObdPid('0142', 'Battery voltage', 'V', 2, decode: ObdPid.millivoltsToVolts),
   ObdPid('0146', 'Ambient temp', '°C', 1, decode: ObdPid.celsius),
 ];
 
@@ -295,6 +301,11 @@ class Elm327Session {
   }
 
   Future<void> close() => _transport.close();
+
+  /// True while the adapter link is up. When this flips to false mid-trip the
+  /// caller should treat it as ignition-off (adapter sleeping) and end the
+  /// trip — see [ObdTripRecorder.onLinkDrop].
+  bool get isConnected => _transport.isConnected;
 }
 
 /// Minimal human meaning for common powertrain DTCs (data keeps the AI out of
@@ -346,6 +357,9 @@ class FakeElmTransport implements Elm327Transport {
     if (!script.containsKey(cmd)) throw Elm327Exception('No scripted reply for $cmd');
     return script[cmd]!;
   }
+
+  @override
+  bool get isConnected => true;
 
   @override
   Future<void> close() async {}

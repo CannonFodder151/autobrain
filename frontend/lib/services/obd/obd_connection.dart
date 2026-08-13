@@ -89,6 +89,17 @@ class ObdConnection extends ChangeNotifier {
     if (_status != ObdStatus.off) _set(ObdStatus.off);
   }
 
+  /// The adapter dropped the link on its own (it sleeps after ignition-off).
+  /// Same teardown as [disconnect] but the caller decides reconnect policy.
+  Future<void> markDropped() async {
+    if (_status != ObdStatus.connected) return;
+    try {
+      await _session?.close();
+    } catch (_) {}
+    _session = null;
+    _set(ObdStatus.off);
+  }
+
   void _set(ObdStatus s, {String? error}) {
     _status = s;
     _error = error;
