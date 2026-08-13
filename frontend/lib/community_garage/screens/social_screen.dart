@@ -11,7 +11,6 @@ import 'package:provider/provider.dart';
 import '../../core/api_client.dart';
 import '../../core/auth_state.dart';
 import '../../core/config.dart';
-import '../../core/models.dart';
 import '../models.dart';
 import '../social_api.dart';
 import '../widgets/premium_gate.dart';
@@ -137,7 +136,6 @@ class _SocialScreenState extends State<SocialScreen> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthState>();
     return Scaffold(
-      appBar: AppBar(title: const Text('Community Garage')),
       floatingActionButton: (auth.premium && !_disabled)
           ? FloatingActionButton.extended(
               onPressed: () async {
