@@ -110,6 +110,58 @@ async def test_webhook_rejects_missing_secret(monkeypatch) -> None:
         svc.construct_event(b"{}", "sig")
 
 
+class _StubDB:
+    async def commit(self) -> None:
+        pass
+
+
+@pytest.mark.asyncio
+async def test_apply_subscription_preserves_entitlement_on_unknown_price(stripe_prices) -> None:
+    u = _user()
+    svc.apply_plan(u, "garage")
+    sub = {
+        "id": "sub_legacy",
+        "customer": "cus_1",
+        "status": "active",
+        "items": {"data": [{"price": {"id": "price_old_usd_garage_y"}}]},
+    }
+    await svc._apply_subscription(_StubDB(), u, sub)
+    assert u.free_account is False
+    assert u.max_vehicles == 5
+    assert u.stripe_subscription_status == "active"
+
+
+@pytest.mark.asyncio
+async def test_apply_subscription_demotes_non_active_unknown_price(stripe_prices) -> None:
+    u = _user()
+    svc.apply_plan(u, "garage")
+    sub = {
+        "id": "sub_x",
+        "customer": "cus_1",
+        "status": "canceled",
+        "items": {"data": [{"price": {"id": "price_old_usd_garage_y"}}]},
+    }
+    await svc._apply_subscription(_StubDB(), u, sub)
+    assert u.free_account is True
+    assert u.max_vehicles == 1
+
+
+def test_plan_for_user_unknown_price_active_sub_infers_plan(stripe_prices) -> None:
+    garage = _user()
+    svc.apply_plan(garage, "garage")
+    garage.stripe_subscription_id = "sub_legacy1"
+    garage.stripe_subscription_status = "active"
+    garage.stripe_price_id = "price_old_usd_garage_y"
+    assert svc.plan_for_user(garage) == "garage"
+
+    enthusiast = _user()
+    svc.apply_plan(enthusiast, "enthusiast")
+    enthusiast.stripe_subscription_id = "sub_legacy2"
+    enthusiast.stripe_subscription_status = "trialing"
+    enthusiast.stripe_price_id = "price_old_usd_enth_m"
+    assert svc.plan_for_user(enthusiast) == "enthusiast"
+
+
 @pytest.mark.asyncio
 async def test_public_signup_disabled_by_default() -> None:
     from httpx import ASGITransport, AsyncClient
@@ -254,3 +306,53 @@ async def test_pricing_endpoint_public() -> None:
     body = resp.json()
     assert {p["key"] for p in body["plans"]} == {"enthusiast", "garage"}
     assert "sale" in body
+
+
+def test_stripe_setup_refuses_archive_while_active_subs_reference_price(monkeypatch) -> None:
+    """F1 regression: scripts/stripe-setup.py must not archive a wrong-currency
+    price that active subscriptions still reference (they keep billing on it)."""
+    import importlib.util
+    import sys as _sys
+
+    from pathlib import Path
+
+    class _Price:
+        id = "price_usd_enth_m"
+        unit_amount = 900
+        currency = "usd"
+
+    class _Sub:
+        def __init__(self, status):
+            self.status = status
+
+    class _PriceAPI:
+        def list(self, **kw):
+            assert "lookup_keys" in kw
+            return type("R", (), {"data": [_Price()]})()
+
+        def modify(self, *a, **kw):
+            raise AssertionError("archive must not run with active subscriptions")
+
+    class _SubscriptionAPI:
+        def list(self, **kw):
+            assert kw.get("price") == "price_usd_enth_m"
+            return type("R", (), {"data": [_Sub("active"), _Sub("canceled")]})()
+
+    class _ProductAPI:
+        def retrieve(self, key):
+            return type("P", (), {"id": key})()
+
+    class _FakeStripe:
+        Price = _PriceAPI()
+        Subscription = _SubscriptionAPI()
+        Product = _ProductAPI()
+
+    monkeypatch.setitem(_sys.modules, "stripe", _FakeStripe())
+    spec = importlib.util.spec_from_file_location(
+        "stripe_setup_under_test", Path(__file__).resolve().parents[2] / "scripts" / "stripe-setup.py"
+    )
+    mod = importlib.util.module_from_spec(spec)
+    _sys.modules[spec.name] = mod
+    spec.loader.exec_module(mod)
+    with pytest.raises(SystemExit):
+        mod.upsert_price("enthusiast", "monthly")

@@ -56,9 +56,8 @@ def upsert_price(plan_key: str, billing: str) -> dict:
     existing = stripe.Price.list(lookup_keys=[lookup], limit=1).data
     if existing:
         price = existing[0]
-        assert price.unit_amount == amount, (
-            f"{plan_key}/{billing}: existing price {price.unit_amount} != {amount}"
-        )
+        if price.unit_amount != amount:
+            sys.exit(f"{plan_key}/{billing}: existing price {price.unit_amount} != {amount}")
         if price.currency == CURRENCY:
             print(f"  verified {plan['name']} {billing}: {price.id}")
             return price
@@ -66,6 +65,16 @@ def upsert_price(plan_key: str, billing: str) -> dict:
         # USD prices) must be archived before its lookup key can be reused. An
         # archived price still owns its lookup key, so the replacement must
         # atomically transfer the key (transfer_lookup_key=True).
+        active_subs = [
+            s
+            for s in stripe.Subscription.list(price=price.id, status="all").data
+            if s.status in ("active", "trialing", "past_due")
+        ]
+        if active_subs:
+            sys.exit(
+                f"refusing to archive {price.id}: {len(active_subs)} active "
+                "subscription(s) still reference it; migrate or cancel them first"
+            )
         print(
             f"  archiving wrong-currency {plan['name']} {billing} "
             f"({price.id}, {price.currency})"
