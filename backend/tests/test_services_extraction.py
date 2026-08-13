@@ -54,18 +54,121 @@ def test_token_pair_contains_user() -> None:
     assert isinstance(pair.user, UserOut)
 
 
-def test_rate_limit_blocks_after_attempts(monkeypatch) -> None:
+class _FakeHeaders(dict):
+    def get(self, key, default=None):  # noqa: D102
+        return dict.get(self, key.lower(), default)
+
+
+class _FakeClient:
+    def __init__(self, host: str):
+        self.host = host
+
+
+class _FakeRequest:
+    def __init__(self, headers: dict | None = None, client_host: str = "9.9.9.9"):
+        self.headers = _FakeHeaders(headers or {})
+        self.client = _FakeClient(client_host)
+
+
+def test_client_ip_ignores_spoofable_x_forwarded_for() -> None:
+    # nginx overwrites X-Real-IP with $remote_addr, so it is the trusted value.
+    req = _FakeRequest(headers={"x-forwarded-for": "1.2.3.4", "x-real-ip": "5.5.5.5"})
+    assert auth_svc.client_ip(req) == "5.5.5.5"
+    # No X-Real-IP (e.g. direct, non-proxy traffic) → socket peer, never XFF.
+    req = _FakeRequest(headers={"x-forwarded-for": "1.2.3.4"})
+    assert auth_svc.client_ip(req) == "9.9.9.9"
+    req = _FakeRequest(headers={})
+    assert auth_svc.client_ip(req) == "9.9.9.9"
+    req = _FakeRequest(headers={"x-forwarded-for": "1.2.3.4, 10.0.3.39"})
+    assert auth_svc.client_ip(req) == "9.9.9.9"
+
+
+class _FakeRedis:
+    """Minimal in-memory Redis subset used by the login rate limiter (AUT-303)."""
+
+    def __init__(self) -> None:
+        self._data: dict[str, dict[str, float]] = {}
+
+    async def zadd(self, key: str, mapping: dict) -> None:
+        self._data.setdefault(key, {}).update(mapping)
+
+    async def zremrangebyscore(self, key: str, min_: float, max_: float) -> None:
+        for member, score in list(self._data.get(key, {}).items()):
+            if min_ <= score <= max_:
+                del self._data[key][member]
+
+    async def zcard(self, key: str) -> int:
+        return len(self._data.get(key, {}))
+
+    async def expire(self, key: str, ttl: int) -> None:
+        pass
+
+    def pipeline(self) -> "_FakePipeline":
+        return _FakePipeline(self)
+
+    async def delete(self, *keys: str) -> None:
+        for key in keys:
+            self._data.pop(key, None)
+
+    async def aclose(self) -> None:
+        pass
+
+
+class _FakePipeline:
+    def __init__(self, fake: _FakeRedis) -> None:
+        self._fake = fake
+        self._ops: list[tuple] = []
+
+    def zadd(self, key: str, mapping: dict) -> "_FakePipeline":
+        self._ops.append(("zadd", key, mapping))
+        return self
+
+    def expire(self, key: str, ttl: int) -> "_FakePipeline":
+        self._ops.append(("expire", key, ttl))
+        return self
+
+    async def execute(self) -> list:
+        for kind, *args in self._ops:
+            if kind == "zadd":
+                await self._fake.zadd(args[0], args[1])
+            elif kind == "expire":
+                await self._fake.expire(args[0], args[1])
+        return []
+
+
+def _stub_redis(monkeypatch, fake: _FakeRedis) -> None:
+    monkeypatch.setattr(auth_svc, "_redis", lambda: fake)
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_blocks_after_attempts(monkeypatch) -> None:
     monkeypatch.setattr("app.services.auth.settings.LOGIN_MAX_ATTEMPTS", 3)
     monkeypatch.setattr("app.services.auth.settings.LOGIN_WINDOW_SECONDS", 3600)
-    auth_svc._login_failures.clear()
+    _stub_redis(monkeypatch, _FakeRedis())
     ip = "1.2.3.4"
     for _ in range(3):
-        auth_svc.record_failure(ip)
+        await auth_svc.record_failure(ip)
     with pytest.raises(HTTPException) as exc:
-        auth_svc.check_rate_limit(ip)
+        await auth_svc.check_rate_limit(ip)
     assert exc.value.status_code == 429
-    auth_svc.clear_failures(ip)
-    auth_svc.check_rate_limit(ip)  # cleared → no raise
+    await auth_svc.clear_failures(ip)
+    await auth_svc.check_rate_limit(ip)  # cleared → no raise
+
+
+@pytest.mark.asyncio
+async def test_xff_spoofing_cannot_bypass_rate_limit(monkeypatch) -> None:
+    """Regression (AUT-303): rotating X-Forwarded-For must not evade lockout."""
+    monkeypatch.setattr("app.services.auth.settings.LOGIN_MAX_ATTEMPTS", 3)
+    monkeypatch.setattr("app.services.auth.settings.LOGIN_WINDOW_SECONDS", 3600)
+    _stub_redis(monkeypatch, _FakeRedis())
+    # Attacker rotates the spoofed header on every request; every one still
+    # resolves to the same trusted X-Real-IP and trips the lockout.
+    for xff in ("1.2.3.4", "2.2.2.2", "3.3.3.3"):
+        req = _FakeRequest(headers={"x-forwarded-for": xff, "x-real-ip": "9.9.9.9"})
+        await auth_svc.record_failure(auth_svc.client_ip(req))
+    with pytest.raises(HTTPException) as exc:
+        await auth_svc.check_rate_limit("9.9.9.9")
+    assert exc.value.status_code == 429
 
 
 def test_random_password_is_hashed() -> None:

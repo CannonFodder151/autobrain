@@ -24,6 +24,7 @@ from app.schemas.fuel import (
 from app.services.export import export_fuel_csv, export_zip
 from app.services import fuel as fuel_svc
 from app.services.odometer import sync_odometer
+from app.services.rate_limit import require_ai_rate_limit
 
 router = APIRouter(prefix="/vehicles/{vehicle_id}/fuel", tags=["fuel"])
 
@@ -189,6 +190,7 @@ async def upload_fuel_receipt(
     ai: bool = Query(default=True),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_write),
+    _: User = Depends(require_ai_rate_limit),
 ) -> FuelReceiptResult:
     """Upload a fuel receipt photo.
 
