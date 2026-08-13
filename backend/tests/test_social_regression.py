@@ -206,6 +206,44 @@ def test_upload_rejects_decompression_bomb():
         media_mod.compress_to_webp(huge, "image/png")
 
 
+# ── AUT-597: oversized upload rejected without buffering full body ──────────
+@pytest.mark.asyncio
+async def test_upload_413_on_oversized_content_length(env, monkeypatch):
+    """Content-Length past the cap -> 413 before the body is parsed/read."""
+    app, _ = env
+    called = []
+
+    async def _must_not_run(file):
+        called.append(True)
+        raise AssertionError("read_upload must never run for a 413")
+
+    monkeypatch.setattr(social_api, "read_upload", _must_not_run)
+    big = b"x" * (5 * 1024 * 1024 + 1)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.post("/social/uploads", files={"file": ("big.png", big, "image/png")})
+    assert r.status_code == 413
+    assert called == []
+
+
+@pytest.mark.asyncio
+async def test_upload_bounded_read_aborts_past_cap():
+    """Streaming a body with no/misleading Content-Length stops at the cap."""
+    class _StreamingUpload:
+        def __init__(self, total):
+            self._total = total
+            self._served = 0
+
+        async def read(self, size=-1):
+            n = min(size, self._total - self._served)
+            self._served += n
+            return b"x" * n
+
+    f = _StreamingUpload(media_mod.MAX_UPLOAD_BYTES + 10)
+    with pytest.raises(media_mod.MediaError, match="5MB"):
+        await media_mod.read_upload(f)
+    assert f._served <= media_mod.MAX_UPLOAD_BYTES + media_mod.UPLOAD_READ_CHUNK
+
+
 # ── CA-4: federation nonce ──────────────────────────────────────────────────
 def test_federation_headers_include_nonce():
     cfg = types.SimpleNamespace(hub_server_id="srv-a", hub_api_key="k", hub_private_key="0" * 64)

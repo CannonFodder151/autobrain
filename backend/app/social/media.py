@@ -12,6 +12,7 @@ from PIL import Image, UnidentifiedImageError
 from app.core.storage import ensure_bucket, presigned_url, upload_object
 
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+UPLOAD_READ_CHUNK = 64 * 1024
 MAX_IMAGE_DIMENSION = 2048
 # Raster formats Pillow can decode; everything lands in MinIO as webp.
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
@@ -56,6 +57,24 @@ def _webp_dimensions(data: bytes) -> tuple[int, int]:
 
 def photo_key(user_id: str) -> str:
     return f"social/{user_id}/{uuid.uuid4().hex[:16]}.webp"
+
+
+async def read_upload(file) -> bytes:
+    """Stream a multipart upload into memory, aborting once past the cap.
+
+    Guards against clients that lie about or omit Content-Length: the whole
+    body is never buffered. Raises MediaError when MAX_UPLOAD_BYTES is exceeded.
+    """
+    chunks: list[bytes] = []
+    buffered = 0
+    while True:
+        chunk = await file.read(UPLOAD_READ_CHUNK)
+        if not chunk:
+            return b"".join(chunks)
+        buffered += len(chunk)
+        if buffered > MAX_UPLOAD_BYTES:
+            raise MediaError("File too large (max 5MB)")
+        chunks.append(chunk)
 
 
 async def upload_photo(user_id: str, data: bytes, content_type: str | None = None) -> tuple[str, str, int, int]:
