@@ -28,7 +28,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.26] - 2026-08-13
 ### Fixed
 - AI service prediction now uses the selected vehicle (AUT-398): the prediction screen fetched `GET /vehicles` and used the first entry, so it could predict for the wrong car (e.g. the Fazer) when the crown-selected vehicle was not first in the list. It now fetches `GET /vehicles/{id}` for the vehicle the user opened from.
 
@@ -52,6 +55,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 - OBD VIN updates are manual only (AUT-361): connecting the adapter no longer silently writes the stored VIN. The OBD screen's Vehicle VIN card gains an **Update VIN** button that reads mode 09 PID 02 and saves it behind a confirmation, with busy + success/failure feedback (manual "Set VIN" entry kept). `POST /vehicles/{id}/obd/vin` now replaces an existing VIN instead of rejecting it with 409.
+
+### Fixed
+- Hosted frontend now pins a static container IP (172.18.0.14) on the pinned default network (AUT-372): host-level nginx-proxy-manager caches the frontend's resolved IP, so a recreated frontend with a new IP returned 502 until npm was restarted. Frontend recreates now keep the same IP and the site stays up with no npm restart.
 
 ## [0.3.21] - 2026-08-12
 
