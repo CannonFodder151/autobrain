@@ -57,6 +57,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- Billing hardening for the AUD currency migration (AUT-523 security follow-ups): `_apply_subscription` no longer demotes an actively-billed subscriber whose Stripe price was archived/rotated (grandfathered pre-AUD prices keep their plan until the subscription lapses), and `scripts/stripe-setup.py` refuses to archive a price that active subscriptions still reference (plus an `assert` hardened to an explicit `sys.exit`).
+
 ## [0.3.53] - 2026-08-13
 
 ### Added
