@@ -50,7 +50,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.49] - 2026-08-13
 
 ### Fixed
 - Community Garage federation registration on AutoBrain-Hosted (AUT-532): registering the server with the hub (`POST /admin/social/register`) returned 502 "Hub unreachable: hub not configured" because no compose file passed `SOCIAL_FEDERATION_HUB_URL` to the backend. All three compose files now wire the hub URL (default `https://hub.autobrainservice.app`) and the hosted stack registers `hosted=true` (free bundled license, per docs R5a). A regression test guards the compose wiring.
