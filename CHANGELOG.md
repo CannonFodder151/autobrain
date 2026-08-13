@@ -24,10 +24,29 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
-## [Unreleased]
 
+
+
+## [Unreleased]
 ### Fixed
 - Security (AUT-304): `POST /auth/signup` revealed registered emails (409 "Email already registered" vs 201 for new accounts) and neither signup nor `POST /auth/password-reset/request` was rate-limited, enabling account enumeration, signup spam and SMTP mail-bomb DoS. Signup now returns the same 201 + generic body for an already-registered email (no email sent, response never reveals account existence), and both endpoints enforce a per-IP burst limit (`AUTH_BURST_LIMIT`=5 requests per `AUTH_BURST_WINDOW_SECONDS`=60s sliding window in Redis, using the trusted `X-Real-IP` client-IP helper) that answers >5 rapid requests with 429.
+
+## [0.3.24] - 2026-08-13
+### Added
+- OBD clear codes (AUT-360): `DELETE /vehicles/{id}/obd/codes` clears every saved fault code for a vehicle (per-code delete unchanged). Mobile OBD screen gets a "Clear codes" action on the saved fault codes library (with confirmation) and on the live adapter card, which sends ELM327 mode 04 to clear the ECU's stored DTCs and re-reads the codes.
+
+## [0.3.23] - 2026-08-13
+### Fixed
+- OBD is hidden on web builds (AUT-364): Bluetooth Classic SPP is Android-only, so the home-screen OBD tile and the Settings "OBD features" chip no longer render on the Flutter web app (kIsWeb-gated). Mobile (autobrain-mobile) OBD is untouched.
+
+
+## [0.3.22] - 2026-08-13
+### Fixed
+- Security (AUT-303): login brute-force rate limit was bypassable by spoofing `X-Forwarded-For` (the backend trusted the client-controlled leading hop, so an attacker could rotate the header and never hit `LOGIN_MAX_ATTEMPTS`). The client IP is now derived from the trusted proxy header `X-Real-IP` (nginx sets `X-Real-IP $remote_addr`) and never from `X-Forwarded-For`. Failure counters moved from process memory to Redis (shared across workers, survive restarts) and now also count per-email as defense in depth against a misconfigured proxy.
+
+
+### Changed
+- OBD VIN updates are manual only (AUT-361): connecting the adapter no longer silently writes the stored VIN. The OBD screen's Vehicle VIN card gains an **Update VIN** button that reads mode 09 PID 02 and saves it behind a confirmation, with busy + success/failure feedback (manual "Set VIN" entry kept). `POST /vehicles/{id}/obd/vin` now replaces an existing VIN instead of rejecting it with 409.
 
 ## [0.3.21] - 2026-08-12
 
@@ -97,7 +116,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [0.3.10] - 2026-08-11
 
 ### Fixed
-- Security (AUT-303): login brute-force rate limit was bypassable by spoofing `X-Forwarded-For` (the backend trusted the client-controlled leading hop, so an attacker could rotate the header and never hit `LOGIN_MAX_ATTEMPTS`). The client IP is now derived from the trusted proxy header `X-Real-IP` (nginx sets `X-Real-IP $remote_addr`) and never from `X-Forwarded-For`. Failure counters moved from process memory to Redis (shared across workers, survive restarts) and now also count per-email as defense in depth against a misconfigured proxy.
 - Alembic migration chain (AUT-290): `market_listing_cache` and the HNSW embedding-index migrations shared the same revision id `h1i2j3k4l5m6`, which broke `alembic upgrade head` (boot fell back to `create_all`, leaving `users.pending`/`users.token_version` and other columns unapplied). Renamed the market-cache revision to `h1i2j3k4l5m7` and folded it into the `m3rge01` merge so the chain has a single head.
 
 ## [0.3.9] - 2026-08-11
