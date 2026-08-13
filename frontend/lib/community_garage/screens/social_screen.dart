@@ -5,6 +5,8 @@
 /// source is decided server-side: on → hub feed, off → local-only.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -32,6 +34,9 @@ class _SocialScreenState extends State<SocialScreen> {
   String? _error;
   bool _loadingMore = false;
   final _scroll = ScrollController();
+  final _searchController = TextEditingController();
+  Timer? _debounce;
+  String _query = '';
 
   @override
   void initState() {
@@ -42,8 +47,27 @@ class _SocialScreenState extends State<SocialScreen> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
+    _searchController.dispose();
     _scroll.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged(String value) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 350), () {
+      if (_query != value.trim()) {
+        _query = value.trim();
+        _load();
+      }
+    });
+  }
+
+  void _clearSearch() {
+    _debounce?.cancel();
+    _query = '';
+    _searchController.clear();
+    _load();
   }
 
   void _onScroll() {
@@ -65,7 +89,7 @@ class _SocialScreenState extends State<SocialScreen> {
       _disabled = false;
     });
     try {
-      final builds = await api.feed();
+      final builds = await api.feed(q: _query);
       setState(() => _builds = builds);
     } on ApiException catch (e) {
       if (e.message.contains('Disabled by your admin')) {
@@ -84,7 +108,8 @@ class _SocialScreenState extends State<SocialScreen> {
     if (_loadingMore || _loading) return;
     setState(() => _loadingMore = true);
     try {
-      final more = await SocialApi(context.read<AuthState>().api).feed();
+      final more = await SocialApi(context.read<AuthState>().api)
+          .feed(q: _query);
       if (more.isNotEmpty && mounted) {
         final known = _builds.map((b) => b.id).toSet();
         setState(() => _builds = [
@@ -162,49 +187,83 @@ class _SocialScreenState extends State<SocialScreen> {
     if (_error != null) {
       return _ErrorView(message: _error!, onRetry: _load);
     }
-    return RefreshIndicator(
-      onRefresh: _refresh,
-      child: _builds.isEmpty
-          ? ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              children: const [
-                SizedBox(height: 160),
-                Center(
-                  child: Text('Nothing here yet — be the first to share a build.',
-                      style: TextStyle(color: Colors.grey)),
-                ),
-              ],
-            )
-          : ListView.builder(
-              controller: _scroll,
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 88),
-              itemCount: _builds.length + 1,
-              itemBuilder: (_, i) {
-                if (i >= _builds.length) {
-                  return _loadingMore
-                      ? const Padding(
-                          padding: EdgeInsets.all(12),
-                          child: Center(child: CircularProgressIndicator()),
-                        )
-                      : const SizedBox.shrink();
-                }
-                final build = _builds[i];
-                return SocialCard(
-                  post: build,
-                  onTap: () async {
-                    await Navigator.of(context).push(MaterialPageRoute(
-                        builder: (_) => SocialPostDetailScreen(
-                            postId: build.id, initial: build)));
-                    _refresh();
-                  },
-                  onShare: () => _share(build),
-                  onDelete: (auth.isAdmin && !build.isRemote)
-                      ? () => _delete(build)
-                      : null,
-                );
-              },
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+          child: TextField(
+            controller: _searchController,
+            onChanged: _onSearchChanged,
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              hintText: 'Search posts by make, model, caption or author',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _query.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.clear),
+                      tooltip: 'Clear search',
+                      onPressed: _clearSearch,
+                    ),
+              isDense: true,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
             ),
+          ),
+        ),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _refresh,
+            child: _builds.isEmpty
+                ? ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    children: [
+                      SizedBox(height: 160),
+                      Center(
+                        child: Text(
+                          _query.isEmpty
+                              ? 'Nothing here yet — be the first to share a build.'
+                              : 'No posts match "$_query".',
+                          style: const TextStyle(color: Colors.grey),
+                        ),
+                      ),
+                    ],
+                  )
+                : ListView.separated(
+                    controller: _scroll,
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 88),
+                    itemCount: _builds.length + 1,
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemBuilder: (_, i) {
+                      if (i >= _builds.length) {
+                        return _loadingMore
+                            ? const Padding(
+                                padding: EdgeInsets.all(12),
+                                child: Center(child: CircularProgressIndicator()),
+                              )
+                            : const SizedBox.shrink();
+                      }
+                      final build = _builds[i];
+                      return SocialCard(
+                        post: build,
+                        onTap: () async {
+                          await Navigator.of(context).push(MaterialPageRoute(
+                              builder: (_) => SocialPostDetailScreen(
+                                  postId: build.id, initial: build)));
+                          _refresh();
+                        },
+                        onShare: () => _share(build),
+                        onDelete: (auth.isAdmin && !build.isRemote)
+                            ? () => _delete(build)
+                            : null,
+                      );
+                    },
+                  ),
+          ),
+        ),
+      ],
     );
   }
 
