@@ -1,0 +1,26 @@
+name: CI Triage Webhook
+
+# Fires the CI Triage routine ~15 minutes after a push so the agent can
+# review the freshly settled workflow runs for failures (AUT-557).
+# The routine's execution issue is created by the Paperclip control plane
+# when the webhook fires; nothing in this job needs write access.
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fire:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for runs to settle
+        run: sleep 900
+
+      - name: Fire CI triage webhook
+        env:
+          CI_TRIAGE_WEBHOOK_URL: ${{ secrets.CI_TRIAGE_WEBHOOK_URL }}
+          CI_TRIAGE_WEBHOOK_SECRET: ${{ secrets.CI_TRIAGE_WEBHOOK_SECRET }}
+        run: curl -fsS -X POST "$CI_TRIAGE_WEBHOOK_URL" -H "Authorization: Bearer $CI_TRIAGE_WEBHOOK_SECRET" -d '{"event":"push","repo":"'"$GITHUB_REPOSITORY"'","ref":"'"$GITHUB_REF"'"}'
