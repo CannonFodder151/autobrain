@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -62,6 +63,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showDownload() {
+    if (!kIsWeb) return;
     showDialog<void>(
       context: context,
       builder: (_) => const DownloadAppDialog(),
@@ -132,7 +134,8 @@ class _HomeScreenState extends State<HomeScreen> {
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'settings', child: Text('Settings & security')),
               const PopupMenuItem(value: 'community', child: Text('Community Garage')),
-              const PopupMenuItem(value: 'download', child: Text('Get the mobile app')),
+              if (kIsWeb)
+                const PopupMenuItem(value: 'download', child: Text('Get the mobile app')),
               if (auth.licenseEnabled)
                 const PopupMenuItem(value: 'license', child: Text('License')),
               if (auth.isAdmin)
@@ -322,8 +325,9 @@ class _FeatureGrid extends StatelessWidget {
           AnalyticsScreen(vehicleId: vehicle.id)),
       _Feature('Notifications', Icons.notifications_active,
           const Color(0xFF0E7490), NotificationsScreen(vehicleId: vehicle.id)),
-      _Feature('OBD', Icons.settings_input_component, const Color(0xFF334155),
-          ObdScreen(vehicleId: vehicle.id)),
+      if (!kIsWeb)
+        _Feature('OBD', Icons.settings_input_component, const Color(0xFF334155),
+            ObdScreen(vehicleId: vehicle.id)),
     ];
     return GridView.count(
       crossAxisCount: 3,

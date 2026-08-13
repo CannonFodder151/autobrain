@@ -1,6 +1,6 @@
 # Change Validation Gate
 
-**Owner:** CEO (policy) / CTO (enforcement). **Last reviewed:** 2026-08-10 (AUT-241).
+**Owner:** CEO (policy) / CTO (enforcement). **Last reviewed:** 2026-08-11 (AUT-381).
 
 Mandatory two-gate process for every change to the AutoBrain stack (backend, AI
 gateway, frontend, infra, deployment config). Mirrors the Paperclip issue
@@ -55,6 +55,22 @@ A change is `done` only when ALL hold:
   violation and gets flagged to the board.
 - 9Router failure never skips a gate — sign-off and test-pass are human/agent
   checkpoints, not AI calls.
+
+### Security-relevant changes land via PR only
+
+Security-relevant changes (auth, data access, secrets, network, dependency
+pins, config defaults) MUST be submitted as pull requests, reviewed, and
+merged through the PR. Direct pushes to `main` are not permitted for these
+changes — Gate 1 sign-off does not waive the PR path.
+
+- Owner: CTO.
+- Review bar: the Security Officer's Gate 1 sign-off is a precondition; the
+  merging reviewer confirms the pushed diff matches the signed-off code.
+- Long-term: add PR-level CI checks (SAST + lint) so the gate is machine
+  enforced too (tracked on the engineering backlog).
+- Known history: `5ee86d3` (AUT-200) and `9ca989f` (AUT-199) predate this
+  rule; both were retroactively signed off (AUT-248 verdict) and covered by
+  Gate 2 QA. They are not a precedent for future commits.
 
 ## Related
 

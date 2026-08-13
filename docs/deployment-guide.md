@@ -51,6 +51,24 @@ All three tiers run as standalone Portainer stacks with prebuilt images pulled
 from Docker Hub / GHCR. Hosted is published behind Nginx Proxy Manager on the
 Oracle VM; the stack frontend nginx exposes `:8086`.
 
+## Deployment log
+
+| Date | Version | Change | Verified |
+|------|---------|--------|----------|
+| 2026-08-13 | v0.3.32 | Post-merge deploy after AUT-441 merge drive: all tiers promoted Demo → Default → Hosted (AUT-450). Includes alembic migration-chain fix (PR #70) — gps_samples reparented onto `k2l3m4n5o6p7`. Mobile release surfaced: `/api/v1/version/mobile` → `reachable:true`, latest v0.3.31+66. | `/health` 0.3.32 on all three tiers; mobile endpoint live (2026-08-13T02:31Z) |
+
+### GITHUB_TOKEN rotation (AUT-439) — MANDATORY before every redeploy
+
+`GITHUB_TOKEN` is a classic PAT used by the backend for mobile release checks
+(`/api/v1/version/mobile`). It is **applied via the Portainer stack env**, not
+committed to compose. After any PAT rotation:
+
+1. Set the new `GITHUB_TOKEN` value in the stack env of **all three** tiers
+   (Demo/Default on EP2, Hosted on EP5) before redeploying — a stale/revoked
+   token makes `/api/v1/version/mobile` return `reachable:false, latest_version:null`.
+2. Compose files reference `${GITHUB_TOKEN:-}` (default empty) so a missing
+   stack env fails loudly via the version endpoint, never a hard-coded token.
+
 ## Stack services
 
 | Service | Image | Notes |
@@ -98,6 +116,40 @@ Services:
 ./scripts/publish-images.sh hosted
 # Then update the Portainer stack (AutoBrain-Hosted) to pull new images.
 ```
+
+Portainer stack updates pull images and recreate changed services (AUT-372).
+This is intended so CI-published images reach the tier, and it is safe for the
+frontend because the stack pins a static IP.
+
+### Nginx Proxy Manager + the hosted frontend (AUT-372)
+
+Hosted sits behind a host-level Nginx Proxy Manager (`npm`) container that is
+**on the same Compose network** and forwards to the frontend service name. npm
+caches the resolved frontend container IP and does NOT re-resolve it (the
+`resolver valid=10s` does not help on this host), so a recreated frontend with
+a new IP returns 502 until npm is restarted.
+
+Durable fix already applied to `docker-compose.hosted.yml` and the live
+`autobrain-hosted` stack:
+
+- the default network declares `subnet: 172.18.0.0/16` / `gateway: 172.18.0.1`
+  (matches the live network, so compose never recreates it);
+- the `frontend` service pins `ipv4_address: 172.18.0.14`.
+
+Any frontend recreate keeps the same IP, so npm's cached value stays correct
+and the site stays up with **no npm restart** (verified: full frontend container
+recreate, site 200, npm untouched).
+
+Rules:
+- Do **not** remove the `networks` / `ipv4_address` block from the hosted
+  compose.
+- Do **not** point the npm proxy host at `152.69.188.133:8086` or the docker
+  gateway IP: the Oracle host firewall drops hairpin/gateway traffic from npm
+  (`EHOSTUNREACH`), so container-name forwarding to the static IP is the only
+  stable target.
+- npm, `9router`, and `rego-lookup` are attached to `autobrain-hosted_default`
+  as external containers; never let compose try to recreate that network
+  (marking it `external` or changing its IPAM fails or tears the stack down).
 
 ## Deploy (production, from source)
 
@@ -151,3 +203,4 @@ docker compose -f docker-compose.prod.yml up -d --build   # pinned images
 On Portainer: redeploy the previous stack definition / image tag. In a
 migration, keep the old host running and flip DNS back to roll back — see
 `server-migration.md`.
+

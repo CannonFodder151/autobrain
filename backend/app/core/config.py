@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "text-embedding-3-small"
     EMBEDDING_DIMENSION: int = 1536  # text-embedding-3-small output size
 
+    # AI usage caps (AUT-302): per-user fixed-window burst + UTC-day total,
+    # Redis-backed and enforced before any 9Router spend. 429 once exceeded.
+    AI_RATE_LIMIT_PER_WINDOW: int = 10
+    AI_RATE_WINDOW_SECONDS: int = 60
+    AI_DAILY_LIMIT: int = 50
+
     # External providers (optional)
     REGO_LOOKUP_URL: str = ""
     REGO_LOOKUP_API_KEY: str = ""
@@ -99,9 +105,12 @@ class Settings(BaseSettings):
     APP_BASE_URL: str = "http://localhost:8000"
 
     # Versioning + GitHub release checking
-    APP_VERSION: str = "0.3.19"  # mirror frontend/pubspec.yaml version
+    APP_VERSION: str = "0.3.34"  # mirror frontend/pubspec.yaml version
     GITHUB_REPO: str = "CannonFodder151/autobrain"
-    GITHUB_TOKEN: str = ""  # optional, raises the GitHub API rate limit for release checks
+    # Optional. Only used for the PRIVATE MOBILE repo release check
+    # (MOBILE_GITHUB_REPO). Public autobrain version checks run unauthenticated.
+    # Use a fine-grained PAT scoped to exactly that one repo, read-only contents.
+    GITHUB_TOKEN: str = ""
     MOBILE_GITHUB_REPO: str = "CannonFodder151/autobrain-mobile"  # private; needs GITHUB_TOKEN
 
     # Scheduled backup (daily). When set, beats stores a full JSON snapshot to MinIO.

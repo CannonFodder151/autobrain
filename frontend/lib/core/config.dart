@@ -25,7 +25,8 @@ class AppConfig {
   static String apiBase = _defaultApiBase;
   static String wsBase = _defaultWsBase;
 
-  static bool get _isMobile =>
+  /// Whether running natively on Android/iOS (as opposed to web/desktop).
+  static bool get isMobile =>
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
@@ -33,7 +34,7 @@ class AppConfig {
   /// Loads a saved server selection (called once at startup).
   static Future<void> load() async {
     // Web and desktop always use the compiled base URL — no picker.
-    if (!_isMobile) {
+    if (!isMobile) {
       serverConfigured = true;
       return;
     }

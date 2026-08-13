@@ -9,7 +9,7 @@ structlog==24.4.0
 # Local OCR fallback (Tesseract via pytesseract, optional runtime dep)
 pytesseract==0.3.13
 pillow==12.3.0
-pypdf==6.14.2
+pypdf==6.15.0
 
 # Test/dev
 pytest==9.1.1
