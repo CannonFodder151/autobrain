@@ -42,7 +42,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.41] - 2026-08-13
 
 ### Added
 - My Builds tab in the Community Garage (AUT-501): view and edit your own posts. Backed by `GET /social/my-posts` + `PATCH /social/posts/{id}`.
