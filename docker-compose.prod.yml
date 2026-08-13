@@ -28,6 +28,10 @@ x-backend-base: &backend-base
   environment:
     POSTGRES_HOST: postgres
     <<: *core-env
+    # Community Garage federation hub (AUT-532): needed so /admin/social/register
+    # works out of the box. Self-hosters default to hosted=false (pay $20/yr).
+    SOCIAL_FEDERATION_HUB_URL: ${SOCIAL_FEDERATION_HUB_URL:-https://hub.autobrainservice.app}
+    SOCIAL_FEDERATION_HOSTED: ${SOCIAL_FEDERATION_HOSTED:-false}
   depends_on:
     postgres:
       condition: service_healthy

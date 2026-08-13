@@ -93,6 +93,14 @@ releases API payload subset) and ship it:
 | frontend | `autobrain-frontend:<tag>` | nginx serves Flutter web + proxies `/api/*`, `/ws/*`, `/ai/*` |
 | hub | `ghcr.io/cannonfodder151/autobrain-federation-hub:<tag>` | federation hub (Community Garage); built + pushed from the PRIVATE repo `autobrain-federation-hub` (board rev 8); deploy config only in this repo |
 
+The backend registers with the hub via `SOCIAL_FEDERATION_HUB_URL` (default
+`https://hub.autobrainservice.app`; override per stack). `SOCIAL_FEDERATION_HOSTED`
+is `true` on the AutoBrain-Hosted stack (free bundled license, docs R5a) and
+`false` on self-hosted/prod stacks (pays the $20/yr license). If the hub URL is
+missing from the `backend` service env, Community Garage server registration
+fails with `502 hub not configured` (AUT-532) — make sure the env reaches the
+`backend` service on every redeploy.
+
 Only the frontend publishes a port; all internal services stay on the Compose
 network.
 
