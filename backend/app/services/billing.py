@@ -26,10 +26,12 @@ PLANS: dict[str, dict] = {
     "garage": {"name": "Garage", "max_vehicles": 5},
 }
 
-# Display amounts in US cents — the approved prices (AUT-93 plan c36dbe7d).
-# The Stripe price objects created by scripts/stripe-setup.py are the source of
-# truth at checkout; these mirror them for the /billing/pricing endpoint so the
-# frontend renders prices without a live Stripe round-trip.
+# Display amounts in AUD cents — the approved prices (AUT-93 plan c36be7d;
+# AUD per AUT-523). The Stripe price objects created by scripts/stripe-setup.py
+# are the source of truth at checkout; these mirror them for the
+# /billing/pricing endpoint so the frontend renders prices without a live
+# Stripe round-trip.
+CURRENCY = "aud"
 PLAN_AMOUNTS: dict[str, dict[str, int]] = {
     "enthusiast": {"monthly": 900, "yearly": 8400},
     "garage": {"monthly": 1900, "yearly": 16800},
@@ -115,7 +117,7 @@ def pricing() -> dict:
         if sale["active"]:
             entry["sale_monthly"] = _discounted(amounts["monthly"], SALE_PERCENT_OFF)
         plans.append(entry)
-    return {"currency": "usd", "sale": sale, "plans": plans}
+    return {"currency": CURRENCY, "sale": sale, "plans": plans}
 
 
 def _discounted(amount_cents: int, percent_off: int) -> int:
@@ -147,9 +149,19 @@ def plan_for_user(user: User) -> str:
     """Resolve the current plan key from a user's subscription state."""
     if not user.free_account:
         if user.stripe_price_id and user.stripe_subscription_status in ACTIVE_STATUSES:
-            return plan_for_price(user.stripe_price_id) or FREE_PLAN
+            return plan_for_price(user.stripe_price_id) or _plan_from_entitlement(user)
         return FREE_PLAN  # admin-granted access without a Stripe sub
     return FREE_PLAN
+
+
+def _plan_from_entitlement(user: User) -> str:
+    """Best-effort plan for an active subscription on a price this deploy does
+    not recognise (e.g. a grandfathered pre-AUT-523 price that was archived in
+    Stripe). The persisted entitlement was set when the sub was created, so
+    infer the plan from it rather than demoting someone who is still billed."""
+    if user.max_vehicles >= PLANS["garage"]["max_vehicles"]:
+        return "garage"
+    return "enthusiast"
 
 
 def has_paid_subscription(user: User) -> bool:
@@ -325,8 +337,19 @@ async def _apply_subscription(db: AsyncSession, user: User, sub) -> None:
     price_id = items[0].get("price", {}).get("id") if items else None
     user.stripe_price_id = price_id
 
-    if sub.get("status") in ACTIVE_STATUSES and price_id and plan_for_price(price_id):
-        apply_plan(user, plan_for_price(price_id))
+    if sub.get("status") in ACTIVE_STATUSES:
+        plan = plan_for_price(price_id) if price_id else None
+        if plan:
+            apply_plan(user, plan)
+        else:
+            # Active subscription on a price this deploy doesn't recognise (e.g.
+            # a grandfathered pre-AUT-523 price archived in Stripe). Stripe keeps
+            # billing it, so preserve the user's entitlement instead of silently
+            # demoting a paying member to the free tier.
+            logger.info(
+                "stripe_subscription_preserved_unknown_price",
+                extra={"user": user.id, "status": sub.get("status"), "price": price_id},
+            )
     else:
         apply_free(user)
     await db.commit()

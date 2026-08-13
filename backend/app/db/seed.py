@@ -483,6 +483,25 @@ async def _seed_demo_social(db, user_id: str) -> None:
         ("Project Silvia", "Long-term drift build. GT2871R goes in next month."),
         ("Ducati Monster", "Termignoni exhaust sounds unreal. Commuter for good weather only."),
     ]
+    # Distinct photo colours per build so each feed item shows its own media.
+    build_colours = {
+        "Skyline R34": [(0, 61, 165), (28, 96, 128), (220, 20, 60)],
+        "Weekend MX-5": [(178, 34, 34), (255, 99, 71), (70, 130, 180)],
+        "Project Silvia": [(245, 245, 245), (105, 105, 105), (178, 34, 34)],
+        "Ducati Monster": [(220, 20, 60), (30, 30, 30), (169, 169, 169)],
+    }
+    photo_keys: dict[str, list[str]] = {}
+    try:
+        for nickname, colours in build_colours.items():
+            keys = []
+            for i, rgb in enumerate(colours):
+                key = f"demo/build-{nickname.lower().replace(' ', '-')}-{i + 1}.png"
+                await _upload_demo_image(key, rgb)  # object key stored; URL signed at read time
+                keys.append(key)
+            photo_keys[nickname] = keys
+    except Exception as exc:  # storage may be unavailable; demo still seeds
+        logger.warning("demo_build_photo_seed_failed", error=str(exc))
+
     for nickname, caption in demos:
         vehicle = next((v for v in vehicles if v.nickname == nickname), None)
         if vehicle is None:
@@ -511,19 +530,23 @@ async def _seed_demo_social(db, user_id: str) -> None:
             author_display_name=settings.DEMO_DISPLAY_NAME,
             body="Nice build! What's next on the list?",
         ))
-    # A demo photo for the first build so the feed shows media (webp key reused).
-    first = next((v for v in vehicles if v.nickname == "Skyline R34"), None)
-    if first is not None:
-        from app.social.models import SocialPhoto
+    # At least 3 photos per build so every demo feed item shows media.
+    from app.social.models import SocialPhoto
 
+    for nickname, keys in photo_keys.items():
+        vehicle = next((v for v in vehicles if v.nickname == nickname), None)
+        if vehicle is None:
+            continue
         build = await db.scalar(
-            select(SocialBuild).where(SocialBuild.vehicle_id == first.id)
+            select(SocialBuild).where(SocialBuild.vehicle_id == vehicle.id)
         )
-        if build is not None:
+        if build is None:
+            continue
+        for key in keys:
             db.add(SocialPhoto(
                 build_id=build.id,
                 uploader_user_id=user_id,
-                file_key="demo/mod-photo.png",
+                file_key=key,
                 width=640,
                 height=420,
             ))

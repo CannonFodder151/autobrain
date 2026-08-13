@@ -42,8 +42,13 @@ class SocialApi {
   final ApiClient _api;
 
   /// Homepage feed. Federation on → hub feed; off → local-only (server-side).
-  Future<List<SocialBuild>> feed({int limit = 20}) async {
-    final data = await _api.get('/social/feed?limit=$limit') as Map<String, dynamic>;
+  /// Optional `q` filters by title, caption, author or server name.
+  Future<List<SocialBuild>> feed({int limit = 20, String? q}) async {
+    final qs = q != null && q.trim().isNotEmpty
+        ? '&q=${Uri.encodeQueryComponent(q.trim())}'
+        : '';
+    final data =
+        await _api.get('/social/feed?limit=$limit$qs') as Map<String, dynamic>;
     return ((data['items'] as List?) ?? const [])
         .map((e) => SocialBuild.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();

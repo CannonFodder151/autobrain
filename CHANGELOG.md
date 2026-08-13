@@ -46,11 +46,81 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 ## [Unreleased]
 
 ### Fixed
 - Full-DB backups now cover every table (AUT-521): the snapshot table list is derived from the ORM metadata instead of a hand-maintained list that had drifted — `market_listing_cache` and `revoked_refresh_tokens` were missing entirely, and `vehicle_shares` was only added on 2026-08-10. A backup taken before a table was added, when restored by newer code, wiped that table's rows without re-inserting them — the mechanism that could silently remove shared vehicles during a server upgrade/restore. `serialize_all`/`restore_all` now use SQLAlchemy's FK-aware table order, and a regression test asserts the snapshot covers the full schema and that a backup/restore roundtrip preserves shared vehicles.
 - Demo reset no longer orphans (or crashes on) shared vehicles (AUT-521): `reset_demo` deleted the demo user + vehicles without clearing `vehicle_shares` first, so a share referencing a demo vehicle or the demo account either left orphaned rows (FK-less DBs) or blocked the deletes on Postgres (`NO ACTION`) and crashed the boot. It now deletes those shares before the user/vehicles, with a regression test covering both directions (demo as share owner and as invitee).
+
+## [0.3.56] - 2026-08-13
+
+### Fixed
+- Social uploads no longer buffer the full request body before size validation (AUT-597): `POST /api/v1/social/uploads` rejects oversize `Content-Length` with 413 before reading, and a bounded read loop aborts with 415 once buffered bytes exceed the 5MB cap.
+
+## [0.3.55] - 2026-08-13
+
+### Fixed
+- Billing hardening for the AUD currency migration (AUT-523 security follow-ups): `_apply_subscription` no longer demotes an actively-billed subscriber whose Stripe price was archived/rotated (grandfathered pre-AUD prices keep their plan until the subscription lapses), and `scripts/stripe-setup.py` refuses to archive a price that active subscriptions still reference (plus an `assert` hardened to an explicit `sys.exit`).
+
+## [0.3.54] - 2026-08-13
+### Added
+- Demo Community Garage builds now each ship with 3 photos (AUT-529): every demo build shows media in the feed instead of only the first build having a single image. Existing demo instances pick this up on next `DEMO_RESET` restart.
+
+## [0.3.53] - 2026-08-13
+
+### Added
+- Community Garage feed search (AUT-530): search bar on the Feed tab (debounced 350ms, server-side `?q=`) filters posts by title, caption, author and server name, with a clear button and a search-aware empty state. Feed cards are now separated by 12px spacing (`ListView.separated`).
+
+## [0.3.52] - 2026-08-13
+
+### Added
+- License opens an external browser tab on store-published mobile builds (AUT-531): the mobile License button launches the web License screen at `https://<api-origin>/#/license` in the OS browser, and the web app deep-links `/#/license` straight to the License screen. Avoids in-app purchase billing for app-store subscriptions (Apple/Google 30% IAP).
+
+## [0.3.51] - 2026-08-13
+
+### Fixed
+- GitHub Actions "run failed" noise (AUT-540): the publish workflow only auto-cuts releases when the ref is `main` (a `workflow_dispatch` on a feature branch no longer tries to push to `main` and fail), git identity is set before the auto-bump push/rebase retry, and the changelog gate is skipped for `dependabot[bot]` PRs (they never modify CHANGELOG.md).
+
+## [0.3.50] - 2026-08-13
+
+### Fixed
+- Logbook GPS button on mobile (AUT-539): the "Use GPS" icon always showed "GPS unavailable" because the native (non-web) helper `frontend/lib/core/geoloc_io.dart` was a hard-coded `null`. It now uses the `geolocator` plugin: checks location services, requests permission on first use, and stamps the current `lat, lng` (10s fix timeout) into the trip start/end location. iOS: added `NSLocationWhenInUseUsageDescription`. Android permissions (`ACCESS_FINE/COARSE_LOCATION`) were already declared for the car-kit GPS path.
+
+## [0.3.49] - 2026-08-13
+
+### Fixed
+- Community Garage federation registration on AutoBrain-Hosted (AUT-532): registering the server with the hub (`POST /admin/social/register`) returned 502 "Hub unreachable: hub not configured" because no compose file passed `SOCIAL_FEDERATION_HUB_URL` to the backend. All three compose files now wire the hub URL (default `https://hub.autobrainservice.app`) and the hosted stack registers `hosted=true` (free bundled license, per docs R5a). A regression test guards the compose wiring.
+
+## [0.3.48] - 2026-08-13
+### Fixed
+- Subscription billing is now in **AUD** (AUT-523): `/billing/pricing` returns `currency: aud`, the license screen renders `A$` prices, and `scripts/stripe-setup.py` provisions/verifies Stripe prices in AUD (archiving the old USD prices). Stripe `STRIPE_PRICE_*` env values must be refreshed from a re-run of the script before checkout goes live.
+
+## [0.3.47] - 2026-08-13
+
+### Security
+- Federation hub registration: `register()` now sends `registration_key` (from `SOCIAL_FEDERATION_HOSTED_REGISTRATION_KEY`, a deploy-time secret) whenever a server presents itself as `hosted=true`. Self-hosted servers send an empty key and register unlicensed as before. Closes the hosted=true free-license bypass on the hub (AUT-525).
+
+## [0.3.46] - 2026-08-13
+
+### Removed
+- Server version check removed entirely (AUT-461): the GitHub update check (`/api/v1/version/mobile`, the GitHub portion of `/admin/version`, and `backend/app/services/version.py`) is gone. The server no longer touches the GitHub API at all — no PAT, no anonymous rate-limit usage. `/admin/version` still returns the local server version string; the admin UI shows it without any update banner. The mobile app's release banner now uses only the release advertised by its server (`/auth/config app_version`).
+
+## [0.3.45] - 2026-08-13
+
+### Fixed
+- Mobile release builds failing on `AuthState` (AUT-522): the mobile-only `auth_state.dart` delta in `CannonFodder151/autobrain-mobile` had drifted from this web base and was missing the `freeAccount`/`premium` getters the synced Community Garage screens use, so every mobile release since v0.3.34+69 failed to compile. The mobile delta was re-merged onto the web base (getters + refresh-token flow restored) and a `flutter analyze` CI guard was added to `autobrain-mobile` so a stale delta can never silently break a release again.
 
 ## [0.3.44] - 2026-08-13
 

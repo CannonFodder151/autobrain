@@ -4,6 +4,21 @@
 
 Chronological log of verified test passes and verification runs. Real state only — mirrors repo `docs/qa-run-logs.md`. Newest first.
 
+## 2026-08-13 — Pre-merge pass: AUT-523 billing hardening PR #107 (AUT-581, Gate 2)
+
+Gate 2 verification of PR https://github.com/CannonFodder151/autobrain/pull/107 (branch `fix/AUT-523-billing-hardening` @ `c500753`, base `main` @ `574260b`). Change scope: billing entitlement hardening — an active subscription on a price this deploy doesn't map (e.g. a grandfathered pre-AUT-523 USD price archived in Stripe) **preserves** the user's entitlement instead of demoting them to free while Stripe keeps billing; demotion only on lapse/cancel. `plan_for_user` infers the plan from persisted entitlement for such subs. `scripts/stripe-setup.py` refuses to archive a wrong-currency price that active subscriptions still reference; `assert` → `sys.exit` (survives `python -O`).
+
+**Suite: `backend/tests/test_billing.py` @ PR head — 18 passed** (14 pre-existing + 4 new). Ran from a fresh checkout at `c500753` with the pinned `requirements.txt` on Python 3.13; suite is self-contained (no live Stripe/Postgres needed). The 4 new tests, verified against the diff and by execution:
+
+- `test_apply_subscription_preserves_entitlement_on_unknown_price` — active sub on unknown/archived price keeps `free_account=False` + plan caps (no silent demotion).
+- `test_apply_subscription_demotes_non_active_unknown_price` — canceled sub on unknown price demotes to free (`free_account=True`, `max_vehicles=1`).
+- `test_plan_for_user_unknown_price_active_sub_infers_plan` — active/trialing sub on unknown price infers `garage`/`enthusiast` from persisted entitlement.
+- `test_stripe_setup_refuses_archive_while_active_subs_reference_price` — `scripts/stripe-setup.py` raises `SystemExit` and never calls `Price.modify` while an active sub references the price.
+
+**Regression sanity (same file, all green):** pricing endpoint (`test_pricing_endpoint_public`, `test_pricing_matches_approved_plan`), checkout paths incl. promo codes (`test_checkout_*`, 6 tests) and early-adopter sale (`test_checkout_auto_applies_sale_on_monthly`, `test_pricing_no_sale_when_unconfigured`) — no regression in pricing/checkout/sale.
+
+**Findings:** none. No release-blocking issues. Verdict: **deliverable** (failures would still be flagged; the parent AUT-523 owns any follow-up).
+
 ## 2026-08-11 — Post-push pass: AUT-218 search fix + AUT-205 merges (AUT-276, Gate 2)
 
 Second post-push pass under the change validation gate. Covers commits merged to `main` after the AUT-249 base `b2ca584` (range `b2ca584..29f8c09`): the AUT-218 search-500 fix `da12cdf` (raw `IS NOT NULL` embedding filter — the ORM models don't map the pgvector column, so `getattr(model, vec_col).isnot(None)` raised `AttributeError`) and the AUT-205 batch — AUT-136 (push `receipt.processed` to the vehicle owner, not the vehicle id), AUT-141 (AI router response key/type whitelist), AUT-142 (OCR helpers → `app/ocr_utils.py`), AUT-143 (inline router logic → `services/`, incl. `search.py` import fix), AUT-200 (fail closed on default creds), AUT-137 (embedding backfill worker + queue on entity create/update + daily sweep).

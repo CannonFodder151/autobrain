@@ -22,6 +22,7 @@ on:
 
 jobs:
   auto-bump:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -32,6 +33,8 @@ jobs:
       - name: Cut a release if [Unreleased] has content (AUT-240)
         run: |
           set -euo pipefail
+          git config user.name "AutoBrain Release Bot"
+          git config user.email "release@autobrainservice.app"
           ./scripts/auto-bump.sh
           git push origin main
           echo "==> auto-bump done"

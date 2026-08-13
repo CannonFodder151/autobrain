@@ -8,9 +8,9 @@ feed still works, local builds only.
 import secrets
 from datetime import date, datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_premium, require_premium_write
@@ -22,7 +22,7 @@ from app.services.events import add_event
 from app.services.ownership import get_accessible_vehicle
 from app.social import federation
 from app.social.federation import FederationUnavailable
-from app.social.media import MediaError, signed_url, upload_photo
+from app.social.media import MAX_UPLOAD_BYTES, MediaError, read_upload, signed_url, upload_photo
 from app.social.rate_limit import social_rate_limit
 from app.social.models import (
     SocialBuild,
@@ -252,17 +252,24 @@ async def _push_outbox_safe(cfg, build: SocialBuild, snapshot: dict, photo_keys:
 @router.get("/feed")
 async def feed(
     limit: int = Query(default=20, ge=1, le=100),
+    q: str | None = Query(default=None, max_length=120),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_premium),
     _rl: None = Depends(social_rate_limit(24)),
 ) -> dict:
     await _sync_federation(db)
     await db.commit()
+    stmt = select(SocialBuild).where(SocialBuild.status == "published")
+    if q and q.strip():
+        needle = f"%{q.strip()}%"
+        stmt = stmt.where(
+            SocialBuild.title.ilike(needle)
+            | SocialBuild.caption.ilike(needle)
+            | SocialBuild.author_display_name.ilike(needle)
+            | SocialBuild.server_name.ilike(needle)
+        )
     rows = await db.scalars(
-        select(SocialBuild)
-        .where(SocialBuild.status == "published")
-        .order_by(SocialBuild.created_at.desc())
-        .limit(limit)
+        stmt.order_by(SocialBuild.created_at.desc()).limit(limit)
     )
     return {"items": [await _serialize(db, b, user) for b in rows]}
 
@@ -523,14 +530,27 @@ async def resolve_share_link(
         raise HTTPException(status_code=404, detail="Build not found")
     return await _serialize(db, build, user)
 
+def _reject_oversized_content_length(request: Request) -> None:
+    """Return 413 on a declared Content-Length past the cap before any body read.
+
+    Must resolve before the UploadFile dependency so the multipart body is never
+    parsed/buffered for oversized uploads. Missing or lying Content-Length is
+    covered by the bounded read_upload() inside the handler.
+    """
+    declared = request.headers.get("content-length")
+    if declared is not None and declared.isdigit() and int(declared) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File too large (max 5MB)")
+
+
 @router.post("/uploads", status_code=201)
 async def upload(
+    _size_guard: None = Depends(_reject_oversized_content_length),
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_premium_write),
     _rl: None = Depends(social_rate_limit(10)),
 ) -> dict:
-    data = await file.read()
+    data = await read_upload(file)
     try:
         key, url, width, height = await upload_photo(user.id, data, file.content_type)
     except MediaError as exc:

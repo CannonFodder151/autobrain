@@ -104,13 +104,8 @@ class Settings(BaseSettings):
     # Public base URL used to build password-reset links (no trailing slash)
     APP_BASE_URL: str = "http://localhost:8000"
 
-    # Versioning + GitHub release checking
-    APP_VERSION: str = "0.3.44"  # mirror frontend/pubspec.yaml version
-    GITHUB_REPO: str = "CannonFodder151/autobrain"
-    # Mobile repo identifier reported by /version/mobile. Its release info is
-    # published to the PUBLIC autobrain repo (mobile/latest.json) and read
-    # unauthenticated — no GitHub token lives on the server.
-    MOBILE_GITHUB_REPO: str = "CannonFodder151/autobrain-mobile"
+    # Versioning (local only; the GitHub update check was removed — AUT-461)
+    APP_VERSION: str = "0.3.56"  # mirror frontend/pubspec.yaml version
 
     # Scheduled backup (daily). When set, beats stores a full JSON snapshot to MinIO.
     BACKUP_ENABLED: bool = True
@@ -147,6 +142,11 @@ class Settings(BaseSettings):
     SOCIAL_FEDERATION_ENABLED: bool = False
     SOCIAL_FEDERATION_HUB_URL: str = ""  # federation hub base URL (hub is a separate service)
     SOCIAL_FEDERATION_HOSTED: bool = False  # AutoBrain-hosted = licensed free on the hub
+    # Proof-of-hosting key for the hub (AUT-525): Paperclip secret injected ONLY
+    # into AutoBrain-hosted stacks. Empty on self-hosted servers — sent to the
+    # hub as-is, which then requires it for `hosted=true` registrations. Never
+    # default this to a real value; never store it in the repo.
+    SOCIAL_FEDERATION_HOSTED_REGISTRATION_KEY: str = ""
 
     # Stripe billing (hosted subscriptions). Price IDs come from the Stripe
     # Dashboard (or scripts/stripe-setup.py). Leave empty to disable /billing.
