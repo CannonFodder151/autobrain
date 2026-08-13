@@ -26,6 +26,7 @@ class _LicenseScreenState extends State<LicenseScreen> {
   Map<String, dynamic>? _profile;
   List<Map<String, dynamic>> _plans = _fallbackPlans;
   Map<String, dynamic> _sale = const {};
+  String _currency = 'aud';
   bool _saleActive = false;
   bool _loading = true;
   bool _yearly = false;
@@ -67,6 +68,7 @@ class _LicenseScreenState extends State<LicenseScreen> {
     try {
       final data = await api.get('/billing/pricing') as Map<String, dynamic>;
       setState(() {
+        _currency = (data['currency'] as String?) ?? 'aud';
         _sale = (data['sale'] as Map<String, dynamic>?) ?? const {};
         _saleActive = _sale['active'] == true;
         _plans = ((data['plans'] as List?) ?? [])
@@ -132,7 +134,8 @@ class _LicenseScreenState extends State<LicenseScreen> {
   String _fmt(int cents) {
     final whole = cents ~/ 100;
     final frac = (cents % 100).toString().padLeft(2, '0');
-    return '\$$whole.$frac';
+    final symbol = _currency == 'aud' ? 'A\$' : '\$';
+    return '$symbol$whole.$frac';
   }
 
   @override

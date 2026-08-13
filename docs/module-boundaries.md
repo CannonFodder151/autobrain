@@ -29,7 +29,7 @@ Async-first. Routers call services directly; services never import routers.
 | `odometer.py` | Odometer sync from fuel/service data (`sync_odometer`) |
 | `rego.py` | AU rego-lookup API client |
 | `ai_client.py` | Backend → AI gateway calls (one wrapper per module) |
-| `billing.py`, `email.py`, `notify.py`, `export.py`, `search.py`, `vector_search.py`, `version.py` | Stripe billing, email delivery, push notifications, exports, (vector) search, version check |
+| `billing.py`, `email.py`, `notify.py`, `export.py`, `search.py`, `vector_search.py` | Stripe billing, email delivery, push notifications, exports, (vector) search |
 
 ### Other `app/` layers
 - `models/` — SQLAlchemy models, one file per domain (12 files + `models/__init__.py` barrel).

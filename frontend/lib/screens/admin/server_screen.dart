@@ -6,8 +6,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/auth_state.dart';
 import '../../core/download.dart';
 
-/// Admin-only server page: version + GitHub update check, full backup,
-/// restore, and the machine-to-machine admin API key note.
+/// Admin-only server page: version, full backup, restore, and the
+/// machine-to-machine admin API key note.
 class ServerScreen extends StatefulWidget {
   const ServerScreen({super.key});
 
@@ -125,8 +125,8 @@ class _ServerScreenState extends State<ServerScreen> {
                       style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 8),
                   if (v == null)
-                    const Text('Checking GitHub…')
-                  else ...[
+                    const Text('Loading…')
+                  else
                     Text(
                       'v${v['version'] ?? '?'}',
                       style: Theme.of(context)
@@ -134,24 +134,11 @@ class _ServerScreenState extends State<ServerScreen> {
                           .headlineSmall
                           ?.copyWith(fontWeight: FontWeight.bold),
                     ),
-                    const SizedBox(height: 4),
-                    _statusRow(context, v),
-                  ],
                   const SizedBox(height: 8),
                   Text(
-                    'Repository: ${v?['repo'] ?? '—'}',
+                    'Repository: CannonFodder151/autobrain',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
-                  if (v != null && v['commit_message'] != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(
-                        'Latest commit: ${v['commit_message']}',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -165,7 +152,7 @@ class _ServerScreenState extends State<ServerScreen> {
                   'What changed in each release — view CHANGELOG.md on GitHub'),
               trailing: const Icon(Icons.open_in_new),
               onTap: () => _openUrl(
-                  'https://github.com/${(v?['repo'] ?? 'CannonFodder151/autobrain')}/blob/main/CHANGELOG.md'),
+                  'https://github.com/CannonFodder151/autobrain/blob/main/CHANGELOG.md'),
             ),
           ),
           const SizedBox(height: 16),
@@ -217,40 +204,5 @@ class _ServerScreenState extends State<ServerScreen> {
     final ok = await launchUrl(Uri.parse(url),
         mode: LaunchMode.externalApplication);
     if (!ok && mounted) _snack('Could not open link');
-  }
-
-  Widget _statusRow(BuildContext context, Map<String, dynamic> v) {
-    final latest = v['latest_version']?.toString();
-    final upToDate = v['up_to_date'];
-    final reachable = v['reachable'] == true;
-    final repoVersion = v['repo_version']?.toString();
-    String text;
-    Color color;
-    if (!reachable) {
-      text = "GitHub unreachable — can't check for updates";
-      color = Colors.grey;
-    } else if (upToDate == null) {
-      text = 'Checking GitHub…';
-      color = Colors.grey;
-    } else if (upToDate == true) {
-      text = repoVersion != null
-          ? 'Up to date (v$repoVersion)'
-          : 'Up to date (latest: $latest)';
-      color = Colors.green;
-    } else {
-      text = repoVersion != null
-          ? 'Update available: v$repoVersion (running v${v['version']})'
-          : 'Update available: $latest';
-      color = Colors.orange;
-    }
-    return Row(
-      children: [
-        Icon(Icons.circle, size: 12, color: color),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(text, style: TextStyle(color: color)),
-        ),
-      ],
-    );
   }
 }

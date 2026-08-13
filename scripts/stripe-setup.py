@@ -2,11 +2,14 @@
 """Idempotent Stripe provisioning for AutoBrain paid tiers (AUT-111).
 
 Creates or verifies, in the account owning STRIPE_SECRET_KEY:
-  * Enthusiast prices  $9/mo, $84/yr
-  * Garage prices      $19/mo, $168/yr
-  * Early-adopter sale (AUT-93, plan c36dbe7d): coupon EARLY40 = 40% off the
+  * Enthusiast prices  A$9/mo, A$84/yr
+  * Garage prices      A$19/mo, A$168/yr
+  * Early-adopter sale (AUT-93, plan c36be7d): coupon EARLY40 = 40% off the
     first 3 months, capped at 100 redemptions, redeemable for 6 months from
     launch, plus its promotion code.
+
+All prices are in AUD (AUT-523); the script archives any wrong-currency price
+found under the same lookup key and creates an AUD replacement.
 
 Run in Stripe test mode first (sk_test_...), then again with the live key.
 Prints the env values to wire into the hosted stack; do not run against an
@@ -22,6 +25,8 @@ import sys
 from datetime import date, timedelta
 
 import stripe
+
+CURRENCY = "aud"
 
 PLANS = {
     "enthusiast": {
@@ -54,14 +59,25 @@ def upsert_price(plan_key: str, billing: str) -> dict:
         assert price.unit_amount == amount, (
             f"{plan_key}/{billing}: existing price {price.unit_amount} != {amount}"
         )
-        print(f"  verified {plan['name']} {billing}: {price.id}")
-        return price
+        if price.currency == CURRENCY:
+            print(f"  verified {plan['name']} {billing}: {price.id}")
+            return price
+        # Price objects are immutable; a wrong-currency price (e.g. the pre-AUT-523
+        # USD prices) must be archived before its lookup key can be reused.
+        print(
+            f"  archiving wrong-currency {plan['name']} {billing} "
+            f"({price.id}, {price.currency})"
+        )
+        stripe.Price.modify(price.id, active=False)
+        existing = stripe.Price.list(lookup_keys=[lookup], limit=1).data
+        if existing:
+            stripe.Price.modify(existing[0].id, active=False)
     product = stripe.Product.retrieve(plan_key)
     interval = {"monthly": "month", "yearly": "year"}[billing]
     return stripe.Price.create(
         product=product.id,
         unit_amount=amount,
-        currency="usd",
+        currency=CURRENCY,
         lookup_key=lookup,
         nickname=f"{plan['name']} {billing}",
         recurring={"interval": interval, "interval_count": 1},

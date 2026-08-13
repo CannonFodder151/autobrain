@@ -480,41 +480,18 @@ class _VersionBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final current = version['version']?.toString() ?? '?';
-    final latest = version['latest_version']?.toString();
-    final upToDate = version['up_to_date'];
-    final reachable = version['reachable'] == true;
-    final repoVersion = version['repo_version']?.toString();
-    String statusText;
-    Color statusColor;
-    if (!reachable) {
-      statusText = "GitHub unreachable — can't check for updates";
-      statusColor = Colors.grey;
-    } else if (upToDate == null) {
-      statusText = 'Checking GitHub…';
-      statusColor = Colors.grey;
-    } else if (upToDate == true) {
-      statusText = repoVersion != null
-          ? 'Up to date (v$repoVersion)'
-          : 'Up to date (latest: $latest)';
-      statusColor = Colors.green;
-    } else {
-      statusText = repoVersion != null
-          ? 'Update available: v$repoVersion'
-          : 'Update available: $latest';
-      statusColor = Colors.orange;
-    }
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      color: statusColor.withValues(alpha: 0.12),
+      color: Colors.blueGrey.withValues(alpha: 0.12),
       child: Row(
         children: [
-          Icon(Icons.info_outline, color: statusColor, size: 18),
+          Icon(Icons.info_outline, color: Colors.blueGrey, size: 18),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              'Server v$current · $statusText',
-              style: TextStyle(color: statusColor, fontWeight: FontWeight.w600),
+              'Server v$current',
+              style: TextStyle(color: Colors.blueGrey, fontWeight: FontWeight.w600),
             ),
           ),
         ],

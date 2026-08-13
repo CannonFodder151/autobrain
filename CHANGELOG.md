@@ -47,10 +47,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
+
+
 ## [Unreleased]
 
 ### Added
 - Community Garage feed search (AUT-530): search bar on the Feed tab (debounced 350ms, server-side `?q=`) filters posts by title, caption, author and server name, with a clear button and a search-aware empty state. Feed cards are now separated by 12px spacing (`ListView.separated`).
+
+## [0.3.48] - 2026-08-13
+### Fixed
+- Subscription billing is now in **AUD** (AUT-523): `/billing/pricing` returns `currency: aud`, the license screen renders `A$` prices, and `scripts/stripe-setup.py` provisions/verifies Stripe prices in AUD (archiving the old USD prices). Stripe `STRIPE_PRICE_*` env values must be refreshed from a re-run of the script before checkout goes live.
+
+## [0.3.47] - 2026-08-13
+
+### Security
+- Federation hub registration: `register()` now sends `registration_key` (from `SOCIAL_FEDERATION_HOSTED_REGISTRATION_KEY`, a deploy-time secret) whenever a server presents itself as `hosted=true`. Self-hosted servers send an empty key and register unlicensed as before. Closes the hosted=true free-license bypass on the hub (AUT-525).
+
+## [0.3.46] - 2026-08-13
+
+### Removed
+- Server version check removed entirely (AUT-461): the GitHub update check (`/api/v1/version/mobile`, the GitHub portion of `/admin/version`, and `backend/app/services/version.py`) is gone. The server no longer touches the GitHub API at all — no PAT, no anonymous rate-limit usage. `/admin/version` still returns the local server version string; the admin UI shows it without any update banner. The mobile app's release banner now uses only the release advertised by its server (`/auth/config app_version`).
 
 ## [0.3.45] - 2026-08-13
 
