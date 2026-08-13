@@ -28,7 +28,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.26] - 2026-08-13
 ### Fixed
 - AI service prediction now uses the selected vehicle (AUT-398): the prediction screen fetched `GET /vehicles` and used the first entry, so it could predict for the wrong car (e.g. the Fazer) when the crown-selected vehicle was not first in the list. It now fetches `GET /vehicles/{id}` for the vehicle the user opened from.
 
