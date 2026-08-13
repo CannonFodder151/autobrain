@@ -129,7 +129,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.9"
-<<<<<<< HEAD
   dart_earcut:
     dependency: transitive
     description:
@@ -146,7 +145,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.0"
-=======
   dbus:
     dependency: transitive
     description:
@@ -155,7 +153,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.7.13"
->>>>>>> origin/main
   equatable:
     dependency: transitive
     description:
