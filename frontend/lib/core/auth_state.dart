@@ -26,6 +26,7 @@ class AuthState extends ChangeNotifier {
   bool _darkMode = true;
   bool _signupEnabled = true;
   bool _licenseEnabled = false;
+  bool _freeAccount = false;
   String? get token => _token;
   String? get role => _role;
   String? get userId => _userId;
@@ -34,6 +35,9 @@ class AuthState extends ChangeNotifier {
   bool get isLoggedIn => _token != null;
   bool get isAdmin => _role == 'admin';
   bool get isDemo => _role == 'demo';
+  /// Free-tier accounts cannot access premium features (Community Garage).
+  bool get freeAccount => _freeAccount;
+  bool get premium => !_freeAccount;
   /// Whether this server allows self-service signup (from /auth/config).
   bool get signupEnabled => _signupEnabled;
   /// Whether the licence/upgrade feature is enabled on this server
@@ -90,6 +94,7 @@ class AuthState extends ChangeNotifier {
     _client = null;
     _signupEnabled = true;
     _licenseEnabled = false;
+    _freeAccount = false;
     await _tokens.clear();
     _loadConfig();
     notifyListeners();
@@ -100,6 +105,7 @@ class AuthState extends ChangeNotifier {
       final data = await _client!.get('/auth/me') as Map<String, dynamic>;
       _role = data['role'] as String?;
       _userId = data['id'] as String?;
+      _freeAccount = data['free_account'] == true;
       await _tokens.write(token: _token!, refreshToken: _refreshToken, role: _role ?? 'user');
       notifyListeners();
     } catch (_) {}
@@ -214,6 +220,7 @@ class AuthState extends ChangeNotifier {
     _role = null;
     _userId = null;
     _client = null;
+    _freeAccount = false;
     await _tokens.clear();
     if (refreshToken != null) {
       // Best effort, non-blocking: the server bumps the account's

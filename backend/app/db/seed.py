@@ -1,7 +1,5 @@
 """Seed utilities: bootstrap admin + demo account and sample data."""
 
-import asyncio
-import io
 import json
 import struct
 import zlib
@@ -26,6 +24,12 @@ from app.models.service import ServiceItem, ServiceRecord
 from app.models.user import User
 from app.models.valuation import ValuationSnapshot
 from app.models.vehicle import Vehicle, VehicleEvent
+from app.social.models import (
+    SocialBuild,
+    SocialComment,
+    SocialShareScope,
+    get_server_config,
+)
 
 logger = get_logger(__name__)
 
@@ -126,6 +130,21 @@ async def reset_demo() -> None:
                 select(Vehicle.id).where(Vehicle.user_id == user.id)
             )).all())
             if vids:
+                from sqlalchemy import delete as _delete
+
+                from app.social.models import SocialLike, SocialPhoto
+
+                builds = list((await db.scalars(
+                    select(SocialBuild.id).where(SocialBuild.vehicle_id.in_(vids))
+                )).all())
+                if builds:
+                    await db.execute(_delete(SocialPhoto).where(SocialPhoto.build_id.in_(builds)))
+                    await db.execute(_delete(SocialComment).where(SocialComment.build_id.in_(builds)))
+                    await db.execute(_delete(SocialLike).where(SocialLike.build_id.in_(builds)))
+                    await db.execute(_delete(SocialShareScope).where(SocialShareScope.build_id.in_(builds)))
+                    await db.execute(_delete(SocialBuild).where(SocialBuild.id.in_(builds)))
+                # Draft (build-less) uploads by the demo user
+                await db.execute(_delete(SocialPhoto).where(SocialPhoto.uploader_user_id == user.id))
                 svc_ids = list((await db.scalars(
                     select(ServiceRecord.id).where(ServiceRecord.vehicle_id.in_(vids))
                 )).all())
@@ -427,4 +446,73 @@ async def _seed_demo_data(db, user_id: str) -> None:
                 ai_response=json.dumps({"summary": dsummary, "severity": dseverity,
                                         "estimated_cost": dcost}),
                 resolved_at=datetime.now(timezone.utc) if dstatus == "resolved" else None,
+            ))
+
+    await _seed_demo_social(db, user_id)
+
+
+async def _seed_demo_social(db, user_id: str) -> None:
+    """Seed curated Community Garage demo builds (req 10): feature on, no hub.
+
+    The demo server never registers with the federation hub — these builds are
+    origin='demo' and are shown only on the demo instance.
+    """
+    cfg = await get_server_config(db)
+    cfg.feature_enabled = True
+    cfg.federation_enabled = False
+
+    vehicles = list((await db.scalars(
+        select(Vehicle).where(Vehicle.user_id == user_id, Vehicle.nickname.in_(
+            ["Skyline R34", "Weekend MX-5", "Project Silvia", "Ducati Monster"]
+        ))
+    )).all())
+    demos = [
+        ("Skyline R34", "My weekend weapon — turbocharged and coilover'd since day one."),
+        ("Weekend MX-5", "Slow car, fast fun. Enkei wheels + racing seat this season."),
+        ("Project Silvia", "Long-term drift build. GT2871R goes in next month."),
+        ("Ducati Monster", "Termignoni exhaust sounds unreal. Commuter for good weather only."),
+    ]
+    for nickname, caption in demos:
+        vehicle = next((v for v in vehicles if v.nickname == nickname), None)
+        if vehicle is None:
+            continue
+        build = SocialBuild(
+            vehicle_id=vehicle.id,
+            author_user_id=user_id,
+            author_display_name=settings.DEMO_DISPLAY_NAME,
+            server_name=None,
+            title=nickname,
+            caption=caption,
+            origin="demo",
+            snapshot_json="{}",
+        )
+        db.add(build)
+        await db.flush()
+        scope = SocialShareScope(
+            build_id=build.id,
+            allow_photos=True, allow_specs=True, allow_mods=True,
+            allow_odometer=True, allow_notes=True,
+        )
+        db.add(scope)
+        db.add(SocialComment(
+            build_id=build.id,
+            author_user_id=user_id,
+            author_display_name=settings.DEMO_DISPLAY_NAME,
+            body="Nice build! What's next on the list?",
+        ))
+    # A demo photo for the first build so the feed shows media (webp key reused).
+    first = next((v for v in vehicles if v.nickname == "Skyline R34"), None)
+    if first is not None:
+        from app.social.models import SocialPhoto
+
+        build = await db.scalar(
+            select(SocialBuild).where(SocialBuild.vehicle_id == first.id)
+        )
+        if build is not None:
+            db.add(SocialPhoto(
+                build_id=build.id,
+                uploader_user_id=user_id,
+                file_key="demo/mod-photo.png",
+                width=640,
+                height=420,
             ))

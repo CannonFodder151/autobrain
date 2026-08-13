@@ -108,6 +108,29 @@ async def require_ai(user: User = Depends(get_current_user)) -> User:
     return user
 
 
+async def require_premium(user: User = Depends(get_current_user)) -> User:
+    """Community Garage premium entitlement (AUT-294 rev 4).
+
+    Free accounts are locked out of every social route server-side. Demo
+    accounts keep read-only access (their curated demo feed) — write routes
+    reject the demo role via `require_premium_write`.
+    """
+    if user.free_account:
+        raise HTTPException(
+            status_code=403,
+            detail="Community Garage is a premium feature. Upgrade to enable it.",
+        )
+    return user
+
+
+async def require_premium_write(
+    user: User = Depends(require_premium),
+    _read_only: User = Depends(require_write),
+) -> User:
+    """Social write routes: premium + not demo (demo accounts are read-only)."""
+    return user
+
+
 async def require_rego(user: User = Depends(get_current_user)) -> User:
     """Free accounts cannot use rego lookup (exports are available on all plans)."""
     if user.free_account:

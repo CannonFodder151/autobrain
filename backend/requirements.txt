@@ -18,6 +18,8 @@ reportlab==4.2.5
 pypdf==6.15.0
 python-dateutil==2.9.0.post0
 orjson==3.11.9
+pillow==12.3.0
+cryptography==44.0.1
 email-validator==2.2.0
 websockets==14.1
 structlog==24.4.0

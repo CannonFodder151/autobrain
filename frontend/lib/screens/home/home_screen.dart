@@ -8,6 +8,7 @@ import '../../core/models.dart';
 import '../../widgets/vehicle_selector.dart';
 import '../admin/admin_screen.dart';
 import '../analytics/analytics_screen.dart';
+import '../../community_garage/community_garage_screen.dart';
 import '../diagnostics/diagnostics_screen.dart';
 import '../fuel/fuel_screen.dart';
 import '../logbook/logbook_screen.dart';
@@ -109,6 +110,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const SettingsScreen()),
                   );
+                case 'community':
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                        builder: (_) => const CommunityGarageScreen()),
+                  );
                 case 'download':
                   _showDownload();
                 case 'license':
@@ -127,6 +133,7 @@ class _HomeScreenState extends State<HomeScreen> {
             },
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'settings', child: Text('Settings & security')),
+              const PopupMenuItem(value: 'community', child: Text('Community Garage')),
               if (kIsWeb)
                 const PopupMenuItem(value: 'download', child: Text('Get the mobile app')),
               if (auth.licenseEnabled)

@@ -112,6 +112,14 @@ def _externalize_url(url: str) -> str:
     return url
 
 
+async def presigned_url(key: str, expires: timedelta = timedelta(hours=1)) -> str:
+    """Short-lived presigned GET URL (externalized for the public endpoint)."""
+    url = await asyncio.to_thread(
+        get_minio().presigned_get_object, settings.MINIO_BUCKET, key, expires=expires
+    )
+    return _externalize_url(url)
+
+
 async def get_object(key: str) -> bytes:
     def _get() -> bytes:
         resp = get_minio().get_object(settings.MINIO_BUCKET, key)

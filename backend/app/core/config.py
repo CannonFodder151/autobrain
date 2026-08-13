@@ -139,6 +139,16 @@ class Settings(BaseSettings):
     # instance turns it on. When off, the app hides the licence/upgrade page.
     LICENSE_ENABLED: bool = False
 
+    # Community Garage (AUT-294/332). Two admin controls + federation hub.
+    # SOCIAL_FEATURE_ENABLED gates the whole feature ("Disabled by your admin"
+    # when off); SOCIAL_FEDERATION_ENABLED gates hub participation (off = the
+    # feed still works, local builds only). Both are also runtime-overridable
+    # via the admin API (persisted in social_server_config).
+    SOCIAL_FEATURE_ENABLED: bool = False
+    SOCIAL_FEDERATION_ENABLED: bool = False
+    SOCIAL_FEDERATION_HUB_URL: str = ""  # federation hub base URL (hub is a separate service)
+    SOCIAL_FEDERATION_HOSTED: bool = False  # AutoBrain-hosted = licensed free on the hub
+
     # Stripe billing (hosted subscriptions). Price IDs come from the Stripe
     # Dashboard (or scripts/stripe-setup.py). Leave empty to disable /billing.
     STRIPE_SECRET_KEY: str = ""

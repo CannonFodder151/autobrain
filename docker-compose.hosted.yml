@@ -196,10 +196,34 @@ services:
       - backend
       - ai
 
+  hub:
+    # Community Garage federation hub (AUT-333) — deploy config only.
+    # Hub internals live in the PRIVATE repo autobrain-federation-hub
+    # (board rev 8): private code, private GHCR image. Nothing here is hub code.
+    image: ghcr.io/cannonfodder151/autobrain-federation-hub:hosted
+    restart: unless-stopped
+    environment:
+      DATABASE_PATH: /data/hub.db
+      HUB_PUBLIC_BASE_URL: ${HUB_PUBLIC_BASE_URL:-https://hub.autobrainservice.app}
+      HUB_STRIPE_SECRET_KEY: ${HUB_STRIPE_SECRET_KEY:-}
+      HUB_STRIPE_WEBHOOK_SECRET: ${HUB_STRIPE_WEBHOOK_SECRET:-}
+      HUB_STRIPE_PRICE_FEDERATION_YEAR: ${HUB_STRIPE_PRICE_FEDERATION_YEAR:-}
+      HUB_ADMIN_KEY: ${HUB_ADMIN_KEY:-}
+    volumes:
+      - hub-data:/data
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health', timeout=3).status==200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
 volumes:
-  postgres-data:
-  redis-data:
-  minio-data:
+   postgres-data:
+   redis-data:
+   minio-data:
+   hub-data:
 
 # AUT-372: pin the default network subnet + a static frontend IP. The host-level
 # nginx-proxy-manager (npm) caches the resolved frontend container IP, so a
@@ -211,4 +235,3 @@ networks:
       config:
         - subnet: 172.18.0.0/16
           gateway: 172.18.0.1
-

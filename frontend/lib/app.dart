@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'core/auth_state.dart';
 import 'core/config.dart';
 import 'core/theme.dart';
+import 'community_garage/screens/share_link_view.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/reset_password.dart';
 import 'screens/auth/server_setup_screen.dart';
@@ -24,6 +25,22 @@ class AutoBrainApp extends StatelessWidget {
     return null;
   }
 
+  /// True when opened from a shared-build deep link — routes to the Community
+  /// Garage share viewer. Accepts `{origin}/s/{token}` (design) and the
+  /// server-relative `{origin}/social/share/{token}` forms.
+  static String? shareTokenFromUrl() {
+    final segs = Uri.base.pathSegments;
+    if (segs.length >= 2 && segs.last == 's') {
+      return Uri.base.queryParameters['token'] ?? segs[segs.length - 2];
+    }
+    if (segs.length >= 3 &&
+        segs[segs.length - 3] == 'social' &&
+        segs[segs.length - 2] == 'share') {
+      return segs.last;
+    }
+    return null;
+  }
+
   /// True when opened from a website "Get started" button
   /// (…/?signup=1) — routes a logged-out user straight to account creation.
   static bool signupRequested() {
@@ -36,12 +53,15 @@ class AutoBrainApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthState>();
     final resetToken = resetTokenFromUrl();
+    final shareToken = shareTokenFromUrl();
 
     Widget home;
     if (resetToken != null) {
       home = ResetPasswordScreen(token: resetToken);
     } else if (!AppConfig.serverConfigured) {
       home = const ServerSetupScreen();
+    } else if (shareToken != null) {
+      home = ShareLinkView(token: shareToken);
     } else if (auth.isLoggedIn) {
       home = const HomeScreen();
     } else if (signupRequested() && auth.signupEnabled) {
