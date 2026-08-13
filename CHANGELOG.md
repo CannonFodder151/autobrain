@@ -33,6 +33,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Security
+- Dependency bump (AUT-301): `pypdf` pinned `6.14.2` → `6.15.0` in `backend/requirements.txt` and `ai/requirements.txt`, fixing two DoS CVEs in crafted-PDF parsing (CVE-2026-71852 large CID font width ranges, CVE-2026-71870 large /ToUnicode streams) reachable via user-uploaded receipt PDFs in the Celery worker.
+
+### Added
+- Logbook trip routes on a map (AUT-395): trips recorded with GPS now carry a deterministic polyline of `lat,lon` samples (`logbook_entries.gps_samples`, JSON). Phone/car-kit auto trips buffer fixes while driving (survive app kills; ~1 fix/s, capped) and sync them on completion; the board CSV schema `epoch,...,lat,lon` (raw degrees x10^7, `0,0` = no fix) is a valid source via `backend/app/services/trip_gps.py::parse_board_csv` (invalid/out-of-range fixes dropped server-side — no AI). The logbook shows a "View route" button per trip → a full-screen OpenStreetMap route (flutter_map) with start/end markers, skipping no-fix samples. Detail endpoint `GET /vehicles/{id}/logbook/{entry_id}` returns `gps_samples` so the list stays light.
 
 ## [0.3.30] - 2026-08-13
 
