@@ -23,6 +23,7 @@ from app.services.ownership import get_accessible_vehicle
 from app.social import federation
 from app.social.federation import FederationUnavailable
 from app.social.media import MediaError, signed_url, upload_photo
+from app.social.rate_limit import social_rate_limit
 from app.social.models import (
     SocialBuild,
     SocialComment,
@@ -133,20 +134,29 @@ async def _get_published(db: AsyncSession, build_id: str) -> SocialBuild:
     return build
 
 
-async def _sync_inbox(db: AsyncSession) -> None:
-    """Pull remote builds from the hub when due. Errors never break the feed."""
+async def _sync_federation(db: AsyncSession) -> None:
+    """Pull remote builds + like/comment events from the hub when due.
+
+    Errors never break the feed. Events (comment/like) are applied to the
+    matching local copy (AUT-462 FD-1); remote builds keep their author and
+    caption metadata (FD-2).
+    """
     cfg = await get_server_config(db)
     if not cfg.federation_enabled or cfg.hub_status != "registered" or not cfg.hub_server_id:
         return
-    if cfg.last_inbox_sync and (
-        datetime.now(timezone.utc) - cfg.last_inbox_sync < timedelta(seconds=_INBOX_SYNC_TTL_SECONDS)
-    ):
-        return
+    last_sync = cfg.last_inbox_sync
+    if last_sync is not None:
+        if last_sync.tzinfo is None:  # sqlite stores tz-aware columns as naive
+            last_sync = last_sync.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) - last_sync < timedelta(seconds=_INBOX_SYNC_TTL_SECONDS):
+            return
     try:
         remote_builds = await federation.pull_inbox(cfg)
+        event_data = await federation.pull_events(cfg, cfg.last_event_sync or 0)
     except FederationUnavailable as exc:
-        logger.warning("social_inbox_sync_failed", error=str(exc))
+        logger.warning("social_federation_sync_failed", error=str(exc))
         return
+    events = event_data.get("events", []) if isinstance(event_data, dict) else []
     for item in remote_builds:
         build = item.get("build") or item
         rid = build.get("remote_build_id") or build.get("build_id")
@@ -168,20 +178,71 @@ async def _sync_inbox(db: AsyncSession) -> None:
             remote_server_id=item.get("origin_server") or build.get("server_id"),
             snapshot_json=dumps(build.get("snapshot") or {}),
         ))
+    for event in events:
+        await _apply_event(db, event)
     cfg.last_inbox_sync = datetime.now(timezone.utc)
+    if event_data:
+        cursor = event_data.get("next_cursor") or cfg.last_event_sync
+        cfg.last_event_sync = int(cursor)
     await db.flush()
 
 
-async def _push_outbox_safe(cfg, build_id: str, snapshot: dict, photo_keys: list[str]) -> None:
+async def _apply_event(db: AsyncSession, event: dict) -> None:
+    """Apply a federated comment/like event to the matching local build copy."""
+    if event.get("event_type") not in ("comment", "like"):
+        return
+    payload = event.get("payload") or {}
+    build_id = payload.get("build_id")
+    if not build_id:
+        return
+    build = await db.get(SocialBuild, build_id)
+    if not build:
+        build = await db.scalar(
+            select(SocialBuild).where(SocialBuild.remote_build_id == str(build_id))
+        )
+    if not build or build.status != "published":
+        return
+    author = payload.get("author_display_name") or "Unknown"
+    server = payload.get("server_name")
+    if event["event_type"] == "comment":
+        db.add(SocialComment(
+            build_id=build.id,
+            author_display_name=author,
+            server_name=server,
+            body=payload.get("body", ""),
+        ))
+        return
+    # like: delete-then-(maybe)-insert keeps toggles idempotent per remote author.
+    liked = bool(payload.get("liked"))
+    like = await db.scalar(select(SocialLike).where(
+        SocialLike.build_id == build.id,
+        SocialLike.author_display_name == author,
+        SocialLike.server_name == server,
+    ))
+    if liked and like is None:
+        db.add(SocialLike(
+            build_id=build.id,
+            author_display_name=author,
+            server_name=server,
+        ))
+    elif not liked and like is not None:
+        await db.delete(like)
+
+
+async def _push_outbox_safe(cfg, build: SocialBuild, snapshot: dict, photo_keys: list[str]) -> None:
+    """Push a local build (metadata + photos) so remote copies keep author info."""
     try:
-        await federation.push_outbox(cfg, build_id, {
-            "build_id": build_id,
+        await federation.push_outbox(cfg, build.id, {
+            "build_id": build.id,
             "title": snapshot.get("title"),
+            "caption": build.caption,
+            "author_display_name": build.author_display_name,
+            "server_name": build.server_name or cfg.server_name,
             "snapshot": snapshot,
             "photo_urls": [await signed_url(k) for k in photo_keys],
         })
     except (FederationUnavailable, Exception) as exc:
-        logger.warning("social_outbox_push_failed", build_id=build_id, error=str(exc))
+        logger.warning("social_outbox_push_failed", build_id=build.id, error=str(exc))
 
 
 @router.get("/feed")
@@ -189,8 +250,9 @@ async def feed(
     limit: int = Query(default=20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_premium),
+    _rl: None = Depends(social_rate_limit(24)),
 ) -> dict:
-    await _sync_inbox(db)
+    await _sync_federation(db)
     await db.commit()
     rows = await db.scalars(
         select(SocialBuild)
@@ -206,6 +268,7 @@ async def create_post(
     payload: PostCreate,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_premium_write),
+    _rl: None = Depends(social_rate_limit(10)),
 ) -> dict:
     vehicle = await get_accessible_vehicle(db, payload.vehicle_id, user)
     scope = SocialShareScope(**payload.share_scope.model_dump())
@@ -245,7 +308,7 @@ async def create_post(
         )
     await db.commit()
     if build.origin == "local" and cfg.federation_enabled and cfg.hub_status == "registered":
-        await _push_outbox_safe(cfg, build.id, snapshot, photo_keys)
+        await _push_outbox_safe(cfg, build, snapshot, photo_keys)
     return await _serialize(db, build, user)
 
 
@@ -265,6 +328,7 @@ async def add_comment(
     payload: CommentIn,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_premium_write),
+    _rl: None = Depends(social_rate_limit(15)),
 ) -> dict:
     build = await _get_published(db, post_id)
     cfg = await get_server_config(db)
@@ -277,8 +341,11 @@ async def add_comment(
     )
     db.add(comment)
     await db.commit()
-    if build.origin == "remote":
-        await _push_event_safe(db, build, "comment", {"body": payload.body})
+    await _push_event_safe(db, build, "comment", {
+        "body": payload.body,
+        "author_display_name": user.display_name,
+        "server_name": cfg.server_name,
+    })
     return {
         "id": comment.id,
         "build_id": build.id,
@@ -317,6 +384,7 @@ async def toggle_like(
     post_id: str,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_premium_write),
+    _rl: None = Depends(social_rate_limit(20)),
 ) -> dict:
     build = await _get_published(db, post_id)
     cfg = await get_server_config(db)
@@ -338,8 +406,11 @@ async def toggle_like(
         ))
         liked = True
     await db.commit()
-    if build.origin == "remote":
-        await _push_event_safe(db, build, "like", {"liked": liked})
+    await _push_event_safe(db, build, "like", {
+        "liked": liked,
+        "author_display_name": user.display_name,
+        "server_name": cfg.server_name,
+    })
     return {"liked": liked, "like_count": await _like_count(db, build.id)}
 
 
@@ -367,9 +438,15 @@ async def list_likes(
 
 
 async def _push_event_safe(db: AsyncSession, build: SocialBuild, kind: str, payload: dict) -> None:
+    """Fan a comment/like out to the hub so remote copies stay in sync (FD-1).
+
+    Events reference the build id on its origin server: the local id for local
+    builds, the origin id for remote copies (so the origin can match them).
+    """
     cfg = await get_server_config(db)
+    origin_build_id = build.remote_build_id if build.origin == "remote" else build.id
     try:
-        await federation.push_outbox(cfg, build.id, {"event": kind, **payload})
+        await federation.push_event(cfg, origin_build_id, kind, payload)
     except (FederationUnavailable, Exception) as exc:
         logger.warning("social_event_push_failed", kind=kind, build_id=build.id, error=str(exc))
 
@@ -379,6 +456,7 @@ async def create_share_link(
     post_id: str,
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(require_premium_write),
+    _rl: None = Depends(social_rate_limit(10)),
 ) -> dict:
     build = await _get_published(db, post_id)
     if build.origin == "remote":
@@ -408,6 +486,7 @@ async def upload(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_premium_write),
+    _rl: None = Depends(social_rate_limit(10)),
 ) -> dict:
     data = await file.read()
     try:
@@ -429,7 +508,8 @@ async def delete_post(
     """Unshare a build (takedown propagates locally)."""
     build = await _get_published(db, post_id)
     if build.author_user_id != user.id:
-        raise HTTPException(status_code=403, detail="Only the author can delete this post")
+        # 404, not 403, so non-owners cannot tell a post exists (PW-8).
+        raise HTTPException(status_code=404, detail="Post not found")
     scope = await db.scalar(select(SocialShareScope).where(SocialShareScope.build_id == build.id))
     photos = list(await db.scalars(select(SocialPhoto).where(SocialPhoto.build_id == build.id)))
     await db.execute(delete(SocialComment).where(SocialComment.build_id == build.id))

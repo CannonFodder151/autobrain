@@ -75,7 +75,8 @@ class SocialComment(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     build_id: Mapped[str] = mapped_column(String(36), ForeignKey("social_builds.id"), index=True)
-    author_user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"))
+    # Null for comments applied from federated events (no local user).
+    author_user_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id"))
     author_display_name: Mapped[str] = mapped_column(String(120))
     server_name: Mapped[str | None] = mapped_column(String(120))
     body: Mapped[str] = mapped_column(Text)
@@ -87,7 +88,8 @@ class SocialLike(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     build_id: Mapped[str] = mapped_column(String(36), ForeignKey("social_builds.id"), index=True)
-    author_user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"))
+    # Null for likes applied from federated events (no local user).
+    author_user_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id"))
     author_display_name: Mapped[str] = mapped_column(String(120))
     server_name: Mapped[str | None] = mapped_column(String(120))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -129,6 +131,7 @@ class SocialServerConfig(Base):
     hub_api_key: Mapped[str | None] = mapped_column(String(128))
     hub_private_key: Mapped[str | None] = mapped_column(String(128))  # ed25519, hub auth
     last_inbox_sync: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_event_sync: Mapped[int | None] = mapped_column(Integer)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
