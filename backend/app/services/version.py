@@ -32,7 +32,7 @@ async def check_mobile_latest_release() -> dict:
     """
     result: dict = {"reachable": True, "latest_version": None, "html_url": None}
     try:
-        async with httpx.AsyncClient(timeout=12, headers=_headers()) as client:
+        async with httpx.AsyncClient(timeout=12, headers=_headers(authenticated=True)) as client:
             release = await _get(
                 client,
                 f"https://api.github.com/repos/{settings.MOBILE_GITHUB_REPO}/releases/latest",
@@ -51,9 +51,17 @@ async def check_mobile_latest_release() -> dict:
         return {"latest_version": None, "html_url": None, "reachable": False}
 
 
-def _headers() -> dict:
+def _headers(authenticated: bool = False) -> dict:
+    """Default headers for GitHub requests.
+
+    `authenticated=True` is used ONLY for the private mobile repo. Public-repo
+    checks (`autobrain`) never send the token — GitHub's unauthenticated API
+    allows 60 requests/hour per IP, plenty for admin-page version checks.
+    Keeping the PAT off public requests shrinks the exposure surface in case
+    of a leak.
+    """
     headers = {"Accept": "application/vnd.github+json", "User-Agent": "autobrain"}
-    if settings.GITHUB_TOKEN:
+    if authenticated and settings.GITHUB_TOKEN:
         headers["Authorization"] = f"Bearer {settings.GITHUB_TOKEN}"
     return headers
 
