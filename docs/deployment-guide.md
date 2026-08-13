@@ -51,6 +51,12 @@ All three tiers run as standalone Portainer stacks with prebuilt images pulled
 from Docker Hub / GHCR. Hosted is published behind Nginx Proxy Manager on the
 Oracle VM; the stack frontend nginx exposes `:8086`.
 
+## Deployment log
+
+| Date | Version | Change | Verified |
+|------|---------|--------|----------|
+| 2026-08-13 | v0.3.32 | Post-merge deploy after AUT-441 merge drive: all tiers promoted Demo → Default → Hosted (AUT-450). Includes alembic migration-chain fix (PR #70) — gps_samples reparented onto `k2l3m4n5o6p7`. Mobile release surfaced: `/api/v1/version/mobile` → `reachable:true`, latest v0.3.31+66. | `/health` 0.3.32 on all three tiers; mobile endpoint live (2026-08-13T02:31Z) |
+
 ### GITHUB_TOKEN rotation (AUT-439) — MANDATORY before every redeploy
 
 `GITHUB_TOKEN` is a classic PAT used by the backend for mobile release checks
