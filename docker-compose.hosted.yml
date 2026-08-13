@@ -1,6 +1,6 @@
 # AutoBrain HOSTED stack — Portainer stack "autobrain-hosted" (EP5, Oracle Cloud 152.69.188.133)
 # Restored to match the actual running services (AUT-101). Project name: autobrain-hosted.
-# App images from GHCR (what the host actually runs). Secrets interpolated from Portainer stack env.
+# App images from Docker Hub (what the host actually runs). Secrets interpolated from Portainer stack env.
 # Env must stay applied via the stack so redeploys never revert SMTP2GO/SMTP_* (see AUT-97/AUT-101).
 
 x-core-env: &core-env
@@ -83,7 +83,7 @@ services:
       "
 
   backend:
-    image: ghcr.io/cannonfodder151/autobrain-backend:hosted
+    image: cannonfodder151/autobrain-backend:hosted
     restart: unless-stopped
     command: sh -c "python -m app.db.bootstrap && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
@@ -134,9 +134,14 @@ services:
         condition: service_healthy
     expose:
       - "8000"
+    # Backend pinned to .15 (AUT-439): the frontend's static .14 was being
+    # grabbed by the recreated backend during redeploys, stalling the stack.
+    networks:
+      default:
+        ipv4_address: 172.18.0.15
 
   ai:
-    image: ghcr.io/cannonfodder151/autobrain-ai:hosted
+    image: cannonfodder151/autobrain-ai:hosted
     restart: unless-stopped
     command: uvicorn app.main:app --host 0.0.0.0 --port 8001
     environment:
@@ -146,7 +151,7 @@ services:
       - "8001"
 
   market-data:
-    image: ghcr.io/cannonfodder151/autobrain-market-data:hosted
+    image: cannonfodder151/autobrain-market-data:hosted
     restart: unless-stopped
     environment:
       API_KEY: ${MARKET_DATA_API_KEY:-}
@@ -180,7 +185,7 @@ services:
         condition: service_healthy
 
   frontend:
-    image: ghcr.io/cannonfodder151/autobrain-frontend:hosted
+    image: cannonfodder151/autobrain-frontend:hosted
     restart: unless-stopped
     ports:
       - "8086:80"
