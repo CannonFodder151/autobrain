@@ -48,6 +48,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- Mobile release builds failing on `AuthState` (AUT-522): the mobile-only `auth_state.dart` delta in `CannonFodder151/autobrain-mobile` had drifted from this web base and was missing the `freeAccount`/`premium` getters the synced Community Garage screens use, so every mobile release since v0.3.34+69 failed to compile. The mobile delta was re-merged onto the web base (getters + refresh-token flow restored) and a `flutter analyze` CI guard was added to `autobrain-mobile` so a stale delta can never silently break a release again.
+
 ## [0.3.44] - 2026-08-13
 
 ### Fixed
