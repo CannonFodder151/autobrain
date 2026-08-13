@@ -318,8 +318,9 @@ class _FeatureGrid extends StatelessWidget {
           AnalyticsScreen(vehicleId: vehicle.id)),
       _Feature('Notifications', Icons.notifications_active,
           const Color(0xFF0E7490), NotificationsScreen(vehicleId: vehicle.id)),
-      _Feature('OBD', Icons.settings_input_component, const Color(0xFF334155),
-          ObdScreen(vehicleId: vehicle.id)),
+      if (!kIsWeb)
+        _Feature('OBD', Icons.settings_input_component, const Color(0xFF334155),
+            ObdScreen(vehicleId: vehicle.id)),
     ];
     return GridView.count(
       crossAxisCount: 3,
