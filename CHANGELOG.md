@@ -58,7 +58,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.57] - 2026-08-13
 
 ### Fixed
 - Worker daily `scheduled_backup` now stores in-stack MinIO snapshots (AUT-583): local `async def _run()` shadowed the module `_run(coro)` helper, raising `TypeError` so the daily task never wrote `backups/autobrain-backup-*.json`. Renamed to `_do()` with regression tests in `backend/tests/test_workers.py`.
