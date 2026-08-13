@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_premium, require_premium_write
@@ -252,17 +252,24 @@ async def _push_outbox_safe(cfg, build: SocialBuild, snapshot: dict, photo_keys:
 @router.get("/feed")
 async def feed(
     limit: int = Query(default=20, ge=1, le=100),
+    q: str | None = Query(default=None, max_length=120),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_premium),
     _rl: None = Depends(social_rate_limit(24)),
 ) -> dict:
     await _sync_federation(db)
     await db.commit()
+    stmt = select(SocialBuild).where(SocialBuild.status == "published")
+    if q and q.strip():
+        needle = f"%{q.strip()}%"
+        stmt = stmt.where(
+            SocialBuild.title.ilike(needle)
+            | SocialBuild.caption.ilike(needle)
+            | SocialBuild.author_display_name.ilike(needle)
+            | SocialBuild.server_name.ilike(needle)
+        )
     rows = await db.scalars(
-        select(SocialBuild)
-        .where(SocialBuild.status == "published")
-        .order_by(SocialBuild.created_at.desc())
-        .limit(limit)
+        stmt.order_by(SocialBuild.created_at.desc()).limit(limit)
     )
     return {"items": [await _serialize(db, b, user) for b in rows]}
 

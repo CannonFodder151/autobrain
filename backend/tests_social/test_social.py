@@ -358,6 +358,37 @@ async def test_social_happy_path() -> None:
 
 
 @pytest.mark.asyncio
+async def test_feed_search_filters_posts() -> None:
+    """?q= matches title, caption, author and server name (AUT-530)."""
+    await _enable_feature(True)
+    async with _SessionLocal() as db:
+        owner = await _new_user(db, "search@example.com", "Kai")
+        vehicle = await _new_vehicle(db, owner.id)
+        token = create_access_token(owner.id)
+        vehicle_id = vehicle.id
+    async with await _client(token) as c:
+        await c.post("/api/v1/social/posts", json={
+            "vehicle_id": vehicle_id, "caption": "Twin turbo done",
+        })
+        await c.post("/api/v1/social/posts", json={
+            "vehicle_id": vehicle_id, "caption": "Widebody kit",
+        })
+
+        all_items = (await c.get("/api/v1/social/feed")).json()["items"]
+        assert len(all_items) == 2
+
+        by_caption = (await c.get("/api/v1/social/feed?q=turbo")).json()["items"]
+        assert len(by_caption) == 1
+        assert "turbo" in by_caption[0]["caption"]
+
+        by_author = (await c.get("/api/v1/social/feed?q=Kai")).json()["items"]
+        assert len(by_author) == 2
+
+        none = (await c.get("/api/v1/social/feed?q=no-such-thing")).json()["items"]
+        assert none == []
+
+
+@pytest.mark.asyncio
 async def test_federation_off_feed_local_only() -> None:
     """With federation off and no hub configured, the feed still works."""
     async with _SessionLocal() as db:
