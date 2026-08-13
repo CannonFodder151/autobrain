@@ -37,7 +37,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.36] - 2026-08-13
 
 ### Security
 - Version-check (AUT-461): GitHub token removed from the server entirely. The private `autobrain-mobile` release check no longer calls the GitHub API with a PAT — the release info is published to a public manifest (`mobile/latest.json` in the autobrain repo) and read unauthenticated. `GITHUB_TOKEN` deleted from backend config, compose files, and stack envs; legacy classic PAT no longer exposed at runtime.

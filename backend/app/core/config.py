@@ -105,7 +105,7 @@ class Settings(BaseSettings):
     APP_BASE_URL: str = "http://localhost:8000"
 
     # Versioning + GitHub release checking
-    APP_VERSION: str = "0.3.35"  # mirror frontend/pubspec.yaml version
+    APP_VERSION: str = "0.3.36"  # mirror frontend/pubspec.yaml version
     GITHUB_REPO: str = "CannonFodder151/autobrain"
     # Mobile repo identifier reported by /version/mobile. Its release info is
     # published to the PUBLIC autobrain repo (mobile/latest.json) and read
