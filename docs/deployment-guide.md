@@ -58,17 +58,24 @@ Oracle VM; the stack frontend nginx exposes `:8086`.
 | 2026-08-13 | v0.3.34 | Post-merge deploy of AUT-442 security fix (PR #74, merge `79a6a851`): GitHub PAT dropped from public version checks. All tiers promoted Demo → Default → Hosted (Portainer stacks 73/68 EP2, 83 EP5, `pullImage:true`); `GITHUB_TOKEN` stack env untouched (classic PAT still in place until fine-grained token lands — see AUT-461). Pruned dangling images (EP2 5.2GB, EP5 8.5GB). | `/health` 0.3.34 on all three tiers; `/api/v1/version/mobile` → `reachable:true`, latest v0.3.33+68 (2026-08-13T04:05Z) |
 | 2026-08-13 | v0.3.32 | Post-merge deploy after AUT-441 merge drive: all tiers promoted Demo → Default → Hosted (AUT-450). Includes alembic migration-chain fix (PR #70) — gps_samples reparented onto `k2l3m4n5o6p7`. Mobile release surfaced: `/api/v1/version/mobile` → `reachable:true`, latest v0.3.31+66. | `/health` 0.3.32 on all three tiers; mobile endpoint live (2026-08-13T02:31Z) |
 
-### GITHUB_TOKEN rotation (AUT-439) — MANDATORY before every redeploy
+### Mobile release manifest (AUT-461) — update on every mobile release
 
-`GITHUB_TOKEN` is a classic PAT used by the backend for mobile release checks
-(`/api/v1/version/mobile`). It is **applied via the Portainer stack env**, not
-committed to compose. After any PAT rotation:
+The backend serves the latest `autobrain-mobile` release to the app via
+`/api/v1/version/mobile`. The mobile repo is private, so its release info is
+published to the **public** autobrain repo as `mobile/latest.json` and read by
+the backend over raw.githubusercontent.com — no GitHub token lives on the
+server.
 
-1. Set the new `GITHUB_TOKEN` value in the stack env of **all three** tiers
-   (Demo/Default on EP2, Hosted on EP5) before redeploying — a stale/revoked
-   token makes `/api/v1/version/mobile` return `reachable:false, latest_version:null`.
-2. Compose files reference `${GITHUB_TOKEN:-}` (default empty) so a missing
-   stack env fails loudly via the version endpoint, never a hard-coded token.
+On each mobile release, update `mobile/latest.json` (same fields as the GitHub
+releases API payload subset) and ship it:
+
+1. Edit `mobile/latest.json` to the new release's `tag_name`, `html_url`,
+   `published_at` (copy exactly from the GitHub release page — note the `+`
+   in the tag is URL-encoded as `%2B` in `html_url`).
+2. Open a PR, merge to `main`. No server redeploy is required — the backend
+   reads the manifest from `main` on each request.
+3. If the file is missing, `/api/v1/version/mobile` returns
+   `reachable:true, latest_version:null` (GitHub reachable, no manifest).
 
 ## Stack services
 

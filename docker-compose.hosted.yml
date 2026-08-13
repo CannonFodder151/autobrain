@@ -88,7 +88,6 @@ services:
     command: sh -c "python -m app.db.bootstrap && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
       <<: [*db-env, *core-env, *router-env]
-      GITHUB_TOKEN: ${GITHUB_TOKEN:-}  # PAT for release checks; set via Portainer stack env (AUT-439)
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in the hosted stack env (Portainer)}
       MINIO_PUBLIC_ENDPOINT: ${APP_BASE_URL:-https://hosted.autobrainservice.app}
       AI_ROUTER_TIMEOUT_SECONDS: 120
