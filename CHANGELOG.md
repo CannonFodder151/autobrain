@@ -9,13 +9,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
 
-
-
-
-
-
-
 ## [Unreleased]
+
+### Fixed
+- "Get the mobile app" no longer shows inside the mobile app (AUT-428): the home-screen menu item and its download dialog are now hidden on Android/iOS builds and only offered on the web app, where downloading the app actually makes sense.
 
 ## [0.3.86] - 2026-08-15
 
@@ -26,6 +23,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Admin moderation hub lists every flagged post/comment with the reporting
   reason and author; admins can delete the entry or ban/unban the author from
   posting in Community Garage (AUT-832).
+
 
 ## [0.3.85] - 2026-08-15
 
@@ -456,11 +454,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Security
 - Dependency bump (AUT-301): `pypdf` pinned `6.14.2` → `6.15.0` in `backend/requirements.txt` and `ai/requirements.txt`, fixing two DoS CVEs in crafted-PDF parsing (CVE-2026-71852 large CID font width ranges, CVE-2026-71870 large /ToUnicode streams) reachable via user-uploaded receipt PDFs in the Celery worker.
 
-### Added
-- Logbook trip routes on a map (AUT-395): trips recorded with GPS now carry a deterministic polyline of `lat,lon` samples (`logbook_entries.gps_samples`, JSON). Phone/car-kit auto trips buffer fixes while driving (survive app kills; ~1 fix/s, capped) and sync them on completion; the board CSV schema `epoch,...,lat,lon` (raw degrees x10^7, `0,0` = no fix) is a valid source via `backend/app/services/trip_gps.py::parse_board_csv` (invalid/out-of-range fixes dropped server-side — no AI). The logbook shows a "View route" button per trip → a full-screen OpenStreetMap route (flutter_map) with start/end markers, skipping no-fix samples. Detail endpoint `GET /vehicles/{id}/logbook/{entry_id}` returns `gps_samples` so the list stays light.
-
 ## [0.3.30] - 2026-08-13
-
 
 ### Added
 - Logbook trip routes on a map (AUT-395): trips recorded with GPS now carry a deterministic polyline of `lat,lon` samples (`logbook_entries.gps_samples`, JSON). Phone/car-kit auto trips buffer fixes while driving (survive app kills; ~1 fix/s, capped) and sync them on completion; the board CSV schema `epoch,...,lat,lon` (raw degrees x10^7, `0,0` = no fix) is a valid source via `backend/app/services/trip_gps.py::parse_board_csv` (invalid/out-of-range fixes dropped server-side — no AI). The logbook shows a "View route" button per trip → a full-screen OpenStreetMap route (flutter_map) with start/end markers, skipping no-fix samples. Detail endpoint `GET /vehicles/{id}/logbook/{entry_id}` returns `gps_samples` so the list stays light.
@@ -472,17 +466,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Phone-side auto trip logging (AUT-367, Android): auto start/stop logbook trips with no OBD adapter and no Android Auto approval. When the phone links to the car's Bluetooth (head-unit / car-kit) a trip is armed, then starts once GPS speed is sustained above a threshold (a passenger in a bus never starts one); the link dropping or the car going quiet stops and closes the trip with distance from the GPS odometer diff. Both this phone path and the VGate/OBD path (AUT-362) drive one shared auto start/stop recorder. Backend: `source=car_auto` trips and caller-provided `distance_km` accepted on logbook update. Logbook marks these "auto (car kit)".
 - Logbook screen (mobile + web): auto-logged trips are labelled "auto (OBD)" / "auto (car kit)" in the trip list.
 
-### Fixed
-- Version banner inverted (AUT-346): a server behind the repo (e.g. v0.3.6 vs repo v0.3.10) was shown as "Up to date"; the `up_to_date` comparison was reversed. The banner now correctly reports "Update available" when the running server is behind.
-- "Get the mobile app" no longer shows inside the mobile app (AUT-428): the home-screen menu item and its download dialog are now hidden on Android/iOS builds and only offered on the web app, where downloading the app actually makes sense.
-
-
 ## [0.3.27] - 2026-08-13
 ### Added
-- "Car Play / Android Auto Integration" settings submenu (AUT-366, mobile-only): honest explainer of what works (auto trip logging) vs what doesn't (head-unit OBD gauges, CarPlay OBD — Google/Apple category policy + Android-only Bluetooth SPP stack), an "Auto-start trip logging when connected to the car" toggle (wired to the OBD adapter car-connection service), and a live connection / last-trip status line. Hidden on web.
 - OBD automatic trip recording (AUT-362, Android): GoFar-style auto start/stop logbook trips. With the VGate iCar Pro adapter left in the car and `Auto-connect OBD` on, a foreground service keeps the app alive in the background, ignition is detected from battery voltage (PID 0142) + engine RPM (010C) + BT link-drop, and each drive lands in the logbook automatically — marked "auto (OBD)" so manual trips stay distinguishable. A mid-drive app kill no longer loses a trip (buffered locally, synced on next open). Backend: `logbook_entries.source` column (`manual`/`obd_auto`) via Alembic migration.
 - Logbook screen (mobile + web): auto-logged trips are labelled "auto (OBD)" in the trip list.
-
 
 ## [0.3.26] - 2026-08-13
 ### Fixed
@@ -500,17 +487,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed
 - OBD is hidden on web builds (AUT-364): Bluetooth Classic SPP is Android-only, so the home-screen OBD tile and the Settings "OBD features" chip no longer render on the Flutter web app (kIsWeb-gated). Mobile (autobrain-mobile) OBD is untouched.
 
-
 ## [0.3.22] - 2026-08-13
 ### Fixed
 - Security (AUT-303): login brute-force rate limit was bypassable by spoofing `X-Forwarded-For` (the backend trusted the client-controlled leading hop, so an attacker could rotate the header and never hit `LOGIN_MAX_ATTEMPTS`). The client IP is now derived from the trusted proxy header `X-Real-IP` (nginx sets `X-Real-IP $remote_addr`) and never from `X-Forwarded-For`. Failure counters moved from process memory to Redis (shared across workers, survive restarts) and now also count per-email as defense in depth against a misconfigured proxy.
-
+- Hosted frontend now pins a static container IP (172.18.0.14) on the pinned default network (AUT-372): host-level nginx-proxy-manager caches the frontend's resolved IP, so a recreated frontend with a new IP returned 502 until npm was restarted. Frontend recreates now keep the same IP and the site stays up with no npm restart.
 
 ### Changed
 - OBD VIN updates are manual only (AUT-361): connecting the adapter no longer silently writes the stored VIN. The OBD screen's Vehicle VIN card gains an **Update VIN** button that reads mode 09 PID 02 and saves it behind a confirmation, with busy + success/failure feedback (manual "Set VIN" entry kept). `POST /vehicles/{id}/obd/vin` now replaces an existing VIN instead of rejecting it with 409.
-
-### Fixed
-- Hosted frontend now pins a static container IP (172.18.0.14) on the pinned default network (AUT-372): host-level nginx-proxy-manager caches the frontend's resolved IP, so a recreated frontend with a new IP returned 502 until npm was restarted. Frontend recreates now keep the same IP and the site stays up with no npm restart.
 
 ## [0.3.21] - 2026-08-12
 
