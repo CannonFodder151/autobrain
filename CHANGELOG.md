@@ -49,6 +49,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- Community Garage feed search (AUT-530): search bar on the Feed tab (debounced 350ms, server-side `?q=`) filters posts by title, caption, author and server name, with a clear button and a search-aware empty state. Feed cards are now separated by 12px spacing (`ListView.separated`).
+
 ## [0.3.45] - 2026-08-13
 
 ### Fixed
