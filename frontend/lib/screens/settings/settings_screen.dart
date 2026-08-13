@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/auth_state.dart';
 import '../../core/download.dart';
+import 'car_integration_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -329,6 +330,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
           ),
+          const SizedBox(height: 16),
+          if (!kIsWeb)
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.car_repair_outlined),
+                title: const Text('Car Play / Android Auto'),
+                subtitle: const Text(
+                    'Auto trip logging, connection status, platform limits'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => const CarIntegrationScreen())),
+              ),
+            ),
           const SizedBox(height: 16),
           Card(
             child: Column(
