@@ -229,7 +229,7 @@ def scheduled_backup() -> None:
     from app.core.storage import get_minio
     from app.services.backup import dump_backup, serialize_all
 
-    async def _run():
+    async def _do():
         async with SessionLocal() as db:
             data = await serialize_all(db)
             stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
@@ -257,7 +257,7 @@ def scheduled_backup() -> None:
         except Exception:
             logger.exception("backup_prune_failed")
 
-    _run(_run())
+    _run(_do())
 
 
 @shared_task
