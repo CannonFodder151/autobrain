@@ -40,6 +40,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security
+- Private-repo clones now use SSH read-only deploy keys instead of a PAT (AUT-461); the classic PAT is limited to agent-side `gh` API automation.
+
 ## [0.3.36] - 2026-08-13
 
 ### Security

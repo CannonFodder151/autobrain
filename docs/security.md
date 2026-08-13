@@ -41,20 +41,31 @@
 
 The GitHub `github_pat` (classic PAT, full access) is injected as the env var
 `GITHUB_TOKEN` (or fetched via the Paperclip secrets API). It is used ONLY for
-agent-side git ops / clones of PRIVATE repos (dev box) — the deployed server
+agent-side `gh` API operations (PR/release automation) — the deployed server
 runtime makes NO authenticated GitHub calls and holds no token (AUT-461).
+
+Private-repo CLONES use **SSH read-only deploy keys**, not a PAT (AUT-461):
+- Read-only deploy keys (`agent-deploy-key-readonly`) are registered on
+  `autobrain-mobile`, `autobrainservice-website`, `rego-lookup-api`.
+- Per-repo keypairs live in `~/.ssh/autobrain_{mobile,website,rego}_deploy`;
+  `~/.ssh/config` maps alias hosts (`github-ab-mobile`, `github-ab-website`,
+  `github-ab-rego`) to github.com with `IdentitiesOnly yes`.
+- `git config --global url.…insteadOf` rewrites the plain HTTPS URLs of the
+  three private repos to those SSH aliases, so cloning with the plain HTTPS URL
+  still works and needs no token.
+- Public repos (e.g. `autobrain`) clone over plain HTTPS without any auth.
+
 All git operations MUST follow this procedure:
 
 - **Clone with the plain HTTPS URL only** — never embed the token:
-  `git clone https://github.com/CannonFodder151/<repo>.git`.
-- Auth is injected at fetch time by the gh credential helper (configured
-  globally on the dev box) or by `GIT_ASKPASS` reading `$GITHUB_TOKEN` from
-  env. The token never appears in the URL.
+  `git clone https://github.com/CannonFodder151/<repo>.git`. Private repos are
+  transparently routed to SSH deploy keys via the `insteadOf` rewrite above.
+- `gh` API operations authenticate via the injected `GITHUB_TOKEN` env
+  (gh credential helper) — the token never appears in any URL.
 - **Never** use `https://<user>:<token>@github.com/...` — git persists the
   remote URL (token included) into `<repo>/.git/config`, leaking the secret to
   disk (see [AUT-323](/AUT/issues/AUT-323)).
 - Purge scratch clones with `rm -rf` when done; never leave clones in `/tmp`.
-
 ## AI router
 
 - `AI_ROUTER_API_KEY` (optional) is sent as a bearer token to the router.
