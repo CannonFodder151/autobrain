@@ -44,7 +44,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.43] - 2026-08-13
 
 ### Fixed
 - Community Garage no longer shows the "Community Garage" title twice (AUT-511): the Feed tab dropped its own app bar since the parent screen already shows the title.
