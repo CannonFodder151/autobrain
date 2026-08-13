@@ -60,6 +60,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- Worker daily `scheduled_backup` now stores in-stack MinIO snapshots (AUT-583): local `async def _run()` shadowed the module `_run(coro)` helper, raising `TypeError` so the daily task never wrote `backups/autobrain-backup-*.json`. Renamed to `_do()` with regression tests in `backend/tests/test_workers.py`.
+- Restored the Celery worker image to CI (AUT-583): `docker/worker/Dockerfile` + `worker` added to the `dockerhub-publish` and `build-hosted` image loops, so `autobrain-worker` picks up worker fixes on every merge (it had no build path since the P1-1 consolidation).
+
 ## [0.3.56] - 2026-08-13
 
 ### Fixed

@@ -77,3 +77,43 @@ def test_receipt_push_targets_vehicle_owner(monkeypatch) -> None:
     assert user_id == "user-9", f"push sent to {user_id!r}, expected vehicle owner user-9"
     assert event == "receipt.processed"
     assert payload["receipt_id"] == "receipt-1"
+
+
+class FakeBucket:
+    def __init__(self):
+        self.written = []
+        self.removed = []
+
+    def put_object(self, bucket, key, body, length, content_type):
+        self.written.append((bucket, key, length, content_type))
+
+    def list_objects(self, bucket, prefix=""):
+        return []
+
+    def remove_object(self, bucket, key):
+        self.removed.append(key)
+
+
+def test_scheduled_backup_stores_snapshot(monkeypatch) -> None:
+    import app.core.storage as storage
+    import app.services.backup as svc_backup
+
+    fake_db = FakeDB()
+    bucket = FakeBucket()
+    monkeypatch.setattr(tasks, "SessionLocal", lambda: fake_db)
+
+    async def fake_serialize(db):
+        assert db is fake_db
+        return {"users": [], "vehicles": []}
+
+    monkeypatch.setattr(svc_backup, "serialize_all", fake_serialize)
+    monkeypatch.setattr(svc_backup, "dump_backup", lambda data: b'{"ok":true}')
+    monkeypatch.setattr(storage, "get_minio", lambda: bucket)
+
+    tasks.scheduled_backup()
+
+    assert bucket.written, "expected a snapshot to be written to MinIO"
+    bkt, key, length, ctype = bucket.written[0]
+    assert bkt == "test-minio-bucket", f"bucket={bkt!r}"
+    assert key.startswith("backups/autobrain-backup-"), key
+    assert ctype == "application/json", ctype
