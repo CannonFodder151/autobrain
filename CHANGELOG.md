@@ -37,6 +37,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security
+- Version-check (AUT-442): GitHub PAT no longer attached to public `autobrain` server-version checks; token now sent only for the private `autobrain-mobile` release check. Use a fine-grained read-only token scoped to `autobrain-mobile` only.
+
 ## [0.3.33] - 2026-08-13
 
 ### Changed
