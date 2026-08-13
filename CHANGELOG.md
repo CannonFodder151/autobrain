@@ -42,6 +42,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+- Community Garage moved from the app-bar menu to a home-screen feature tile button (AUT-488), matching the Fuel/Logbook style; Settings & security stays in the menu.
+
 ## [0.3.38] - 2026-08-13
 
 ### Security
