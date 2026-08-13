@@ -334,6 +334,69 @@ class _ObdScreenState extends State<ObdScreen> {
     }
   }
 
+  /// Clears the saved fault-code library (not the car). Confirmed before run.
+  Future<void> _clearSavedCodes() async {
+    final api = context.read<AuthState>().api;
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear saved codes?'),
+        content: const Text(
+            'This removes every saved fault code for this vehicle from the '
+            'app. Codes still stored in the car are not affected.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Clear')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await api.delete('/vehicles/${widget.vehicleId}/obd/codes');
+      _load();
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
+  /// Clears the car's ECU DTCs (mode 04) via the adapter, then re-reads.
+  Future<void> _clearCarCodes() async {
+    final session = _connection.session;
+    if (session == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear codes from car?'),
+        content: const Text(
+            'This asks the ECU to erase its stored fault codes. Saved codes '
+            'in the app library are not affected.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Clear')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await session.clearDtc();
+      messenger.showSnackBar(
+          const SnackBar(content: Text('Fault codes cleared')));
+      await _readFaultCodes();
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
   Future<void> _diagnoseCodes(List<String> codes) async {
     await Navigator.of(context).push(
       MaterialPageRoute(
@@ -391,6 +454,12 @@ class _ObdScreenState extends State<ObdScreen> {
                     onPressed: _readFaultCodes,
                     icon: const Icon(Icons.warning_amber),
                     label: const Text('Read fault codes'),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    tooltip: 'Clear codes from car',
+                    onPressed: _clearCarCodes,
+                    icon: const Icon(Icons.delete_sweep),
                   ),
                 ],
               ),
@@ -516,6 +585,12 @@ class _ObdScreenState extends State<ObdScreen> {
                           Text('Fault codes',
                               style: Theme.of(context).textTheme.titleMedium),
                           const Spacer(),
+                          if (_codes.isNotEmpty)
+                            IconButton(
+                              tooltip: 'Clear saved codes',
+                              onPressed: _clearSavedCodes,
+                              icon: const Icon(Icons.delete_sweep),
+                            ),
                           FilledButton.tonalIcon(
                             onPressed: _addCode,
                             icon: const Icon(Icons.add),
