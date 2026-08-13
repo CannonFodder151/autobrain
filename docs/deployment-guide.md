@@ -228,15 +228,16 @@ docker compose -f docker-compose.prod.yml up -d nginx   # mounts ./web-dist
 First boot runs `python -m app.db.bootstrap` (Alembic, falling back to
 `create_all`). Afterwards use Alembic:
 
-> **Known hazard — create_all-hybrid DBs.** A DB that was ever bootstrapped via
-> the `create_all` fallback (Alembic failure) will have tables Alembic has never
-> seen. `alembic upgrade head` then collides (e.g. `n4p5q6r7s8t9` tries to
-> re-create the social tables) and falls back to `create_all` again, which only
-> creates missing *tables* — never missing *columns* on existing tables. The
-> next model change needing an `ALTER` (e.g. `social_server_config.last_event_sync`)
-> then crashes boot. v0.3.41 hit this on all three tiers; the migration-chain fix
-> is tracked as a follow-up. Until fixed, any new column on an existing table
-> must be applied manually on all tiers (Demo/Default EP2, Hosted EP5).
+> **Resolved (AUT-510) — create_all-hybrid DBs.** A DB that was ever bootstrapped
+> via the `create_all` fallback (Alembic failure) has tables Alembic has never
+> seen. From v0.3.43+ the social migrations are linear and idempotent:
+> `n4p5q6r7s8t9` was reparented onto `a5b6c7d8e9f0` (fixing the two-head fork that
+> made `alembic upgrade head` fail with "Multiple head revisions"), and every DDL
+> op in `n4p5q6r7s8t9` / `p6q7r8s9t0u1` is guarded so already-present tables and
+> columns are skipped. The v0.3.41 manual `ALTER TABLE`s are now no-ops.
+>
+> New columns on existing tables still require a real Alembic migration (never
+> rely on `create_all` — it only creates missing *tables*).
 
 ```bash
 docker compose exec backend alembic revision --autogenerate -m "change"

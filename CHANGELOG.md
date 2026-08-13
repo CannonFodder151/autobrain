@@ -47,6 +47,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- Alembic migration chain unbroken for create_all-hybrid DBs (AUT-510): the social-tables migration `n4p5q6r7s8t9` is reparented onto the logbook head so the chain has a single head again (`alembic upgrade head` no longer fails with "Multiple head revisions"), and every DDL op in the social migrations is guarded to skip already-present tables/columns. Boot on all tiers converges to the schema head automatically; no manual `ALTER TABLE` needed anymore.
+
 ## [0.3.43] - 2026-08-13
 
 ### Fixed
