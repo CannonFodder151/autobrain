@@ -66,6 +66,19 @@ All git operations MUST follow this procedure:
   remote URL (token included) into `<repo>/.git/config`, leaking the secret to
   disk (see [AUT-323](/AUT/issues/AUT-323)).
 - Purge scratch clones with `rm -rf` when done; never leave clones in `/tmp`.
+
+**Recovery (if a token already leaked into a clone):**
+
+1. Replace every credential-bearing URL/remote value with the plain HTTPS URL:
+   `git remote set-url origin https://github.com/CannonFodder151/<repo>.git`.
+   This includes `[branch "..."]` blocks whose `remote` line holds a full URL.
+2. Expire reflogs so the token is not persisted under `.git/logs`:
+   `git reflog expire --expire=now --all`.
+3. Regression-check all workspace clones — this must return nothing:
+   `grep -rnE '@github\.com' /paperclip/instances/default/workspaces/*/*/.git/config /paperclip/instances/default/projects/*/*/*/.git/config`
+4. If the leaked token was still live at exposure time, rotate it (exposed-on-disk
+   equals compromised); see [AUT-474](/AUT/issues/AUT-474).
+
 ## AI router
 
 - `AI_ROUTER_API_KEY` (optional) is sent as a bearer token to the router.
