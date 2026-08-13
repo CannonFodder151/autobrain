@@ -40,8 +40,10 @@
 ## Git operations (credential-safe cloning)
 
 The GitHub `github_pat` (classic PAT, full access) is injected as the env var
-`GITHUB_TOKEN` (or fetched via the Paperclip secrets API). All git operations
-MUST follow this procedure:
+`GITHUB_TOKEN` (or fetched via the Paperclip secrets API). It is used ONLY for
+agent-side git ops / clones of PRIVATE repos (dev box) — the deployed server
+runtime makes NO authenticated GitHub calls and holds no token (AUT-461).
+All git operations MUST follow this procedure:
 
 - **Clone with the plain HTTPS URL only** — never embed the token:
   `git clone https://github.com/CannonFodder151/<repo>.git`.

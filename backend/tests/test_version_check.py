@@ -105,8 +105,7 @@ def test_uptodate_true_when_matching_repo(monkeypatch) -> None:
 
 
 def test_public_repo_check_never_sends_token(monkeypatch) -> None:
-    """AUT-442: GITHUB_TOKEN must NOT be sent on public autobrain requests."""
-    monkeypatch.setattr("app.services.version.settings.GITHUB_TOKEN", "ghp_secret")
+    """No GitHub token is configured on the server — no Authorization header."""
     client = _FakeClient(
         {
             "https://api.github.com/repos/CannonFodder151/autobrain/releases/latest": _FakeResp(
@@ -130,15 +129,15 @@ def test_public_repo_check_never_sends_token(monkeypatch) -> None:
     asyncio.run(check_latest_release())
 
     assert "Authorization" not in client.headers
-    assert "ghp_secret" not in str(client.headers)
+    assert "ghp_" not in str(client.headers)
 
 
-def test_mobile_repo_check_requires_token(monkeypatch) -> None:
-    """AUT-442: private mobile repo check still authenticates with the token."""
-    monkeypatch.setattr("app.services.version.settings.GITHUB_TOKEN", "ghp_secret")
+def test_mobile_check_uses_public_manifest_no_token(monkeypatch) -> None:
+    """AUT-461: private mobile release info is proxied via a public manifest —
+    no GitHub token is sent on any request."""
     client = _FakeClient(
         {
-            "https://api.github.com/repos/CannonFodder151/autobrain-mobile/releases/latest": _FakeResp(
+            "https://raw.githubusercontent.com/CannonFodder151/autobrain/main/mobile/latest.json": _FakeResp(
                 payload={
                     "tag_name": "v1.2.3",
                     "html_url": "https://github.com/CannonFodder151/autobrain-mobile/releases/tag/v1.2.3",
@@ -147,6 +146,7 @@ def test_mobile_repo_check_requires_token(monkeypatch) -> None:
             )
         }
     )
+
     def _ctor(**kwargs):
         client.headers = kwargs.get("headers") or {}
         return client
@@ -156,4 +156,21 @@ def test_mobile_repo_check_requires_token(monkeypatch) -> None:
     result = asyncio.run(check_mobile_latest_release())
 
     assert result["latest_version"] == "1.2.3"
-    assert client.headers.get("Authorization") == "Bearer ghp_secret"
+    assert "Authorization" not in client.headers
+    assert "ghp_" not in str(client.headers)
+
+
+def test_mobile_check_manifest_missing(monkeypatch) -> None:
+    """No manifest published yet → reachable, no version."""
+    client = _FakeClient(
+        {
+            "https://raw.githubusercontent.com/CannonFodder151/autobrain/main/mobile/latest.json": _FakeResp(
+                404
+            )
+        }
+    )
+    monkeypatch.setattr("app.services.version.httpx.AsyncClient", lambda **_: client)
+
+    result = asyncio.run(check_mobile_latest_release())
+    assert result["reachable"] is True
+    assert result["latest_version"] is None

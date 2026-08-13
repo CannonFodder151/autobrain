@@ -107,11 +107,10 @@ class Settings(BaseSettings):
     # Versioning + GitHub release checking
     APP_VERSION: str = "0.3.35"  # mirror frontend/pubspec.yaml version
     GITHUB_REPO: str = "CannonFodder151/autobrain"
-    # Optional. Only used for the PRIVATE MOBILE repo release check
-    # (MOBILE_GITHUB_REPO). Public autobrain version checks run unauthenticated.
-    # Use a fine-grained PAT scoped to exactly that one repo, read-only contents.
-    GITHUB_TOKEN: str = ""
-    MOBILE_GITHUB_REPO: str = "CannonFodder151/autobrain-mobile"  # private; needs GITHUB_TOKEN
+    # Mobile repo identifier reported by /version/mobile. Its release info is
+    # published to the PUBLIC autobrain repo (mobile/latest.json) and read
+    # unauthenticated — no GitHub token lives on the server.
+    MOBILE_GITHUB_REPO: str = "CannonFodder151/autobrain-mobile"
 
     # Scheduled backup (daily). When set, beats stores a full JSON snapshot to MinIO.
     BACKUP_ENABLED: bool = True
