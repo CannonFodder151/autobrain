@@ -167,5 +167,27 @@ void main() {
       expect(() => session.readPid(livePids[2]),
           throwsA(isA<Elm327Exception>()));
     });
+
+    test('clearDtc sends mode 04 and succeeds on 44', () async {
+      final t = FakeElmTransport({...script, '04': '44\r'});
+      final session = Elm327Session(t);
+      await session.init();
+      await session.clearDtc();
+      expect(t.sent, contains('04'));
+    });
+
+    test('clearDtc treats NO DATA as success', () async {
+      final t = FakeElmTransport({...script, '04': 'NO DATA\r'});
+      final session = Elm327Session(t);
+      await session.init();
+      await session.clearDtc();
+    });
+
+    test('clearDtc throws when adapter rejects with ?', () async {
+      final t = FakeElmTransport({...script, '04': '?\r'});
+      final session = Elm327Session(t);
+      await session.init();
+      expect(() => session.clearDtc(), throwsA(isA<Elm327Exception>()));
+    });
   });
 }
