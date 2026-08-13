@@ -16,17 +16,22 @@ All workflows run on `ubuntu-latest`. Builds are multi-arch (`linux/amd64`,
 
 ## 1. Docker Hub publish (`dockerhub-publish.yml`)
 
-Runs on every push to `main` (and manual dispatch):
+Runs on every push to `main`, every pull request, and manual dispatch:
 
-1. **changelog-gate** — if the push changed `backend/`, `ai/`, `frontend/`,
-   `docker/` or `docker-compose*` files, `CHANGELOG.md` must have changed too;
-   otherwise the job fails. This enforces the "every user-facing change ships
-   with a changelog entry" rule (AUT-168).
-2. **publish** — builds and pushes `autobrain-backend`, `autobrain-ai`,
+1. **changelog-gate** — runs on `pull_request` events only: if the PR changed
+   `backend/`, `ai/`, `frontend/`, `docker/` or `docker-compose*` files,
+   `CHANGELOG.md` must have changed too; otherwise the job fails. This enforces
+   the "every user-facing change ships with a changelog entry" rule (AUT-168).
+   Skipped on `push`/manual dispatch — the merge process already grafts
+   `[Unreleased]` entries, so a post-merge check would only misfire (AUT-451).
+2. **auto-bump** — cuts a release when `[Unreleased]` has content and pushes it
+   to `main`, rebasing onto the latest main and retrying up to 3 times on
+   concurrent-push conflicts (AUT-451).
+3. **publish** — builds and pushes `autobrain-backend`, `autobrain-ai`,
    `autobrain-frontend` for both `latest` and `hosted` tags. The frontend build
    is baked with `API_BASE_URL=https://hosted.autobrainservice.app/api/v1` and
    `WS_BASE_URL=wss://hosted.autobrainservice.app/ws`.
-3. **sync-changelog** — copies `CHANGELOG.md` into the
+4. **sync-changelog** — copies `CHANGELOG.md` into the
    `autobrainservice-website` repo and pushes if changed.
 
 Image tags: `latest` tracks every main merge; `hosted` is the tag the hosted
@@ -50,7 +55,10 @@ scripts, it:
    `CHANGELOG.md` into `autobrain-mobile`, preserves mobile-only deltas,
    bumps the mobile version to match the server `APP_VERSION`),
 3. commits + pushes to `autobrain-mobile` if anything changed,
-4. dispatches `release-mobile.yml` for the new version.
+4. tags the synced commit (`v<version>`) and dispatches `release-mobile.yml`
+   for that tag. A freshly pushed tag can lag GitHub's ref lookup, so the
+   dispatch retries up to ~60s on HTTP 422 "No ref found" before failing
+   (AUT-451).
 
 ## 4. Mobile release (`release-mobile.yml`, `autobrain-mobile` repo)
 

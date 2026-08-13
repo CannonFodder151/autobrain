@@ -44,10 +44,11 @@ public config) must come from `APP_VERSION` — never a hardcoded literal.
 4. `changelog.html` on the marketing site regenerates automatically from
    `CHANGELOG.md` on the `main` push (AUT-119/AUT-168).
 
-A CI changelog gate on `main` (AUT-168) fails the Docker Hub publish if any
+A CI changelog gate (AUT-168) runs on every pull request and fails if any
 `backend/`, `ai/`, `frontend/`, `docker/` or compose file changes without a
 matching `CHANGELOG.md` entry — so the changelog and the website always track
-shipped code.
+shipped code. It is not enforced on `main` pushes, where the merge process
+already grafts `[Unreleased]` entries (AUT-451).
 
 ## Migration rules
 

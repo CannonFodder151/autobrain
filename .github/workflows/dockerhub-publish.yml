@@ -3,6 +3,7 @@ name: Publish images to Docker Hub
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 jobs:
@@ -15,12 +16,19 @@ jobs:
       - name: Require changelog iteration on app/docker changes (AUT-168)
         run: |
           set -euo pipefail
-          BEFORE="${{ github.event.before }}"
-          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
-            echo "workflow_dispatch or initial push — skipping changelog gate"
+          # Enforced on pull_request only. On push/workflow_dispatch the merge
+          # process already grafts [Unreleased] entries, so checking here would
+          # only misfire post-merge (AUT-451).
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "changelog gate skipped outside pull_request (AUT-451)"
             exit 0
           fi
-          CHANGED="$(git diff --name-only "$BEFORE" "$GITHUB_SHA")"
+          BASE="${{ github.event.pull_request.base.sha }}"
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            echo "no usable base SHA — skipping changelog gate"
+            exit 0
+          fi
+          CHANGED="$(git diff --name-only "$BASE" "$GITHUB_SHA")"
           APP_CHANGED="$(printf '%s\n' "$CHANGED" | grep -E '^(backend/|ai/|frontend/|docker/|docker-compose)' || true)"
           if [ -n "$APP_CHANGED" ] && ! printf '%s\n' "$CHANGED" | grep -qx 'CHANGELOG.md'; then
             echo "::error::App/docker files changed but CHANGELOG.md was not updated. Add an entry under [Unreleased] (see CONTRIBUTING.md) before merging."
@@ -30,6 +38,7 @@ jobs:
 
   auto-bump:
     needs: changelog-gate
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -41,11 +50,22 @@ jobs:
         run: |
           set -euo pipefail
           ./scripts/auto-bump.sh
-          git push origin main
-          echo "==> auto-bump done"
+          # Concurrent workflow runs can race the auto-bump push; rebase onto
+          # the latest main and retry instead of failing the run (AUT-451).
+          for attempt in 1 2 3; do
+            if git push origin main; then
+              echo "==> auto-bump done"
+              exit 0
+            fi
+            echo "push rejected (attempt $attempt/3) — rebasing onto latest main"
+            git pull --rebase origin main
+          done
+          echo "::error::auto-bump push failed after 3 attempts (non-fast-forward)"
+          exit 1
 
   publish:
     needs: auto-bump
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -123,6 +143,7 @@ jobs:
 
   sync-changelog:
     needs: publish
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: write
