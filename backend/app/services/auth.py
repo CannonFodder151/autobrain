@@ -49,6 +49,10 @@ def _fail_key(kind: str, value: str) -> str:
     return f"login:fail:{kind}:{value}"
 
 
+def _burst_key(value: str) -> str:
+    return f"auth:burst:{value}"
+
+
 def client_ip(request: Request) -> str:
     real = request.headers.get("x-real-ip")
     if real:
@@ -105,6 +109,33 @@ async def record_failure(ip: str, email: str | None = None) -> None:
             await _record_failure(key, now)
     except Exception as exc:
         logger.warning("login_rate_limit_record_failed", error=str(exc))
+
+
+async def check_burst_limit(ip: str) -> None:
+    """Raise 429 when `ip` exceeds AUTH_BURST_LIMIT requests in a sliding
+    window of AUTH_BURST_WINDOW_SECONDS (AUT-304). Guards unauthenticated
+    signup / password-reset endpoints against enumeration + mail-bomb abuse.
+    Fails open on Redis outage, matching the login limiter."""
+    now = time.time()
+    window = settings.AUTH_BURST_WINDOW_SECONDS
+    key = _burst_key(ip)
+    r = _redis()
+    try:
+        await r.zremrangebyscore(key, 0, now - window)
+        if await r.zcard(key) >= settings.AUTH_BURST_LIMIT:
+            raise HTTPException(
+                status_code=429, detail="Too many requests. Try again in a minute."
+            )
+        pipe = r.pipeline()
+        pipe.zadd(key, {f"{now}:{secrets.token_hex(4)}": now})
+        pipe.expire(key, window * 2)
+        await pipe.execute()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("auth_burst_limit_unavailable", error=str(exc))
+    finally:
+        await r.aclose()
 
 
 async def clear_failures(ip: str, email: str | None = None) -> None:

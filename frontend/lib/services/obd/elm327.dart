@@ -250,6 +250,17 @@ class Elm327Session {
     ];
   }
 
+  /// Clears the ECU's stored DTCs via mode 04.
+  ///
+  /// Most adapters reply `44` on success; a `?` means the vehicle rejected
+  /// the request. `NO DATA` is treated as success (nothing stored).
+  Future<void> clearDtc() async {
+    final reply = normalizeReply(await _send('04'), '04');
+    if (reply.contains('?')) {
+      throw Elm327Exception('Adapter rejected mode 04 (clear DTCs): "$reply"');
+    }
+  }
+
   /// Reads one live PID; returns null when the vehicle doesn't support it
   /// (reply is `41 <pid> 00`... or the pid isn't in the supported set).
   Future<PidReading?> readPid(ObdPid pid) async {

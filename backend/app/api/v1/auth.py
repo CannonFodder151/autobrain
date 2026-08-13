@@ -307,9 +307,13 @@ async def mfa_disable(
 @router.post("/password-reset/request", status_code=200)
 async def request_password_reset(
     payload: PasswordResetRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Send a password-reset email. Always returns 200 (do not reveal account existence)."""
+    """Send a password-reset email. Always returns 200 (do not reveal account
+    existence); the per-IP burst limiter (AUT-304) prevents mail-bomb DoS."""
+    ip = auth_svc.client_ip(request)
+    await auth_svc.check_burst_limit(ip)
     user = await db.scalar(select(User).where(User.email == payload.email.lower()))
     if user and user.is_active:
         token = create_password_reset_token(user.id)
@@ -376,20 +380,31 @@ async def admin_create_user(
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
 async def public_signup(
     payload: SignupRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Create a Free-tier account with display name + email only. A setup link
     is emailed to finish activation (password + MFA). Enabled via
     SELF_SIGNUP_ENABLED (hosted instance); self-hosted servers keep
-    admin-only provisioning."""
+    admin-only provisioning.
+
+    Anti-enumeration (AUT-304): a registered email gets the same 201 + generic
+    body as a fresh signup (no email is sent), so the response never reveals
+    account existence. The per-IP burst limiter throttles enumeration probes
+    and mail-bomb abuse."""
     if not settings.SELF_SIGNUP_ENABLED:
         raise HTTPException(
             status_code=403,
             detail="Self-service signup is disabled on this server. Ask your administrator for an account.",
         )
+    ip = auth_svc.client_ip(request)
+    await auth_svc.check_burst_limit(ip)
     existing = await db.scalar(select(User).where(User.email == payload.email.lower()))
     if existing:
-        raise HTTPException(status_code=409, detail="Email already registered")
+        return {
+            "message": "Account created — check your email to finish setting it up.",
+            "email": payload.email.lower(),
+        }
     name_taken = await db.scalar(
         select(User).where(func.lower(User.display_name) == payload.display_name.lower())
     )
