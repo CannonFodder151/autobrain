@@ -88,6 +88,7 @@ services:
     command: sh -c "python -m app.db.bootstrap && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
       <<: [*db-env, *core-env, *router-env]
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}  # PAT for release checks; set via Portainer stack env (AUT-439)
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in the hosted stack env (Portainer)}
       MINIO_PUBLIC_ENDPOINT: ${APP_BASE_URL:-https://hosted.autobrainservice.app}
       AI_ROUTER_TIMEOUT_SECONDS: 120
@@ -183,6 +184,9 @@ services:
     restart: unless-stopped
     ports:
       - "8086:80"
+    networks:
+      default:
+        ipv4_address: 172.18.0.14
     depends_on:
       - backend
       - ai
@@ -191,3 +195,15 @@ volumes:
   postgres-data:
   redis-data:
   minio-data:
+
+# AUT-372: pin the default network subnet + a static frontend IP. The host-level
+# nginx-proxy-manager (npm) caches the resolved frontend container IP, so a
+# changing IP = 502 until npm is restarted; a static IP keeps the cached value
+# permanently correct across container recreates.
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.18.0.0/16
+          gateway: 172.18.0.1
+

@@ -52,10 +52,10 @@ async def login(
     db: AsyncSession = Depends(get_db),
 ) -> LoginResult:
     ip = auth_svc.client_ip(request)
-    auth_svc.check_rate_limit(ip)
+    await auth_svc.check_rate_limit(ip, payload.email)
     user = await db.scalar(select(User).where(User.email == payload.email.lower()))
     if not user or not _verify_password(payload.password, user.hashed_password):
-        auth_svc.record_failure(ip)
+        await auth_svc.record_failure(ip, payload.email)
         raise HTTPException(status_code=401, detail="Invalid email or password")
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account is disabled")
@@ -71,9 +71,9 @@ async def login(
         if not payload.totp_code:
             return LoginResult(mfa_required=True, mfa_token=create_mfa_token(user.id))
         if not auth_svc.verify_totp(user.mfa_secret, payload.totp_code):
-            auth_svc.record_failure(ip)
+            await auth_svc.record_failure(ip, user.email)
             raise HTTPException(status_code=401, detail="Invalid MFA code")
-    auth_svc.clear_failures(ip)
+    await auth_svc.clear_failures(ip, user.email)
     return LoginResult(token_pair=auth_svc.token_pair(user))
 
 
@@ -84,12 +84,12 @@ async def mfa_verify(
     db: AsyncSession = Depends(get_db),
 ) -> TokenPair:
     ip = auth_svc.client_ip(request)
-    auth_svc.check_rate_limit(ip)
+    await auth_svc.check_rate_limit(ip)
     user = await auth_svc.resolve_mfa_session(db, payload.mfa_token)
     if not user.mfa_enabled or not auth_svc.verify_totp(user.mfa_secret, payload.code):
-        auth_svc.record_failure(ip)
+        await auth_svc.record_failure(ip, user.email)
         raise HTTPException(status_code=401, detail="Invalid MFA code")
-    auth_svc.clear_failures(ip)
+    await auth_svc.clear_failures(ip, user.email)
     return auth_svc.token_pair(user)
 
 
@@ -115,13 +115,13 @@ async def mfa_complete_setup(
 ) -> TokenPair:
     """Activate MFA after a login-in-progress setup session, completing login."""
     ip = auth_svc.client_ip(request)
-    auth_svc.check_rate_limit(ip)
+    await auth_svc.check_rate_limit(ip)
     user = await auth_svc.resolve_mfa_session(db, payload.mfa_token)
     if user.role == "demo":
         raise HTTPException(status_code=403, detail="Demo accounts cannot set up MFA")
     if not user.mfa_secret or not auth_svc.verify_totp(user.mfa_secret, payload.code):
         raise HTTPException(status_code=400, detail="Invalid MFA code")
-    auth_svc.clear_failures(ip)
+    await auth_svc.clear_failures(ip, user.email)
     user.mfa_enabled = True
     await db.commit()
     await mail.send_security_alert(

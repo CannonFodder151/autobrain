@@ -89,9 +89,33 @@ class ObdConnection extends ChangeNotifier {
     if (_status != ObdStatus.off) _set(ObdStatus.off);
   }
 
+  /// The adapter dropped the link on its own (it sleeps after ignition-off).
+  /// Same teardown as [disconnect] but the caller decides reconnect policy.
+  Future<void> markDropped() async {
+    if (_status != ObdStatus.connected) return;
+    try {
+      await _session?.close();
+    } catch (_) {}
+    _session = null;
+    _set(ObdStatus.off);
+  }
+
   void _set(ObdStatus s, {String? error}) {
     _status = s;
     _error = error;
     notifyListeners();
   }
+}
+
+/// Manual "Update VIN" flow: reads the VIN from a connected adapter (mode 09
+/// PID 02) and hands it to [save] exactly once. Throws when no session is
+/// connected so the UI can prompt the user to connect first.
+Future<String> updateVin(
+  Elm327Session? session,
+  Future<void> Function(String vin) save,
+) async {
+  if (session == null) throw StateError('OBD adapter not connected');
+  final vin = await session.readVin();
+  await save(vin);
+  return vin;
 }

@@ -8,7 +8,7 @@ marked `purpose=work` count towards the business-use percentage.
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.session import Base
@@ -32,6 +32,7 @@ class LogEntry(Base):
 
     purpose: Mapped[str] = mapped_column(String(12), default="private")  # work/private
     reason: Mapped[str | None] = mapped_column(String(500))
+    source: Mapped[str] = mapped_column(String(20), default="manual")  # manual/obd_auto
 
     start_location: Mapped[str | None] = mapped_column(String(255))
     end_location: Mapped[str | None] = mapped_column(String(255))
@@ -42,6 +43,10 @@ class LogEntry(Base):
 
     start_photo_key: Mapped[str | None] = mapped_column(String(500))
     end_photo_key: Mapped[str | None] = mapped_column(String(500))
+
+    # Trip GPS polyline: [{"t": <epoch seconds>, "lat": deg, "lon": deg}, ...]
+    # deterministic raw coordinates — no AI. Rendered as the trip route on a map.
+    gps_samples: Mapped[list | None] = mapped_column(JSON)
 
     status: Mapped[str] = mapped_column(String(20), default="in_progress")  # in_progress/completed
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

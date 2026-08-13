@@ -58,13 +58,21 @@ jobs:
           echo "changed=true" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Trigger mobile release pipeline for the new version
+      - name: Tag version and trigger mobile release pipeline
         if: steps.commit.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ secrets.MOBILE_SYNC_TOKEN }}
         working-directory: autobrain-mobile
         run: |
           set -euo pipefail
+          tag="v${{ steps.commit.outputs.version }}"
+          # workflow_dispatch only accepts a branch or tag ref (raw SHAs are
+          # rejected), and the release runner checks out that ref. Pin the
+          # dispatch to a version tag so rapid sync bursts cannot build a newer
+          # main against an older version input (version-mismatch failures).
+          git tag -f "$tag" HEAD
+          git push -f origin "$tag"
           gh workflow run release-mobile.yml --repo CannonFodder151/autobrain-mobile \
-            -f "version=v${{ steps.commit.outputs.version }}"
-          echo "dispatched mobile release for v${{ steps.commit.outputs.version }}"
+            --ref "$tag" \
+            -f "version=$tag"
+          echo "dispatched mobile release $tag"

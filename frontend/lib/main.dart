@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import 'app.dart';
 import 'core/auth_state.dart';
 import 'core/config.dart';
+import 'services/car/car_kit_service.dart';
+import 'services/obd/obd_trip_monitor.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,4 +16,12 @@ void main() async {
       child: const AutoBrainApp(),
     ),
   );
+  // Resume background OBD trip recording (auto-connect + any buffered trip)
+  // without the user having to open the OBD screen. No-op when no vehicle has
+  // been set up with an adapter yet.
+  ObdTripMonitor.instance.start();
+  // Phone-side auto trip path (AUT-367): re-arms the car-kit BT + GPS speed
+  // monitor on the same recorder, so a drive starts logging without Android
+  // Auto approval or an OBD adapter.
+  CarKitTripMonitorService.instance.start();
 }

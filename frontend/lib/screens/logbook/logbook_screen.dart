@@ -7,6 +7,8 @@ import '../../core/download.dart';
 import '../../core/geoloc.dart';
 import '../../core/models.dart';
 import '../../core/trip_datetime.dart';
+import '../../core/trip_route.dart';
+import '../../widgets/trip_route_map.dart';
 
 class LogbookScreen extends StatefulWidget {
   const LogbookScreen({super.key, required this.vehicleId});
@@ -62,6 +64,54 @@ class _LogbookScreenState extends State<LogbookScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
+  }
+
+  /// Fetches the full trip (incl. its GPS route) and shows it on a map.
+  Future<void> _showRoute(LogEntry entry) async {
+    final api = context.read<AuthState>().api;
+    try {
+      final detail = await api
+              .get('/vehicles/${widget.vehicleId}/logbook/${entry.id}')
+          as Map<String, dynamic>;
+      final route = validRoute(LogEntry.fromJson(detail).gpsSamples);
+      if (!mounted) return;
+      if (route.length < 2) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('No GPS route recorded for this trip')));
+        return;
+      }
+      await showDialog<void>(
+        context: context,
+        builder: (_) => Dialog.fullscreen(
+          child: Scaffold(
+            appBar: AppBar(
+              title: Text(
+                  'Trip route${entry.reason != null ? ' · ${entry.reason}' : ''}'),
+            ),
+            body: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: TripRouteMap(route: route)),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${route.length} GPS points · ${entry.startedAt?.substring(0, 16) ?? ''}',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Failed to load route: $e')));
       }
     }
   }
@@ -393,19 +443,30 @@ class _LogbookScreenState extends State<LogbookScreen> {
                   ),
                   subtitle: Text(
                     '${e.purpose}'
+                    '${e.isAutoLogged ? ' · ${e.autoSourceLabel}' : ''}'
                     '${e.startOdometerKm != null ? ' · ${e.startOdometerKm} km' : ''}'
                     '${e.endOdometerKm != null ? ' → ${e.endOdometerKm} km' : ''}'
                     '${e.distanceKm != null ? ' · ${e.distanceKm!.toStringAsFixed(0)} km' : ''}'
                     '${e.isComplete ? '' : ' · IN PROGRESS'}',
                   ),
-                  trailing: PopupMenuButton<String>(
-                    onSelected: (v) {
-                      if (v == 'edit') _editTrip(e);
-                      if (v == 'delete') _deleteTrip(e);
-                    },
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(value: 'edit', child: Text('Edit / complete')),
-                      PopupMenuItem(value: 'delete', child: Text('Delete')),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: 'View route',
+                        icon: const Icon(Icons.route),
+                        onPressed: () => _showRoute(e),
+                      ),
+                      PopupMenuButton<String>(
+                        onSelected: (v) {
+                          if (v == 'edit') _editTrip(e);
+                          if (v == 'delete') _deleteTrip(e);
+                        },
+                        itemBuilder: (_) => const [
+                          PopupMenuItem(value: 'edit', child: Text('Edit / complete')),
+                          PopupMenuItem(value: 'delete', child: Text('Delete')),
+                        ],
+                      ),
                     ],
                   ),
                 ),

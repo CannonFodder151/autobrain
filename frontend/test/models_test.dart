@@ -57,6 +57,16 @@ void main() {
     expect(Vehicle.resolveSelection([], gone), isNull);
   });
 
+  test('Vehicle.byId resolves the requested vehicle, not the first', () {
+    final crown = Vehicle.fromJson(
+        const {'id': 'crown', 'nickname': 'Crown', 'is_primary': true});
+    final fazer = Vehicle.fromJson(const {'id': 'fazer', 'nickname': 'Fazer'});
+    expect(Vehicle.byId([crown, fazer], 'crown'), same(crown));
+    expect(Vehicle.byId([crown, fazer], 'fazer'), same(fazer));
+    expect(Vehicle.byId([crown, fazer], 'missing'), same(crown));
+    expect(Vehicle.byId([], 'missing'), isNull);
+  });
+
   test('Vehicle.fromJson parses share fields', () {
     final v = Vehicle.fromJson(const {
       'id': 's1',
@@ -73,5 +83,33 @@ void main() {
     final v = Vehicle.fromJson(const {'id': 'o1', 'nickname': 'Mine'});
     expect(v.isShared, isFalse);
     expect(v.dropdownLabel, 'Mine');
+  });
+
+  group('LogEntry auto source labels', () {
+    test('car_auto trips are auto-logged as "auto (car kit)"', () {
+      final e = LogEntry.fromJson(const {
+        'id': 'l1',
+        'source': 'car_auto',
+        'status': 'completed',
+        'started_at': '2026-08-01T09:00:00Z',
+      });
+      expect(e.isAutoLogged, isTrue);
+      expect(e.autoSourceLabel, 'auto (car kit)');
+    });
+
+    test('obd_auto trips keep the OBD label', () {
+      final e = LogEntry.fromJson(const {
+        'id': 'l2',
+        'source': 'obd_auto',
+        'status': 'completed',
+      });
+      expect(e.isAutoLogged, isTrue);
+      expect(e.autoSourceLabel, 'auto (OBD)');
+    });
+
+    test('manual trips are not auto-logged', () {
+      final e = LogEntry.fromJson(const {'id': 'l3', 'source': 'manual'});
+      expect(e.isAutoLogged, isFalse);
+    });
   });
 }
