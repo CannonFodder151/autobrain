@@ -55,6 +55,7 @@ Oracle VM; the stack frontend nginx exposes `:8086`.
 
 | Date | Version | Change | Verified |
 |------|---------|--------|----------|
+| 2026-08-13 | v0.3.41 | Post-merge deploy of AUT-501 My Builds (PR #87, merge `ea095d18`): `GET /social/my-posts` + `PATCH /social/posts/{id}` (owner-only edit, 404 for non-owners). Deploy order Demo → Default → Hosted. Backend/ai/market-data pinned to `:0.3.41` image tags (v0.3.42 was publishing concurrently — separate release, see AUT-508). Frontends: demo=ghcr `:demo` (v0.3.42 build, has My Builds), default=`:default`, hosted=`:0.3.41`. **Release-blocking schema drift fixed on the fly:** `social_server_config.last_event_sync` + `author_user_id` nullable on `social_likes`/`social_comments` were missing on ALL three DBs — `alembic upgrade head` fails on create_all-hybrid DBs (`n4p5q6r7s8t9` collides with pre-existing tables, bootstrap falls back to `create_all` which cannot add columns). Manual `ALTER TABLE` applied to all 3 DBs; proper migration-chain fix tracked in a follow-up issue. | `/health` 0.3.41 on all three tiers; My Builds verified on demo + hosted: `my-posts` returns caller-only posts, owner `PATCH` persists, non-owner `PATCH` → 404 `Post not found` |
 | 2026-08-13 | v0.3.36 | Post-merge deploy of AUT-461 (PR #78, merge `058c886`): GitHub token removed from the server entirely — mobile release check now reads the public `mobile/latest.json` manifest unauthenticated. `GITHUB_TOKEN` deleted from config, all 3 compose files, and all 3 stack envs (Demo/Default EP2, Hosted EP5). Deploy order Demo → Default → Hosted, `pullImage:true`. | `/health` 0.3.36 on all three tiers; `/api/v1/version/mobile` → `reachable:true`, latest v0.3.33+68 (manifest) on all; no stack env carries GITHUB_TOKEN |
 | 2026-08-13 | v0.3.34 | Post-merge deploy of AUT-442 security fix (PR #74, merge `79a6a851`): GitHub PAT dropped from public version checks. All tiers promoted Demo → Default → Hosted (Portainer stacks 73/68 EP2, 83 EP5, `pullImage:true`); `GITHUB_TOKEN` stack env untouched (classic PAT still in place until fine-grained token lands — see AUT-461). Pruned dangling images (EP2 5.2GB, EP5 8.5GB). | `/health` 0.3.34 on all three tiers; `/api/v1/version/mobile` → `reachable:true`, latest v0.3.33+68 (2026-08-13T04:05Z) |
 | 2026-08-13 | v0.3.32 | Post-merge deploy after AUT-441 merge drive: all tiers promoted Demo → Default → Hosted (AUT-450). Includes alembic migration-chain fix (PR #70) — gps_samples reparented onto `k2l3m4n5o6p7`. Mobile release surfaced: `/api/v1/version/mobile` → `reachable:true`, latest v0.3.31+66. | `/health` 0.3.32 on all three tiers; mobile endpoint live (2026-08-13T02:31Z) |
@@ -226,6 +227,16 @@ docker compose -f docker-compose.prod.yml up -d nginx   # mounts ./web-dist
 
 First boot runs `python -m app.db.bootstrap` (Alembic, falling back to
 `create_all`). Afterwards use Alembic:
+
+> **Known hazard — create_all-hybrid DBs.** A DB that was ever bootstrapped via
+> the `create_all` fallback (Alembic failure) will have tables Alembic has never
+> seen. `alembic upgrade head` then collides (e.g. `n4p5q6r7s8t9` tries to
+> re-create the social tables) and falls back to `create_all` again, which only
+> creates missing *tables* — never missing *columns* on existing tables. The
+> next model change needing an `ALTER` (e.g. `social_server_config.last_event_sync`)
+> then crashes boot. v0.3.41 hit this on all three tiers; the migration-chain fix
+> is tracked as a follow-up. Until fixed, any new column on an existing table
+> must be applied manually on all tiers (Demo/Default EP2, Hosted EP5).
 
 ```bash
 docker compose exec backend alembic revision --autogenerate -m "change"
