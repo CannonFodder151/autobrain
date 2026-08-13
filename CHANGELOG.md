@@ -45,6 +45,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+- Community Garage admin Settings moved out of the tab bar into the AppBar 3-dot menu (AUT-502) so it no longer takes up the whole screen; non-admins see no menu.
+
 ## [0.3.41] - 2026-08-13
 
 ### Added
