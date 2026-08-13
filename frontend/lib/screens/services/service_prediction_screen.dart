@@ -83,14 +83,13 @@ class _ServicePredictionScreenState extends State<ServicePredictionScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('AI service prediction')),
       body: FutureBuilder(
-        future: context.read<AuthState>().api.get('/vehicles'),
+        future: context
+            .read<AuthState>()
+            .api
+            .get('/vehicles/${widget.vehicleId}'),
         builder: (context, snap) {
           final Vehicle? vehicle = snap.hasData
-              ? Vehicle.byId(
-                  (snap.data as List)
-                      .map((e) => Vehicle.fromJson(e as Map<String, dynamic>))
-                      .toList(),
-                  widget.vehicleId)
+              ? Vehicle.fromJson(snap.data as Map<String, dynamic>)
               : null;
           return ListView(
             padding: const EdgeInsets.all(16),

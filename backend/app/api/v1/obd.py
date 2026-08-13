@@ -2,11 +2,12 @@
 
 Fault codes captured from a Bluetooth OBD2 adapter can be saved here and
 pushed into the existing diagnostic AI tool. OBD access is admin-granted per
-account; a VIN read from the adapter backfills the vehicle if missing.
+account; the VIN is updated only on explicit user action (manual entry or the
+"Update VIN" button in the app), never silently on connect.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_write
@@ -54,8 +55,8 @@ async def set_obd_vin(
 ) -> Vehicle:
     vehicle = await get_accessible_vehicle(db, vehicle_id, user)
     _require_obd(user, vehicle)
-    if vehicle.vin and len(vehicle.vin) >= 5:
-        raise HTTPException(status_code=409, detail="Vehicle already has a VIN")
+    # Explicit user action (manual entry or the "Update VIN" OBD button), so an
+    # existing VIN is replaced rather than rejected (AUT-361).
     vehicle.vin = payload.vin
     await db.commit()
     await db.refresh(vehicle)
@@ -124,4 +125,15 @@ async def delete_code(
     if not code or code.vehicle_id != vehicle_id:
         raise HTTPException(status_code=404, detail="OBD code not found")
     await db.delete(code)
+    await db.commit()
+
+@router.delete("/codes", status_code=204)
+async def clear_codes(
+    vehicle_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_write),
+) -> None:
+    vehicle = await get_accessible_vehicle(db, vehicle_id, user)
+    _require_obd(user, vehicle)
+    await db.execute(delete(ObdCode).where(ObdCode.vehicle_id == vehicle_id))
     await db.commit()
