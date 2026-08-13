@@ -32,7 +32,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.31] - 2026-08-13
 ### Security
 - Dependency bump (AUT-301): `pypdf` pinned `6.14.2` → `6.15.0` in `backend/requirements.txt` and `ai/requirements.txt`, fixing two DoS CVEs in crafted-PDF parsing (CVE-2026-71852 large CID font width ranges, CVE-2026-71870 large /ToUnicode streams) reachable via user-uploaded receipt PDFs in the Celery worker.
 
