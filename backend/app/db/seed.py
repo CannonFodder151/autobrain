@@ -169,6 +169,17 @@ async def reset_demo() -> None:
                     await db.execute(delete(ExtractedItem).where(ExtractedItem.receipt_id.in_(rcp_ids)))
                 await db.execute(delete(Receipt).where(Receipt.vehicle_id.in_(vids)))
                 await db.execute(delete(Vehicle).where(Vehicle.user_id == user.id))
+            # Shares involving the demo account (as vehicle owner or as
+            # invitee) must go first, or the FK (NO ACTION) blocks the
+            # user/vehicle deletes and the reset crashes on Postgres.
+            from app.models.share import VehicleShare
+
+            await db.execute(
+                delete(VehicleShare).where(
+                    (VehicleShare.vehicle_id.in_(vids))
+                    | (VehicleShare.invitee_user_id == user.id)
+                )
+            )
             await db.execute(delete(User).where(User.id == user.id))
             await db.commit()
             logger.info("demo_reset_deleted", user=user.id)
