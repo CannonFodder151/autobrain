@@ -71,6 +71,10 @@ class CommentIn(BaseModel):
     body: str = Field(min_length=1, max_length=1000)
 
 
+class PostUpdate(BaseModel):
+    caption: str | None = Field(default=None, max_length=1000)
+
+
 async def _like_count(db: AsyncSession, build_id: str) -> int:
     return (await db.scalar(
         select(func.count()).select_from(SocialLike).where(SocialLike.build_id == build_id)
@@ -263,6 +267,26 @@ async def feed(
     return {"items": [await _serialize(db, b, user) for b in rows]}
 
 
+@router.get("/my-posts")
+async def my_posts(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_premium),
+    _rl: None = Depends(social_rate_limit(24)),
+) -> dict:
+    """The caller's own builds (My Builds tab, AUT-501). Local-only; remote
+    copies have no local author."""
+    rows = await db.scalars(
+        select(SocialBuild)
+        .where(
+            SocialBuild.status == "published",
+            SocialBuild.author_user_id == user.id,
+        )
+        .order_by(SocialBuild.created_at.desc())
+        .limit(200)
+    )
+    return {"items": [await _serialize(db, b, user) for b in rows]}
+
+
 @router.post("/posts", status_code=201)
 async def create_post(
     payload: PostCreate,
@@ -319,6 +343,24 @@ async def get_post(
     user: User = Depends(require_premium),
 ) -> dict:
     build = await _get_published(db, post_id)
+    return await _serialize(db, build, user)
+
+
+@router.patch("/posts/{post_id}")
+async def update_post(
+    post_id: str,
+    payload: PostUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_premium_write),
+    _rl: None = Depends(social_rate_limit(10)),
+) -> dict:
+    """Edit a build's caption. Ownership check matches delete: 404 for
+    non-owners so posts cannot be probed (PW-8)."""
+    build = await _get_published(db, post_id)
+    if build.author_user_id != user.id:
+        raise HTTPException(status_code=404, detail="Post not found")
+    build.caption = payload.caption
+    await db.commit()
     return await _serialize(db, build, user)
 
 

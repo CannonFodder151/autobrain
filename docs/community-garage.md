@@ -60,7 +60,7 @@ Display identity: `<Display name> from <Server Name>`.
   * Licensing: **Stripe integration here and only here** — embedded Checkout + webhook receiver; join-time payment auto-activates; license expiry check on every federation write.
   * Routing: post metadata relayed between subscribers; comment/like events fanned out.
   * Verification: signed requests, per-server API keys, rate limiting, block list.
-* **Frontend (Flutter web + mobile)** — new screens: `SocialScreen` (feed), `SocialPostDetail`, `SocialCompose`, `ShareLinkView`, `ServerSettings`, Garage → Social nav, "Disabled by your admin" state, premium upsell states.
+* **Frontend (Flutter web + mobile)** — new screens: `SocialScreen` (feed), `MyBuildsScreen` (My Builds tab: list + edit caption + unshare own builds), `SocialPostDetail`, `SocialCompose`, `ShareLinkView`, `ServerSettings`, Garage → Social nav, "Disabled by your admin" state, premium upsell states.
 * **Demo** — no hub registration; `DEMO_MODE` seeds demo builds.
 
 ### 4.2 Data flow
