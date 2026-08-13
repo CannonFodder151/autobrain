@@ -148,7 +148,8 @@ async def _sync_inbox(db: AsyncSession) -> None:
         logger.warning("social_inbox_sync_failed", error=str(exc))
         return
     for item in remote_builds:
-        rid = item.get("remote_build_id") or item.get("build_id")
+        build = item.get("build") or item
+        rid = build.get("remote_build_id") or build.get("build_id")
         if not rid:
             continue
         existing = await db.scalar(
@@ -157,15 +158,15 @@ async def _sync_inbox(db: AsyncSession) -> None:
         if existing:
             continue
         db.add(SocialBuild(
-            author_display_name=item.get("author_display_name", "Unknown"),
-            remote_author_display_name=item.get("author_display_name"),
-            server_name=item.get("server_name"),
-            title=item.get("title", "Untitled build"),
-            caption=item.get("caption"),
+            author_display_name=build.get("author_display_name", "Unknown"),
+            remote_author_display_name=build.get("author_display_name"),
+            server_name=build.get("server_name"),
+            title=build.get("title", "Untitled build"),
+            caption=build.get("caption"),
             origin="remote",
             remote_build_id=str(rid),
-            remote_server_id=item.get("server_id"),
-            snapshot_json=dumps(item.get("snapshot") or {}),
+            remote_server_id=item.get("origin_server") or build.get("server_id"),
+            snapshot_json=dumps(build.get("snapshot") or {}),
         ))
     cfg.last_inbox_sync = datetime.now(timezone.utc)
     await db.flush()
