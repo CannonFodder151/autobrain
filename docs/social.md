@@ -27,10 +27,12 @@ keep read-only access (curated demo feed); write routes reject the demo role.
 ## API
 
 - `GET /social/feed` — published builds (local + remote, desc).
+- `GET /social/my-posts` — the caller's own published builds (My Builds tab).
 - `POST /social/posts` — share a vehicle as a build: `{vehicle_id, caption?,
   share_scope?, photo_ids?}`. Snapshot is built deterministically from the
   vehicle + mods (no AI). Outbox push happens when federation is on.
 - `GET/DELETE /social/posts/{id}` — detail / unshare (takedown).
+- `PATCH /social/posts/{id}` — edit the build's caption `{caption?}` (owner-only).
 - `POST/GET /social/posts/{id}/comments`, `POST/GET /social/posts/{id}/likes`.
 - `POST /social/posts/{id}/share-link` → `{token, url}`;
   `GET /social/share/{token}` resolves it.

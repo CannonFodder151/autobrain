@@ -54,6 +54,20 @@ class SocialApi {
     return SocialBuild.fromJson(data);
   }
 
+  /// The caller's own builds (My Builds tab, AUT-501).
+  Future<List<SocialBuild>> myPosts() async {
+    final data = await _api.get('/social/my-posts') as Map<String, dynamic>;
+    return ((data['items'] as List?) ?? const [])
+        .map((e) => SocialBuild.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
+
+  Future<SocialBuild> updatePost(String postId, {String? caption}) async {
+    final data = await _api.patch('/social/posts/$postId', {'caption': caption})
+        as Map<String, dynamic>;
+    return SocialBuild.fromJson(data);
+  }
+
   Future<SocialBuild> createPost({
     required String vehicleId,
     String? caption,

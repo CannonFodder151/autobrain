@@ -11,12 +11,14 @@ class SocialCard extends StatelessWidget {
     required this.post,
     required this.onTap,
     this.onShare,
+    this.onEdit,
     this.onDelete,
   });
 
   final SocialBuild post;
   final VoidCallback onTap;
   final VoidCallback? onShare;
+  final VoidCallback? onEdit;
   final VoidCallback? onDelete;
 
   @override
@@ -120,6 +122,12 @@ class SocialCard extends StatelessWidget {
                     tooltip: 'Share link',
                     onPressed: onShare,
                   ),
+                  if (onEdit != null)
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined, size: 20),
+                      tooltip: 'Edit build',
+                      onPressed: onEdit,
+                    ),
                   if (onDelete != null)
                     IconButton(
                       icon: const Icon(Icons.delete_outline, size: 20),
