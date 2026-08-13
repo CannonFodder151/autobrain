@@ -51,6 +51,18 @@ All three tiers run as standalone Portainer stacks with prebuilt images pulled
 from Docker Hub / GHCR. Hosted is published behind Nginx Proxy Manager on the
 Oracle VM; the stack frontend nginx exposes `:8086`.
 
+### GITHUB_TOKEN rotation (AUT-439) — MANDATORY before every redeploy
+
+`GITHUB_TOKEN` is a classic PAT used by the backend for mobile release checks
+(`/api/v1/version/mobile`). It is **applied via the Portainer stack env**, not
+committed to compose. After any PAT rotation:
+
+1. Set the new `GITHUB_TOKEN` value in the stack env of **all three** tiers
+   (Demo/Default on EP2, Hosted on EP5) before redeploying — a stale/revoked
+   token makes `/api/v1/version/mobile` return `reachable:false, latest_version:null`.
+2. Compose files reference `${GITHUB_TOKEN:-}` (default empty) so a missing
+   stack env fails loudly via the version endpoint, never a hard-coded token.
+
 ## Stack services
 
 | Service | Image | Notes |
