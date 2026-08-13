@@ -67,7 +67,8 @@ The mobile repo mirrors the web app's Flutter code. **This is now automated**:
   `CHANGELOG.md` into `autobrain-mobile` (single source for both apps),
 - bumps the mobile version to match the server `APP_VERSION` (build number
   incremented), commits + pushes to `autobrain-mobile` `main`, then
-  **dispatches the mobile release pipeline** (draft release) automatically.
+  **dispatches the mobile release pipeline** (which **publishes** the release
+  automatically — no draft backlog, see step 7 below) automatically.
 
 `scripts/sync-mobile.sh` **preserves mobile-only deltas** and will not silently
 drop them:
@@ -170,16 +171,18 @@ rules as the `.aab`.
 
 ### 4. Create a GitHub Release and attach the `.aab`
 
+The CI pipeline (step 7 below) does this automatically and **publishes** the
+release — drafts are no longer used. Manual fallback (tag = version, e.g. `v1.2.3+10`):
+
 ```bash
 # Create the release (tag = version, e.g. v1.2.3+10)
 curl -s -X POST https://api.github.com/repos/CannonFodder151/autobrain-mobile/releases \
   -H "Authorization: Bearer <PAT>" \
-  -d '{"tag_name":"v1.2.3+10","name":"v1.2.3+10","body":"<release notes>","draft":true}'
+  -d '{"tag_name":"v1.2.3+10","name":"v1.2.3+10","body":"<release notes>","draft":false}'
 # Upload the artifact (from the release response `upload_url`)
 curl -s -X POST "<upload_url>?name=app-release.aab" \
   -H "Authorization: Bearer <PAT>" -H "Content-Type: application/octet-stream" \
   --data-binary @build/app/outputs/bundle/release/app-release.aab
-# Publish the release
 ```
 
 ### 4b. Coordinate the Play Console upload (Nathan uploads)
@@ -228,9 +231,12 @@ Automated pipeline now lives at `CannonFodder151/autobrain-mobile`
    (hosted API/WS URLs), then builds the release APK with the same config.
 6. Signing guard: `jarsigner -verify` the `.aab` (v1) and `apksigner verify`
    the APK for v2+v3 (Play-required), with the upload certificate.
-7. Publishes a **draft** GitHub Release (`softprops/action-gh-release@v2`) on
-   tag `v<X.Y.Z>+<build>` with that version's `CHANGELOG.md` section as the body
-   and `app-release.aab` attached. Publish the draft when the CEO/CTO approves.
+7. Publishes a **published** GitHub Release (`softprops/action-gh-release@v2`
+   with `draft: false`) on tag `v<X.Y.Z>+<build>` with that version's
+   `CHANGELOG.md` section as the body and `app-release.aab` attached. The release
+   is **fully published by the workflow** — it does not stall as a draft. A
+   `Play Console upload checklist (Nathan)` step reminds that the Google-side
+   upload (step 4b) is the remaining manual step.
 8. Posts the release embeds to Discord via the internal reporter webhook (see
    the Outline "Discord reporter" doc): `changelog` (public, `0x2ECC71`) and
    `updates` (staff, `0x3498DB`). Payloads are built with `jq`
