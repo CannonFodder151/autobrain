@@ -3,7 +3,8 @@
 A demo reset deletes the demo user + all demo vehicles. If a share references
 a demo vehicle or the demo user, the FK (NO ACTION) blocks the deletes on
 Postgres and the reset crashes at boot; on FK-less backends it leaves orphaned
-shares. Regression: reset_demo removes those shares first.
+shares. Regression: reset_demo removes those shares first. Foreign keys are
+enforced (PRAGMA) so the ordering is tested like it would be on Postgres.
 
 Run (sqlite, no Postgres/MinIO needed):
     cd backend && python3 -m pytest tests/test_seed_reset_demo.py -q
@@ -30,7 +31,7 @@ os.environ["MARKET_DATA_URL"] = ""
 os.environ["MARKET_DATA_API_KEY"] = ""
 
 import pytest  # noqa: E402
-from sqlalchemy import func, select  # noqa: E402
+from sqlalchemy import event, func, select  # noqa: E402
 
 from app.core.security import hash_password  # noqa: E402
 from app.db.seed import _upload_demo_image, reset_demo, seed_demo  # noqa: E402
@@ -38,6 +39,13 @@ from app.db.session import Base, SessionLocal, engine  # noqa: E402
 from app.models.share import VehicleShare  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.models.vehicle import Vehicle  # noqa: E402
+
+
+@event.listens_for(engine.sync_engine, "connect")
+def _enforce_fks(dbapi_conn, _):
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
 
 
 async def _reset_schema() -> None:
