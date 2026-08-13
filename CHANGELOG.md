@@ -25,6 +25,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Fixed
+- Security (AUT-303): login brute-force rate limit was bypassable by spoofing `X-Forwarded-For` (the backend trusted the client-controlled leading hop, so an attacker could rotate the header and never hit `LOGIN_MAX_ATTEMPTS`). The client IP is now derived from the trusted proxy header `X-Real-IP` (nginx sets `X-Real-IP $remote_addr`) and never from `X-Forwarded-For`. Failure counters moved from process memory to Redis (shared across workers, survive restarts) and now also count per-email as defense in depth against a misconfigured proxy.
+
 
 ## [0.3.21] - 2026-08-12
 
