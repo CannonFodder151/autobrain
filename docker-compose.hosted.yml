@@ -184,6 +184,9 @@ services:
     restart: unless-stopped
     ports:
       - "8086:80"
+    networks:
+      default:
+        ipv4_address: 172.18.0.14
     depends_on:
       - backend
       - ai
@@ -192,3 +195,15 @@ volumes:
   postgres-data:
   redis-data:
   minio-data:
+
+# AUT-372: pin the default network subnet + a static frontend IP. The host-level
+# nginx-proxy-manager (npm) caches the resolved frontend container IP, so a
+# changing IP = 502 until npm is restarted; a static IP keeps the cached value
+# permanently correct across container recreates.
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.18.0.0/16
+          gateway: 172.18.0.1
+
