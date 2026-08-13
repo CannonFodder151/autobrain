@@ -48,6 +48,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- Full-DB backups now cover every table (AUT-521): the snapshot table list is derived from the ORM metadata instead of a hand-maintained list that had drifted — `market_listing_cache` and `revoked_refresh_tokens` were missing entirely, and `vehicle_shares` was only added on 2026-08-10. A backup taken before a table was added, when restored by newer code, wiped that table's rows without re-inserting them — the mechanism that could silently remove shared vehicles during a server upgrade/restore. `serialize_all`/`restore_all` now use SQLAlchemy's FK-aware table order, and a regression test asserts the snapshot covers the full schema and that a backup/restore roundtrip preserves shared vehicles.
+
 ## [0.3.44] - 2026-08-13
 
 ### Fixed
