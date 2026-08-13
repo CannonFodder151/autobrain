@@ -10,6 +10,7 @@ import 'screens/auth/reset_password.dart';
 import 'screens/auth/server_setup_screen.dart';
 import 'screens/auth/signup_screen.dart';
 import 'screens/home/home_screen.dart';
+import 'screens/settings/license_screen.dart';
 
 class AutoBrainApp extends StatelessWidget {
   const AutoBrainApp({super.key});
@@ -49,6 +50,13 @@ class AutoBrainApp extends StatelessWidget {
         uri.pathSegments.contains('signup');
   }
 
+  /// True when opened from the mobile app's License link
+  /// ({origin}/#/license) — routes a logged-in user to the License screen so
+  /// purchases happen in the browser, not in the store-published app.
+  static bool licenseRequested() {
+    return Uri.base.fragment.replaceAll('/', '').toLowerCase() == 'license';
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthState>();
@@ -63,7 +71,7 @@ class AutoBrainApp extends StatelessWidget {
     } else if (shareToken != null) {
       home = ShareLinkView(token: shareToken);
     } else if (auth.isLoggedIn) {
-      home = const HomeScreen();
+      home = licenseRequested() ? const LicenseScreen() : const HomeScreen();
     } else if (signupRequested() && auth.signupEnabled) {
       home = const SignupScreen();
     } else {
