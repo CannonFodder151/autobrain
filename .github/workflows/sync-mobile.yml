@@ -43,14 +43,12 @@ jobs:
         # A stale mobile-only delta (e.g. auth_state.dart) can silently miss
         # getters the synced screens now use — never commit or release a tree
         # that does not analyze clean (AUT-522).
-        if: github.event_name == 'push'
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
       - name: Analyze synced tree
-        if: github.event_name == 'push'
         working-directory: autobrain-mobile
         run: |
           set -euo pipefail
