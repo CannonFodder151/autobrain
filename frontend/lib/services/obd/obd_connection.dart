@@ -106,3 +106,16 @@ class ObdConnection extends ChangeNotifier {
     notifyListeners();
   }
 }
+
+/// Manual "Update VIN" flow: reads the VIN from a connected adapter (mode 09
+/// PID 02) and hands it to [save] exactly once. Throws when no session is
+/// connected so the UI can prompt the user to connect first.
+Future<String> updateVin(
+  Elm327Session? session,
+  Future<void> Function(String vin) save,
+) async {
+  if (session == null) throw StateError('OBD adapter not connected');
+  final vin = await session.readVin();
+  await save(vin);
+  return vin;
+}
