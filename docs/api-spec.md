@@ -2,6 +2,10 @@
 
 Base URL: `/api/v1`. Auth: `Authorization: Bearer <token>` (JWT). Interactive spec: `http://<host>/docs` (OpenAPI).
 
+For partners integrating with AutoBrain, read
+[integrating-autobrain.md](integrating-autobrain.md) first — it is the human-readable
+guide with worked examples for the global API (auth + user management).
+
 Access tiers: `role` ∈ `admin | user | demo`; `free_account` (per-user) disables **AI features and rego lookup** (403 on those endpoints). File exports are available on all plans. Demo accounts are read-only.
 
 Vehicle sharing: a user with an accepted share on a vehicle can read and write its data. For shared vehicles, **AI and rego feature entitlement follows the owner's plan** — a free account invited to a paid owner's car gets the owner's features on that car.
