@@ -17,6 +17,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+- Community Garage enabled live on AutoBrain-Hosted via compose toggles (AUT-468) — `SOCIAL_FEATURE_ENABLED`/`SOCIAL_FEDERATION_ENABLED`/`SOCIAL_FEDERATION_HUB_URL`/`SOCIAL_FEDERATION_HOSTED` now default on so redeploys never revert the flip.
+
 ## [0.3.86] - 2026-08-15
 
 ### Added
@@ -182,8 +185,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
-
-## [Unreleased]
 
 ## [0.3.79] - 2026-08-15
 
