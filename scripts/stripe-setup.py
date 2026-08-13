@@ -63,15 +63,14 @@ def upsert_price(plan_key: str, billing: str) -> dict:
             print(f"  verified {plan['name']} {billing}: {price.id}")
             return price
         # Price objects are immutable; a wrong-currency price (e.g. the pre-AUT-523
-        # USD prices) must be archived before its lookup key can be reused.
+        # USD prices) must be archived before its lookup key can be reused. An
+        # archived price still owns its lookup key, so the replacement must
+        # atomically transfer the key (transfer_lookup_key=True).
         print(
             f"  archiving wrong-currency {plan['name']} {billing} "
             f"({price.id}, {price.currency})"
         )
         stripe.Price.modify(price.id, active=False)
-        existing = stripe.Price.list(lookup_keys=[lookup], limit=1).data
-        if existing:
-            stripe.Price.modify(existing[0].id, active=False)
     product = stripe.Product.retrieve(plan_key)
     interval = {"monthly": "month", "yearly": "year"}[billing]
     return stripe.Price.create(
@@ -79,6 +78,7 @@ def upsert_price(plan_key: str, billing: str) -> dict:
         unit_amount=amount,
         currency=CURRENCY,
         lookup_key=lookup,
+        transfer_lookup_key=True,
         nickname=f"{plan['name']} {billing}",
         recurring={"interval": interval, "interval_count": 1},
     )
