@@ -164,10 +164,11 @@ class _MyBuildsScreenState extends State<MyBuildsScreen> {
                 ),
               ],
             )
-          : ListView.builder(
+          : ListView.separated(
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 88),
               itemCount: _builds.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
               itemBuilder: (_, i) {
                 final build = _builds[i];
                 return SocialCard(
