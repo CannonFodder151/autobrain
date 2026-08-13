@@ -25,7 +25,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.23] - 2026-08-13
 ### Fixed
 - OBD is hidden on web builds (AUT-364): Bluetooth Classic SPP is Android-only, so the home-screen OBD tile and the Settings "OBD features" chip no longer render on the Flutter web app (kIsWeb-gated). Mobile (autobrain-mobile) OBD is untouched.
 
