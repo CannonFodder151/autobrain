@@ -57,6 +57,7 @@ jobs:
           git push origin main
           echo "changed=true" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Trigger mobile release pipeline for the new version
         if: steps.commit.outputs.changed == 'true'
@@ -66,5 +67,6 @@ jobs:
         run: |
           set -euo pipefail
           gh workflow run release-mobile.yml --repo CannonFodder151/autobrain-mobile \
+            --ref "${{ steps.commit.outputs.sha }}" \
             -f "version=v${{ steps.commit.outputs.version }}"
-          echo "dispatched mobile release for v${{ steps.commit.outputs.version }}"
+          echo "dispatched mobile release v${{ steps.commit.outputs.version }} at ref ${{ steps.commit.outputs.sha }}"
