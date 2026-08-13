@@ -19,6 +19,12 @@ Toggles persist in the singleton `social_server_config` row (seeded from env
 API (`GET/PATCH /admin/social`, `POST /admin/social/register`,
 `POST /admin/social/unregister`) flips them at runtime.
 
+Registration needs `SOCIAL_FEDERATION_HUB_URL` on the backend (default
+`https://hub.autobrainservice.app`; wired in all three compose files, AUT-532).
+AutoBrain's own stacks set `SOCIAL_FEDERATION_HOSTED=true` (free bundled
+license, docs R5a); self-hosted servers leave it unset/false and pay $20/yr at
+join. With no hub URL the register route returns `502 hub not configured`.
+
 ## Entitlement (rev 4)
 
 Every social route requires premium (`free_account == False`). Demo accounts

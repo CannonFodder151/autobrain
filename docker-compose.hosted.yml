@@ -114,6 +114,11 @@ services:
       ADMIN_API_KEY: ${ADMIN_API_KEY:-}
       SELF_SIGNUP_ENABLED: ${SELF_SIGNUP_ENABLED:-true}
       LICENSE_ENABLED: "true"
+      # Community Garage federation hub (AUT-532): the hub is a sibling service
+      # in this stack. Wire the URL so /admin/social/register works (was 502
+      # "hub not configured"); AutoBrain-Hosted registers hosted=true (free).
+      SOCIAL_FEDERATION_HUB_URL: ${SOCIAL_FEDERATION_HUB_URL:-https://hub.autobrainservice.app}
+      SOCIAL_FEDERATION_HOSTED: "true"
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       STRIPE_PRICE_ENTHUSIAST_MONTHLY: ${STRIPE_PRICE_ENTHUSIAST_MONTHLY:-}
