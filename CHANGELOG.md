@@ -71,10 +71,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
 
 ### Fixed
 - Alembic migration chain on `main` had two heads (`q1r2s3t4u5v6` from the Community Garage photo-position change and `u1v2w3x4y5z6` from the Issues Blog), which broke `alembic upgrade head` at bootstrap and forced the `create_all` fallback on every deploy. Added merge revision `m3rge02` re-unifying both branches (no-op upgrade body, same pattern as the earlier `m3rge01` merge) so `alembic heads` reports a single head and fresh/stamped databases migrate cleanly. Already-stamped databases (demo/default/hosted, AUT-682) apply it as a clean no-op. No schema or data changes.
+
+## [0.3.71] - 2026-08-14
+
+### Added
+- Demo issues-blog content (AUT-712): the demo instance's Community Garage Issues Blog is seeded with 16 posts, each with 1–3 replies (~30 total), on next boot with `DEMO_RESET=true`. Answered/resolved posts pin their answer. Deterministic content (fixed tag vocabulary, `origin="demo"`, fictional replier names, staggered `created_at`) — no AI in the seed path. `reset_demo` now clears the demo user's posts/replies/flags before deleting the user (FK-safe on Postgres).
 
 ## [0.3.70] - 2026-08-14
 
