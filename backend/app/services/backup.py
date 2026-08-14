@@ -18,35 +18,17 @@ from app.db.session import Base
 
 logger = get_logger(__name__)
 
-# Tables are ordered parent-first for insertion and reversed for deletion.
-_ORDER = [
-    "users",
-    "vehicles",
-    "social_builds",
-    "social_share_scopes",
-    "social_photos",
-    "social_comments",
-    "social_likes",
-    "social_server_config",
-    "vehicle_shares",
-    "vehicle_events",
-    "service_records",
-    "service_items",
-    "fuel_logs",
-    "diagnostics",
-    "modifications",
-    "parts",
-    "part_movements",
-    "receipts",
-    "extracted_items",
-    "valuation_snapshots",
-    "notification_preferences",
-    "notification_deliveries",
-    "logbook_entries",
-    "obd_codes",
-]
-
+# Table order is derived from SQLAlchemy's FK-aware `metadata.sorted_tables`
+# (parent-first for insertion, reversed for deletion) instead of a hardcoded
+# list. A hand-maintained list drifts — it previously missed
+# `market_listing_cache`, `revoked_refresh_tokens`, and (until 2026-08-10)
+# `vehicle_shares`, so full backups silently dropped those tables and a restore
+# of such a snapshot wiped the corresponding rows (AUT-521).
 _TABLES = {name: table for name, table in Base.metadata.tables.items()}
+
+
+def _backup_order() -> list[str]:
+    return [t.name for t in Base.metadata.sorted_tables]
 
 
 def _jsonable(value):
@@ -63,7 +45,7 @@ def _jsonable(value):
 async def serialize_all(db: AsyncSession) -> dict:
     """Serialize every table into a JSON-ready dict."""
     data: dict[str, list[dict]] = {}
-    for name in _ORDER:
+    for name in _backup_order():
         table = _TABLES.get(name)
         if table is None:
             continue
@@ -97,20 +79,21 @@ async def restore_all(db: AsyncSession, data: dict) -> None:
         raise ValueError("Backup file has no data")
 
     # Delete children-first.
-    for name in reversed(_ORDER):
+    # Delete children-first (reverse dependency order).
+    for name in reversed(_backup_order()):
         table = _TABLES.get(name)
         if table is not None:
             await db.execute(delete(table))
     await db.flush()
 
-    for name in _ORDER:
+    for name in _backup_order():
         table = _TABLES.get(name)
         if table is None:
             continue
         for row in data["data"].get(name, []):
             await db.execute(table.insert().values(**_coerce_values(table, row)))
     await db.commit()
-    logger.info("restore_completed", tables=len(_ORDER))
+    logger.info("restore_completed", tables=len(_backup_order()))
 
 
 # --- user-scoped profile export (data portability) ---

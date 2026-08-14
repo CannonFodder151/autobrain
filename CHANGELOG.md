@@ -62,6 +62,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- Full-DB backups now cover every table (AUT-521): the snapshot table list is derived from the ORM metadata instead of a hand-maintained list that had drifted — `market_listing_cache` and `revoked_refresh_tokens` were missing entirely, and `vehicle_shares` was only added on 2026-08-10. A backup taken before a table was added, when restored by newer code, wiped that table's rows without re-inserting them — the mechanism that could silently remove shared vehicles during a server upgrade/restore. `serialize_all`/`restore_all` now use SQLAlchemy's FK-aware table order, and a regression test asserts the snapshot covers the full schema and that a backup/restore roundtrip preserves shared vehicles.
+- Demo reset no longer orphans (or crashes on) shared vehicles (AUT-521): `reset_demo` deleted the demo user + vehicles without clearing `vehicle_shares` first, so a share referencing a demo vehicle or the demo account either left orphaned rows (FK-less DBs) or blocked the deletes on Postgres (`NO ACTION`) and crashed the boot. It now deletes those shares before the user/vehicles, with a regression test covering both directions (demo as share owner and as invitee).
+
 ## [0.3.59] - 2026-08-14
 
 ### Fixed
@@ -91,7 +95,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [0.3.54] - 2026-08-13
 ### Added
 - Demo Community Garage builds now each ship with 3 photos (AUT-529): every demo build shows media in the feed instead of only the first build having a single image. Existing demo instances pick this up on next `DEMO_RESET` restart.
->>>>>>> origin/main
 
 ## [0.3.53] - 2026-08-13
 
