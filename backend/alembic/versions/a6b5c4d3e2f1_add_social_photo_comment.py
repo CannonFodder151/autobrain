@@ -5,8 +5,11 @@ nullable comment_id link (exactly one of build_id/issue_id/comment_id).
 
 AUT-510 pattern: guarded so DBs where the column already exists apply cleanly.
 
+Chains onto a1b2c3d4e5f7 (AUT-709 issue-photo link, current head) so the graph
+keeps a single head; the earlier merge m3rge02 is already a parent of that head.
+
 Revision ID: a6b5c4d3e2f1
-Revises: m3rge02
+Revises: a1b2c3d4e5f7
 Create Date: 2026-08-14 00:00:00.000000
 """
 from typing import Sequence, Union
@@ -15,7 +18,7 @@ import sqlalchemy as sa
 from alembic import context, op
 
 revision: str = "a6b5c4d3e2f1"
-down_revision: Union[str, None] = "m3rge02"
+down_revision: Union[str, None] = "a1b2c3d4e5f7"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
