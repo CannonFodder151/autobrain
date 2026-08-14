@@ -66,7 +66,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.66] - 2026-08-14
 
 ### Added
 - Community Garage builds can now be named when sharing and fully edited afterwards (AUT-675): "Edit build" on My Builds lets you rename the project, change the caption, and reorder/add/remove photos, and it shows what the build shares (photos, specs, mods, odometer, notes) so you can edit that after the fact too. Photos keep their new order in the feed; dropped photos go back to your uploads. Backed by `POST/PATCH /social/posts` now accepting `title`, ordered `photo_ids` and `share_scope`, plus a new `social_photos.position` column.
