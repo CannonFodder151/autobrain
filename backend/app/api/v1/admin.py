@@ -325,3 +325,74 @@ async def unregister_social_server(db: AsyncSession = Depends(get_db)) -> dict:
     cfg.hub_private_key = None
     await db.commit()
     return {"message": "Server removed from the federation hub", "hub_status": cfg.hub_status}
+
+
+# --- Issues Blog moderation (AUT-627) ---
+
+
+class _IssueModerationUpdate(BaseModel):
+    status_hidden: bool | None = None
+    status: str | None = None
+
+
+@admin_ops.get("/issues/flagged")
+async def flagged_issues(db: AsyncSession = Depends(get_db)) -> dict:
+    """Moderation queue: every flagged issue post with its flag count."""
+    from app.social.models import SocialIssueFlag, SocialIssuePost
+
+    rows = await db.execute(
+        select(
+            SocialIssuePost.id,
+            SocialIssuePost.title,
+            SocialIssuePost.status,
+            SocialIssuePost.status_hidden,
+            SocialIssuePost.author_display_name,
+            SocialIssuePost.created_at,
+            func.count(SocialIssueFlag.id).label("flag_count"),
+        )
+        .join(SocialIssueFlag, SocialIssueFlag.post_id == SocialIssuePost.id)
+        .group_by(SocialIssuePost.id)
+        .order_by(func.count(SocialIssueFlag.id).desc())
+    )
+    return {
+        "items": [
+            {
+                "post_id": r.id,
+                "title": r.title,
+                "status": r.status,
+                "status_hidden": r.status_hidden,
+                "author_display_name": r.author_display_name,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "flag_count": r.flag_count,
+            }
+            for r in rows
+        ]
+    }
+
+
+@admin_ops.patch("/issues/{issue_id}")
+async def moderate_issue(
+    issue_id: str,
+    payload: _IssueModerationUpdate,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Hide/restore an issue post and optionally change its status."""
+    from app.api.v1.issues import ISSUE_STATUSES
+    from app.social.models import SocialIssuePost
+
+    post = await db.get(SocialIssuePost, issue_id)
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    if payload.status_hidden is not None:
+        post.status_hidden = payload.status_hidden
+    if payload.status is not None:
+        if payload.status not in ISSUE_STATUSES:
+            raise HTTPException(status_code=422, detail="Invalid status")
+        post.status = payload.status
+    await db.commit()
+    return {
+        "message": "Issue post updated",
+        "id": post.id,
+        "status_hidden": post.status_hidden,
+        "status": post.status,
+    }

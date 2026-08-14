@@ -19,7 +19,7 @@ class SearchRequest(BaseModel):
     q: str = Field(..., min_length=1, max_length=500, description="Search query")
     entity_types: list[str] | None = Field(
         default=None,
-        description="Limit to these entity types (diagnostic/service/modification/receipt)",
+        description="Limit to these entity types (diagnostic/service/modification/receipt/issue)",
     )
     limit: int = Field(default=20, ge=1, le=100)
 
@@ -45,6 +45,12 @@ class SearchResult(BaseModel):
     vendor: str | None = None
     original_name: str | None = None
     total: float | None = None
+    # Issue (community blog) fields:
+    title: str | None = None
+    body: str | None = None
+    tags: list[str] | None = None
+    status: str | None = None
+    author_display_name: str | None = None
 
 
 async def _accessible_vehicle_ids(db: AsyncSession, user: User) -> list[str]:
@@ -70,10 +76,13 @@ async def search(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Hybrid search across diagnostics, services, modifications, and receipts.
+    """Hybrid search across diagnostics, services, modifications, receipts,
+    and community issues.
 
     Results are scoped to the requesting user's own vehicles plus vehicles
-    shared with them (accepted shares only).
+    shared with them (accepted shares only). Community issues are visible to
+    every user regardless of vehicle ownership, and are excluded when a
+    `vehicle_id` narrows the search.
     """
     types = [t.strip() for t in entity_types.split(",") if t.strip()] if entity_types else None
     if types:
@@ -83,10 +92,18 @@ async def search(
                 status_code=400,
                 detail=f"Unknown entity types: {', '.join(unknown)}",
             )
+    else:
+        types = list(ENTITY_TYPES)
+    if user.free_account:
+        # Issues are premium-gated (same entitlement as the blog routes) — never
+        # surface them to free accounts via global search.
+        types = [t for t in types if t != "issue"]
 
     if vehicle_id:
         await get_accessible_vehicle(db, vehicle_id, user)
         vehicle_ids = [vehicle_id]
+        # Community issues are not vehicle-scoped — drop them from a scoped search.
+        types = [t for t in types if t != "issue"]
     else:
         vehicle_ids = await _accessible_vehicle_ids(db, user)
 
