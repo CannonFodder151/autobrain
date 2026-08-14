@@ -98,7 +98,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [0.3.65] - 2026-08-14
 
 ### Fixed
-- Celery worker/beat healthcheck (AUT-601): the `autobrain-worker` image healthcheck is now command-aware. The beat scheduler container (which shares the image) previously ran `celery inspect ping` — a check that only a *worker* can answer, so it reported health for the wrong process. It now verifies the `celerybeat-schedule` file exists and stays fresh (missing or stale file flags the wedged scheduler busy-loop behind the 100% CPU incident), and the worker check gets a longer ping reply timeout so AI-task load no longer false-negatives it.
+- Celery worker/beat healthcheck (AUT-601): the `autobrain-worker` image healthcheck is now command-aware. The beat scheduler container (which shares the image) previously ran `celery inspect ping` — a check that only a *worker* can answer, so it reported health for the wrong process. It now verifies the `celerybeat-schedule` file exists and stays fresh (missing or stale file flags the wedged scheduler busy-loop behind the 100% CPU incident). The worker check pings only its own node (`-d celery@$(hostname)`) so the backend's embedded worker on the same broker can't stall it, and gets an 8s reply window inside a 15s healthcheck timeout so AI-task load no longer false-negatives it.
 
 ## [0.3.64] - 2026-08-14
 
