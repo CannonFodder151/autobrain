@@ -76,6 +76,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- Hourly admin backup no longer fails on a transient DB blip during a deploy (AUT-696). `serialize_all` now retries (3 attempts, short backoff, session rollback) on transient `OperationalError`/`InterfaceError` (closed connection, DB restart mid-backup) before reporting failure to `autobrain-backup`, so a mid-deploy churn can't trip a backup alert. Regression test in `tests/test_backup_completeness.py`.
+
 ## [0.3.73] - 2026-08-14
 
 ### Added
