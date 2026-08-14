@@ -71,6 +71,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- Community Garage share (AUT-676): the share dialog now has a **Copy link** button, and the shared link can be opened in-app so it renders on the user's own AutoBrain instance. Sharing a federated (remote-server) build no longer throws a raw error — it opens the build directly on the viewer's instance.
+
 ## [0.3.68] - 2026-08-14
 
 ### Added
