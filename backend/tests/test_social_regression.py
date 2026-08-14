@@ -244,6 +244,21 @@ async def test_upload_bounded_read_aborts_past_cap():
     assert f._served <= media_mod.MAX_UPLOAD_BYTES + media_mod.UPLOAD_READ_CHUNK
 
 
+@pytest.mark.asyncio
+async def test_upload_415_on_oversize_abort(env, monkeypatch):
+    """Bounded-read abort (chunked/lying Content-Length) -> 415, never 500."""
+    app, _ = env
+
+    async def _abort(file):
+        raise media_mod.MediaError("File too large (max 5MB)")
+
+    monkeypatch.setattr(social_api, "read_upload", _abort)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.post("/social/uploads", files={"file": ("small.png", b"x", "image/png")})
+    assert r.status_code == 415
+    assert "5MB" in r.text
+
+
 # ── CA-4: federation nonce ──────────────────────────────────────────────────
 def test_federation_headers_include_nonce():
     cfg = types.SimpleNamespace(hub_server_id="srv-a", hub_api_key="k", hub_private_key="0" * 64)
