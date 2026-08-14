@@ -122,6 +122,35 @@ def test_catalog_endpoint_public() -> None:
     assert resp.json()["enabled"] is False
 
 
+# --- verify rate limit (F4/N1) ------------------------------------------------
+
+
+def test_check_verify_rate_limit_429() -> None:
+    from fastapi import HTTPException
+
+    iap._verify_hits.clear()
+    try:
+        uid = "u-rate-429"
+        for _ in range(iap.IAP_VERIFY_LIMIT_PER_WINDOW):
+            iap.check_verify_rate_limit(uid)  # within the window: allowed
+        with pytest.raises(HTTPException) as exc:
+            iap.check_verify_rate_limit(uid)
+        assert exc.value.status_code == 429
+        assert "Retry-After" in exc.value.headers
+    finally:
+        iap._verify_hits.clear()
+
+
+def test_check_verify_rate_limit_windows_are_per_user() -> None:
+    iap._verify_hits.clear()
+    try:
+        for _ in range(iap.IAP_VERIFY_LIMIT_PER_WINDOW):
+            iap.check_verify_rate_limit("u-a")
+        iap.check_verify_rate_limit("u-b")  # different user: not throttled
+    finally:
+        iap._verify_hits.clear()
+
+
 # --- entitlement --------------------------------------------------------------
 
 
@@ -378,6 +407,27 @@ async def test_verify_ios_revoked(apple_cfg, monkeypatch) -> None:
         await iap.verify_and_grant(_FakeDB(), _user(), "ios", PRODUCT_MONTHLY, "txn-1", "jws")
 
 
+@pytest.mark.asyncio
+async def test_verify_ios_already_expired_rejects_not_active(apple_cfg, monkeypatch) -> None:
+    """N3: first-time verify of an already-lapsed transaction settles to
+    "expired" instead of reporting "active" and granting a dead entitlement."""
+    async def _txn(client, transaction_id):
+        return {
+            "productId": PRODUCT_MONTHLY,
+            "bundleId": "com.autobrainservice.app",
+            "transactionId": "txn-1",
+            "expiresDate": str(int((time.time() - 86400) * 1000)),
+        }
+
+    monkeypatch.setattr(iap, "_apple_transaction", _txn)
+
+    u = _user()
+    with pytest.raises(iap.SubscriptionNotActive) as exc:
+        await iap.verify_and_grant(_FakeDB(), u, "ios", PRODUCT_MONTHLY, "txn-1", "jws")
+    assert exc.value.status == "expired"
+    assert svc.iap_status(u) is None  # never granted
+
+
 # --- refresh ------------------------------------------------------------------
 
 
@@ -437,6 +487,64 @@ async def test_refresh_google_cancelled_demotes_to_revoked(google_cfg, monkeypat
     await iap.refresh_entitlement(_FakeDB(), u, force=True)
     assert svc.iap_status(u) == "revoked"
     assert svc.plan_for_user(u) == "free"
+
+
+@pytest.mark.asyncio
+async def test_refresh_ios_non_active_status_demotes(apple_cfg, monkeypatch) -> None:
+    """F3/N2: an iOS refresh whose store status is outside _APPLE_ACTIVE_STATUSES
+    settles the entitlement instead of keeping access."""
+    async def _sub(client, original_transaction_id):
+        assert original_transaction_id == "orig-1"
+        return None, 2  # status 2 = expired
+
+    monkeypatch.setattr(iap, "_apple_subscription", _sub)
+
+    u = _user()
+    u.iap_platform = "ios"
+    svc.apply_iap(u, PRODUCT_MONTHLY, "ios", "t1", "jws", _expires_at(days=-1), "orig-1")
+    assert svc.iap_status(u) == "expired"
+    await iap.refresh_entitlement(_FakeDB(), u, force=True)
+    assert svc.iap_status(u) == "expired"
+    assert svc.plan_for_user(u) == "free"
+
+
+@pytest.mark.asyncio
+async def test_refresh_ios_status_5_demotes_to_revoked(apple_cfg, monkeypatch) -> None:
+    async def _sub(client, original_transaction_id):
+        return None, 5  # status 5 = revoked
+
+    monkeypatch.setattr(iap, "_apple_subscription", _sub)
+
+    u = _user()
+    u.iap_platform = "ios"
+    svc.apply_iap(u, PRODUCT_MONTHLY, "ios", "t1", "jws", _expires_at(days=30), "orig-1")
+    await iap.refresh_entitlement(_FakeDB(), u, force=True)
+    assert svc.iap_status(u) == "revoked"
+
+
+@pytest.mark.asyncio
+async def test_apple_subscription_skips_empty_signed_transaction(apple_cfg, monkeypatch) -> None:
+    """N2: _apple_subscription must skip lastTransactions with an empty/absent
+    signedTransactionInfo instead of trusting the row."""
+    class _Client:
+        async def get(self, url, **kw):
+            return httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {
+                            "lastTransactions": [
+                                {"signedTransactionInfo": "", "status": 1},
+                                {"signedTransactionInfo": None, "status": 2},
+                            ]
+                        }
+                    ]
+                },
+            )
+
+    monkeypatch.setattr(iap, "_apple_bearer", lambda: "bearer-1")
+    expires, status = await iap._apple_subscription(_Client(), "orig-not-matched")
+    assert (expires, status) == (None, None)
 
 
 @pytest.mark.asyncio
@@ -557,6 +665,51 @@ async def test_apple_webhook_valid_signature_ignores_unknown_user(monkeypatch) -
 
     result = await iap.handle_apple_webhook(_FakeDB(), signed)
     assert result == {"received": True}
+
+
+def _sign_payload(root_pem: str, root_key, data: dict, notification_type: str = "DID_RENEW") -> str:
+    """A structurally-valid Apple notification JWS signed by a throwaway leaf
+    issued by the given root (the test root from _test_root_leaf)."""
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.x509.oid import NameOID
+    from jose import jwt as jose_jwt
+
+    now = datetime.datetime.now(datetime.timezone.utc)
+    key = ec.generate_private_key(ec.SECP256R1())
+    root_cert = x509.load_pem_x509_certificate(root_pem.encode())
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "leaf-n")]))
+        .issuer_name(root_cert.subject)
+        .public_key(key.public_key())
+        .serial_number(4)
+        .not_valid_before(now - datetime.timedelta(days=1))
+        .not_valid_after(now + datetime.timedelta(days=365))
+        .sign(root_key, hashes.SHA256())
+    )
+    x5c = [
+        base64.b64encode(cert.public_bytes(serialization.Encoding.DER)).decode(),
+        base64.b64encode(root_cert.public_bytes(serialization.Encoding.DER)).decode(),
+    ]
+    return jose_jwt.encode(
+        {"notificationType": notification_type, "data": data},
+        key,
+        algorithm="ES256",
+        headers={"alg": "ES256", "x5c": x5c},
+    )
+
+
+@pytest.mark.asyncio
+async def test_apple_webhook_rejects_bundle_id_mismatch(monkeypatch) -> None:
+    """N2: a signed notification for another app's bundle id is rejected."""
+    root_pem, _signed, root_key, _root_cert = _test_root_leaf()
+    monkeypatch.setattr(iap, "APPLE_ROOT_CA_G3", root_pem)
+    signed = _sign_payload(root_pem, root_key, {"bundleId": "com.attacker.app"})
+
+    with pytest.raises(iap.VerificationError, match="bundle id mismatch"):
+        await iap.handle_apple_webhook(_FakeDB(), signed)
 
 
 @pytest.mark.asyncio

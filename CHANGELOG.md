@@ -85,6 +85,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Security
 - Backend IAP hardening (AUT-622 review on AUT-617): App Store webhook certificate-chain verification now validates the terminal cert against Apple's root by key, not subject string (forged-root spoof closed); Play purchases are replay-protected (one store purchase grants at most one account, enforced by unique DB constraints + ownership check); Google subscriptions settle to `expired`/`revoked` on definitive non-active state; per-user verify/refresh cooldown + rate limit bound external store calls; Google Pub/Sub push JWKS cached with issuer/expiry checks.
 - Backend IAP webhook crash hardening (AUT-625 re-review on AUT-617): invalid-signature chain forgery on `POST /billing/iap/webhook/apple` now returns a clean 400 instead of an unhandled HTTP 500 (`InvalidSignature` caught in `_chain_verified`/`_verify_apple_signed_payload`); regression test forges the root with Apple's full subject.
+- Backend IAP QA follow-ups (AUT-628): first-time iOS verify of an already-expired transaction now rejects with the entitlement settling to `expired` instead of reporting `active`; added regression tests for the verify rate-limit 429 branch, Apple webhook bundle-id mismatch, empty `signedTransactionInfo` skip, and iOS refresh demotion on non-active store status. Documented that the process-local verify rate limiter is invalidated if the backend scales to multiple workers (N4).
 
 ## [0.3.57] - 2026-08-13
 
