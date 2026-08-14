@@ -132,6 +132,7 @@ async def _serialize(db: AsyncSession, build: SocialBuild, viewer: User | None) 
             )
         )
     ) is not None
+    is_author = viewer is not None and build.author_user_id is not None and viewer.id == build.author_user_id
     return {
         "id": build.id,
         "title": build.title,
@@ -141,7 +142,7 @@ async def _serialize(db: AsyncSession, build: SocialBuild, viewer: User | None) 
         "origin": build.origin,
         "snapshot": snapshot,
         "photos": photos,
-        "photo_ids": photo_ids,
+        "photo_ids": photo_ids if is_author else [],
         "share_scope": share_scope,
         "like_count": await _like_count(db, build.id),
         "liked_by_me": liked,
@@ -413,6 +414,7 @@ async def update_post(
             select(SocialPhoto).where(
                 SocialPhoto.id.in_(payload.photo_ids),
                 SocialPhoto.uploader_user_id == user.id,
+                or_(SocialPhoto.build_id.is_(None), SocialPhoto.build_id == build.id),
             )
         ))
         by_id = {p.id: p for p in photos}
@@ -429,16 +431,17 @@ async def update_post(
             photo = by_id[photo_id]
             photo.build_id = build.id
             photo.position = position
+    snapshot = None
+    photo_keys = []
     if build.vehicle_id:
         vehicle = await db.get(Vehicle, build.vehicle_id)
-        photos = list(await db.scalars(
-            select(SocialPhoto).where(SocialPhoto.build_id == build.id).order_by(SocialPhoto.position, SocialPhoto.created_at)
-        ))
-        snapshot = await build_snapshot(db, vehicle, scope, [p.file_key for p in photos])
-        build.snapshot_json = dumps(snapshot)
-        photo_keys = [p.file_key for p in photos]
-    else:
-        photo_keys = []
+        if vehicle:
+            photos = list(await db.scalars(
+                select(SocialPhoto).where(SocialPhoto.build_id == build.id).order_by(SocialPhoto.position, SocialPhoto.created_at)
+            ))
+            snapshot = await build_snapshot(db, vehicle, scope, [p.file_key for p in photos])
+            build.snapshot_json = dumps(snapshot)
+            photo_keys = [p.file_key for p in photos]
     cfg = await get_server_config(db)
     await db.commit()
     if build.origin == "local" and cfg.federation_enabled and cfg.hub_status == "registered":

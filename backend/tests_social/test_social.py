@@ -422,12 +422,29 @@ async def test_edit_build_title_photos_scope(monkeypatch) -> None:
         cleared = await c.patch(f"/api/v1/social/posts/{post_id}", json={"caption": None})
         assert cleared.json()["caption"] is None
 
+        # hide photos, then verify non-owner sees no photo_ids (F1)
+        hidden = await c.patch(f"/api/v1/social/posts/{post_id}",
+                               json={"share_scope": {"allow_photos": False}})
+        assert hidden.json()["photo_ids"] == [p2["id"], p1["id"]]
+
         # non-owners cannot edit (404, same as delete — PW-8)
         async with await _client(other_token) as oc:
             denied = await oc.patch(f"/api/v1/social/posts/{post_id}",
                                     json={"title": "Hacked"})
             assert denied.status_code == 404
+            # F1: non-owner never sees photo ids, even for published builds
+            detail = (await oc.get(f"/api/v1/social/posts/{post_id}")).json()
+            assert detail["photo_ids"] == []
 
+        # QA#2: a photo attached to this build cannot be hijacked into another
+        second = await c.post("/api/v1/social/posts", json={"vehicle_id": vehicle_id})
+        second_id = second.json()["id"]
+        hijack = await c.patch(f"/api/v1/social/posts/{second_id}",
+                               json={"photo_ids": [p1["id"]]})
+        assert hijack.status_code == 400, hijack.text
+
+        gone2 = await c.delete(f"/api/v1/social/posts/{second_id}")
+        assert gone2.status_code == 204
         gone = await c.delete(f"/api/v1/social/posts/{post_id}")
         assert gone.status_code == 204
 

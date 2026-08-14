@@ -5,7 +5,7 @@ reorder/upload/remove photos. Existing photos keep creation-time order
 (position defaults to 0, tie-broken by created_at).
 
 Revision ID: q1r2s3t4u5v6
-Revises: p6q7r8s9t0u1
+Revises: q7r8s9t0u1v2
 Create Date: 2026-08-14 00:00:00.000000
 
 """
@@ -15,7 +15,7 @@ import sqlalchemy as sa
 from alembic import context, op
 
 revision: str = "q1r2s3t4u5v6"
-down_revision: Union[str, None] = "p6q7r8s9t0u1"
+down_revision: Union[str, None] = "q7r8s9t0u1v2"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
