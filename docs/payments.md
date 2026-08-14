@@ -40,6 +40,7 @@ The store builds of the mobile app sell the same licences through Apple App Stor
 - Catalogue: `GET /billing/iap/catalog` (public) → `{enabled, products}`; `enabled` is false until IAP credentials are set, and the mobile app then falls back to the Stripe browser path.
 - Verify: `POST /billing/iap/verify` (auth) verifies the store transaction server-side and grants the plan; purchases are recorded on the user (`iap_*` fields) and durable across reinstall/re-login.
 - Renewal model: verify-on-refresh — `GET /auth/me` re-validates the stored purchase token against the store API when the entitlement is expired or within `IAP_REFRESH_WINDOW_DAYS` of expiry (no webhooks needed). Webhooks (`POST /billing/iap/webhook/apple|google`) are also accepted and act as refresh triggers when the store teams configure them.
+- Rate limiting: `POST /billing/iap/verify` is rate-limited per user (in-process sliding window, 10 hits/60s). The limiter is process-local — correct for the single-uvicorn hosted deploy (`docker-compose.hosted.yml`), but it is invalidated if the backend ever scales to multiple workers/instances; move the window to a shared store (e.g. Redis) before scaling out (N4).
 - Entitlement: `plan_for_user` and `/auth/me` treat an active IAP entitlement as paid (`subscription_status` + `iap_status` fields). Upgrading replaces the prior store entitlement (no double grant); expiry/revocation demotes back to the free tier (or keeps a still-active Stripe plan).
 
 ## Configuration (env)

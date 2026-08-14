@@ -135,7 +135,9 @@ def catalog() -> dict:
 
 # Verify-endpoint rate limit (F4): in-process sliding window per user so a
 # logged-in client cannot spam store verification calls (each hit = external
-# store API round-trips).
+# store API round-trips). Process-local: correct for the single-uvicorn hosted
+# deploy, but invalidated if the backend ever scales to multiple workers (N4) —
+# move the window to a shared store (e.g. Redis) before scaling out.
 IAP_VERIFY_WINDOW_SECONDS = 60
 IAP_VERIFY_LIMIT_PER_WINDOW = 10
 _verify_hits: dict[str, deque[float]] = defaultdict(deque)
@@ -475,6 +477,12 @@ def _validate_apple_info(info: dict, product_id: str, transaction_id: str) -> No
         raise VerificationError("Transaction id mismatch")
     if info.get("status") == 2 or info.get("revocationDate"):
         raise VerificationError("Transaction was revoked by Apple")
+    expires = _expires_at_from_ms(info.get("expiresDate"))
+    if expires is not None and expires <= datetime.now(timezone.utc):
+        # First-time verify of an already-lapsed transaction must not report
+        # "active" (N3): mirror the Google path and reject with the entitlement
+        # settling to "expired" instead of granting a dead subscription.
+        raise SubscriptionNotActive("expired")
 
 
 def _expires_at_from_ms(ms) -> datetime | None:
