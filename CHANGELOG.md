@@ -61,7 +61,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.61] - 2026-08-14
 
 ### Added
 - Backend store-native IAP (AUT-617): Apple App Store / Google Play receipt verification for the mobile store builds — `GET /billing/iap/catalog`, `POST /billing/iap/verify`, and `POST /billing/iap/webhook/{apple,google}`. Purchases are recorded server-side and durable; active store entitlements grant the same plans as Stripe (`plan_for_user` + `GET /auth/me` now surface `iap_status`). Renewals/refunds propagate via verify-on-refresh on `/auth/me` plus the store webhooks once the store teams configure them.
