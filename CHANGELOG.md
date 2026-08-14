@@ -71,10 +71,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
 
 ### Added
 - Issues Blog now lets you attach up to 4 photos to a post (AUT-709). Photos upload through the existing media pipeline, are rendered on the post detail + browse list, and are cleaned up when the post is deleted. A photo attached to an issue can no longer be claimed by a build (and vice-versa).
+
+## [0.3.71] - 2026-08-14
+
+### Added
+- Demo issues-blog content (AUT-712): the demo instance's Community Garage Issues Blog is seeded with 16 posts, each with 1–3 replies (~30 total), on next boot with `DEMO_RESET=true`. Answered/resolved posts pin their answer. Deterministic content (fixed tag vocabulary, `origin="demo"`, fictional replier names, staggered `created_at`) — no AI in the seed path. `reset_demo` now clears the demo user's posts/replies/flags before deleting the user (FK-safe on Postgres).
 
 ## [0.3.70] - 2026-08-14
 
