@@ -1,6 +1,6 @@
 /// My Builds tab — the caller's own shared builds, with edit + unshare
-/// (AUT-501). Tapping a card opens the post detail; the edit icon opens a
-/// caption dialog.
+/// (AUT-501). Tapping a card opens the post detail; the edit icon opens the
+/// full edit screen (AUT-675: rename, photos, share scope).
 library;
 
 import 'package:flutter/material.dart';
@@ -12,6 +12,7 @@ import '../models.dart';
 import '../social_api.dart';
 import '../widgets/premium_gate.dart';
 import '../widgets/social_card.dart';
+import 'edit_build_screen.dart';
 import 'social_post_detail.dart';
 
 class MyBuildsScreen extends StatefulWidget {
@@ -53,46 +54,13 @@ class _MyBuildsScreenState extends State<MyBuildsScreen> {
   Future<void> _refresh() => _load();
 
   Future<void> _edit(SocialBuild build) async {
-    final controller = TextEditingController(text: build.caption ?? '');
-    final caption = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Edit build'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLines: 3,
-          maxLength: 1000,
-          decoration: const InputDecoration(
-            labelText: 'Caption',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    if (caption == null || !mounted) return;
-    try {
-      final updated = await SocialApi(context.read<AuthState>().api).updatePost(
-          build.id,
-          caption: caption.isEmpty ? null : caption);
-      if (mounted) {
-        setState(() => _builds = [
-              for (final b in _builds) b.id == updated.id ? updated : b
-            ]);
-      }
-    } on ApiException catch (e) {
-      _toast(e.message);
-    } catch (e) {
-      _toast('Could not save: $e');
-    }
+    final updated = await Navigator.of(context).push<SocialBuild>(
+        MaterialPageRoute(
+            builder: (_) => EditBuildScreen(build: build)));
+    if (updated == null || !mounted) return;
+    setState(() => _builds = [
+          for (final b in _builds) b.id == updated.id ? updated : b
+        ]);
   }
 
   Future<void> _delete(SocialBuild build) async {

@@ -67,14 +67,45 @@ class SocialApi {
         .toList();
   }
 
-  Future<SocialBuild> updatePost(String postId, {String? caption}) async {
-    final data = await _api.patch('/social/posts/$postId', {'caption': caption})
-        as Map<String, dynamic>;
+  /// Full build edit (AUT-675): rename, reorder/swap photos, adjust scope.
+  /// `null` leaves a field unchanged; empty string clears a caption.
+  Future<SocialBuild> updatePost(
+    String postId, {
+    String? title,
+    String? caption,
+    List<String>? photoIds,
+    bool? allowPhotos,
+    bool? allowSpecs,
+    bool? allowMods,
+    bool? allowOdometer,
+    bool? allowNotes,
+  }) async {
+    final body = <String, dynamic>{
+      if (title != null) 'title': title,
+      if (caption != null) 'caption': caption,
+      if (photoIds != null) 'photo_ids': photoIds,
+    };
+    if (allowPhotos != null ||
+        allowSpecs != null ||
+        allowMods != null ||
+        allowOdometer != null ||
+        allowNotes != null) {
+      body['share_scope'] = {
+        if (allowPhotos != null) 'allow_photos': allowPhotos,
+        if (allowSpecs != null) 'allow_specs': allowSpecs,
+        if (allowMods != null) 'allow_mods': allowMods,
+        if (allowOdometer != null) 'allow_odometer': allowOdometer,
+        if (allowNotes != null) 'allow_notes': allowNotes,
+      };
+    }
+    final data =
+        await _api.patch('/social/posts/$postId', body) as Map<String, dynamic>;
     return SocialBuild.fromJson(data);
   }
 
   Future<SocialBuild> createPost({
     required String vehicleId,
+    String? title,
     String? caption,
     List<String> photoIds = const [],
     bool allowPhotos = true,
@@ -85,6 +116,7 @@ class SocialApi {
   }) async {
     final data = await _api.post('/social/posts', {
       'vehicle_id': vehicleId,
+      'title': title,
       'caption': caption,
       'photo_ids': photoIds,
       'share_scope': {
@@ -143,6 +175,76 @@ class SocialApi {
         as Map<String, dynamic>;
     return (id: data['id'] as String, url: data['url'] as String);
   }
+
+  /// Issues Blog browse — reverse-chronological with tag/status/q filters and
+  /// keyset cursor pagination (server-side, deterministic). Returns the page
+  /// plus `nextCursor` (null when there are no more pages).
+  Future<({List<SocialIssuePost> items, String? nextCursor})> issues({
+    int limit = 20,
+    String? cursor,
+    String? tag,
+    IssueStatus? status,
+    String? q,
+  }) async {
+    final params = <String>['limit=$limit'];
+    if (cursor != null && cursor.isNotEmpty) {
+      params.add('cursor=${Uri.encodeQueryComponent(cursor)}');
+    }
+    if (tag != null && tag.isNotEmpty) {
+      params.add('tag=${Uri.encodeQueryComponent(tag)}');
+    }
+    if (status != null) {
+      params.add('status=${status.name}');
+    }
+    if (q != null && q.trim().isNotEmpty) {
+      params.add('q=${Uri.encodeQueryComponent(q.trim())}');
+    }
+    final data = await _api.get('/social/issues?${params.join('&')}')
+        as Map<String, dynamic>;
+    return (
+      items: ((data['items'] as List?) ?? const [])
+          .map((e) => SocialIssuePost.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList(),
+      nextCursor: data['next_cursor'] as String?,
+    );
+  }
+
+  Future<SocialIssuePost> getIssue(String postId) async {
+    final data =
+        await _api.get('/social/issues/$postId') as Map<String, dynamic>;
+    return SocialIssuePost.fromJson(data);
+  }
+
+  Future<SocialIssuePost> createIssue({
+    required String title,
+    required String body,
+    String? vehicleId,
+  }) async {
+    final data = await _api.post('/social/issues', {
+      'title': title,
+      'body': body,
+      if (vehicleId != null) 'vehicle_id': vehicleId,
+    }) as Map<String, dynamic>;
+    return SocialIssuePost.fromJson(data);
+  }
+
+  Future<SocialIssueComment> addIssueComment(String postId, String body) async {
+    final data = await _api.post('/social/issues/$postId/comments', {'body': body})
+        as Map<String, dynamic>;
+    return SocialIssueComment.fromJson(data);
+  }
+
+  /// Mark a comment as the answer and resolve the post (author or comment
+  /// author only — the server 404s others, so the UI only surfaces it to
+  /// eligible commenters).
+  Future<void> markAnswer(String postId, String commentId) =>
+      _api.post('/social/issues/$postId/comments/$commentId/answer');
+
+  Future<void> flagIssue(String postId, String reason) =>
+      _api.post('/social/issues/$postId/flag', {'reason': reason});
+
+  Future<void> deleteIssue(String postId) =>
+      _api.delete('/social/issues/$postId');
 
   /// Admin toggles (GET/PATCH /admin/social).
   Future<SocialSettings> settings() async {

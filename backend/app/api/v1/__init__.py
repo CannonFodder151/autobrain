@@ -10,6 +10,7 @@ from app.api.v1 import (
     billing,
     diagnostics,
     fuel,
+    issues,
     logbook,
     mods,
     notifications,
@@ -45,3 +46,4 @@ api_router.include_router(analytics.router)
 api_router.include_router(notifications.router)
 api_router.include_router(search.router)
 api_router.include_router(social.router)
+api_router.include_router(issues.router)

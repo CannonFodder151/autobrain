@@ -1,4 +1,4 @@
-/// Social compose — pick vehicle + photos (max 6), set share scope, publish.
+/// Social compose — pick vehicle + photos (max 15), set share scope, publish.
 library;
 
 import 'dart:typed_data';
@@ -25,6 +25,7 @@ class SocialComposeScreen extends StatefulWidget {
 class _SocialComposeScreenState extends State<SocialComposeScreen> {
   List<Vehicle> _vehicles = const [];
   Vehicle? _vehicle;
+  final _title = TextEditingController();
   final _caption = TextEditingController();
   final _scope = ShareScopeState();
   final List<({String name, String mime, Uint8List bytes})> _picked = [];
@@ -39,6 +40,7 @@ class _SocialComposeScreenState extends State<SocialComposeScreen> {
 
   @override
   void dispose() {
+    _title.dispose();
     _caption.dispose();
     super.dispose();
   }
@@ -59,8 +61,8 @@ class _SocialComposeScreenState extends State<SocialComposeScreen> {
   }
 
   Future<void> _pickPhotos() async {
-    if (_picked.length >= 6) {
-      _toast('Maximum 6 photos.');
+    if (_picked.length >= 15) {
+      _toast('Maximum 15 photos.');
       return;
     }
     final files = await ImagePicker().pickMultiImage(
@@ -70,7 +72,7 @@ class _SocialComposeScreenState extends State<SocialComposeScreen> {
     if (files.isEmpty) return;
     final picked = <({String name, String mime, Uint8List bytes})>[];
     for (final f in files) {
-      if (picked.length + _picked.length >= 6) break;
+      if (picked.length + _picked.length >= 15) break;
       picked.add((
         name: f.name,
         mime: f.mimeType ?? 'image/jpeg',
@@ -95,6 +97,7 @@ class _SocialComposeScreenState extends State<SocialComposeScreen> {
       }
       await api.createPost(
         vehicleId: _vehicle!.id,
+        title: _title.text.trim().isEmpty ? null : _title.text.trim(),
         caption: _caption.text.trim().isEmpty ? null : _caption.text.trim(),
         photoIds: photoIds,
         allowPhotos: _scope.allowPhotos,
@@ -151,6 +154,16 @@ class _SocialComposeScreenState extends State<SocialComposeScreen> {
                     _vehiclePicker(),
                     const SizedBox(height: 16),
                     TextField(
+                      controller: _title,
+                      maxLength: 200,
+                      decoration: const InputDecoration(
+                        labelText: 'Project name (optional)',
+                        hintText: 'e.g. Project Sky',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
                       controller: _caption,
                       maxLines: 3,
                       maxLength: 1000,
@@ -188,7 +201,7 @@ class _SocialComposeScreenState extends State<SocialComposeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Photos (up to 6)', style: Theme.of(context).textTheme.titleSmall),
+        Text('Photos (up to 15)', style: Theme.of(context).textTheme.titleSmall),
         const SizedBox(height: 8),
         if (_picked.isEmpty)
           OutlinedButton.icon(
@@ -225,7 +238,7 @@ class _SocialComposeScreenState extends State<SocialComposeScreen> {
                     ),
                   ],
                 ),
-              if (_picked.length < 6)
+              if (_picked.length < 15)
                 InkWell(
                   onTap: _pickPhotos,
                   borderRadius: BorderRadius.circular(8),

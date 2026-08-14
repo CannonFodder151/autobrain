@@ -66,10 +66,40 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
+
+
 ## [Unreleased]
 
 ### Fixed
 - Community Garage share (AUT-676): the share dialog now has a **Copy link** button, and the shared link can be opened in-app so it renders on the user's own AutoBrain instance. Sharing a federated (remote-server) build no longer throws a raw error — it opens the build directly on the viewer's instance.
+
+## [0.3.68] - 2026-08-14
+
+### Added
+- Community Garage **Issues Blog** frontend (AUT-627, AUT-644): third tab in Community Garage (Feed / My Builds / Issues Blog) with a blog-archive list (title, excerpt, author, tags, comment count, Open/Answered/Resolved status badge, date), keyword search + tag chips + status filter (server-side, deterministic), full blog-post detail with chronological comment thread, "Mark as answer" resolution flow with a resolved banner pointing at the pinned answer, "Report" moderation action, and a compose screen (title, body, optional vehicle context snapshot). Reuses Community Garage premium gating and "disabled by admin" states; wired to `/api/v1/social/issues`.
+- Community Garage Issues Blog backend (AUT-627, AUT-643): `social_issue_posts` / `social_issue_comments` / `social_issue_flags` tables + Alembic migration, blog routes under `/api/v1/social/issues` (browse with tag/status/q filters and cursor pagination, create/edit/comment/mark-answer/flag/delete), admin moderation (`/api/v1/admin/issues/flagged`, hide/restore), deterministic fixed-vocabulary auto-tags, and global search integration for `issue` (community-visible, hidden posts excluded). Premium-gated, rate-limited, plaintext-only; no AI in authoring/answers/moderation.
+
+### Fixed
+- Issues Blog: editing your own post via PATCH `/api/v1/social/issues/{id}` no longer returns HTTP 500 (AUT-665). `updated_at` (`onupdate=func.now()`) was expired after commit and the async lazy load raised `MissingGreenlet`; `update_issue` now `refresh`es the post before serializing. Added a PATCH success-path regression test.
+
+### Security
+- Issues Blog rate limiting no longer trusts client-supplied `X-Forwarded-For` (AUT-670, F1): `client_ip()` keys on the proxy-set `X-Real-IP` / socket peer only, the nginx edge overwrites `X-Forwarded-For` with `$remote_addr`, and create/comment/answer now carry per-user caps (`social_user_rate_limit`) mirroring flags — so rotating the header can no longer reset the per-IP window. Regression suite `tests/test_pt1_xff_bypass.py`.
+- Issues Blog answer pinning restricted to the post author (AUT-670, F2): a commenter can no longer pin their own comment and force the post to `resolved`; non-authors get 404 (PW-8 no-probing pattern). Author pinning still resolves the post.
+- Issues Blog `cursor` pagination param capped at 512 chars (AUT-670, F3): oversized cursors are rejected with 422 by validation instead of being base64-decoded/parsed (mild parse DoS on attacker input); malformed short cursors still 400.
+
+## [0.3.67] - 2026-08-14
+
+### Added
+- Community Garage photos per build raised from 6 to 15 (AUT-674): the compose picker (web + mobile) accepts up to 15 photos and the backend `POST /social/posts` validation caps `photo_ids` at 15 (was 12). Regression test asserts 15 IDs pass and 16 are rejected.
+
+### Fixed
+- Community Garage photo upload no longer rejects real phone photos (AUT-674): the social upload input gate was 5MB while receipts/fuel/logbook allow 15MB, and web + iOS multi-pick can't pre-downscale — typical modern phone photos (5–15MB) were returned `413 File too large`. Social uploads now use the same 15MB bounded-read cap as the rest of the app; the backend still downscales to 2048px and re-encodes to webp, so stored media stays small. Regression tests cover a >5MB accepted upload and the 413/415 gate.
+
+## [0.3.66] - 2026-08-14
+
+### Added
+- Community Garage builds can now be named when sharing and fully edited afterwards (AUT-675): "Edit build" on My Builds lets you rename the project, change the caption, and reorder/add/remove photos, and it shows what the build shares (photos, specs, mods, odometer, notes) so you can edit that after the fact too. Photos keep their new order in the feed; dropped photos go back to your uploads. Backed by `POST/PATCH /social/posts` now accepting `title`, ordered `photo_ids` and `share_scope`, plus a new `social_photos.position` column.
 
 ## [0.3.65] - 2026-08-14
 
