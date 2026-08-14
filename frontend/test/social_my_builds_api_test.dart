@@ -48,4 +48,42 @@ void main() {
     expect(api.lastBody, {'caption': 'edited'});
     expect(updated.caption, 'edited');
   });
+
+  test('updatePost sends full edit payload (AUT-675)', () async {
+    final api = _FakeApi()
+      ..response = {
+        'id': 'b1',
+        'title': 'Renamed',
+        'photo_ids': ['p2', 'p1'],
+        'share_scope': {'allow_odometer': true}
+      };
+    final social = SocialApi(api);
+    final updated = await social.updatePost(
+      'b1',
+      title: 'Renamed',
+      caption: 'done',
+      photoIds: ['p2', 'p1'],
+      allowOdometer: true,
+    );
+    expect(api.lastBody, {
+      'title': 'Renamed',
+      'caption': 'done',
+      'photo_ids': ['p2', 'p1'],
+      'share_scope': {'allow_odometer': true},
+    });
+    expect(updated.photoIds, ['p2', 'p1']);
+    expect(updated.shareScope['allow_odometer'], isTrue);
+  });
+
+  test('updatePost omits null fields', () async {
+    final api = _FakeApi()..response = {'id': 'b1'};
+    await SocialApi(api).updatePost('b1', title: null);
+    expect(api.lastBody, isEmpty);
+  });
+
+  test('updatePost sends empty caption to clear it', () async {
+    final api = _FakeApi()..response = {'id': 'b1'};
+    await SocialApi(api).updatePost('b1', caption: '');
+    expect(api.lastBody, {'caption': ''});
+  });
 }

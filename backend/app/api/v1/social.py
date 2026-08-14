@@ -62,9 +62,10 @@ class ShareScopeIn(BaseModel):
 
 class PostCreate(BaseModel):
     vehicle_id: str = Field(min_length=1, max_length=36)
+    title: str | None = Field(default=None, max_length=200)
     caption: str | None = Field(default=None, max_length=1000)
     share_scope: ShareScopeIn = ShareScopeIn()
-    photo_ids: list[str] = Field(default_factory=list, max_length=12)
+    photo_ids: list[str] = Field(default_factory=list, max_length=15)
 
 
 class CommentIn(BaseModel):
@@ -72,7 +73,14 @@ class CommentIn(BaseModel):
 
 
 class PostUpdate(BaseModel):
+    """Full build edit (AUT-675): title, caption, photo order/swap and scope.
+
+    `None` means "leave unchanged"; pass empty strings/lists to clear.
+    """
+    title: str | None = Field(default=None, max_length=200)
     caption: str | None = Field(default=None, max_length=1000)
+    photo_ids: list[str] | None = Field(default=None, max_length=12)
+    share_scope: ShareScopeIn | None = None
 
 
 async def _like_count(db: AsyncSession, build_id: str) -> int:
@@ -90,17 +98,26 @@ async def _comment_count(db: AsyncSession, build_id: str) -> int:
 async def _serialize(db: AsyncSession, build: SocialBuild, viewer: User | None) -> dict:
     snapshot = loads(build.snapshot_json)
     photo_keys = list(snapshot.get("photo_keys", []))
+    photo_ids: list[str] = []
+    scope = await db.scalar(
+        select(SocialShareScope).where(SocialShareScope.build_id == build.id)
+    )
+    share_scope = {
+        "allow_photos": scope.allow_photos if scope else True,
+        "allow_specs": scope.allow_specs if scope else True,
+        "allow_mods": scope.allow_mods if scope else True,
+        "allow_odometer": scope.allow_odometer if scope else False,
+        "allow_notes": scope.allow_notes if scope else False,
+    }
     if build.origin in ("local", "demo") and build.vehicle_id:
         vehicle = await db.get(Vehicle, build.vehicle_id)
         if vehicle:
-            scope = await db.scalar(
-                select(SocialShareScope).where(SocialShareScope.build_id == build.id)
-            )
             photos = list(await db.scalars(
-                select(SocialPhoto).where(SocialPhoto.build_id == build.id).order_by(SocialPhoto.created_at)
+                select(SocialPhoto).where(SocialPhoto.build_id == build.id).order_by(SocialPhoto.position, SocialPhoto.created_at)
             ))
             snapshot = await build_snapshot(db, vehicle, scope, [p.file_key for p in photos])
             photo_keys = list(snapshot.get("photo_keys", []))
+            photo_ids = [p.id for p in photos]
     photos: list[str] = []
     for key in photo_keys:
         try:
@@ -115,6 +132,7 @@ async def _serialize(db: AsyncSession, build: SocialBuild, viewer: User | None) 
             )
         )
     ) is not None
+    is_author = viewer is not None and build.author_user_id is not None and viewer.id == build.author_user_id
     return {
         "id": build.id,
         "title": build.title,
@@ -124,6 +142,8 @@ async def _serialize(db: AsyncSession, build: SocialBuild, viewer: User | None) 
         "origin": build.origin,
         "snapshot": snapshot,
         "photos": photos,
+        "photo_ids": photo_ids if is_author else [],
+        "share_scope": share_scope,
         "like_count": await _like_count(db, build.id),
         "liked_by_me": liked,
         "comment_count": await _comment_count(db, build.id),
@@ -321,7 +341,7 @@ async def create_post(
         author_user_id=user.id,
         author_display_name=user.display_name,
         server_name=cfg.server_name,
-        title=snapshot["title"],
+        title=payload.title.strip() if payload.title and payload.title.strip() else snapshot["title"],
         caption=payload.caption,
         origin="local",
         snapshot_json=dumps(snapshot),
@@ -361,13 +381,71 @@ async def update_post(
     user: User = Depends(require_premium_write),
     _rl: None = Depends(social_rate_limit(10)),
 ) -> dict:
-    """Edit a build's caption. Ownership check matches delete: 404 for
-    non-owners so posts cannot be probed (PW-8)."""
+    """Edit a build (AUT-675): name/title, caption, photo reorder/upload/remove
+    and share scope. Ownership check matches delete: 404 for non-owners so
+    posts cannot be probed (PW-8)."""
     build = await _get_published(db, post_id)
     if build.author_user_id != user.id:
         raise HTTPException(status_code=404, detail="Post not found")
-    build.caption = payload.caption
+    if build.origin == "remote":
+        raise HTTPException(
+            status_code=400, detail="Remote builds can only be edited on their origin server"
+        )
+    fields = payload.model_fields_set
+    if "title" in fields:
+        build.title = payload.title.strip() if payload.title and payload.title.strip() else build.title
+    if "caption" in fields and payload.caption is not None:
+        build.caption = payload.caption or None
+    scope = await db.scalar(
+        select(SocialShareScope).where(SocialShareScope.build_id == build.id)
+    )
+    if "share_scope" in fields and payload.share_scope is not None:
+        if scope is None:
+            scope = SocialShareScope(
+                build_id=build.id, **payload.share_scope.model_dump())
+            db.add(scope)
+        else:
+            for key, value in payload.share_scope.model_dump().items():
+                setattr(scope, key, value)
+    if "photo_ids" in fields and payload.photo_ids is not None:
+        if len(payload.photo_ids) > 12 or len(set(payload.photo_ids)) != len(payload.photo_ids):
+            raise HTTPException(status_code=400, detail="Invalid photo list")
+        photos = list(await db.scalars(
+            select(SocialPhoto).where(
+                SocialPhoto.id.in_(payload.photo_ids),
+                SocialPhoto.uploader_user_id == user.id,
+                or_(SocialPhoto.build_id.is_(None), SocialPhoto.build_id == build.id),
+            )
+        ))
+        by_id = {p.id: p for p in photos}
+        if len(by_id) != len(payload.photo_ids):
+            raise HTTPException(
+                status_code=400, detail="Some photos could not be used")
+        keep = set(payload.photo_ids)
+        current = list(await db.scalars(
+            select(SocialPhoto).where(SocialPhoto.build_id == build.id)))
+        for photo in current:
+            if photo.id not in keep:
+                photo.build_id = None  # back to the user's unassigned pool
+        for position, photo_id in enumerate(payload.photo_ids):
+            photo = by_id[photo_id]
+            photo.build_id = build.id
+            photo.position = position
+    snapshot = None
+    photo_keys = []
+    if build.vehicle_id:
+        vehicle = await db.get(Vehicle, build.vehicle_id)
+        if vehicle:
+            photos = list(await db.scalars(
+                select(SocialPhoto).where(SocialPhoto.build_id == build.id).order_by(SocialPhoto.position, SocialPhoto.created_at)
+            ))
+            snapshot = await build_snapshot(db, vehicle, scope, [p.file_key for p in photos])
+            build.snapshot_json = dumps(snapshot)
+            photo_keys = [p.file_key for p in photos]
+    cfg = await get_server_config(db)
     await db.commit()
+    if build.origin == "local" and cfg.federation_enabled and cfg.hub_status == "registered":
+        await _push_outbox_safe(cfg, build, snapshot, photo_keys)
     return await _serialize(db, build, user)
 
 
@@ -539,7 +617,7 @@ def _reject_oversized_content_length(request: Request) -> None:
     """
     declared = request.headers.get("content-length")
     if declared is not None and declared.isdigit() and int(declared) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="File too large (max 5MB)")
+        raise HTTPException(status_code=413, detail="File too large (max 15MB)")
 
 
 @router.post("/uploads", status_code=201)

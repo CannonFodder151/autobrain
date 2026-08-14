@@ -68,6 +68,8 @@ class SocialPhoto(Base):
     file_key: Mapped[str] = mapped_column(String(255))
     width: Mapped[int | None] = mapped_column(Integer)
     height: Mapped[int | None] = mapped_column(Integer)
+    # Display order within the build (AUT-675 reorder).
+    position: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
