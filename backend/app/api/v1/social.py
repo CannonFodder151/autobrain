@@ -343,6 +343,7 @@ async def create_post(
                 SocialPhoto.id.in_(payload.photo_ids),
                 SocialPhoto.uploader_user_id == user.id,
                 SocialPhoto.build_id.is_(None),
+                SocialPhoto.issue_id.is_(None),
             )
         ))
         photo_keys = [p.file_key for p in photos]
@@ -426,6 +427,7 @@ async def update_post(
             select(SocialPhoto).where(
                 SocialPhoto.id.in_(payload.photo_ids),
                 SocialPhoto.uploader_user_id == user.id,
+                SocialPhoto.issue_id.is_(None),
                 or_(SocialPhoto.build_id.is_(None), SocialPhoto.build_id == build.id),
             )
         ))
