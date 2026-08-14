@@ -176,6 +176,8 @@ class SocialIssuePost {
     this.origin,
     this.resolvedCommentId,
     this.snapshot = const SocialSnapshot(),
+    this.photos = const [],
+    this.photoIds = const [],
     this.createdAt,
     this.comments = const [],
   });
@@ -192,6 +194,8 @@ class SocialIssuePost {
   final SocialSnapshot snapshot;
   final int commentCount;
   final bool isMine;
+  final List<String> photos;
+  final List<String> photoIds;
   final DateTime? createdAt;
   final List<SocialIssueComment> comments;
 
@@ -217,6 +221,8 @@ class SocialIssuePost {
             }),
       commentCount: json['comment_count'] as int? ?? 0,
       isMine: json['is_mine'] == true,
+      photos: ((json['photos'] as List?) ?? const []).cast<String>(),
+      photoIds: ((json['photo_ids'] as List?) ?? const []).cast<String>(),
       createdAt:
           DateTime.tryParse(json['created_at'] as String? ?? '')?.toLocal(),
       comments: ((json['comments'] as List?) ?? const [])
@@ -245,6 +251,8 @@ class SocialIssuePost {
         snapshot: snapshot,
         commentCount: commentCount ?? this.commentCount,
         isMine: isMine,
+        photos: photos,
+        photoIds: photoIds,
         createdAt: createdAt,
         comments: comments ?? this.comments,
       );

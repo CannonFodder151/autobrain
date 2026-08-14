@@ -21,6 +21,7 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -52,7 +53,7 @@ async def db_env():
 
 
 @pytest_asyncio.fixture
-async def env(db_env):
+async def env(db_env, monkeypatch):
     maker, _ = db_env
     app = FastAPI()
     app.include_router(issues_api.router)
@@ -65,6 +66,11 @@ async def env(db_env):
     app.dependency_overrides[deps.require_premium] = lambda: STUB_USER
     app.dependency_overrides[deps.require_premium_write] = lambda: STUB_USER
     app.dependency_overrides[social_api.require_social_feature] = lambda: None
+
+    async def _fake_signed_url(key: str) -> str:
+        return f"https://cdn.test/{key}"
+
+    monkeypatch.setattr(issues_api, "signed_url", _fake_signed_url)
     _window._hits.clear()
     _user_window._hits.clear()
 
@@ -105,6 +111,112 @@ async def _new_comment(maker, post_id, body="Try a new battery", author_user_id=
         s.add(c)
         await s.commit()
         return c.id
+
+
+@pytest.mark.asyncio
+async def test_create_with_photos_attaches_and_serializes():
+    """AUT-709: create with up to 4 pre-uploaded photos attaches them to the
+    post (photos are public URLs; photo_ids only to the author, F1).
+
+    Runs on a self-contained loop/engine: the shared pytest-asyncio session
+    loop closes the httpx client between requests in this multi-request flow
+    (AUT-709 QA note 1), so the flow runs in its own asyncio.run() and is
+    deterministic on any machine. signed_url is stubbed (no MinIO needed)."""
+
+    async def _flow():
+        engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool)
+        maker = async_sessionmaker(engine, expire_on_commit=False)
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        async with maker() as s:
+            s.add(sm.SocialServerConfig(
+                id=1, feature_enabled=True, federation_enabled=False, server_name="Server A",
+            ))
+            for i in range(3):
+                s.add(sm.SocialPhoto(
+                    id=f"ph{i}", uploader_user_id="u1", file_key=f"social/u1/p{i}.webp",
+                    width=640, height=480, position=i,
+                ))
+            await s.commit()
+        app = FastAPI()
+        app.include_router(issues_api.router)
+
+        async def _override_get_db():
+            async with maker() as session:
+                yield session
+
+        async def _fake_signed_url(key: str) -> str:
+            return f"https://cdn.test/{key}"
+
+        app.dependency_overrides[get_db] = _override_get_db
+        app.dependency_overrides[deps.require_premium] = lambda: STUB_USER
+        app.dependency_overrides[deps.require_premium_write] = lambda: STUB_USER
+        app.dependency_overrides[social_api.require_social_feature] = lambda: None
+        issues_api.signed_url = _fake_signed_url
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            r = await c.post("/social/issues", json={
+                "title": "Rattling noise with photo",
+                "body": "Happens when cold.",
+                "photo_ids": ["ph0", "ph1", "ph2"],
+            })
+            assert r.status_code == 201, r.text
+            data = r.json()
+            assert data["photo_ids"] == ["ph0", "ph1", "ph2"]
+            assert data["photos"] == [
+                "https://cdn.test/social/u1/p0.webp",
+                "https://cdn.test/social/u1/p1.webp",
+                "https://cdn.test/social/u1/p2.webp",
+            ]
+            post_id = data["id"]
+
+            detail = (await c.get(f"/social/issues/{post_id}")).json()
+            assert len(detail["photos"]) == 3
+            assert detail["photo_ids"] == ["ph0", "ph1", "ph2"]
+
+            # browse list also carries photos
+            items = (await c.get("/social/issues")).json()["items"]
+            mine = next(i for i in items if i["id"] == post_id)
+            assert mine["photos"] == detail["photos"]
+
+            # delete cascades the photo links
+            r = await c.request("DELETE", f"/social/issues/{post_id}")
+            assert r.status_code == 204
+
+        async with maker() as s:
+            remaining = (await s.scalar(
+                select(sm.SocialPhoto).where(sm.SocialPhoto.issue_id == post_id)
+            ))
+        assert remaining is None
+        await engine.dispose()
+
+    await _flow()
+
+
+@pytest.mark.asyncio
+async def test_create_rejects_unknown_or_foreign_photos(env):
+    """AUT-709: photos must belong to the uploader and be unclaimed; unknown
+    or already-attached ids reject the whole create (422)."""
+    app, maker = env
+    async with maker() as s:
+        s.add(sm.SocialPhoto(id="mine", uploader_user_id="u1", file_key="k1"))
+        s.add(sm.SocialPhoto(id="someone-elses", uploader_user_id="u2", file_key="k2"))
+        await s.commit()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.post("/social/issues", json={
+            "title": "Bad photos", "body": "Body", "photo_ids": ["nope", "mine"],
+        })
+        assert r.status_code == 422
+        r = await c.post("/social/issues", json={
+            "title": "Bad photos 2", "body": "Body", "photo_ids": ["someone-elses"],
+        })
+        assert r.status_code == 422
+        # 5 photos rejected by pydantic
+        r = await c.post("/social/issues", json={
+            "title": "Too many", "body": "Body",
+            "photo_ids": ["a", "b", "c", "d", "e"],
+        })
+        assert r.status_code == 422
 
 
 @pytest.mark.asyncio

@@ -58,12 +58,14 @@ class SocialBuild(Base):
 
 
 class SocialPhoto(Base):
-    """A build photo (webp in MinIO). build_id is null for pre-post uploads."""
+    """A social photo (webp in MinIO). build_id/issue_id are null for pre-post
+    uploads; exactly one is set once attached to a build or an issue post."""
 
     __tablename__ = "social_photos"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     build_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("social_builds.id"), index=True)
+    issue_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("social_issue_posts.id"), index=True)
     uploader_user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"))
     file_key: Mapped[str] = mapped_column(String(255))
     width: Mapped[int | None] = mapped_column(Integer)

@@ -295,6 +295,10 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
         ],
         const SizedBox(height: 12),
         Text(post.body, style: const TextStyle(fontSize: 15, height: 1.45)),
+        if (post.photos.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          _photoGallery(post.photos),
+        ],
         if (post.tags.isNotEmpty) ...[
           const SizedBox(height: 14),
           Wrap(
@@ -339,6 +343,21 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
           for (final c in post.comments) _commentTile(post, c, auth),
         const SizedBox(height: 24),
       ],
+    );
+  }
+
+  Widget _photoGallery(List<String> photos) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: AspectRatio(
+        aspectRatio: 4 / 3,
+        child: PageView.builder(
+          itemCount: photos.length,
+          itemBuilder: (_, i) => Image.network(photos[i],
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+        ),
+      ),
     );
   }
 
