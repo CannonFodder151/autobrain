@@ -67,7 +67,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.67] - 2026-08-14
 
 ### Added
 - Community Garage photos per build raised from 6 to 15 (AUT-674): the compose picker (web + mobile) accepts up to 15 photos and the backend `POST /social/posts` validation caps `photo_ids` at 15 (was 12). Regression test asserts 15 IDs pass and 16 are rejected.
