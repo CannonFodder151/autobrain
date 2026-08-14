@@ -25,6 +25,7 @@ class SocialComposeScreen extends StatefulWidget {
 class _SocialComposeScreenState extends State<SocialComposeScreen> {
   List<Vehicle> _vehicles = const [];
   Vehicle? _vehicle;
+  final _title = TextEditingController();
   final _caption = TextEditingController();
   final _scope = ShareScopeState();
   final List<({String name, String mime, Uint8List bytes})> _picked = [];
@@ -39,6 +40,7 @@ class _SocialComposeScreenState extends State<SocialComposeScreen> {
 
   @override
   void dispose() {
+    _title.dispose();
     _caption.dispose();
     super.dispose();
   }
@@ -95,6 +97,7 @@ class _SocialComposeScreenState extends State<SocialComposeScreen> {
       }
       await api.createPost(
         vehicleId: _vehicle!.id,
+        title: _title.text.trim().isEmpty ? null : _title.text.trim(),
         caption: _caption.text.trim().isEmpty ? null : _caption.text.trim(),
         photoIds: photoIds,
         allowPhotos: _scope.allowPhotos,
@@ -150,6 +153,16 @@ class _SocialComposeScreenState extends State<SocialComposeScreen> {
                   children: [
                     _vehiclePicker(),
                     const SizedBox(height: 16),
+                    TextField(
+                      controller: _title,
+                      maxLength: 200,
+                      decoration: const InputDecoration(
+                        labelText: 'Project name (optional)',
+                        hintText: 'e.g. Project Sky',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     TextField(
                       controller: _caption,
                       maxLines: 3,
