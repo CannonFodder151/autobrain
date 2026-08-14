@@ -219,11 +219,13 @@ class SocialApi {
     required String title,
     required String body,
     String? vehicleId,
+    List<String> photoIds = const [],
   }) async {
     final data = await _api.post('/social/issues', {
       'title': title,
       'body': body,
       if (vehicleId != null) 'vehicle_id': vehicleId,
+      if (photoIds.isNotEmpty) 'photo_ids': photoIds,
     }) as Map<String, dynamic>;
     return SocialIssuePost.fromJson(data);
   }

@@ -30,8 +30,10 @@ from app.social.models import (
     SocialIssueComment,
     SocialIssueFlag,
     SocialIssuePost,
+    SocialPhoto,
     get_server_config,
 )
+from app.social.media import signed_url
 from app.social.rate_limit import social_rate_limit, social_user_rate_limit
 from app.social.snapshot import dumps, loads
 from app.social.tags import TAG_VOCABULARY, detect_tags
@@ -49,6 +51,7 @@ MAX_TITLE = 150
 MAX_BODY = 4000
 MAX_COMMENT = 2000
 MAX_REASON = 200
+MAX_PHOTOS = 4
 _LIST_LIMIT_MAX = 50
 
 
@@ -56,6 +59,7 @@ class IssueCreate(BaseModel):
     title: str = Field(min_length=1, max_length=MAX_TITLE)
     body: str = Field(min_length=1, max_length=MAX_BODY)
     vehicle_id: str | None = Field(default=None, max_length=36)
+    photo_ids: list[str] = Field(default_factory=list, max_length=MAX_PHOTOS)
 
 
 class IssueUpdate(BaseModel):
@@ -102,6 +106,21 @@ async def _comment_count(db: AsyncSession, post_id: str) -> int:
     )) or 0
 
 
+async def _photo_urls(db: AsyncSession, post_id: str) -> list[str]:
+    rows = list(await db.scalars(
+        select(SocialPhoto)
+        .where(SocialPhoto.issue_id == post_id)
+        .order_by(SocialPhoto.position, SocialPhoto.created_at)
+    ))
+    urls: list[str] = []
+    for p in rows:
+        try:
+            urls.append(await signed_url(p.file_key))
+        except Exception:
+            continue
+    return urls
+
+
 async def _serialize(db: AsyncSession, post: SocialIssuePost, viewer: User) -> dict:
     return {
         "id": post.id,
@@ -115,6 +134,11 @@ async def _serialize(db: AsyncSession, post: SocialIssuePost, viewer: User) -> d
         "resolved_comment_id": post.resolved_comment_id,
         "vehicle_snapshot": loads(post.vehicle_snapshot_json),
         "comment_count": await _comment_count(db, post.id),
+        "photos": await _photo_urls(db, post.id),
+        # F1 pattern: photo ids only to the author, never leaked to viewers.
+        "photo_ids": list(await db.scalars(
+            select(SocialPhoto.id).where(SocialPhoto.issue_id == post.id)
+        )) if viewer.id == post.author_user_id else [],
         "is_mine": viewer.id == post.author_user_id,
         "created_at": post.created_at.isoformat(),
         "updated_at": post.updated_at.isoformat(),
@@ -240,6 +264,23 @@ async def create_issue(
         status="open",
     )
     db.add(post)
+    await db.flush()
+    if payload.photo_ids:
+        photos = list(await db.scalars(
+            select(SocialPhoto).where(
+                SocialPhoto.id.in_(set(payload.photo_ids)),
+                SocialPhoto.uploader_user_id == user.id,
+                SocialPhoto.build_id.is_(None),
+                SocialPhoto.issue_id.is_(None),
+            )
+        ))
+        if len({p.id for p in photos}) != len(set(payload.photo_ids)):
+            raise HTTPException(
+                status_code=422,
+                detail="One or more photos are invalid (wrong owner or already attached)",
+            )
+        for photo in photos:
+            photo.issue_id = post.id
     await db.commit()
     from app.workers.tasks import queue_embedding
 
@@ -428,5 +469,9 @@ async def delete_issue(
 
     await db.execute(delete(SocialIssueComment).where(SocialIssueComment.post_id == post.id))
     await db.execute(delete(SocialIssueFlag).where(SocialIssueFlag.post_id == post.id))
+    for photo in list(await db.scalars(
+        select(SocialPhoto).where(SocialPhoto.issue_id == post.id)
+    )):
+        await db.delete(photo)
     await db.delete(post)
     await db.commit()

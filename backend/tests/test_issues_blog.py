@@ -21,6 +21,7 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -105,6 +106,79 @@ async def _new_comment(maker, post_id, body="Try a new battery", author_user_id=
         s.add(c)
         await s.commit()
         return c.id
+
+
+@pytest.mark.asyncio
+async def test_create_with_photos_attaches_and_serializes(env):
+    """AUT-709: create with up to 4 pre-uploaded photos attaches them to the
+    post (photos are public URLs; photo_ids only to the author, F1)."""
+    app, maker = env
+    async with maker() as s:
+        photos = []
+        for i in range(3):
+            p = sm.SocialPhoto(
+                id=f"ph{i}", uploader_user_id="u1", file_key=f"social/u1/p{i}.webp",
+                width=640, height=480, position=i,
+            )
+            s.add(p)
+            photos.append(p)
+        await s.commit()
+        photo_ids = [p.id for p in photos]
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.post("/social/issues", json={
+            "title": "Rattling noise with photo",
+            "body": "Happens when cold.",
+            "photo_ids": photo_ids,
+        })
+    assert r.status_code == 201, r.text
+    data = r.json()
+    assert data["photo_ids"] == photo_ids
+    assert len(data["photos"]) == 3
+    post_id = data["id"]
+
+    detail = (await c.get(f"/social/issues/{post_id}")).json()
+    assert len(detail["photos"]) == 3
+    assert detail["photo_ids"] == photo_ids
+
+    # browse list also carries photos
+    items = (await c.get("/social/issues")).json()["items"]
+    mine = next(i for i in items if i["id"] == post_id)
+    assert mine["photos"] == detail["photos"]
+
+    # delete cascades the photo links
+    r = await c.request("DELETE", f"/social/issues/{post_id}")
+    assert r.status_code == 204
+    async with maker() as s:
+        remaining = (await s.scalar(
+            select(sm.SocialPhoto).where(sm.SocialPhoto.issue_id == post_id)
+        ))
+    assert remaining is None
+
+
+@pytest.mark.asyncio
+async def test_create_rejects_unknown_or_foreign_photos(env):
+    """AUT-709: photos must belong to the uploader and be unclaimed; unknown
+    or already-attached ids reject the whole create (422)."""
+    app, maker = env
+    async with maker() as s:
+        s.add(sm.SocialPhoto(id="mine", uploader_user_id="u1", file_key="k1"))
+        s.add(sm.SocialPhoto(id="someone-elses", uploader_user_id="u2", file_key="k2"))
+        await s.commit()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.post("/social/issues", json={
+            "title": "Bad photos", "body": "Body", "photo_ids": ["nope", "mine"],
+        })
+        assert r.status_code == 422
+        r = await c.post("/social/issues", json={
+            "title": "Bad photos 2", "body": "Body", "photo_ids": ["someone-elses"],
+        })
+        assert r.status_code == 422
+        # 5 photos rejected by pydantic
+        r = await c.post("/social/issues", json={
+            "title": "Too many", "body": "Body",
+            "photo_ids": ["a", "b", "c", "d", "e"],
+        })
+        assert r.status_code == 422
 
 
 @pytest.mark.asyncio
