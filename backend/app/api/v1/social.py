@@ -550,8 +550,8 @@ async def upload(
     user: User = Depends(require_premium_write),
     _rl: None = Depends(social_rate_limit(10)),
 ) -> dict:
-    data = await read_upload(file)
     try:
+        data = await read_upload(file)
         key, url, width, height = await upload_photo(user.id, data, file.content_type)
     except MediaError as exc:
         raise HTTPException(status_code=415, detail=str(exc))
