@@ -59,7 +59,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.58] - 2026-08-14
 
 ### Fixed
 - Worker log calls no longer crash with `TypeError` on structlog-style `key=` kwargs (AUT-603): `tasks.py` used stdlib `logging.getLogger` but passed kwarg events, so `scheduled_backup` stored its snapshot then failed on the success log line. Switched to the codebase structlog `get_logger`.
