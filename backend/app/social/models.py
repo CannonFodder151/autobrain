@@ -1,7 +1,7 @@
 """Social + federation-hub models (AUT-294 rev 7, AUT-332)."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     Boolean,
@@ -18,6 +18,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.config import settings
 from app.db.session import Base
+from app.db.types import StringArray
 
 
 def _uuid() -> str:
@@ -109,6 +110,74 @@ class SocialShareScope(Base):
     allow_mods: Mapped[bool] = mapped_column(Boolean, default=True)
     allow_odometer: Mapped[bool] = mapped_column(Boolean, default=False)
     allow_notes: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class SocialIssuePost(Base):
+    """A blog-style help request (AUT-627). Community-visible: every premium
+    user across the federation can read/answer, regardless of vehicle ownership.
+    No AI in the authoring path — tags are deterministic, bodies are plaintext."""
+
+    __tablename__ = "social_issue_posts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    author_user_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id"), index=True)
+    author_display_name: Mapped[str] = mapped_column(String(120))
+    server_name: Mapped[str | None] = mapped_column(String(120))
+    title: Mapped[str] = mapped_column(String(150))
+    body: Mapped[str] = mapped_column(Text)
+    # Deterministic snapshot of the author's vehicle at post time (make/model/year).
+    vehicle_snapshot_json: Mapped[str | None] = mapped_column(Text)
+    # Fixed-vocabulary tags (deterministic match — never AI).
+    tags: Mapped[list[str]] = mapped_column(StringArray(), default=list)
+    # open | answered | resolved
+    status: Mapped[str] = mapped_column(String(20), default="open", index=True)
+    resolved_comment_id: Mapped[str | None] = mapped_column(String(36), index=True)
+    # local | remote | demo
+    origin: Mapped[str] = mapped_column(String(10), default="local", index=True)
+    remote_post_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    remote_server_id: Mapped[str | None] = mapped_column(String(64))
+    # Admin moderation flag: hidden posts are excluded from browse + search.
+    status_hidden: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    # Client-side microsecond-faithful default so keyset cursors compare exactly
+    # on every dialect (sqlite's func.now() is second-precision text).
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class SocialIssueComment(Base):
+    """A help comment on an issue post. is_answer pins the resolved answer."""
+
+    __tablename__ = "social_issue_comments"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    post_id: Mapped[str] = mapped_column(String(36), ForeignKey("social_issue_posts.id"), index=True)
+    # Null for comments applied from federated events (no local user).
+    author_user_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id"))
+    author_display_name: Mapped[str] = mapped_column(String(120))
+    server_name: Mapped[str | None] = mapped_column(String(120))
+    body: Mapped[str] = mapped_column(Text)
+    is_answer: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SocialIssueFlag(Base):
+    """A user report on an issue post (moderation queue)."""
+
+    __tablename__ = "social_issue_flags"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    post_id: Mapped[str] = mapped_column(String(36), ForeignKey("social_issue_posts.id"), index=True)
+    flagged_by_user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"))
+    reason: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("post_id", "flagged_by_user_id", name="uq_social_issue_flag"),
+    )
 
 
 class SocialServerConfig(Base):

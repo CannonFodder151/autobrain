@@ -64,6 +64,15 @@ def _to_text(entity_type: str, data: dict) -> str:
                     parts.append(item.get("kind", ""))
         return " ".join(p for p in parts if p)
 
+    if entity_type == "issue":
+        tags = data.get("tags") or []
+        parts = [
+            data.get("title", ""),
+            data.get("body", ""),
+            " ".join(str(t) for t in tags) if isinstance(tags, list) else str(tags),
+        ]
+        return " ".join(p for p in parts if p)
+
     return ""
 
 

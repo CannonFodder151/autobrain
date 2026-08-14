@@ -67,6 +67,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- Community Garage Issues Blog backend (AUT-627, AUT-643): `social_issue_posts` / `social_issue_comments` / `social_issue_flags` tables + Alembic migration, blog routes under `/api/v1/social/issues` (browse with tag/status/q filters and cursor pagination, create/edit/comment/mark-answer/flag/delete), admin moderation (`/api/v1/admin/issues/flagged`, hide/restore), deterministic fixed-vocabulary auto-tags, and global search integration for `issue` (community-visible, hidden posts excluded). Premium-gated, rate-limited, plaintext-only; no AI in authoring/answers/moderation.
+
 ## [0.3.64] - 2026-08-14
 
 ### Fixed

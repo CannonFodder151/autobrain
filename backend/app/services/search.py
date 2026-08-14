@@ -9,10 +9,13 @@ from app.models.mod import Modification
 from app.models.receipt import Receipt
 from app.models.service import ServiceRecord
 from app.services.vector_search import generate_embedding
+from app.social.models import SocialIssuePost
 
 logger = get_logger(__name__)
 
 # Entity tables with their searchable columns and vector column mapping.
+# `community: True` marks entities that are visible to every user (NOT scoped
+# to the requesting user's vehicles) and whose rows have a status_hidden flag.
 _ENTITY_MAP = {
     "diagnostic": {
         "model": Diagnostic,
@@ -33,6 +36,12 @@ _ENTITY_MAP = {
         "model": Receipt,
         "columns": ["vendor", "original_name"],
         "vector_col": "embedding",
+    },
+    "issue": {
+        "model": SocialIssuePost,
+        "columns": ["title", "body"],
+        "vector_col": "embedding",
+        "community": True,
     },
 }
 
@@ -61,7 +70,7 @@ async def semantic_search(
     cosine similarity). Falls back to keyword-only if embeddings are
     unavailable.
     """
-    types = entity_types or list(_ENTITY_MAP.keys())
+    types = list(entity_types) if entity_types is not None else list(_ENTITY_MAP.keys())
     results: list[dict] = []
 
     # Try vector search first (needs embedding for the query text).
@@ -72,8 +81,11 @@ async def semantic_search(
         model = cfg["model"]
 
         base_filters = []
-        if vehicle_ids is not None:
+        if vehicle_ids is not None and not cfg.get("community"):
             base_filters.append(model.vehicle_id.in_(vehicle_ids))
+        if cfg.get("community"):
+            # Hidden/modded posts must never surface in search.
+            base_filters.append(model.status_hidden.is_(False))
 
         # Keyword search (ILIKE on text columns) — always runs. Columns are
         # OR-ed (match any column); vehicle scope stays AND-ed. `%`/`_` in the
@@ -147,7 +159,7 @@ def _serialise(etype: str, row, *, score: float, method: str) -> dict:
         "type": etype,
         "score": round(score, 3),
         "method": method,
-        "vehicle_id": row.vehicle_id,
+        "vehicle_id": getattr(row, "vehicle_id", None),
         "created_at": row.created_at.isoformat() if row.created_at else None,
     }
 
@@ -175,6 +187,14 @@ def _serialise(etype: str, row, *, score: float, method: str) -> dict:
             "vendor": row.vendor,
             "original_name": row.original_name,
             "total": row.total,
+        })
+    elif etype == "issue":
+        data.update({
+            "title": row.title,
+            "body": row.body,
+            "tags": list(row.tags or []),
+            "status": row.status,
+            "author_display_name": row.author_display_name,
         })
 
     return data
@@ -240,5 +260,11 @@ def _row_to_dict(row, entity_type: str) -> dict:
             "vendor": row.vendor,
             "original_name": row.original_name,
             "extracted": row.extracted,
+        }
+    if entity_type == "issue":
+        return {
+            "title": row.title,
+            "body": row.body,
+            "tags": list(row.tags or []),
         }
     return {}
