@@ -51,6 +51,7 @@ class User(Base):
     iap_purchase_token: Mapped[str | None] = mapped_column(Text)  # Play token / iOS signedTransaction JWS
     iap_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     iap_status: Mapped[str | None] = mapped_column(String(16))
+    iap_refreshed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # last store re-validation
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

@@ -25,7 +25,8 @@ import json
 import logging
 import time
 import urllib.parse
-from datetime import datetime, timezone
+from collections import defaultdict, deque
+from datetime import datetime, timedelta, timezone
 
 import httpx
 from jose import jwk as jose_jwk
@@ -77,6 +78,19 @@ class VerificationError(Exception):
     """A store verification failed or the transaction is invalid."""
 
 
+class SubscriptionNotActive(VerificationError):
+    """The store definitively says the subscription is no longer active.
+
+    `status` is the entitlement state to settle to ("revoked" for a store-side
+    cancellation, "expired" for a lapsed period). Subclasses VerificationError so
+    a first-time verify still rejects; refresh_entitlement uses it to demote.
+    """
+
+    def __init__(self, status: str, *args: object) -> None:
+        super().__init__(*args)
+        self.status = status
+
+
 def _b64decode(data: str) -> bytes:
     """Decode base64/base64url with padding tolerance."""
     data = data.replace("-", "+").replace("_", "/")
@@ -116,6 +130,32 @@ def catalog() -> dict:
             {"product_id": product_id, "platform": "ios", "plan": plan, "billing": billing_interval}
         )
     return {"enabled": enabled(), "products": products}
+
+
+# Verify-endpoint rate limit (F4): in-process sliding window per user so a
+# logged-in client cannot spam store verification calls (each hit = external
+# store API round-trips).
+IAP_VERIFY_WINDOW_SECONDS = 60
+IAP_VERIFY_LIMIT_PER_WINDOW = 10
+_verify_hits: dict[str, deque[float]] = defaultdict(deque)
+
+
+def check_verify_rate_limit(user_id: str) -> None:
+    """Raise HTTPException 429 when the user exceeds the verify window."""
+    from fastapi import HTTPException
+
+    now = time.monotonic()
+    q = _verify_hits[user_id]
+    while q and now - q[0] > IAP_VERIFY_WINDOW_SECONDS:
+        q.popleft()
+    if len(q) >= IAP_VERIFY_LIMIT_PER_WINDOW:
+        retry_after = max(1, int(IAP_VERIFY_WINDOW_SECONDS - (now - q[0])) + 1)
+        raise HTTPException(
+            status_code=429,
+            detail="Too many purchase verifications. Try again shortly.",
+            headers={"Retry-After": str(retry_after)},
+        )
+    q.append(now)
 
 
 # --- Google Play --------------------------------------------------------------
@@ -171,11 +211,13 @@ async def _google_subscription(
         raise VerificationError("Google Play verification failed")
     data = resp.json()
     state = data.get("purchaseState")
-    if state is not None and state != _GOOGLE_ACTIVE_STATE:
-        raise VerificationError("Purchase is not active on Google Play")
     expiry_ms = data.get("expiryTimeMillis")
+    if state is not None and state != _GOOGLE_ACTIVE_STATE:
+        # 0 active, 1 cancelled, 2 pending. A definitive non-active state means
+        # the entitlement is gone; the caller settles "revoked" vs "expired".
+        raise SubscriptionNotActive("revoked" if state == 1 else "expired")
     if expiry_ms is not None and int(expiry_ms) <= int(time.time() * 1000):
-        raise VerificationError("Subscription has expired on Google Play")
+        raise SubscriptionNotActive("expired")
     return data
 
 
@@ -235,7 +277,10 @@ async def _apple_subscription(
         raise VerificationError("App Store verification failed")
     for group in resp.json().get("data", []):
         for last in group.get("lastTransactions", []):
-            info = _decode_signed_transaction(last.get("signedTransactionInfo", ""))
+            signed = last.get("signedTransactionInfo") or ""
+            if not signed:
+                continue
+            info = _decode_signed_transaction(signed)
             if info.get("originalTransactionId") == original_transaction_id:
                 return info.get("expiresDate"), last.get("status")
     return None, None
@@ -254,9 +299,11 @@ def _chain_verified(certs, trusted_root) -> bool:
                 return False
         for i in range(len(certs) - 1):
             certs[i].verify_directly_issued_by(certs[i + 1])
-        last = certs[-1]
-        if last.subject != trusted_root.subject:
-            last.verify_directly_issued_by(trusted_root)
+        # The terminal cert must be signed by the trusted root's own key —
+        # never short-circuit on the subject string. A self-signed root, a root
+        # that really is the final cert, and an intermediate signed by the root
+        # all pass; a forged "root" that merely copies the subject fails (F1).
+        certs[-1].verify_directly_issued_by(trusted_root)
     except ValueError:
         return False
     return True
@@ -291,6 +338,27 @@ async def verify_google_push_auth(auth_header: str) -> None:
         await _verify_google_push_auth(client, auth_header)
 
 
+# Google OIDC token issuers for Pub/Sub push authentication (F6).
+_GOOGLE_ISSUERS = frozenset({"https://accounts.google.com", "accounts.google.com"})
+_JWKS_CACHE: dict = {"fetched_at": 0.0, "keys": []}
+
+
+async def _google_jwks(client: httpx.AsyncClient, kid: str):
+    """JWKS for Google's signing keys, cached ~24h and refetched on unknown kid."""
+    cache = _JWKS_CACHE
+    keys = cache["keys"]
+    if time.time() - cache["fetched_at"] > 86400 or not any(k.get("kid") == kid for k in keys):
+        resp = await client.get(GOOGLE_JWKS_URL)
+        if resp.status_code != 200:
+            raise VerificationError("Google JWKS unavailable")
+        cache["keys"] = resp.json().get("keys", [])
+        cache["fetched_at"] = time.time()
+    for key in cache["keys"]:
+        if key.get("kid") == kid:
+            return jose_jwk.construct(key, algorithm="RS256")
+    return None
+
+
 async def _verify_google_push_auth(client: httpx.AsyncClient, auth_header: str) -> None:
     """Verify the Pub/Sub push OIDC bearer token against Google's JWKS.
 
@@ -312,23 +380,35 @@ async def _verify_google_push_auth(client: httpx.AsyncClient, auth_header: str) 
     )
     if unverified.get("aud") != expected_aud:
         raise VerificationError("Google Pub/Sub token audience mismatch")
+    if unverified.get("iss") not in _GOOGLE_ISSUERS:
+        raise VerificationError("Google Pub/Sub token issuer mismatch")
+    exp = unverified.get("exp")
+    if isinstance(exp, int) and exp < int(time.time()):
+        raise VerificationError("Google Pub/Sub token has expired")
     kid = jose_jwt.get_unverified_header(token).get("kid")
-    resp = await client.get(GOOGLE_JWKS_URL)
-    if resp.status_code != 200:
-        raise VerificationError("Google JWKS unavailable")
-    for key in resp.json().get("keys", []):
-        if key.get("kid") != kid:
-            continue
-        signing_key = jose_jwk.construct(key, algorithm="RS256")
-        try:
-            jose_jwt.decode(token, signing_key, algorithms=["RS256"], audience=expected_aud)
-        except JWTError:
-            raise VerificationError("Google Pub/Sub token signature is invalid")
-        return
-    raise VerificationError("Google Pub/Sub signing key not found")
+    signing_key = await _google_jwks(client, kid)
+    if signing_key is None:
+        raise VerificationError("Google Pub/Sub signing key not found")
+    try:
+        jose_jwt.decode(token, signing_key, algorithms=["RS256"], audience=expected_aud)
+    except JWTError:
+        raise VerificationError("Google Pub/Sub token signature is invalid")
 
 
 # --- Top-level verify + refresh -----------------------------------------------
+
+
+async def _purchase_owner(db, platform: str, transaction_id: str, original_txn, purchase_token: str):
+    """User currently holding this purchase, or None."""
+    if platform == "android":
+        return await db.scalar(select(User).where(User.iap_purchase_token == purchase_token))
+    if original_txn:
+        return await db.scalar(
+            select(User).where(
+                (User.iap_transaction_id == transaction_id) | (User.iap_original_transaction_id == original_txn)
+            )
+        )
+    return await db.scalar(select(User).where(User.iap_transaction_id == transaction_id))
 
 
 async def verify_and_grant(
@@ -346,6 +426,11 @@ async def verify_and_grant(
                 raise VerificationError("Google Play IAP is not configured")
             token = await _google_access_token(client)
             data = await _google_subscription(client, token, product_id, purchase_token)
+            # Cross-check the store-returned product/package, mirroring iOS (F5).
+            if data.get("productId") and data.get("productId") != product_id:
+                raise VerificationError("Product mismatch")
+            if data.get("packageName") and data.get("packageName") != settings.IAP_GOOGLE_PACKAGE_NAME:
+                raise VerificationError("Package mismatch")
             original_txn = None
             expires_at = _expires_at_from_ms(_google_expiry_ms(data))
         elif platform == "ios":
@@ -357,6 +442,13 @@ async def verify_and_grant(
             _validate_apple_info(info, product_id, transaction_id)
         else:
             raise VerificationError("Unsupported platform")
+
+    # Replay protection (F2): one store purchase must not be granted to a
+    # second account. Same-user re-verification (retry after a partial failure)
+    # is allowed; ownership of the purchase elsewhere is rejected.
+    owner = await _purchase_owner(db, platform, transaction_id, original_txn, purchase_token)
+    if owner is not None and owner.id != user.id:
+        raise VerificationError("This purchase is already linked to another account")
 
     if billing.plan_for_iap_product(product_id) is None:
         raise VerificationError("Unknown product id")
@@ -413,12 +505,25 @@ def should_refresh(user: User) -> bool:
 async def refresh_entitlement(db, user: User, force: bool = False) -> None:
     """Re-validate a stored purchase against the store API and update the
     entitlement. Transient store failures leave the cached state untouched
-    (never demote on a network error)."""
+    (never demote on a network error); a definitive non-active state settles
+    the entitlement to expired/revoked (F3). A per-user cooldown bounds how
+    often a lapsed user can trigger store calls from /auth/me (F4)."""
     if not user.iap_product_id or not user.iap_purchase_token:
         return
     if not force and not should_refresh(user):
         return
-    timeout = httpx.Timeout(15.0)
+    cooldown = timedelta(minutes=settings.IAP_REFRESH_COOLDOWN_MINUTES)
+    last = user.iap_refreshed_at
+    if last is not None:
+        if last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
+        if not force and datetime.now(timezone.utc) - last < cooldown:
+            return
+    # Record the attempt up-front so a failing store call still cools the
+    # account down instead of re-hitting the store on every /auth/me.
+    user.iap_refreshed_at = datetime.now(timezone.utc)
+    await db.commit()
+    timeout = httpx.Timeout(10.0)
     async with httpx.AsyncClient(timeout=timeout) as client:
         try:
             if user.iap_platform == "android":
@@ -442,6 +547,10 @@ async def refresh_entitlement(db, user: User, force: bool = False) -> None:
                 expires_at = _expires_at_from_ms(expires_ms)
             else:
                 return
+        except SubscriptionNotActive as exc:
+            billing.clear_iap(user, exc.status)
+            await db.commit()
+            return
         except (VerificationError, httpx.HTTPError):
             logger.warning("iap_refresh_failed", extra={"user": user.id, "platform": user.iap_platform})
             return
@@ -477,6 +586,9 @@ async def handle_apple_webhook(db, signed_payload: str) -> dict:
         raise VerificationError(f"Invalid App Store notification: {exc}")
     txn_info = None
     data = payload.get("data") or {}
+    bundle_id = data.get("bundleId")
+    if bundle_id and bundle_id != settings.IAP_APPLE_BUNDLE_ID:
+        raise VerificationError("Notification bundle id mismatch")
     if data.get("signedTransactionInfo"):
         txn_info = _decode_signed_transaction(data["signedTransactionInfo"])
     original_txn = (txn_info or {}).get("originalTransactionId")

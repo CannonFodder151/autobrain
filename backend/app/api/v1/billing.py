@@ -131,6 +131,7 @@ async def iap_verify(
     """Verify a store transaction against Apple/Google and grant the plan."""
     if not iap.enabled():
         raise HTTPException(status_code=503, detail=_IAP_NOT_CONFIGURED)
+    iap.check_verify_rate_limit(user.id)
     try:
         return await iap.verify_and_grant(
             db,

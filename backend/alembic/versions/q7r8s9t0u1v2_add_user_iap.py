@@ -21,14 +21,40 @@ def upgrade() -> None:
     op.add_column("users", sa.Column("iap_purchase_token", sa.Text(), nullable=True))
     op.add_column("users", sa.Column("iap_expires_at", sa.DateTime(timezone=True), nullable=True))
     op.add_column("users", sa.Column("iap_status", sa.String(length=16), nullable=True))
+    op.add_column("users", sa.Column("iap_refreshed_at", sa.DateTime(timezone=True), nullable=True))
     op.create_index("ix_users_iap_platform", "users", ["iap_platform"])
-    op.create_index("ix_users_iap_transaction_id", "users", ["iap_transaction_id"])
-    op.create_index("ix_users_iap_original_transaction_id", "users", ["iap_original_transaction_id"])
+    # Replay protection (F2): one store purchase grants at most one account.
+    # Partial unique indexes (multiple NULLs allowed). Also serve the webhook
+    # purchase-token / original-transaction lookups that were previously seq
+    # scans (F7).
+    op.create_index(
+        "uq_users_iap_transaction_id",
+        "users",
+        ["iap_transaction_id"],
+        unique=True,
+        postgresql_where=sa.text("iap_transaction_id IS NOT NULL"),
+    )
+    op.create_index(
+        "uq_users_iap_original_transaction_id",
+        "users",
+        ["iap_original_transaction_id"],
+        unique=True,
+        postgresql_where=sa.text("iap_original_transaction_id IS NOT NULL"),
+    )
+    op.create_index(
+        "uq_users_iap_purchase_token",
+        "users",
+        ["iap_purchase_token"],
+        unique=True,
+        postgresql_where=sa.text("iap_purchase_token IS NOT NULL"),
+    )
 
 def downgrade() -> None:
-    op.drop_index("ix_users_iap_original_transaction_id", table_name="users")
-    op.drop_index("ix_users_iap_transaction_id", table_name="users")
+    op.drop_index("uq_users_iap_purchase_token", table_name="users")
+    op.drop_index("uq_users_iap_original_transaction_id", table_name="users")
+    op.drop_index("uq_users_iap_transaction_id", table_name="users")
     op.drop_index("ix_users_iap_platform", table_name="users")
+    op.drop_column("users", "iap_refreshed_at")
     op.drop_column("users", "iap_status")
     op.drop_column("users", "iap_expires_at")
     op.drop_column("users", "iap_purchase_token")

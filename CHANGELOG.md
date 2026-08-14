@@ -82,6 +82,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Added
 - Backend store-native IAP (AUT-617): Apple App Store / Google Play receipt verification for the mobile store builds — `GET /billing/iap/catalog`, `POST /billing/iap/verify`, and `POST /billing/iap/webhook/{apple,google}`. Purchases are recorded server-side and durable; active store entitlements grant the same plans as Stripe (`plan_for_user` + `GET /auth/me` now surface `iap_status`). Renewals/refunds propagate via verify-on-refresh on `/auth/me` plus the store webhooks once the store teams configure them.
 
+### Security
+- Backend IAP hardening (AUT-622 review on AUT-617): App Store webhook certificate-chain verification now validates the terminal cert against Apple's root by key, not subject string (forged-root spoof closed); Play purchases are replay-protected (one store purchase grants at most one account, enforced by unique DB constraints + ownership check); Google subscriptions settle to `expired`/`revoked` on definitive non-active state; per-user verify/refresh cooldown + rate limit bound external store calls; Google Pub/Sub push JWKS cached with issuer/expiry checks.
+
 ## [0.3.57] - 2026-08-13
 
 ### Fixed

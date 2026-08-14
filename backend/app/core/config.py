@@ -183,6 +183,9 @@ class Settings(BaseSettings):
     # propagating without webhooks; bounds external store calls to ~1/billing
     # period per user.
     IAP_REFRESH_WINDOW_DAYS: int = 2
+    # Minimum minutes between store re-validations per user (AUT-617 F4). A
+    # lapsed entitlement otherwise re-hits the store APIs on every /auth/me.
+    IAP_REFRESH_COOLDOWN_MINUTES: int = 5
     # Google Play RTDN webhook (Pub/Sub push) OIDC token audience. Empty =
     # derive from APP_BASE_URL + the webhook path.
     IAP_GOOGLE_PUBSUB_AUDIENCE: str = ""

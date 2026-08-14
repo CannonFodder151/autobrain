@@ -22,7 +22,7 @@ class IapVerifyRequest(BaseModel):
 
     platform: str = Field(pattern="^(android|ios)$")
     product_id: str = Field(min_length=1)
-    transaction_id: str = Field(min_length=1)
+    transaction_id: str = Field(min_length=0)  # mobile sends purchaseID ?? '' (AUT-617 QA F2)
     purchase_token: str = ""
     purchase_time_ms: int | None = None
 

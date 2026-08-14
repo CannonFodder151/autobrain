@@ -66,6 +66,7 @@ def clean_iap_config(monkeypatch):
     monkeypatch.setattr(settings, "IAP_APPLE_PRIVATE_KEY", "")
     monkeypatch.setattr(settings, "IAP_APPLE_BUNDLE_ID", "com.autobrainservice.app")
     monkeypatch.setattr(settings, "IAP_REFRESH_WINDOW_DAYS", 2)
+    monkeypatch.setattr(settings, "IAP_REFRESH_COOLDOWN_MINUTES", 5)
     return None
 
 
@@ -279,6 +280,50 @@ async def test_verify_unknown_product(google_cfg, monkeypatch) -> None:
         await iap.verify_and_grant(_FakeDB(), _user(), "android", "com.nope", "txn-1", "tok-1")
 
 
+@pytest.mark.asyncio
+async def test_verify_android_package_mismatch(google_cfg, monkeypatch) -> None:
+    async def _token(client):
+        return "access-1"
+
+    async def _sub(client, token, product_id, purchase_token):
+        return {
+            "productId": PRODUCT_MONTHLY,
+            "packageName": "com.attacker.app",
+            "purchaseState": 0,
+            "expiryTimeMillis": str(_expires_ms()),
+        }
+
+    monkeypatch.setattr(iap, "_google_access_token", _token)
+    monkeypatch.setattr(iap, "_google_subscription", _sub)
+
+    with pytest.raises(iap.VerificationError):
+        await iap.verify_and_grant(_FakeDB(), _user(), "android", PRODUCT_MONTHLY, "txn-1", "tok-1")
+
+
+@pytest.mark.asyncio
+async def test_verify_and_grant_rejects_replay_to_other_account(google_cfg, monkeypatch) -> None:
+    """F2: the same store purchase must not be granted to a second account."""
+    async def _token(client):
+        return "access-1"
+
+    async def _sub(client, token, product_id, purchase_token):
+        return {
+            "productId": PRODUCT_MONTHLY,
+            "packageName": "com.autobrainservice.app",
+            "purchaseState": 0,
+            "expiryTimeMillis": str(_expires_ms()),
+        }
+
+    monkeypatch.setattr(iap, "_google_access_token", _token)
+    monkeypatch.setattr(iap, "_google_subscription", _sub)
+
+    other = _user()
+    other.iap_purchase_token = "tok-99"
+    db = _FakeDB(scalar_result=other)
+    with pytest.raises(iap.VerificationError):
+        await iap.verify_and_grant(db, _user(), "android", PRODUCT_MONTHLY, "txn-9", "tok-99")
+
+
 # --- apple verification -------------------------------------------------------
 
 
@@ -375,6 +420,26 @@ async def test_refresh_google_expired_demotes(google_cfg, monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_refresh_google_cancelled_demotes_to_revoked(google_cfg, monkeypatch) -> None:
+    """F3: Google purchaseState=1 (cancelled) settles the entitlement to revoked."""
+    async def _token(client):
+        return "access-1"
+
+    async def _sub(client, token, product_id, purchase_token):
+        raise iap.SubscriptionNotActive("revoked", "Purchase is not active on Google Play")
+
+    monkeypatch.setattr(iap, "_google_access_token", _token)
+    monkeypatch.setattr(iap, "_google_subscription", _sub)
+
+    u = _user()
+    svc.apply_iap(u, PRODUCT_GARAGE, "android", "t1", "tok-1", _expires_at(days=30))
+    assert svc.iap_status(u) == "active"
+    await iap.refresh_entitlement(_FakeDB(), u, force=True)
+    assert svc.iap_status(u) == "revoked"
+    assert svc.plan_for_user(u) == "free"
+
+
+@pytest.mark.asyncio
 async def test_refresh_transient_failure_keeps_state(google_cfg, monkeypatch) -> None:
     async def _token(client):
         raise iap.VerificationError("boom")
@@ -388,7 +453,29 @@ async def test_refresh_transient_failure_keeps_state(google_cfg, monkeypatch) ->
 
 
 @pytest.mark.asyncio
-async def test_refresh_skipped_while_comfortably_active(google_cfg, monkeypatch) -> None:
+async def test_refresh_cooldown_skips_repeat_store_attempt(google_cfg, monkeypatch) -> None:
+    """F4: a failing refresh stamps iap_refreshed_at so a lapsed user cannot
+    re-hit the store on every /auth/me."""
+    calls = []
+
+    async def _token(client):
+        calls.append(1)
+        return "access-1"
+
+    async def _sub(client, token, product_id, purchase_token):
+        raise iap.VerificationError("transient")
+
+    monkeypatch.setattr(iap, "_google_access_token", _token)
+    monkeypatch.setattr(iap, "_google_subscription", _sub)
+
+    u = _user()
+    svc.apply_iap(u, PRODUCT_MONTHLY, "android", "t1", "tok-1", _expires_at(days=-1))
+    await iap.refresh_entitlement(_FakeDB(), u)
+    assert len(calls) == 1
+    assert svc.iap_status(u) == "expired"
+    await iap.refresh_entitlement(_FakeDB(), u)
+    assert len(calls) == 1  # cooldown — no second attempt
+    assert u.iap_refreshed_at is not None
     called = []
 
     async def _token(client):
@@ -563,3 +650,128 @@ async def test_google_webhook_pubsub_envelope(google_cfg, monkeypatch) -> None:
     result = await iap.handle_google_webhook(db, envelope)
     assert result == {"received": True}
     assert refreshed == [u.id]
+
+
+# --- security regressions (AUT-622 F1/F6) -------------------------------------
+
+
+def test_apple_webhook_rejects_forged_root_with_copied_subject() -> None:
+    """F1 regression: a forged chain whose terminal cert copies Apple's subject
+    but is signed by an attacker key must be rejected against the REAL
+    APPLE_ROOT_CA_G3 constant (deliberately not monkeypatched)."""
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.x509.oid import NameOID
+    from jose import jwt as jose_jwt
+
+    now = datetime.datetime.now(datetime.timezone.utc)
+    subject = x509.Name(
+        [x509.NameAttribute(NameOID.COMMON_NAME, "Apple Root CA - G3")]
+    )
+
+    def _mk(name, signing_key=None, self_signed=False):
+        key = ec.generate_private_key(ec.SECP256R1())
+        signing = signing_key if signing_key else key
+        cert = (
+            x509.CertificateBuilder()
+            .subject_name(name)
+            .issuer_name(name)
+            .public_key(key.public_key())
+            .serial_number(2)
+            .not_valid_before(now - datetime.timedelta(days=1))
+            .not_valid_after(now + datetime.timedelta(days=365))
+            .sign(signing, hashes.SHA256())
+        )
+        return key, cert
+
+    fake_root_key, fake_root_cert = _mk(subject)  # copied subject, attacker key
+    leaf_key, leaf_cert = _mk(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "attacker-leaf")]))
+    # Fake root signs the leaf so the chain links, as a real forgery would.
+    signed_leaf = (
+        x509.CertificateBuilder()
+        .subject_name(leaf_cert.subject)
+        .issuer_name(fake_root_cert.subject)
+        .public_key(leaf_key.public_key())
+        .serial_number(3)
+        .not_valid_before(now - datetime.timedelta(days=1))
+        .not_valid_after(now + datetime.timedelta(days=365))
+        .sign(fake_root_key, hashes.SHA256())
+    )
+    x5c = [
+        base64.b64encode(signed_leaf.public_bytes(serialization.Encoding.DER)).decode(),
+        base64.b64encode(fake_root_cert.public_bytes(serialization.Encoding.DER)).decode(),
+    ]
+    signed = jose_jwt.encode(
+        {"notificationType": "EXPIRED", "data": {}},
+        leaf_key,
+        algorithm="ES256",
+        headers={"alg": "ES256", "x5c": x5c},
+    )
+
+    certs = [x509.load_der_x509_certificate(base64.b64decode(c)) for c in x5c]
+    root = x509.load_pem_x509_certificate(iap.APPLE_ROOT_CA_G3.encode())
+    assert iap._chain_verified(certs, root) is False
+    with pytest.raises(iap.VerificationError):
+        iap._verify_apple_signed_payload(signed)
+
+
+def test_google_push_auth_rejects_wrong_issuer(monkeypatch) -> None:
+    from jose import jwt as jose_jwt
+
+    monkeypatch.setattr(settings, "IAP_GOOGLE_PUBSUB_AUDIENCE", "https://autobrain.app/webhook/google")
+    token = jose_jwt.encode(
+        {
+            "aud": "https://autobrain.app/webhook/google",
+            "iss": "https://evil.example.com",
+            "iat": int(time.time()),
+        },
+        "not-a-key",
+        algorithm="HS256",
+    )
+    with pytest.raises(iap.VerificationError):
+        anyio_run(iap.verify_google_push_auth, f"Bearer {token}")
+
+
+def test_google_push_auth_rejects_expired_token(monkeypatch) -> None:
+    from jose import jwt as jose_jwt
+
+    monkeypatch.setattr(settings, "IAP_GOOGLE_PUBSUB_AUDIENCE", "https://autobrain.app/webhook/google")
+    token = jose_jwt.encode(
+        {
+            "aud": "https://autobrain.app/webhook/google",
+            "iss": "https://accounts.google.com",
+            "iat": int(time.time()) - 100,
+            "exp": int(time.time()) - 50,
+        },
+        "not-a-key",
+        algorithm="HS256",
+    )
+    with pytest.raises(iap.VerificationError):
+        anyio_run(iap.verify_google_push_auth, f"Bearer {token}")
+
+
+@pytest.mark.asyncio
+async def test_google_jwks_serves_from_cache() -> None:
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    def _b64u(n: int) -> str:
+        raw = n.to_bytes((n.bit_length() + 7) // 8, "big")
+        return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    pub = key.public_key().public_numbers()
+    iap._JWKS_CACHE["fetched_at"] = time.time()
+    iap._JWKS_CACHE["keys"] = [{"kty": "RSA", "kid": "k1", "n": _b64u(pub.n), "e": _b64u(pub.e)}]
+
+    class _NoFetchClient:
+        async def get(self, url):
+            raise AssertionError("JWKS cache miss — refetched when cached")
+
+    assert await iap._google_jwks(_NoFetchClient(), "k1") is not None
+
+
+def anyio_run(fn, *args):
+    import anyio
+
+    return anyio.run(fn, *args)
