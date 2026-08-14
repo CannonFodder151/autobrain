@@ -64,7 +64,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.64] - 2026-08-14
 
 ### Fixed
 - Social upload bounded-read overflow (AUT-660): `read_upload` now runs inside the `MediaError` handler, so a >5MB chunked/misdeclared `Content-Length` body returns `415` as documented instead of an unhandled `500`.
