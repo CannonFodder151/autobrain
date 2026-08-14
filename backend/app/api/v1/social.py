@@ -64,7 +64,7 @@ class PostCreate(BaseModel):
     vehicle_id: str = Field(min_length=1, max_length=36)
     caption: str | None = Field(default=None, max_length=1000)
     share_scope: ShareScopeIn = ShareScopeIn()
-    photo_ids: list[str] = Field(default_factory=list, max_length=12)
+    photo_ids: list[str] = Field(default_factory=list, max_length=15)
 
 
 class CommentIn(BaseModel):
@@ -539,7 +539,7 @@ def _reject_oversized_content_length(request: Request) -> None:
     """
     declared = request.headers.get("content-length")
     if declared is not None and declared.isdigit() and int(declared) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="File too large (max 5MB)")
+        raise HTTPException(status_code=413, detail="File too large (max 15MB)")
 
 
 @router.post("/uploads", status_code=201)

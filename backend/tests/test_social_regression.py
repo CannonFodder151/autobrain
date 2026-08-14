@@ -173,12 +173,12 @@ def _png_bytes(width: int, height: int, color=(10, 20, 30)) -> bytes:
     return buf.getvalue()
 
 
-def test_upload_bytes_cap_is_5mb():
+def test_upload_bytes_cap_is_15mb():
     import asyncio
 
     with pytest.raises(media_mod.MediaError) as exc:
-        asyncio.run(media_mod.upload_photo("u1", b"x" * (5 * 1024 * 1024 + 1), "image/png"))
-    assert "5MB" in str(exc.value)
+        asyncio.run(media_mod.upload_photo("u1", b"x" * (15 * 1024 * 1024 + 1), "image/png"))
+    assert "15MB" in str(exc.value)
 
 
 def test_upload_downscales_over_2048px():
@@ -218,7 +218,7 @@ async def test_upload_413_on_oversized_content_length(env, monkeypatch):
         raise AssertionError("read_upload must never run for a 413")
 
     monkeypatch.setattr(social_api, "read_upload", _must_not_run)
-    big = b"x" * (5 * 1024 * 1024 + 1)
+    big = b"x" * (15 * 1024 * 1024 + 1)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         r = await c.post("/social/uploads", files={"file": ("big.png", big, "image/png")})
     assert r.status_code == 413
@@ -239,7 +239,7 @@ async def test_upload_bounded_read_aborts_past_cap():
             return b"x" * n
 
     f = _StreamingUpload(media_mod.MAX_UPLOAD_BYTES + 10)
-    with pytest.raises(media_mod.MediaError, match="5MB"):
+    with pytest.raises(media_mod.MediaError, match="15MB"):
         await media_mod.read_upload(f)
     assert f._served <= media_mod.MAX_UPLOAD_BYTES + media_mod.UPLOAD_READ_CHUNK
 
@@ -250,13 +250,80 @@ async def test_upload_415_on_oversize_abort(env, monkeypatch):
     app, _ = env
 
     async def _abort(file):
-        raise media_mod.MediaError("File too large (max 5MB)")
+        raise media_mod.MediaError("File too large (max 15MB)")
 
     monkeypatch.setattr(social_api, "read_upload", _abort)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         r = await c.post("/social/uploads", files={"file": ("small.png", b"x", "image/png")})
     assert r.status_code == 415
-    assert "5MB" in r.text
+    assert "15MB" in r.text
+
+
+# ── AUT-674: real phone photos (>5MB) upload fine; 15-photo cap ─────────────
+def _noisy_jpeg_bytes(width: int, height: int, quality: int) -> bytes:
+    """A large, incompressible photo-like image (noise) for size-gate tests."""
+    import io
+    import os
+
+    img = Image.frombytes("RGB", (width, height), os.urandom(width * height * 3))
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=quality)
+    return buf.getvalue()
+
+
+@pytest.mark.asyncio
+async def test_upload_accepts_photo_over_5mb(env, monkeypatch):
+    """Real phone photos routinely exceed 5MB (esp. web + iOS multi-pick, which
+    cannot pre-downscale). The 15MB input gate lets the backend's existing
+    downscale+webp path handle them — regression for AUT-674."""
+    app, maker = env
+    if media_mod.MAX_UPLOAD_BYTES <= 5 * 1024 * 1024:
+        pytest.skip("cap not raised; nothing to verify")
+
+    async def _fake_upload(key, data, ct):
+        return "http://fake/autobrain-assets/" + key
+
+    async def _fake_presigned(key):
+        return "http://fake/autobrain-assets/" + key
+
+    async def _noop(*a, **k):
+        return None
+
+    monkeypatch.setattr(media_mod, "upload_object", _fake_upload)
+    monkeypatch.setattr(media_mod, "presigned_url", _fake_presigned)
+    monkeypatch.setattr(media_mod, "ensure_bucket", _noop)
+
+    # noise JPEG ~ >5MB but under the 15MB cap
+    big = _noisy_jpeg_bytes(3000, 3000, 95)
+    assert len(big) > 5 * 1024 * 1024, f"fixture too small: {len(big)}"
+    assert len(big) < media_mod.MAX_UPLOAD_BYTES, f"fixture too big: {len(big)}"
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.post("/social/uploads", files={"file": ("phone.jpg", big, "image/jpeg")})
+    assert r.status_code == 201, r.text
+    assert "id" in r.json()
+
+
+@pytest.mark.asyncio
+async def test_post_accepts_15_photo_ids_rejects_16(env):
+    """Pydantic cap on photo_ids is 15 (was 12 / UI 6) — AUT-674."""
+    app, maker = env
+    from app.models.vehicle import Vehicle
+
+    async with maker() as s:
+        s.add(Vehicle(id="v-photos", user_id="u1", nickname="Beast"))
+        await s.commit()
+    ids = [f"ph-{i}" for i in range(15)]
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.post("/social/posts", json={
+            "vehicle_id": "v-photos", "photo_ids": ids,
+        })
+        # cap allows 15; nonexistent photos just produce an empty photo set
+        assert r.status_code == 201, r.text
+        r16 = await c.post("/social/posts", json={
+            "vehicle_id": "v-photos", "photo_ids": ids + ["ph-15"],
+        })
+        assert r16.status_code == 422
 
 
 # ── CA-4: federation nonce ──────────────────────────────────────────────────

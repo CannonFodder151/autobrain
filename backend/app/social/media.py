@@ -11,7 +11,10 @@ from PIL import Image, UnidentifiedImageError
 
 from app.core.storage import ensure_bucket, presigned_url, upload_object
 
-MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+# Input gate matches the 15MB caps used by receipts/fuel/logbook photo
+# uploads. The stored object is still downscaled to 2048px + webp here, so a
+# bigger input costs no extra storage/bandwidth on disk.
+MAX_UPLOAD_BYTES = 15 * 1024 * 1024
 UPLOAD_READ_CHUNK = 64 * 1024
 MAX_IMAGE_DIMENSION = 2048
 # Raster formats Pillow can decode; everything lands in MinIO as webp.
@@ -73,14 +76,14 @@ async def read_upload(file) -> bytes:
             return b"".join(chunks)
         buffered += len(chunk)
         if buffered > MAX_UPLOAD_BYTES:
-            raise MediaError("File too large (max 5MB)")
+            raise MediaError("File too large (max 15MB)")
         chunks.append(chunk)
 
 
 async def upload_photo(user_id: str, data: bytes, content_type: str | None = None) -> tuple[str, str, int, int]:
     """Compress to webp, store in MinIO, return (key, signed_url, width, height)."""
     if len(data) > MAX_UPLOAD_BYTES:
-        raise MediaError("File too large (max 5MB)")
+        raise MediaError("File too large (max 15MB)")
     webp = await asyncio.to_thread(compress_to_webp, data, content_type)
     width, height = await asyncio.to_thread(_webp_dimensions, webp)
     key = photo_key(user_id)
