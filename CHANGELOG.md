@@ -63,6 +63,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- Docs: Issues Blog section for the Community Garage help forum (models, API routes, search integration, moderation) in `docs/community-garage.md`, `docs/api-spec.md`, and `docs/database-schema.md` (AUT-627/AUT-648). Feature is planned — not yet shipped (gated on QA + security).
+
 ## [0.3.60] - 2026-08-14
 
 ### Fixed

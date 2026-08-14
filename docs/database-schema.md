@@ -115,3 +115,32 @@ ATO logbook trips for non-club-reg vehicles only (rule [PR-1](product-rules.md#p
 id, vehicle_id (FK), code, description, source (obd/manual), is_resolved, created_at.
 
 Fault codes captured from a Bluetooth OBD2 adapter; pushed into the diagnostic AI tool.
+
+## Community Garage — Issues Blog (AUT-627, planned)
+
+> **Status: PLANNED — not in the database yet.** Tables land with the P1 migration (AUT-643) in `backend/app/social/`. Pending that, `alembic` has no revisions for them and no model maps them.
+
+```
+social_issue_posts
+  id, author_user_id, author_display_name, server_name
+  title (<=150), body (<=4000, plaintext)
+  vehicle_snapshot_json   # deterministic snapshot from vehicle at post time (make/model/year/mileage bucket)
+  tags (string[] of fixed vocabulary)
+  status: open|answered|resolved (default open)
+  resolved_comment_id (nullable, set on resolution)
+  origin: local|remote|demo
+  remote_post_id, remote_server_id   # federation identity (mirrors SocialBuild)
+  status_hidden: bool                # admin moderation flag
+  created_at, updated_at
+  embedding vector(1536)             # title + body + tags
+
+social_issue_comments
+  id, post_id (FK social_issue_posts), author_user_id, author_display_name, server_name
+  body (<=2000, plaintext), is_answer (bool, one per post)
+  created_at
+
+social_issue_flags
+  id, post_id (FK social_issue_posts), flagged_by_user_id, reason (<=200), created_at
+```
+
+Deterministic auto-tags from a fixed vocabulary (`engine`, `brakes`, `electrical`, `interior`, `suspension`, `transmission`) + vehicle data; optional AI refinement is a fallback only. Vector embedding on `social_issue_posts` feeds the existing pgvector hybrid search path (keyword-only fallback when embeddings are unavailable).
