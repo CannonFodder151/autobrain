@@ -10,15 +10,9 @@ from collections import defaultdict, deque
 from fastapi import Depends, HTTPException, Request
 
 from app.api.deps import require_premium_write
+from app.services.auth import client_ip
 
 WINDOW_SECONDS = 60
-
-
-def client_ip(request: Request) -> str:
-    fwd = request.headers.get("x-forwarded-for")
-    if fwd:
-        return fwd.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
 
 
 class _SlidingWindow:

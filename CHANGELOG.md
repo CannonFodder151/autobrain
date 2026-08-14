@@ -74,6 +74,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed
 - Issues Blog: editing your own post via PATCH `/api/v1/social/issues/{id}` no longer returns HTTP 500 (AUT-665). `updated_at` (`onupdate=func.now()`) was expired after commit and the async lazy load raised `MissingGreenlet`; `update_issue` now `refresh`es the post before serializing. Added a PATCH success-path regression test.
 
+### Security
+- Issues Blog rate limiting no longer trusts client-supplied `X-Forwarded-For` (AUT-670, F1): `client_ip()` keys on the proxy-set `X-Real-IP` / socket peer only, the nginx edge overwrites `X-Forwarded-For` with `$remote_addr`, and create/comment/answer now carry per-user caps (`social_user_rate_limit`) mirroring flags — so rotating the header can no longer reset the per-IP window. Regression suite `tests/test_pt1_xff_bypass.py`.
+- Issues Blog answer pinning restricted to the post author (AUT-670, F2): a commenter can no longer pin their own comment and force the post to `resolved`; non-authors get 404 (PW-8 no-probing pattern). Author pinning still resolves the post.
+- Issues Blog `cursor` pagination param capped at 512 chars (AUT-670, F3): oversized cursors are rejected with 422 by validation instead of being base64-decoded/parsed (mild parse DoS on attacker input); malformed short cursors still 400.
+
 ## [0.3.64] - 2026-08-14
 
 ### Fixed

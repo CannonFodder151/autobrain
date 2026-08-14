@@ -197,15 +197,17 @@ async def test_comment_and_mark_answer(env):
         r = await c.post(f"/social/issues/{pid}/comments/{cid}/answer")
         assert r.status_code == 404
 
-        r = await c.post(f"/social/issues/{pid}/comments", json={"body": "Swap the battery"})
+        # post author adds a comment and pins it -> resolved
+        pid2 = await _new_issue(maker, author_user_id="u1")
+        r = await c.post(f"/social/issues/{pid2}/comments", json={"body": "Swap the battery"})
         assert r.status_code == 201
         my_cid = r.json()["id"]
 
-        r = await c.post(f"/social/issues/{pid}/comments/{my_cid}/answer")
+        r = await c.post(f"/social/issues/{pid2}/comments/{my_cid}/answer")
         assert r.status_code == 200
         assert r.json()["status"] == "resolved"
 
-        detail = (await c.get(f"/social/issues/{pid}")).json()
+        detail = (await c.get(f"/social/issues/{pid2}")).json()
         assert detail["status"] == "resolved"
         assert detail["resolved_comment_id"] == my_cid
         answers = [cm for cm in detail["comments"] if cm["is_answer"]]

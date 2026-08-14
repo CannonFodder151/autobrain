@@ -153,7 +153,7 @@ def _decode_cursor(cursor: str) -> tuple[datetime, str]:
 @router.get("")
 async def list_issues(
     limit: int = Query(default=20, ge=1, le=_LIST_LIMIT_MAX),
-    cursor: str | None = Query(default=None),
+    cursor: str | None = Query(default=None, max_length=512),
     tag: str | None = Query(default=None, max_length=32),
     status: str | None = Query(default=None, max_length=20),
     q: str | None = Query(default=None, max_length=150),
@@ -215,6 +215,7 @@ async def create_issue(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_premium_write),
     _rl: None = Depends(social_rate_limit(5)),
+    _user_rl: None = Depends(social_user_rate_limit("issues-create", 5)),
 ) -> dict:
     title = _plaintext(payload.title).strip()
     body = _plaintext(payload.body).strip()
@@ -323,6 +324,7 @@ async def add_comment(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_premium_write),
     _rl: None = Depends(social_rate_limit(10)),
+    _user_rl: None = Depends(social_user_rate_limit("issues-comment", 10)),
 ) -> dict:
     post = await _get_visible(db, post_id)
     body = _plaintext(payload.body).strip()
@@ -356,14 +358,15 @@ async def mark_answer(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_premium_write),
     _rl: None = Depends(social_rate_limit(10)),
+    _user_rl: None = Depends(social_user_rate_limit("issues-answer", 10)),
 ) -> dict:
-    """Pin a comment as the answer and resolve the post (author or the comment's
-    own author may mark; others get 404 so posts cannot be probed)."""
+    """Pin a comment as the answer and resolve the post (post author only;
+    everyone else gets 404 so posts cannot be probed)."""
     post = await _get_visible(db, post_id)
     comment = await db.get(SocialIssueComment, comment_id)
     if not comment or comment.post_id != post.id:
         raise HTTPException(status_code=404, detail="Comment not found")
-    if user.id not in (post.author_user_id, comment.author_user_id):
+    if user.id != post.author_user_id:
         raise HTTPException(status_code=404, detail="Comment not found")
     previous = await db.scalar(
         select(SocialIssueComment).where(
