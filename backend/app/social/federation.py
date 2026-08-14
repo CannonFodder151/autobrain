@@ -109,13 +109,31 @@ async def _get(cfg: SocialServerConfig, path: str, params: dict | None = None) -
     return resp.json()
 
 
+async def get_server_status(cfg: SocialServerConfig) -> dict:
+    """Public hub status for this server (AUT-731): lets the client detect when
+    the hub operator has approved a `pending` registration (AUT-525) without
+    re-registering. No auth needed — the hub exposes GET /v1/server/{id}."""
+    if not cfg.hub_server_id:
+        raise FederationUnavailable("server not registered with the hub")
+    url = _hub_url(cfg) + f"/v1/server/{cfg.hub_server_id}"
+    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        try:
+            resp = await client.get(url)
+        except httpx.HTTPError as exc:
+            raise FederationUnavailable(str(exc)) from exc
+    if resp.status_code >= 300:
+        raise FederationUnavailable(f"hub {url} -> {resp.status_code}")
+    return resp.json()
+
+
 async def register(
     cfg: SocialServerConfig,
     server_name: str,
     server_email: str,
     public_key_hex: str,
 ) -> dict:
-    """Register this server with the hub. Returns {server_id, api_key}."""
+    """Register this server with the hub. Returns {server_id, api_key,
+    status, license_status, checkout_url}."""
     path = "/v1/register"
     payload = {
         "server_name": server_name,
