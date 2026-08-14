@@ -59,8 +59,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
-
 ## [Unreleased]
+
+### Fixed
+- Community Garage "My Builds" tab now matches the feed's 12px card spacing (AUT-614): `my_builds_screen.dart` switched from `ListView.builder` to `ListView.separated` with a `SizedBox(height: 12)` separator, mirroring `social_screen.dart`.
 
 ## [0.3.58] - 2026-08-14
 
