@@ -29,6 +29,7 @@ from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
 
 import httpx
+from cryptography.exceptions import InvalidSignature
 from jose import jwk as jose_jwk
 from jose import jws as jose_jws
 from jose import jwt as jose_jwt
@@ -304,7 +305,7 @@ def _chain_verified(certs, trusted_root) -> bool:
         # that really is the final cert, and an intermediate signed by the root
         # all pass; a forged "root" that merely copies the subject fails (F1).
         certs[-1].verify_directly_issued_by(trusted_root)
-    except ValueError:
+    except (ValueError, InvalidSignature):
         return False
     return True
 
@@ -328,7 +329,7 @@ def _verify_apple_signed_payload(signed: str) -> dict:
             raise VerificationError("Notification certificate chain is untrusted")
         payload = jose_jws.verify(signed, certs[0].public_key(), algorithms=["ES256"])
         return json.loads(payload)
-    except (JWTError, jose_exc.JWSError, ValueError, TypeError):
+    except (JWTError, jose_exc.JWSError, ValueError, TypeError, InvalidSignature):
         raise VerificationError("Notification JWS could not be verified")
 
 

@@ -667,7 +667,12 @@ def test_apple_webhook_rejects_forged_root_with_copied_subject() -> None:
 
     now = datetime.datetime.now(datetime.timezone.utc)
     subject = x509.Name(
-        [x509.NameAttribute(NameOID.COMMON_NAME, "Apple Root CA - G3")]
+        [
+            x509.NameAttribute(NameOID.COMMON_NAME, "Apple Root CA - G3"),
+            x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, "Apple Certification Authority"),
+            x509.NameAttribute(NameOID.ORGANIZATION_NAME, "Apple Inc."),
+            x509.NameAttribute(NameOID.COUNTRY_NAME, "US"),
+        ]
     )
 
     def _mk(name, signing_key=None, self_signed=False):
