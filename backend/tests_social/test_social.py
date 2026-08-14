@@ -418,8 +418,10 @@ async def test_edit_build_title_photos_scope(monkeypatch) -> None:
         detail = (await c.get(f"/api/v1/social/posts/{post_id}")).json()
         assert p3["id"] not in detail["photo_ids"]
 
-        # clear caption explicitly
-        cleared = await c.patch(f"/api/v1/social/posts/{post_id}", json={"caption": None})
+        # F3: caption None = unchanged; explicit "" clears
+        keep = await c.patch(f"/api/v1/social/posts/{post_id}", json={"caption": None})
+        assert keep.json()["caption"] == "Paint done"
+        cleared = await c.patch(f"/api/v1/social/posts/{post_id}", json={"caption": ""})
         assert cleared.json()["caption"] is None
 
         # hide photos, then verify non-owner sees no photo_ids (F1)

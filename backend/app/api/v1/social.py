@@ -394,7 +394,7 @@ async def update_post(
     fields = payload.model_fields_set
     if "title" in fields:
         build.title = payload.title.strip() if payload.title and payload.title.strip() else build.title
-    if "caption" in fields:
+    if "caption" in fields and payload.caption is not None:
         build.caption = payload.caption or None
     scope = await db.scalar(
         select(SocialShareScope).where(SocialShareScope.build_id == build.id)
