@@ -65,6 +65,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- `#/license` deep-link race (AUT-629): the Flutter web engine cleared the URL fragment via `history.replaceState` before the logged-in session-restore rebuild, so fresh loads of `/#/license` landed on Home. The fragment is now captured once in `main()` before `runApp` and routing reads the captured value, restoring reliable deep-link navigation to the License screen.
+
 ## [0.3.62] - 2026-08-14
 
 ### Fixed
