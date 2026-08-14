@@ -33,11 +33,23 @@ Two paid tiers plus a free tier. Prices in AUD (AUT-523); source of truth is `sc
 - Admin re-upgrade grants paid benefits without a Stripe subscription; sponsored accounts are blocked from buying a licence.
 - Billing endpoints return **503** until `STRIPE_SECRET_KEY` is set.
 
+## Store-native IAP (mobile store builds)
+
+The store builds of the mobile app sell the same licences through Apple App Store / Google Play (AUT-610/617). Product ids (same on both stores): `com.autobrainservice.app.{enthusiast,garage}.{monthly,yearly}`.
+
+- Catalogue: `GET /billing/iap/catalog` (public) → `{enabled, products}`; `enabled` is false until IAP credentials are set, and the mobile app then falls back to the Stripe browser path.
+- Verify: `POST /billing/iap/verify` (auth) verifies the store transaction server-side and grants the plan; purchases are recorded on the user (`iap_*` fields) and durable across reinstall/re-login.
+- Renewal model: verify-on-refresh — `GET /auth/me` re-validates the stored purchase token against the store API when the entitlement is expired or within `IAP_REFRESH_WINDOW_DAYS` of expiry (no webhooks needed). Webhooks (`POST /billing/iap/webhook/apple|google`) are also accepted and act as refresh triggers when the store teams configure them.
+- Rate limiting: `POST /billing/iap/verify` is rate-limited per user (in-process sliding window, 10 hits/60s). The limiter is process-local — correct for the single-uvicorn hosted deploy (`docker-compose.hosted.yml`), but it is invalidated if the backend ever scales to multiple workers/instances; move the window to a shared store (e.g. Redis) before scaling out (N4).
+- Entitlement: `plan_for_user` and `/auth/me` treat an active IAP entitlement as paid (`subscription_status` + `iap_status` fields). Upgrading replaces the prior store entitlement (no double grant); expiry/revocation demotes back to the free tier (or keeps a still-active Stripe plan).
+
 ## Configuration (env)
 
 `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ENTHUSIAST_MONTHLY/YEARLY`, `STRIPE_PRICE_GARAGE_MONTHLY/YEARLY`, `STRIPE_PROMO_EARLY_ADOPTER`, `STRIPE_PROMO_EARLY_ADOPTER_CODE`, `STRIPE_SALE_ENDS_AT`. Hosted stack sets `LICENSE_ENABLED=true`; demo/default keep it off. Provisioning script: `scripts/stripe-setup.py` (idempotent; run in test mode first, then live).
 
+IAP env (empty = disabled): `IAP_GOOGLE_SERVICE_ACCOUNT_JSON`, `IAP_GOOGLE_PACKAGE_NAME`, `IAP_APPLE_ISSUER_ID`, `IAP_APPLE_KEY_ID`, `IAP_APPLE_PRIVATE_KEY`, `IAP_APPLE_BUNDLE_ID`, `IAP_REFRESH_WINDOW_DAYS`, `IAP_GOOGLE_PUBSUB_AUDIENCE`. Credentials are secrets — set them on the deployment env, never commit.
+
 ## References
 
-- `scripts/stripe-setup.py`, `backend/app/services/billing.py`, `backend/app/api/v1/billing.py`
-- `docker-compose.hosted.yml` (Stripe env), `.env.example` (Stripe block)
+- `scripts/stripe-setup.py`, `backend/app/services/billing.py`, `backend/app/services/iap.py`, `backend/app/api/v1/billing.py`
+- `docker-compose.hosted.yml` (Stripe env), `.env.example` (Stripe + IAP blocks)

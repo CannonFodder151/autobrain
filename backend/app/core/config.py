@@ -105,7 +105,7 @@ class Settings(BaseSettings):
     APP_BASE_URL: str = "http://localhost:8000"
 
     # Versioning (local only; the GitHub update check was removed — AUT-461)
-    APP_VERSION: str = "0.3.60"  # mirror frontend/pubspec.yaml version
+    APP_VERSION: str = "0.3.61"  # mirror frontend/pubspec.yaml version
 
     # Scheduled backup (daily). When set, beats stores a full JSON snapshot to MinIO.
     BACKUP_ENABLED: bool = True
@@ -165,6 +165,30 @@ class Settings(BaseSettings):
     STRIPE_PROMO_EARLY_ADOPTER: str = ""      # promotion code id (promo_...)
     STRIPE_PROMO_EARLY_ADOPTER_CODE: str = "EARLY40"
     STRIPE_SALE_ENDS_AT: str = ""             # ISO date (YYYY-MM-DD); empty = sale on
+
+    # Store-native in-app purchases (AUT-610/617): Apple App Store + Google
+    # Play for the store builds of the mobile app. Empty credentials keep IAP
+    # disabled and the mobile app falls back to the Stripe browser path.
+    # Credentials are secrets — never commit them; set them via the deployment
+    # env (docker-compose.hosted.yml passes them through).
+    IAP_GOOGLE_SERVICE_ACCOUNT_JSON: str = ""  # Play service-account key JSON (secret)
+    IAP_GOOGLE_PACKAGE_NAME: str = "com.autobrainservice.app"
+    IAP_APPLE_ISSUER_ID: str = ""              # App Store Connect API key issuer id
+    IAP_APPLE_KEY_ID: str = ""                 # App Store Connect API key id
+    IAP_APPLE_PRIVATE_KEY: str = ""            # App Store Connect API key .p8 PEM (secret)
+    IAP_APPLE_BUNDLE_ID: str = "com.autobrainservice.app"
+    # Verify-on-refresh (AUT-617): GET /auth/me re-validates the stored store
+    # purchase token against the store API when the entitlement is already
+    # expired or within this many days of expiring. Keeps renewals/refunds
+    # propagating without webhooks; bounds external store calls to ~1/billing
+    # period per user.
+    IAP_REFRESH_WINDOW_DAYS: int = 2
+    # Minimum minutes between store re-validations per user (AUT-617 F4). A
+    # lapsed entitlement otherwise re-hits the store APIs on every /auth/me.
+    IAP_REFRESH_COOLDOWN_MINUTES: int = 5
+    # Google Play RTDN webhook (Pub/Sub push) OIDC token audience. Empty =
+    # derive from APP_BASE_URL + the webhook path.
+    IAP_GOOGLE_PUBSUB_AUDIENCE: str = ""
 
     @model_validator(mode="after")
     def _refuse_default_creds_outside_dev(self) -> "Settings":
