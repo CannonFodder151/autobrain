@@ -182,7 +182,11 @@ async def _sync_federation(db: AsyncSession) -> None:
         return
     events = event_data.get("events", []) if isinstance(event_data, dict) else []
     for item in remote_builds:
+        if not isinstance(item, dict):
+            continue
         build = item.get("build") or item
+        if not isinstance(build, dict):
+            continue
         rid = build.get("remote_build_id") or build.get("build_id")
         if not rid:
             continue
@@ -206,16 +210,24 @@ async def _sync_federation(db: AsyncSession) -> None:
         await _apply_event(db, event)
     cfg.last_inbox_sync = datetime.now(timezone.utc)
     if event_data:
-        cursor = event_data.get("next_cursor") or cfg.last_event_sync
-        cfg.last_event_sync = int(cursor)
+        cursor = event_data.get("next_cursor")
+        if cursor is not None:
+            try:
+                cfg.last_event_sync = int(cursor)
+            except (TypeError, ValueError):
+                logger.warning("social_event_cursor_invalid", cursor=cursor)
     await db.flush()
 
 
 async def _apply_event(db: AsyncSession, event: dict) -> None:
     """Apply a federated comment/like event to the matching local build copy."""
+    if not isinstance(event, dict):
+        return
     if event.get("event_type") not in ("comment", "like"):
         return
     payload = event.get("payload") or {}
+    if not isinstance(payload, dict):
+        return
     build_id = payload.get("build_id")
     if not build_id:
         return

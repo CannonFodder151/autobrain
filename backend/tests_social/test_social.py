@@ -539,10 +539,16 @@ async def test_inbox_pulls_remote_builds(monkeypatch) -> None:
             "snapshot": {"title": "Clubman build", "mods": [{"name": "Exhaust"}]},
         }]
 
+    async def _no_events(_cfg, after):
+        return {"events": [], "next_cursor": 0}
+
     monkeypatch.setattr("app.social.federation.pull_inbox", _fake_pull)
+    monkeypatch.setattr("app.social.federation.pull_events", _no_events)
     async with _SessionLocal() as db:
         cfg = SocialServerConfig(id=1, feature_enabled=True, federation_enabled=True,
-                                 hub_status="registered", hub_server_id="me")
+                                 hub_status="registered", hub_server_id="me",
+                                 hub_api_key="k", hub_private_key="ab" * 32,
+                                 last_inbox_sync=None, last_event_sync=None)
         await db.merge(cfg)
         await db.commit()
         user = await _new_user(db, "hub@example.com", "Hub")
@@ -558,6 +564,69 @@ async def test_inbox_pulls_remote_builds(monkeypatch) -> None:
     async with _SessionLocal() as db:
         rows = list(await db.scalars(select(SocialBuild).where(SocialBuild.origin == "remote")))
         assert len(rows) == 1
+
+
+@pytest.mark.asyncio
+async def test_feed_survives_empty_hub_event_cursor(monkeypatch) -> None:
+    """AUT-694: the hub returns `next_cursor: 0` with no pending events, and the
+    first sync crashed on `int(0 or None)` -> 500 on the whole feed."""
+    async def _no_inbox(_cfg):
+        return []
+
+    async def _empty_events(_cfg, after):
+        return {"events": [], "next_cursor": 0}
+
+    monkeypatch.setattr("app.social.federation.pull_inbox", _no_inbox)
+    monkeypatch.setattr("app.social.federation.pull_events", _empty_events)
+    async with _SessionLocal() as db:
+        cfg = SocialServerConfig(id=1, feature_enabled=True, federation_enabled=True,
+                                 hub_status="registered", hub_server_id="me",
+                                 last_inbox_sync=None, last_event_sync=None)
+        await db.merge(cfg)
+        await db.commit()
+        user = await _new_user(db, "cursor@example.com", "Cursor")
+        token = create_access_token(user.id)
+    async with await _client(token) as c:
+        feed = await c.get("/api/v1/social/feed")
+        assert feed.status_code == 200, feed.text
+    async with _SessionLocal() as db:
+        cfg = await db.get(SocialServerConfig, 1)
+        assert cfg.last_event_sync == 0
+
+
+@pytest.mark.asyncio
+async def test_feed_survives_malformed_hub_payloads(monkeypatch) -> None:
+    """AUT-694: federated payloads with unexpected shapes must never 500 the
+    feed (errors are logged, feed keeps serving local builds)."""
+    async def _bad_inbox(_cfg):
+        return [
+            {"id": 1, "build": "not-a-dict", "created_at": "x"},
+            {"id": 2, "origin_server": "o", "build": {
+                "build_id": "hub-bad", "title": "S",
+                "snapshot": "just a string"}},
+        ]
+
+    async def _bad_events(_cfg, after):
+        return {"events": [
+            {"id": 1, "event_type": "comment", "payload": "not-a-dict"},
+        ], "next_cursor": 1}
+
+    monkeypatch.setattr("app.social.federation.pull_inbox", _bad_inbox)
+    monkeypatch.setattr("app.social.federation.pull_events", _bad_events)
+    async with _SessionLocal() as db:
+        cfg = SocialServerConfig(id=1, feature_enabled=True, federation_enabled=True,
+                                 hub_status="registered", hub_server_id="me",
+                                 last_inbox_sync=None, last_event_sync=None)
+        await db.merge(cfg)
+        await db.commit()
+        user = await _new_user(db, "badhub@example.com", "BadHub")
+        token = create_access_token(user.id)
+    async with await _client(token) as c:
+        feed = await c.get("/api/v1/social/feed")
+        assert feed.status_code == 200, feed.text
+    async with _SessionLocal() as db:
+        cfg = await db.get(SocialServerConfig, 1)
+        assert cfg.last_event_sync == 1
 
 
 # --- admin toggles ------------------------------------------------------------

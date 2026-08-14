@@ -109,6 +109,7 @@ def loads(raw: str | None) -> dict:
     if not raw:
         return {}
     try:
-        return json.loads(raw)
+        result = json.loads(raw)
     except (ValueError, TypeError):
         return {}
+    return result if isinstance(result, dict) else {}

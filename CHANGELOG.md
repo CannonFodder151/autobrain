@@ -72,6 +72,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- Community Garage feed no longer returns HTTP 500 when federation is registered with the hub (AUT-694). The hub answers an empty event pull with `next_cursor: 0`, and the first sync crashed on `int(0 or None)` → `TypeError` → every feed request 500'd until a cursor was stored. The cursor is now only stored when present (`next_cursor` + a `TypeError`/`ValueError` guard). The sync loop is also hardened so malformed hub payloads (non-dict builds/events, non-dict `snapshot`/`payload`) are skipped instead of crashing the feed. Regression tests in `tests_social/test_social.py`.
+
 ## [0.3.69] - 2026-08-14
 
 ### Fixed
