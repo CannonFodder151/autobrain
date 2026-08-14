@@ -68,7 +68,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.68] - 2026-08-14
 
 ### Added
 - Community Garage **Issues Blog** frontend (AUT-627, AUT-644): third tab in Community Garage (Feed / My Builds / Issues Blog) with a blog-archive list (title, excerpt, author, tags, comment count, Open/Answered/Resolved status badge, date), keyword search + tag chips + status filter (server-side, deterministic), full blog-post detail with chronological comment thread, "Mark as answer" resolution flow with a resolved banner pointing at the pinned answer, "Report" moderation action, and a compose screen (title, body, optional vehicle context snapshot). Reuses Community Garage premium gating and "disabled by admin" states; wired to `/api/v1/social/issues`.
