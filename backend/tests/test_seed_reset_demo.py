@@ -32,13 +32,30 @@ os.environ["MARKET_DATA_API_KEY"] = ""
 
 import pytest  # noqa: E402
 from sqlalchemy import event, func, select  # noqa: E402
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine  # noqa: E402
 
+from app.core.config import settings  # noqa: E402
 from app.core.security import hash_password  # noqa: E402
 from app.db.seed import _upload_demo_image, reset_demo, seed_demo  # noqa: E402
-from app.db.session import Base, SessionLocal, engine  # noqa: E402
+from app.db.session import Base  # noqa: E402
 from app.models.share import VehicleShare  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.models.vehicle import Vehicle  # noqa: E402
+
+# Settings is a process-wide singleton cached on first app import; another test
+# module may have imported it before our env vars above ran, so pin the demo
+# config directly on the cached instance instead of relying on os.environ.
+settings.DEMO_MODE = True
+settings.DEMO_EMAIL = "demo@test.local"
+settings.DEMO_PASSWORD = "demo"
+settings.DEMO_DISPLAY_NAME = "Demo Garage"
+
+# Self-contained sqlite engine: seed.py resolves SessionLocal from
+# app.db.session at call time, so patch it to our test sessionmaker. Using the
+# shared app engine here would break if an earlier test module imported it with
+# a Postgres DATABASE_URL.
+engine = create_async_engine("sqlite+aiosqlite:////tmp/autobrain-seed-reset-test.db")
+SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
 @event.listens_for(engine.sync_engine, "connect")
@@ -46,6 +63,11 @@ def _enforce_fks(dbapi_conn, _):
     cursor = dbapi_conn.cursor()
     cursor.execute("PRAGMA foreign_keys=ON")
     cursor.close()
+
+
+import app.db.seed as seed_module  # noqa: E402
+
+seed_module.SessionLocal = SessionLocal
 
 
 async def _reset_schema() -> None:

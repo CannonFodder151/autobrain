@@ -28,8 +28,16 @@ os.environ["MARKET_DATA_URL"] = ""
 os.environ["MARKET_DATA_API_KEY"] = ""
 
 import pytest  # noqa: E402
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine  # noqa: E402
 
-from app.db.session import Base, SessionLocal, engine  # noqa: E402
+# Self-contained sqlite engine so this file is immune to suite import order:
+# the app's shared engine is created on first app import and pinned to whatever
+# DATABASE_URL was set then, so reusing app.db.session.engine here could point
+# at Postgres (OSError) if another module loaded first.
+engine = create_async_engine("sqlite+aiosqlite:////tmp/autobrain-backup-test.db")
+SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+from app.db.session import Base  # noqa: E402
 from app.models.share import VehicleShare  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.models.vehicle import Vehicle  # noqa: E402
