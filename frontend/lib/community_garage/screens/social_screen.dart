@@ -8,6 +8,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/api_client.dart';
@@ -19,6 +20,7 @@ import '../widgets/premium_gate.dart';
 import '../widgets/social_card.dart';
 import 'social_compose.dart';
 import 'social_post_detail.dart';
+import 'share_link_view.dart';
 
 class SocialScreen extends StatefulWidget {
   const SocialScreen({super.key});
@@ -126,23 +128,57 @@ class _SocialScreenState extends State<SocialScreen> {
   }
 
   Future<void> _share(SocialBuild build) async {
-    try {
-      final link = await SocialApi(context.read<AuthState>().api)
-          .createShareLink(build.id);
-      final origin = _originBase();
+    final api = SocialApi(context.read<AuthState>().api);
+    if (build.isRemote) {
       if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (_) => AlertDialog(
-          title: const Text('Share this build'),
-          content: Text('$origin${link.url}'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Close'),
-            ),
-          ],
-        ),
+      await _showShareDialog(
+        title: 'View this build',
+        message:
+            'This build was shared from another server. Open it to view it on '
+            'your own AutoBrain instance.',
+        actions: [
+          _shareAction(
+            label: 'View build',
+            onPressed: () {
+              Navigator.of(context).pop();
+              Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => SocialPostDetailScreen(
+                      postId: build.id, initial: build)));
+            },
+          ),
+        ],
+      );
+      return;
+    }
+    try {
+      final link = await api.createShareLink(build.id);
+      final fullLink = '${_originBase()}${link.url}';
+      if (!mounted) return;
+      await _showShareDialog(
+        title: 'Share this build',
+        message: fullLink,
+        selectable: true,
+        actions: [
+          _shareAction(
+            label: 'Copy link',
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: fullLink));
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  content: Text('Link copied to clipboard')));
+              Navigator.of(context).pop();
+            },
+          ),
+          _shareAction(
+            label: 'View',
+            filled: true,
+            onPressed: () {
+              Navigator.of(context).pop();
+              Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => ShareLinkView(token: link.token)));
+            },
+          ),
+        ],
       );
     } catch (e) {
       if (mounted) {
@@ -150,6 +186,43 @@ class _SocialScreenState extends State<SocialScreen> {
             SnackBar(content: Text('Could not create share link: $e')));
       }
     }
+  }
+
+  /// Small dialog helper for the share flow (AUT-676): the shared link is
+  /// copyable and can be opened in-app so it renders on the user's own
+  /// instance. A close button is always appended.
+  Future<void> _showShareDialog({
+    required String title,
+    required String message,
+    required List<Widget> actions,
+    bool selectable = false,
+  }) {
+    return showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(title),
+        content: selectable
+            ? SelectableText(message)
+            : Text(message),
+        actions: [
+          ...actions,
+          _shareAction(
+            label: 'Close',
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _shareAction({
+    required String label,
+    required VoidCallback onPressed,
+    bool filled = false,
+  }) {
+    return filled
+        ? FilledButton(onPressed: onPressed, child: Text(label))
+        : TextButton(onPressed: onPressed, child: Text(label));
   }
 
   String _originBase() {
