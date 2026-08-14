@@ -49,6 +49,8 @@ class SocialBuild {
     this.origin,
     this.snapshot = const SocialSnapshot(),
     this.photos = const [],
+    this.photoIds = const [],
+    this.shareScope = const {},
     this.likeCount = 0,
     this.likedByMe = false,
     this.commentCount = 0,
@@ -63,6 +65,8 @@ class SocialBuild {
   final String? origin;
   final SocialSnapshot snapshot;
   final List<String> photos;
+  final List<String> photoIds;
+  final Map<String, bool> shareScope;
   final int likeCount;
   final bool likedByMe;
   final int commentCount;
@@ -81,6 +85,8 @@ class SocialBuild {
         origin: origin,
         snapshot: snapshot,
         photos: photos,
+        photoIds: photoIds,
+        shareScope: shareScope,
         likeCount: likeCount ?? this.likeCount,
         likedByMe: likedByMe ?? this.likedByMe,
         commentCount: commentCount ?? this.commentCount,
@@ -97,6 +103,9 @@ class SocialBuild {
         snapshot:
             SocialSnapshot.fromJson(json['snapshot'] as Map<String, dynamic>?),
         photos: ((json['photos'] as List?) ?? const []).cast<String>(),
+        photoIds: ((json['photo_ids'] as List?) ?? const []).cast<String>(),
+        shareScope: ((json['share_scope'] as Map<String, dynamic>?) ?? const {})
+            .map((k, v) => MapEntry(k, v == true)),
         likeCount: json['like_count'] as int? ?? 0,
         likedByMe: json['liked_by_me'] == true,
         commentCount: json['comment_count'] as int? ?? 0,

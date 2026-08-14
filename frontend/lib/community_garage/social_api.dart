@@ -67,14 +67,45 @@ class SocialApi {
         .toList();
   }
 
-  Future<SocialBuild> updatePost(String postId, {String? caption}) async {
-    final data = await _api.patch('/social/posts/$postId', {'caption': caption})
-        as Map<String, dynamic>;
+  /// Full build edit (AUT-675): rename, reorder/swap photos, adjust scope.
+  /// `null` leaves a field unchanged; empty string clears a caption.
+  Future<SocialBuild> updatePost(
+    String postId, {
+    String? title,
+    String? caption,
+    List<String>? photoIds,
+    bool? allowPhotos,
+    bool? allowSpecs,
+    bool? allowMods,
+    bool? allowOdometer,
+    bool? allowNotes,
+  }) async {
+    final body = <String, dynamic>{
+      if (title != null) 'title': title,
+      if (caption != null) 'caption': caption,
+      if (photoIds != null) 'photo_ids': photoIds,
+    };
+    if (allowPhotos != null ||
+        allowSpecs != null ||
+        allowMods != null ||
+        allowOdometer != null ||
+        allowNotes != null) {
+      body['share_scope'] = {
+        if (allowPhotos != null) 'allow_photos': allowPhotos,
+        if (allowSpecs != null) 'allow_specs': allowSpecs,
+        if (allowMods != null) 'allow_mods': allowMods,
+        if (allowOdometer != null) 'allow_odometer': allowOdometer,
+        if (allowNotes != null) 'allow_notes': allowNotes,
+      };
+    }
+    final data =
+        await _api.patch('/social/posts/$postId', body) as Map<String, dynamic>;
     return SocialBuild.fromJson(data);
   }
 
   Future<SocialBuild> createPost({
     required String vehicleId,
+    String? title,
     String? caption,
     List<String> photoIds = const [],
     bool allowPhotos = true,
@@ -85,6 +116,7 @@ class SocialApi {
   }) async {
     final data = await _api.post('/social/posts', {
       'vehicle_id': vehicleId,
+      'title': title,
       'caption': caption,
       'photo_ids': photoIds,
       'share_scope': {

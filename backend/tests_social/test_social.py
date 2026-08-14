@@ -354,6 +354,124 @@ async def test_social_happy_path() -> None:
         assert gone2.status_code == 404
 
 
+# --- edit build (AUT-675) ----------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_edit_build_title_photos_scope(monkeypatch) -> None:
+    """AUT-675: edit renames a build, reorders/adds/removes photos and changes
+    the share scope — all after the initial share."""
+    async def _fake_upload(user_id, data, content_type=None):
+        return (f"social/{user_id}/x.webp", "http://assets/x.webp", 640, 480)
+
+    monkeypatch.setattr("app.api.v1.social.upload_photo", _fake_upload)
+    await _enable_feature(True)
+    async with _SessionLocal() as db:
+        owner = await _new_user(db, "editor@example.com", "Editor")
+        vehicle = await _new_vehicle(db, owner.id)
+        other = await _new_user(db, "peek@example.com", "Peek")
+        token = create_access_token(owner.id)
+        other_token = create_access_token(other.id)
+        vehicle_id = vehicle.id
+    async with await _client(token) as c:
+        p1 = (await c.post("/api/v1/social/uploads",
+                           files={"file": ("a.webp", b"aaaa", "image/webp")})).json()
+        p2 = (await c.post("/api/v1/social/uploads",
+                           files={"file": ("b.webp", b"bbbb", "image/webp")})).json()
+        p3 = (await c.post("/api/v1/social/uploads",
+                           files={"file": ("c.webp", b"cccc", "image/webp")})).json()
+        created = await c.post("/api/v1/social/posts", json={
+            "vehicle_id": vehicle_id,
+            "title": "Project Sky",
+            "caption": "In progress",
+            "photo_ids": [p1["id"], p2["id"], p3["id"]],
+        })
+        assert created.status_code == 201, created.text
+        body = created.json()
+        assert body["title"] == "Project Sky"
+        assert body["photo_ids"] == [p1["id"], p2["id"], p3["id"]]
+        assert "odometer_km" not in body["snapshot"]["specs"]
+        post_id = body["id"]
+
+        # rename + drop p3 + reorder (p2 first) + widen scope
+        updated = await c.patch(f"/api/v1/social/posts/{post_id}", json={
+            "title": "Project Sky II",
+            "caption": "Paint done",
+            "photo_ids": [p2["id"], p1["id"]],
+            "share_scope": {"allow_odometer": True, "allow_notes": True},
+        })
+        assert updated.status_code == 200, updated.text
+        ub = updated.json()
+        assert ub["title"] == "Project Sky II"
+        assert ub["caption"] == "Paint done"
+        assert ub["photo_ids"] == [p2["id"], p1["id"]]
+        assert ub["snapshot"]["specs"]["odometer_km"] == 142000
+        assert ub["snapshot"]["notes"]
+
+        # feed reflects the new name + order
+        feed = (await c.get("/api/v1/social/feed")).json()["items"]
+        mine = next(i for i in feed if i["id"] == post_id)
+        assert mine["title"] == "Project Sky II"
+        assert mine["photo_ids"] == [p2["id"], p1["id"]]
+
+        # dropped photo is free again (can be re-attached)
+        detail = (await c.get(f"/api/v1/social/posts/{post_id}")).json()
+        assert p3["id"] not in detail["photo_ids"]
+
+        # F3: caption None = unchanged; explicit "" clears
+        keep = await c.patch(f"/api/v1/social/posts/{post_id}", json={"caption": None})
+        assert keep.json()["caption"] == "Paint done"
+        cleared = await c.patch(f"/api/v1/social/posts/{post_id}", json={"caption": ""})
+        assert cleared.json()["caption"] is None
+
+        # hide photos, then verify non-owner sees no photo_ids (F1)
+        hidden = await c.patch(f"/api/v1/social/posts/{post_id}",
+                               json={"share_scope": {"allow_photos": False}})
+        assert hidden.json()["photo_ids"] == [p2["id"], p1["id"]]
+
+        # non-owners cannot edit (404, same as delete — PW-8)
+        async with await _client(other_token) as oc:
+            denied = await oc.patch(f"/api/v1/social/posts/{post_id}",
+                                    json={"title": "Hacked"})
+            assert denied.status_code == 404
+            # F1: non-owner never sees photo ids, even for published builds
+            detail = (await oc.get(f"/api/v1/social/posts/{post_id}")).json()
+            assert detail["photo_ids"] == []
+
+        # QA#2: a photo attached to this build cannot be hijacked into another
+        second = await c.post("/api/v1/social/posts", json={"vehicle_id": vehicle_id})
+        second_id = second.json()["id"]
+        hijack = await c.patch(f"/api/v1/social/posts/{second_id}",
+                               json={"photo_ids": [p1["id"]]})
+        assert hijack.status_code == 400, hijack.text
+
+        gone2 = await c.delete(f"/api/v1/social/posts/{second_id}")
+        assert gone2.status_code == 204
+        gone = await c.delete(f"/api/v1/social/posts/{post_id}")
+        assert gone.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_edit_build_rejects_unknown_photos(monkeypatch) -> None:
+    async def _fake_upload(user_id, data, content_type=None):
+        return (f"social/{user_id}/x.webp", "http://assets/x.webp", 640, 480)
+
+    monkeypatch.setattr("app.api.v1.social.upload_photo", _fake_upload)
+    await _enable_feature(True)
+    async with _SessionLocal() as db:
+        owner = await _new_user(db, "editor2@example.com", "Editor2")
+        vehicle = await _new_vehicle(db, owner.id)
+        token = create_access_token(owner.id)
+        vehicle_id = vehicle.id
+    async with await _client(token) as c:
+        created = await c.post("/api/v1/social/posts", json={"vehicle_id": vehicle_id})
+        post_id = created.json()["id"]
+        bad = await c.patch(f"/api/v1/social/posts/{post_id}",
+                            json={"photo_ids": ["no-such-photo"]})
+        assert bad.status_code == 400
+        await c.delete(f"/api/v1/social/posts/{post_id}")
+
+
 # --- federation on/off -------------------------------------------------------
 
 
