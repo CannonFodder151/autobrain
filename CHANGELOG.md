@@ -73,6 +73,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+- Hub registration keys wired into hosted compose (AUT-528): `docker-compose.hosted.yml` now passes `HUB_HOSTED_REGISTRATION_KEY` to the hub service (was missing — hub fails closed without it) and `SOCIAL_FEDERATION_HOSTED_REGISTRATION_KEY` to the backend so hosted servers present the registration key when registering with the hub. The repo compose reference now matches the live EP5 stack, which already had both vars set and the key rotated.
+
 ## [0.3.70] - 2026-08-14
 
 ### Fixed
