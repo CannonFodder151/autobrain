@@ -129,6 +129,16 @@ services:
       STRIPE_PROMO_EARLY_ADOPTER: ${STRIPE_PROMO_EARLY_ADOPTER:-}
       STRIPE_PROMO_EARLY_ADOPTER_CODE: ${STRIPE_PROMO_EARLY_ADOPTER_CODE:-EARLY40}
       STRIPE_SALE_ENDS_AT: ${STRIPE_SALE_ENDS_AT:-}
+      # Store-native IAP (AUT-610/617): empty = disabled (mobile falls back to
+      # the Stripe browser path). Credentials are Paperclip secrets.
+      IAP_GOOGLE_SERVICE_ACCOUNT_JSON: ${IAP_GOOGLE_SERVICE_ACCOUNT_JSON:-}
+      IAP_GOOGLE_PACKAGE_NAME: ${IAP_GOOGLE_PACKAGE_NAME:-com.autobrainservice.app}
+      IAP_APPLE_ISSUER_ID: ${IAP_APPLE_ISSUER_ID:-}
+      IAP_APPLE_KEY_ID: ${IAP_APPLE_KEY_ID:-}
+      IAP_APPLE_PRIVATE_KEY: ${IAP_APPLE_PRIVATE_KEY:-}
+      IAP_APPLE_BUNDLE_ID: ${IAP_APPLE_BUNDLE_ID:-com.autobrainservice.app}
+      IAP_REFRESH_WINDOW_DAYS: ${IAP_REFRESH_WINDOW_DAYS:-2}
+      IAP_GOOGLE_PUBSUB_AUDIENCE: ${IAP_GOOGLE_PUBSUB_AUDIENCE:-}
     depends_on:
       postgres:
         condition: service_healthy

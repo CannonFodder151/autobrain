@@ -1,6 +1,7 @@
 """Authentication routes: login (with MFA), MFA management, admin user creation."""
 
 import json as _json
+import logging
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -40,6 +41,8 @@ from app.schemas.auth import (
 )
 from app.services import auth as auth_svc
 from app.services import email as mail
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -208,6 +211,7 @@ async def me(
     db: AsyncSession = Depends(get_db),
 ) -> UserWithVehicleCount:
     from app.models.vehicle import Vehicle
+    from app.services import iap
 
     count = await db.scalar(
         select(func.count()).select_from(Vehicle).where(Vehicle.user_id == current.id)
@@ -215,6 +219,23 @@ async def me(
     count = count or 0
     remaining = max(current.max_vehicles - count, 0)
     from app.services import billing as billing_svc
+
+    # Verify-on-refresh (AUT-617): re-validate the stored store purchase token
+    # so renewals/refunds propagate without webhooks. Never throws — transient
+    # store failures keep the cached entitlement.
+    if iap.enabled() and current.iap_purchase_token:
+        try:
+            await iap.refresh_entitlement(db, current)
+        except Exception:
+            logger.exception("auth_me_iap_refresh_error")
+            await db.rollback()
+
+    iap_state = billing_svc.iap_status(current)
+    subscription_status = current.stripe_subscription_status
+    if iap_state == "active" and subscription_status not in billing_svc.ACTIVE_STATUSES:
+        # An active store entitlement is a paid subscription: reflect it even
+        # when no Stripe subscription exists.
+        subscription_status = "active"
 
     return UserWithVehicleCount.model_validate(
         {
@@ -231,7 +252,8 @@ async def me(
             "vehicle_count": count,
             "vehicles_remaining": remaining,
             "plan": billing_svc.plan_for_user(current),
-            "subscription_status": current.stripe_subscription_status,
+            "subscription_status": subscription_status,
+            "iap_status": iap_state,
         }
     )
 

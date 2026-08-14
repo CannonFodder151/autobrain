@@ -142,3 +142,4 @@ class UserWithVehicleCount(UserOut):
     vehicles_remaining: int = 0
     plan: str = "free"  # free / enthusiast / garage (billing tier)
     subscription_status: str | None = None
+    iap_status: str | None = None  # active / expired / revoked / null (store IAP)

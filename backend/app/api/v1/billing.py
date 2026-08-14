@@ -1,9 +1,10 @@
-"""Billing routes: Stripe Checkout, customer portal, and webhooks.
+"""Billing routes: Stripe Checkout, customer portal, webhooks, and store-native
+IAP (Apple App Store / Google Play) for the mobile store builds.
 
-The webhook is the source of truth for tier changes — it promotes an account
-when a subscription becomes active and demotes it back to the free tier when
-the subscription is cancelled or lapses. Webhook signature verification is
-mandatory (STRIPE_WEBHOOK_SECRET); events are rejected when it is unset.
+The Stripe webhook is the source of truth for web tier changes; store IAP
+purchases are verified against the store APIs by /billing/iap/verify and
+recorded server-side (verify-on-refresh keeps renewals/refunds propagating on
+GET /auth/me — see app/services/iap.py).
 """
 
 import logging
@@ -15,14 +16,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.billing import CheckoutRequest, CheckoutResponse, PortalResponse
+from app.schemas.billing import (
+    CheckoutRequest,
+    CheckoutResponse,
+    IapVerifyRequest,
+    IapVerifyResponse,
+    PortalResponse,
+)
 from app.services import billing as svc
+from app.services import iap
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
 _NOT_CONFIGURED = "Billing is not configured on this server"
+_IAP_NOT_CONFIGURED = "In-app purchases are not configured on this server"
 
 
 @router.post("/checkout", response_model=CheckoutResponse)
@@ -98,3 +107,83 @@ async def webhook(
         raise HTTPException(status_code=400, detail="Invalid signature")
     await svc.handle_event(db, event)
     return {"received": True}
+
+
+# --- Store-native IAP (Apple App Store / Google Play) ---
+
+
+@router.get("/iap/catalog")
+async def iap_catalog() -> dict:
+    """Public IAP product catalogue for the store builds of the mobile app.
+
+    `enabled` is false until IAP credentials are configured — the mobile app
+    then falls back to the Stripe browser purchase path (AUT-610).
+    """
+    return iap.catalog()
+
+
+@router.post("/iap/verify", response_model=IapVerifyResponse)
+async def iap_verify(
+    payload: IapVerifyRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> IapVerifyResponse:
+    """Verify a store transaction against Apple/Google and grant the plan."""
+    if not iap.enabled():
+        raise HTTPException(status_code=503, detail=_IAP_NOT_CONFIGURED)
+    iap.check_verify_rate_limit(user.id)
+    try:
+        return await iap.verify_and_grant(
+            db,
+            user,
+            payload.platform,
+            payload.product_id,
+            payload.transaction_id,
+            payload.purchase_token,
+        )
+    except iap.VerificationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.post("/iap/webhook/apple")
+async def iap_webhook_apple(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """App Store Server Notifications v2 (JWS-signed signedPayload)."""
+    if not iap.apple_configured():
+        raise HTTPException(status_code=503, detail=_IAP_NOT_CONFIGURED)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    signed = body.get("signedPayload")
+    if not signed:
+        raise HTTPException(status_code=400, detail="Missing signedPayload")
+    try:
+        return await iap.handle_apple_webhook(db, signed)
+    except iap.VerificationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.post("/iap/webhook/google")
+async def iap_webhook_google(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Play Real-time Developer Notification delivered via Pub/Sub push.
+
+    The Pub/Sub push subscription must authenticate with an OIDC token whose
+    audience is this endpoint (default: APP_BASE_URL + /api/v1/billing/iap/webhook/google).
+    """
+    if not iap.google_configured():
+        raise HTTPException(status_code=503, detail=_IAP_NOT_CONFIGURED)
+    try:
+        envelope = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    try:
+        await iap.verify_google_push_auth(request.headers.get("authorization", ""))
+        return await iap.handle_google_webhook(db, envelope)
+    except iap.VerificationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
