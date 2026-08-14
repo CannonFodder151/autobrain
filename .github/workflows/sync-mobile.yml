@@ -72,9 +72,21 @@ jobs:
           git config user.email "release@autobrainservice.app"
           git add -A
           git commit -m "chore: sync frontend lineage + version to $version from autobrain (auto)"
-          git push origin main
-          echo "changed=true" >> "$GITHUB_OUTPUT"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
+          # Concurrent sync runs (merge push + auto-bump push) can race the
+          # push; rebase onto the latest remote main and retry instead of
+          # reddening the whole run (AUT-633).
+          for attempt in 1 2 3; do
+            if git pull --rebase origin main; then
+              if git push origin main; then
+                echo "changed=true" >> "$GITHUB_OUTPUT"
+                echo "version=$version" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+            fi
+            echo "push rejected (attempt $attempt/3) — retrying after rebase"
+          done
+          echo "::error::mobile sync push failed after 3 attempts (non-fast-forward)"
+          exit 1
 
       - name: Tag version and trigger mobile release pipeline
         if: steps.commit.outputs.changed == 'true'
