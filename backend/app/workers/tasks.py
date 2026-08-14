@@ -4,9 +4,9 @@ import asyncio
 import base64
 import io
 import json
-import logging
-
 from celery import shared_task
+
+from app.core.logging import get_logger
 from pypdf import PdfReader
 
 from app.core.storage import get_object
@@ -20,7 +20,7 @@ from app.services.ai_client import extract_receipt, estimate_value
 from app.services.search import backfill_entity_embedding
 from app.ws.manager import manager
 
-logger = logging.getLogger("autobrain.workers")
+logger = get_logger("autobrain.workers")
 
 _loop = None
 
@@ -229,7 +229,7 @@ def scheduled_backup() -> None:
     from app.core.storage import get_minio
     from app.services.backup import dump_backup, serialize_all
 
-    async def _run():
+    async def _do():
         async with SessionLocal() as db:
             data = await serialize_all(db)
             stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
@@ -257,7 +257,7 @@ def scheduled_backup() -> None:
         except Exception:
             logger.exception("backup_prune_failed")
 
-    _run(_run())
+    _run(_do())
 
 
 @shared_task

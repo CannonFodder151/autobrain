@@ -58,11 +58,29 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
+
 ## [Unreleased]
 
 ### Fixed
 - Full-DB backups now cover every table (AUT-521): the snapshot table list is derived from the ORM metadata instead of a hand-maintained list that had drifted — `market_listing_cache` and `revoked_refresh_tokens` were missing entirely, and `vehicle_shares` was only added on 2026-08-10. A backup taken before a table was added, when restored by newer code, wiped that table's rows without re-inserting them — the mechanism that could silently remove shared vehicles during a server upgrade/restore. `serialize_all`/`restore_all` now use SQLAlchemy's FK-aware table order, and a regression test asserts the snapshot covers the full schema and that a backup/restore roundtrip preserves shared vehicles.
 - Demo reset no longer orphans (or crashes on) shared vehicles (AUT-521): `reset_demo` deleted the demo user + vehicles without clearing `vehicle_shares` first, so a share referencing a demo vehicle or the demo account either left orphaned rows (FK-less DBs) or blocked the deletes on Postgres (`NO ACTION`) and crashed the boot. It now deletes those shares before the user/vehicles, with a regression test covering both directions (demo as share owner and as invitee).
+
+## [0.3.59] - 2026-08-14
+
+### Fixed
+- Community Garage "My Builds" tab now matches the feed's 12px card spacing (AUT-614): `my_builds_screen.dart` switched from `ListView.builder` to `ListView.separated` with a `SizedBox(height: 12)` separator, mirroring `social_screen.dart`.
+
+## [0.3.58] - 2026-08-14
+
+### Fixed
+- Worker log calls no longer crash with `TypeError` on structlog-style `key=` kwargs (AUT-603): `tasks.py` used stdlib `logging.getLogger` but passed kwarg events, so `scheduled_backup` stored its snapshot then failed on the success log line. Switched to the codebase structlog `get_logger`.
+
+## [0.3.57] - 2026-08-13
+
+### Fixed
+- Worker daily `scheduled_backup` now stores in-stack MinIO snapshots (AUT-583): local `async def _run()` shadowed the module `_run(coro)` helper, raising `TypeError` so the daily task never wrote `backups/autobrain-backup-*.json`. Renamed to `_do()` with regression tests in `backend/tests/test_workers.py`.
+- Restored the Celery worker image to CI (AUT-583): `docker/worker/Dockerfile` + `worker` added to the `dockerhub-publish` and `build-hosted` image loops, so `autobrain-worker` picks up worker fixes on every merge (it had no build path since the P1-1 consolidation).
 
 ## [0.3.56] - 2026-08-13
 
