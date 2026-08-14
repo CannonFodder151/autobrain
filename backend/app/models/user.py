@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Integer, String, func
+from sqlalchemy import DateTime, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.session import Base
@@ -39,6 +39,18 @@ class User(Base):
     stripe_subscription_id: Mapped[str | None] = mapped_column(String(64))
     stripe_subscription_status: Mapped[str | None] = mapped_column(String(32))
     stripe_price_id: Mapped[str | None] = mapped_column(String(64))
+    # Store-native IAP (AUT-610/617): Apple App Store / Google Play licences for
+    # the store builds of the mobile app. Recorded server-side and durable so
+    # the licence survives reinstall/re-login. iap_status is the last-known
+    # state ("active"/"expired"/"revoked"); effective status also considers
+    # iap_expires_at (see billing.iap_status).
+    iap_platform: Mapped[str | None] = mapped_column(String(16), index=True)  # android | ios
+    iap_product_id: Mapped[str | None] = mapped_column(String(128))
+    iap_transaction_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    iap_original_transaction_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    iap_purchase_token: Mapped[str | None] = mapped_column(Text)  # Play token / iOS signedTransaction JWS
+    iap_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    iap_status: Mapped[str | None] = mapped_column(String(16))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

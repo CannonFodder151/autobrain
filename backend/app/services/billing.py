@@ -1,13 +1,18 @@
-"""Stripe billing: plans, checkout sessions, customer portal, webhook handling.
+"""Billing + entitlement: Stripe subscriptions and store-native IAP (AUT-610/617).
 
-The hosted instance uses Stripe subscriptions to grant plan access. A valid
-subscription promotes the account (free_account=False + per-plan vehicle cap);
-cancelling or letting it lapse demotes back to the free tier. Everything is
-driven by price IDs held in the environment (STRIPE_PRICE_*).
+The hosted instance grants plan access through Stripe subscriptions (web
+/ self-hosted builds) and, for the store builds of the mobile app, through
+Apple App Store / Google Play purchases. A valid subscription or an active
+IAP entitlement promotes the account (free_account=False + per-plan vehicle
+cap); cancelling, lapsing or being revoked demotes back to the free tier.
+
+IAP purchase verification lives in app/services/iap.py; this module owns the
+entitlement mapping (what a product grants) so plan_for_user treats an active
+IAP entitlement exactly like a Stripe subscription.
 """
 
 import logging
-from datetime import date
+from datetime import date, datetime, timezone
 
 import stripe
 from sqlalchemy import select
@@ -48,6 +53,16 @@ SALE_CAP = 100
 # Stripe statuses that still grant paid access (past_due keeps access while
 # Stripe retries the card; unpaid/canceled do not).
 ACTIVE_STATUSES = frozenset({"active", "trialing", "past_due"})
+
+# Store-native IAP product ids (AUT-610/617). The store teams configure these
+# exact ids in App Store Connect / Play Console; both stores use the same ids.
+# Each maps to the plan + billing interval it grants.
+IAP_PRODUCTS: dict[str, tuple[str, str]] = {
+    "com.autobrainservice.app.enthusiast.monthly": ("enthusiast", "monthly"),
+    "com.autobrainservice.app.enthusiast.yearly": ("enthusiast", "yearly"),
+    "com.autobrainservice.app.garage.monthly": ("garage", "monthly"),
+    "com.autobrainservice.app.garage.yearly": ("garage", "yearly"),
+}
 
 _client: stripe.StripeClient | None = None
 
@@ -145,8 +160,85 @@ def _promo_discounts(promo_code: str | None, billing: str) -> list[dict] | None:
     return None
 
 
+def plan_for_iap_product(product_id: str | None) -> str | None:
+    """Plan key granted by a store IAP product id, or None."""
+    info = IAP_PRODUCTS.get(product_id) if product_id else None
+    return info[0] if info else None
+
+
+def iap_status(user: User) -> str | None:
+    """Effective IAP entitlement state, or None when never bought via a store.
+
+    "active" while the last-known state is not revoked and iap_expires_at is in
+    the future; "expired" once the period has passed; "revoked" on refund/revoke.
+    """
+    if not user.iap_product_id or not user.iap_transaction_id:
+        return None
+    if user.iap_status == "revoked":
+        return "revoked"
+    expires = user.iap_expires_at
+    if expires is None:
+        return "active"
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+    return "active" if expires > datetime.now(timezone.utc) else "expired"
+
+
+def apply_iap(
+    user: User,
+    product_id: str,
+    platform: str,
+    transaction_id: str,
+    purchase_token: str,
+    expires_at,
+    original_transaction_id: str | None = None,
+) -> None:
+    """Grant the plan entitlement a store IAP product maps to.
+
+    Replaces any prior IAP entitlement — there is a single store slot per
+    account, so upgrading (enthusiast → garage) or switching products never
+    double-grants. Raises ValueError for unknown product ids.
+    """
+    plan_key = plan_for_iap_product(product_id)
+    if not plan_key:
+        raise ValueError("Unknown IAP product")
+    apply_plan(user, plan_key)
+    user.iap_platform = platform
+    user.iap_product_id = product_id
+    user.iap_transaction_id = transaction_id
+    user.iap_original_transaction_id = original_transaction_id
+    user.iap_purchase_token = purchase_token
+    user.iap_expires_at = expires_at
+    user.iap_status = "active"
+
+
+def clear_iap(user: User, status: str = "expired") -> None:
+    """Demote an IAP entitlement (expired, revoked or refunded).
+
+    The purchase record is kept so verify-on-refresh can re-check a lapsed or
+    renewed subscription, but the account tier is recomputed: a still-active
+    Stripe subscription keeps the paid plan, otherwise the account returns to
+    the free tier.
+    """
+    if user.iap_product_id:
+        user.iap_status = status
+    if has_paid_subscription(user):
+        plan_key = plan_for_price(user.stripe_price_id) if user.stripe_price_id else None
+        if plan_key:
+            apply_plan(user, plan_key)
+            return
+    apply_free(user)
+
+
 def plan_for_user(user: User) -> str:
-    """Resolve the current plan key from a user's subscription state."""
+    """Resolve the current plan key from a user's subscription state.
+
+    An active store IAP entitlement is treated exactly like a paid subscription.
+    """
+    if iap_status(user) == "active":
+        plan_key = plan_for_iap_product(user.iap_product_id)
+        if plan_key:
+            return plan_key
     if not user.free_account:
         if user.stripe_price_id and user.stripe_subscription_status in ACTIVE_STATUSES:
             return plan_for_price(user.stripe_price_id) or _plan_from_entitlement(user)
@@ -165,6 +257,8 @@ def _plan_from_entitlement(user: User) -> str:
 
 
 def has_paid_subscription(user: User) -> bool:
+    if iap_status(user) == "active":
+        return True
     return (
         bool(user.stripe_subscription_id)
         and user.stripe_subscription_status in ACTIVE_STATUSES

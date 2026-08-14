@@ -79,6 +79,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed
 - Worker log calls no longer crash with `TypeError` on structlog-style `key=` kwargs (AUT-603): `tasks.py` used stdlib `logging.getLogger` but passed kwarg events, so `scheduled_backup` stored its snapshot then failed on the success log line. Switched to the codebase structlog `get_logger`.
 
+### Added
+- Backend store-native IAP (AUT-617): Apple App Store / Google Play receipt verification for the mobile store builds — `GET /billing/iap/catalog`, `POST /billing/iap/verify`, and `POST /billing/iap/webhook/{apple,google}`. Purchases are recorded server-side and durable; active store entitlements grant the same plans as Stripe (`plan_for_user` + `GET /auth/me` now surface `iap_status`). Renewals/refunds propagate via verify-on-refresh on `/auth/me` plus the store webhooks once the store teams configure them.
+
 ## [0.3.57] - 2026-08-13
 
 ### Fixed
