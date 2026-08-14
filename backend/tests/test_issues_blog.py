@@ -265,6 +265,32 @@ async def test_non_owner_edit_delete_404(env):
 
 
 @pytest.mark.asyncio
+async def test_owner_patch_success_path(env):
+    """Owner edits their own post -> 200 with the refreshed payload (regression
+    for AUT-665: onupdate=func.now() expires updated_at after commit, and the
+    async lazy load raised MissingGreenlet -> HTTP 500)."""
+    app, maker = env
+    pid = await _new_issue(maker, author_user_id="u1", title="Brake squeal", body="Only when cold")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.patch(f"/social/issues/{pid}", json={"title": "Brake squeal fixed?", "status": "answered"})
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["id"] == pid
+        assert data["title"] == "Brake squeal fixed?"
+        assert data["status"] == "answered"
+        assert "updated_at" in data and data["updated_at"]
+        # updated_at bumped after the edit
+        detail = (await c.get(f"/social/issues/{pid}")).json()
+        assert detail["updated_at"] >= data["updated_at"]
+
+        # body-only patch still returns the full payload (updated_at not expired)
+        r = await c.patch(f"/social/issues/{pid}", json={"body": "Warm weather fixed it"})
+        assert r.status_code == 200, r.text
+        assert r.json()["body"] == "Warm weather fixed it"
+        assert r.json()["updated_at"]
+
+
+@pytest.mark.asyncio
 async def test_search_issue_is_community_not_vehicle_scoped(env):
     """Issues appear in search for any vehicle scope (including none) and
     hidden posts are excluded (keyword path, embeddings disabled)."""

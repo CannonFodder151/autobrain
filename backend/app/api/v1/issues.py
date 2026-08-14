@@ -312,6 +312,7 @@ async def update_issue(
         from app.workers.tasks import queue_embedding
 
         queue_embedding("issue", str(post.id))
+    await db.refresh(post)
     return await _serialize(db, post, user)
 
 
