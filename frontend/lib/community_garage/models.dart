@@ -264,6 +264,7 @@ class SocialIssueComment {
     required this.authorDisplayName,
     required this.body,
     this.serverName,
+    this.photo,
     this.isAnswer = false,
     this.isMine = false,
     this.createdAt,
@@ -273,6 +274,7 @@ class SocialIssueComment {
   final String authorDisplayName;
   final String body;
   final String? serverName;
+  final String? photo;
   final bool isAnswer;
   final bool isMine;
   final DateTime? createdAt;
@@ -283,6 +285,7 @@ class SocialIssueComment {
         authorDisplayName: json['author_display_name'] as String? ?? 'Unknown',
         serverName: json['server_name'] as String?,
         body: json['body'] as String? ?? '',
+        photo: json['photo'] as String?,
         isAnswer: json['is_answer'] == true,
         isMine: json['is_mine'] == true,
         createdAt:

@@ -72,6 +72,7 @@ void main() {
           'id': 'c1',
           'author_display_name': 'Carol',
           'body': 'Check the sway bar links.',
+          'photo': 'http://assets/c1.webp',
           'is_answer': true,
           'is_mine': false,
           'created_at': '2026-08-12T01:00:00Z',
@@ -83,6 +84,20 @@ void main() {
     expect(p.isMine, isTrue);
     expect(p.comments, hasLength(1));
     expect(p.comments.first.isAnswer, isTrue);
+    expect(p.comments.first.photo, 'http://assets/c1.webp');
+  });
+
+  test('SocialIssueComment parses replies without a photo (AUT-736)', () {
+    final c = SocialIssueComment.fromJson(const {
+      'id': 'c2',
+      'author_display_name': 'Dana',
+      'body': 'No picture attached.',
+      'photo': null,
+      'is_answer': false,
+      'is_mine': true,
+      'created_at': '2026-08-12T02:00:00Z',
+    });
+    expect(c.photo, isNull);
   });
 
   test('issueTagVocabulary matches backend fixed vocabulary', () {

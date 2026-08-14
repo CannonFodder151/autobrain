@@ -230,9 +230,15 @@ class SocialApi {
     return SocialIssuePost.fromJson(data);
   }
 
-  Future<SocialIssueComment> addIssueComment(String postId, String body) async {
-    final data = await _api.post('/social/issues/$postId/comments', {'body': body})
-        as Map<String, dynamic>;
+  Future<SocialIssueComment> addIssueComment(
+    String postId,
+    String body, {
+    String? photoId,
+  }) async {
+    final data = await _api.post('/social/issues/$postId/comments', {
+      'body': body,
+      if (photoId != null) 'photo_id': photoId,
+    }) as Map<String, dynamic>;
     return SocialIssueComment.fromJson(data);
   }
 
