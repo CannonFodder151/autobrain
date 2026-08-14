@@ -34,7 +34,16 @@ jobs:
             echo "no usable base SHA — skipping changelog gate"
             exit 0
           fi
-          CHANGED="$(git diff --name-only "$BASE" "$GITHUB_SHA")"
+          # Diff against the merge-base, not base.sha: base.sha is the live
+          # tip of the target branch, so on a stale PR it drags in unrelated
+          # main changes — false-failing docs-only PRs and, worse, masking a
+          # missing CHANGELOG.md entry when main happened to move one (AUT-633).
+          MB="$(git merge-base "$BASE" "$GITHUB_SHA")"
+          if [ -z "$MB" ]; then
+            echo "no merge-base with base SHA — skipping changelog gate"
+            exit 0
+          fi
+          CHANGED="$(git diff --name-only "$MB" "$GITHUB_SHA")"
           APP_CHANGED="$(printf '%s\n' "$CHANGED" | grep -E '^(backend/|ai/|frontend/|docker/|docker-compose)' || true)"
           if [ -n "$APP_CHANGED" ] && ! printf '%s\n' "$CHANGED" | grep -qx 'CHANGELOG.md'; then
             echo "::error::App/docker files changed but CHANGELOG.md was not updated. Add an entry under [Unreleased] (see CONTRIBUTING.md) before merging."
