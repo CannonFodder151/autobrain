@@ -127,3 +127,87 @@ Branch: `feat/community-garage`. No mobile app release until P4 completes.
 Feature is **not actioned** until: (a) all current in-flight jobs complete, and (b) QA/security testing of the current stack is green. Implementation child issues are parked in `backlog` until this gate clears. **Exception:** the marketing campaign (website teaser, blog post, socials) is active now — "coming soon" only, never presented as live.
 
 Source: [AUT-294](https://paperclip.nathanmartina.com/AUT/issues/AUT-294) — plan document (rev 7, approved).
+
+---
+
+# Community Garage — Issues Blog (AUT-627)
+
+> **STATUS: PLANNED — board approved plan 2026-08-14.** Implementation is in flight (P1/P2 backend + frontend), gated on the P3 QA + security gate before launch. This section documents the approved design; nothing here is shipped until the gate clears. Schema tables are pending the P1 migration.
+
+## 1. Concept
+
+A **blog-style help forum** inside Community Garage. An owner posts a car problem ("engine won't start", "rattle at 60km/h") with vehicle context; other owners reply with help in a chronological comment thread; the author (or a helper) can mark the issue **resolved** and pin the answer. Reads like an old blog: newest posts first, tag browsing, full post pages.
+
+- **Community, not vehicle-scoped:** posts are visible to every premium Community Garage user across the federated network — NOT scoped to the author's own vehicles (unlike `/search`).
+- **Old-blog style:** reverse-chronological list → full post page → threaded comments. No infinite-swipe feed; a browsable archive.
+
+## 2. Principles (inherited from Community Garage)
+
+1. **Deterministic first, AI never in the critical path.** Search, tags, and list filters work without AI; AI is optional enhancement only, with deterministic fallback (same hybrid pattern as `search.py`).
+2. **Reuse, don't rebuild.** Same premium gating, feature toggle (`SocialServerConfig`), media/rate-limit/ownership plumbing, federation relay, and moderation model as Community Garage.
+3. **Premium-gated.** Free accounts cannot post or comment (server-side enforcement).
+4. **Safety by design.** Plain-text rendering (no raw HTML → no stored XSS), payload caps, rate limits, moderation + report flow, full QA + security gate before launch.
+5. **Opt-in per admin.** Lives under the existing Community Garage admin toggles; no new billing, no new infra.
+
+## 3. Data model
+
+New models in `backend/app/social/` (extend the Community Garage module):
+
+```
+social_issue_posts
+  id, author_user_id, author_display_name, server_name
+  title (<=150), body (<=4000, plaintext)
+  vehicle_snapshot_json   # deterministic snapshot from vehicle at post time (make/model/year/mileage bucket) — same pattern as SocialBuild.snapshot_json
+  tags (string[] of fixed vocabulary)
+  status: open|answered|resolved (default open)
+  resolved_comment_id (nullable, set on resolution)
+  origin: local|remote|demo
+  remote_post_id, remote_server_id   # federation identity (mirrors SocialBuild)
+  status_hidden: bool                # admin moderation flag
+  created_at, updated_at
+  embedding vector(1536)             # title + body + tags, via existing pgvector hybrid path
+
+social_issue_comments
+  id, post_id (FK), author_user_id, author_display_name, server_name
+  body (<=2000, plaintext), is_answer (bool, one per post)
+  created_at
+
+social_issue_flags
+  id, post_id, flagged_by_user_id, reason (<=200), created_at
+```
+
+- Reuses `SocialServerConfig`, the federation client (`federation.py`), `media.py` (photos), and `rate_limit.py`.
+- DB migration via the existing Alembic flow (AUT-643).
+- **Not in the database until the P1 migration lands.**
+
+## 4. API routes
+
+Extends `backend/app/api/v1/social.py` (or a sibling `issues.py` router) under `/api/v1`:
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET    | `/social/issues` | Blog list — reverse-chronological; filters `tag`, `status`, `q`; pagination (`cursor`/`limit`) |
+| POST   | `/social/issues` | Create issue post (premium write, rate-limited) |
+| GET    | `/social/issues/{id}` | Full post page incl. comments |
+| PATCH  | `/social/issues/{id}` | Author edit (title/body/status) |
+| POST   | `/social/issues/{id}/comments` | Add help comment (premium write) |
+| POST   | `/social/issues/{id}/comments/{cid}/answer` | Mark answer + set post `resolved` (author or helper) |
+| POST   | `/social/issues/{id}/flag` | Report abuse |
+| DELETE | `/social/issues/{id}` | Author delete (mirrors build delete; 404-for-non-owners) |
+| Admin  | hide/restore + list flagged | Via the existing admin API pattern |
+
+## 5. Search integration
+
+Register `issue` in `_ENTITY_MAP` (`backend/app/services/search.py`) as a **community-visible** entity (no vehicle scope). Keyword ILIKE always runs; pgvector cosine similarity ranks when embeddings are available. Blog browse stays deterministic — keyword-only fallback is already built in.
+
+## 6. Moderation
+
+- Flag/report flow: `POST /social/issues/{id}/flag` (flags capped per user per time window).
+- Admin hide/restore sets `status_hidden`; hidden posts are excluded from search and browse.
+- No AI moderation decisions — rule-based flag thresholds → admin queue.
+
+## 7. Delivery & gate
+
+P1 backend (AUT-643) → P2 frontend (AUT-644) → P3 QA + security (AUT-645/646) blocks launch → P4 docs + marketing (this doc, AUT-648/647) → P5 launch (AUT-649). Branch: `feat/issues-blog`. **No release until P3 is green.**
+
+Source: [AUT-627](https://paperclip.nathanmartina.com/AUT/issues/AUT-627) — plan document (rev 1, confirmed 2026-08-14).
