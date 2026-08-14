@@ -1,4 +1,4 @@
-/// Social compose — pick vehicle + photos (max 6), set share scope, publish.
+/// Social compose — pick vehicle + photos (max 15), set share scope, publish.
 library;
 
 import 'dart:typed_data';
@@ -61,8 +61,8 @@ class _SocialComposeScreenState extends State<SocialComposeScreen> {
   }
 
   Future<void> _pickPhotos() async {
-    if (_picked.length >= 6) {
-      _toast('Maximum 6 photos.');
+    if (_picked.length >= 15) {
+      _toast('Maximum 15 photos.');
       return;
     }
     final files = await ImagePicker().pickMultiImage(
@@ -72,7 +72,7 @@ class _SocialComposeScreenState extends State<SocialComposeScreen> {
     if (files.isEmpty) return;
     final picked = <({String name, String mime, Uint8List bytes})>[];
     for (final f in files) {
-      if (picked.length + _picked.length >= 6) break;
+      if (picked.length + _picked.length >= 15) break;
       picked.add((
         name: f.name,
         mime: f.mimeType ?? 'image/jpeg',
@@ -201,7 +201,7 @@ class _SocialComposeScreenState extends State<SocialComposeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Photos (up to 6)', style: Theme.of(context).textTheme.titleSmall),
+        Text('Photos (up to 15)', style: Theme.of(context).textTheme.titleSmall),
         const SizedBox(height: 8),
         if (_picked.isEmpty)
           OutlinedButton.icon(
@@ -238,7 +238,7 @@ class _SocialComposeScreenState extends State<SocialComposeScreen> {
                     ),
                   ],
                 ),
-              if (_picked.length < 6)
+              if (_picked.length < 15)
                 InkWell(
                   onTap: _pickPhotos,
                   borderRadius: BorderRadius.circular(8),
