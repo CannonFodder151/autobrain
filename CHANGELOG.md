@@ -72,6 +72,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- Alembic migration chain (AUT-695): merge migration `m3rge02` re-unifies the fork at `p6q7r8s9t0u1` so `alembic upgrade head` runs clean again and future migrations (e.g. `social_photos.position`) actually apply instead of silently falling back to `create_all`.
+
 ## [0.3.69] - 2026-08-14
 
 ### Fixed
