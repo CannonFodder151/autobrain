@@ -130,6 +130,149 @@ class SocialComment {
       );
 }
 
+/// Issues Blog (AUT-627) statuses, mirrored from the backend vocabulary.
+enum IssueStatus { open, answered, resolved }
+
+IssueStatus issueStatusFrom(String? raw) {
+  switch (raw) {
+    case 'answered':
+      return IssueStatus.answered;
+    case 'resolved':
+      return IssueStatus.resolved;
+    default:
+      return IssueStatus.open;
+  }
+}
+
+/// Fixed issue tag vocabulary (mirror of backend/app/social/tags.py). The
+/// server validates tags against this set, so the filter chips stay in sync.
+const List<String> issueTagVocabulary = [
+  'engine', 'brakes', 'electrical', 'interior', 'suspension', 'transmission',
+  'cooling', 'exhaust', 'fuel', 'steering', 'battery', 'starting',
+  'overheating', 'tyres', 'body', 'clutch', 'oil', 'noise', 'vibration',
+  'warning',
+];
+
+class SocialIssuePost {
+  SocialIssuePost({
+    required this.id,
+    required this.title,
+    required this.body,
+    required this.authorDisplayName,
+    required this.tags,
+    required this.status,
+    required this.commentCount,
+    required this.isMine,
+    this.serverName,
+    this.origin,
+    this.resolvedCommentId,
+    this.snapshot = const SocialSnapshot(),
+    this.createdAt,
+    this.comments = const [],
+  });
+
+  final String id;
+  final String title;
+  final String body;
+  final String authorDisplayName;
+  final String? serverName;
+  final String? origin;
+  final List<String> tags;
+  final IssueStatus status;
+  final String? resolvedCommentId;
+  final SocialSnapshot snapshot;
+  final int commentCount;
+  final bool isMine;
+  final DateTime? createdAt;
+  final List<SocialIssueComment> comments;
+
+  String get excerpt => body.replaceAll(RegExp(r'\s+'), ' ').trim();
+
+  factory SocialIssuePost.fromJson(Map<String, dynamic> json) {
+    final snap = json['vehicle_snapshot'] as Map<String, dynamic>?;
+    return SocialIssuePost(
+      id: json['id'] as String,
+      title: json['title'] as String? ?? '',
+      body: json['body'] as String? ?? '',
+      authorDisplayName: json['author_display_name'] as String? ?? 'Unknown',
+      serverName: json['server_name'] as String?,
+      origin: json['origin'] as String?,
+      tags: ((json['tags'] as List?) ?? const []).cast<String>(),
+      status: issueStatusFrom(json['status'] as String?),
+      resolvedCommentId: json['resolved_comment_id'] as String?,
+      snapshot: snap == null
+          ? const SocialSnapshot()
+          : SocialSnapshot.fromJson({
+              'specs': snap,
+              'mods': const [],
+            }),
+      commentCount: json['comment_count'] as int? ?? 0,
+      isMine: json['is_mine'] == true,
+      createdAt:
+          DateTime.tryParse(json['created_at'] as String? ?? '')?.toLocal(),
+      comments: ((json['comments'] as List?) ?? const [])
+          .map((c) =>
+              SocialIssueComment.fromJson(Map<String, dynamic>.from(c as Map)))
+          .toList(),
+    );
+  }
+
+  SocialIssuePost copyWith({
+    List<SocialIssueComment>? comments,
+    int? commentCount,
+    IssueStatus? status,
+    String? resolvedCommentId,
+  }) =>
+      SocialIssuePost(
+        id: id,
+        title: title,
+        body: body,
+        authorDisplayName: authorDisplayName,
+        serverName: serverName,
+        origin: origin,
+        tags: tags,
+        status: status ?? this.status,
+        resolvedCommentId: resolvedCommentId ?? this.resolvedCommentId,
+        snapshot: snapshot,
+        commentCount: commentCount ?? this.commentCount,
+        isMine: isMine,
+        createdAt: createdAt,
+        comments: comments ?? this.comments,
+      );
+}
+
+class SocialIssueComment {
+  SocialIssueComment({
+    required this.id,
+    required this.authorDisplayName,
+    required this.body,
+    this.serverName,
+    this.isAnswer = false,
+    this.isMine = false,
+    this.createdAt,
+  });
+
+  final String id;
+  final String authorDisplayName;
+  final String body;
+  final String? serverName;
+  final bool isAnswer;
+  final bool isMine;
+  final DateTime? createdAt;
+
+  factory SocialIssueComment.fromJson(Map<String, dynamic> json) =>
+      SocialIssueComment(
+        id: json['id'] as String,
+        authorDisplayName: json['author_display_name'] as String? ?? 'Unknown',
+        serverName: json['server_name'] as String?,
+        body: json['body'] as String? ?? '',
+        isAnswer: json['is_answer'] == true,
+        isMine: json['is_mine'] == true,
+        createdAt:
+            DateTime.tryParse(json['created_at'] as String? ?? '')?.toLocal(),
+      );
+}
+
 /// Relative time like "2h ago" — no intl dependency needed on the card.
 String socialRelativeTime(DateTime? when) {
   if (when == null) return '';
