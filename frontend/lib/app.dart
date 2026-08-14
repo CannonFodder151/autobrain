@@ -15,6 +15,13 @@ import 'screens/settings/license_screen.dart';
 class AutoBrainApp extends StatelessWidget {
   const AutoBrainApp({super.key});
 
+  /// Deep-link fragment captured at startup, before the Flutter web engine
+  /// normalizes the URL (clears `#/license` via `history.replaceState`
+  /// within ~2-4s of load). Without this, the logged-in rebuild reads an
+  /// already-cleared fragment and Home mounts instead of License. Set once
+  /// from `main()`; null falls back to the live `Uri.base.fragment`.
+  static String? initialFragment;
+
   /// True when the app was opened from a password-reset email link
   /// (…/reset-password?token=…).
   static String? resetTokenFromUrl() {
@@ -54,7 +61,9 @@ class AutoBrainApp extends StatelessWidget {
   /// ({origin}/#/license) — routes a logged-in user to the License screen so
   /// purchases happen in the browser, not in the store-published app.
   static bool licenseRequested() {
-    return Uri.base.fragment.replaceAll('/', '').toLowerCase() == 'license';
+    final fragment =
+        (initialFragment ?? Uri.base.fragment).replaceAll('/', '').toLowerCase();
+    return fragment == 'license';
   }
 
   @override

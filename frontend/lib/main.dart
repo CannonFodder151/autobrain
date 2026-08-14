@@ -9,6 +9,10 @@ import 'services/obd/obd_trip_monitor.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Capture the deep-link fragment before runApp: the Flutter web engine
+  // clears `#/license` via history.replaceState within ~2-4s of load, after
+  // which licenseRequested() would read an empty fragment (AUT-629).
+  AutoBrainApp.initialFragment = Uri.base.fragment;
   await AppConfig.load();
   runApp(
     ChangeNotifierProvider(
