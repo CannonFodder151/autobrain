@@ -77,6 +77,7 @@ async def env(db_env, monkeypatch):
     from sqlalchemy import delete
 
     async with maker() as s:
+        await s.execute(delete(sm.SocialPhoto))
         await s.execute(delete(sm.SocialIssueFlag))
         await s.execute(delete(sm.SocialIssueComment))
         await s.execute(delete(sm.SocialIssuePost))
@@ -336,6 +337,52 @@ async def test_comment_body_capped_and_plaintext(env):
         r = await c.post(f"/social/issues/{pid}/comments", json={"body": "ok\x1f\nfine"})
         assert r.status_code == 201
         assert "\x1f" not in r.json()["body"]
+
+
+@pytest.mark.asyncio
+async def test_comment_photo_attach_serialize_reject_and_cascade(env):
+    """AUT-736: a reply can carry one photo. The photo must belong to the
+    uploader and be unclaimed; the detail view returns it as `photo`; deleting
+    the post cascades reply photos."""
+    app, maker = env
+    pid = await _new_issue(maker, author_user_id="u1")
+    async with maker() as s:
+        s.add(sm.SocialPhoto(id="mine", uploader_user_id="u1", file_key="social/u1/photo.webp"))
+        s.add(sm.SocialPhoto(id="theirs", uploader_user_id="u2", file_key="social/u2/other.webp"))
+        await s.commit()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        # foreign photo -> 422
+        r = await c.post(f"/social/issues/{pid}/comments",
+                         json={"body": "Nice car", "photo_id": "theirs"})
+        assert r.status_code == 422
+        # unknown photo -> 422
+        r = await c.post(f"/social/issues/{pid}/comments",
+                         json={"body": "Nice car", "photo_id": "nope"})
+        assert r.status_code == 422
+        # valid attach -> 201 with the photo url
+        r = await c.post(f"/social/issues/{pid}/comments",
+                         json={"body": "Swap the battery", "photo_id": "mine"})
+        assert r.status_code == 201, r.text
+        cid = r.json()["id"]
+        assert r.json()["photo"] == "https://cdn.test/social/u1/photo.webp"
+        # a claimed photo can't be reused on another comment
+        pid2 = await _new_issue(maker, author_user_id="u1")
+        r = await c.post(f"/social/issues/{pid2}/comments",
+                         json={"body": "Reuse", "photo_id": "mine"})
+        assert r.status_code == 422
+
+        detail = (await c.get(f"/social/issues/{pid}")).json()
+        comment = next(cm for cm in detail["comments"] if cm["id"] == cid)
+        assert comment["photo"] == "https://cdn.test/social/u1/photo.webp"
+
+        # delete cascades reply photos
+        r = await c.request("DELETE", f"/social/issues/{pid}")
+        assert r.status_code == 204
+    async with maker() as s:
+        leftover = (await s.scalar(
+            select(sm.SocialPhoto).where(sm.SocialPhoto.id == "mine")
+        ))
+    assert leftover is None
 
 
 @pytest.mark.asyncio

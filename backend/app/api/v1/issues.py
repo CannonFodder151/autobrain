@@ -70,6 +70,7 @@ class IssueUpdate(BaseModel):
 
 class CommentIn(BaseModel):
     body: str = Field(min_length=1, max_length=MAX_COMMENT)
+    photo_id: str | None = Field(default=None, max_length=36)
 
 
 class FlagIn(BaseModel):
@@ -119,6 +120,22 @@ async def _photo_urls(db: AsyncSession, post_id: str) -> list[str]:
         except Exception:
             continue
     return urls
+
+
+async def _comment_photo_url(db: AsyncSession, comment_id: str) -> str | None:
+    """A reply's single photo (AUT-736). Returns None when there is none."""
+    p = await db.scalar(
+        select(SocialPhoto)
+        .where(SocialPhoto.comment_id == comment_id)
+        .order_by(SocialPhoto.created_at)
+        .limit(1)
+    )
+    if p is None:
+        return None
+    try:
+        return await signed_url(p.file_key)
+    except Exception:
+        return None
 
 
 async def _serialize(db: AsyncSession, post: SocialIssuePost, viewer: User) -> dict:
@@ -309,6 +326,7 @@ async def get_issue(
                 "author_display_name": c.author_display_name,
                 "server_name": c.server_name,
                 "body": c.body,
+                "photo": await _comment_photo_url(db, c.id),
                 "is_answer": c.is_answer,
                 "is_mine": user.id == c.author_user_id,
                 "created_at": c.created_at.isoformat(),
@@ -380,6 +398,23 @@ async def add_comment(
         body=body,
     )
     db.add(comment)
+    await db.flush()
+    if payload.photo_id:
+        photo = await db.scalar(
+            select(SocialPhoto).where(
+                SocialPhoto.id == payload.photo_id,
+                SocialPhoto.uploader_user_id == user.id,
+                SocialPhoto.build_id.is_(None),
+                SocialPhoto.issue_id.is_(None),
+                SocialPhoto.comment_id.is_(None),
+            )
+        )
+        if photo is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Photo is invalid (wrong owner or already attached)",
+            )
+        photo.comment_id = comment.id
     await db.commit()
     return {
         "id": comment.id,
@@ -387,6 +422,7 @@ async def add_comment(
         "author_display_name": comment.author_display_name,
         "server_name": comment.server_name,
         "body": comment.body,
+        "photo": await _comment_photo_url(db, comment.id),
         "is_answer": False,
         "created_at": comment.created_at.isoformat(),
     }
@@ -467,8 +503,13 @@ async def delete_issue(
         raise HTTPException(status_code=404, detail="Post not found")
     from sqlalchemy import delete
 
+    comment_ids = list(await db.scalars(
+        select(SocialIssueComment.id).where(SocialIssueComment.post_id == post.id)
+    ))
     await db.execute(delete(SocialIssueComment).where(SocialIssueComment.post_id == post.id))
     await db.execute(delete(SocialIssueFlag).where(SocialIssueFlag.post_id == post.id))
+    if comment_ids:
+        await db.execute(delete(SocialPhoto).where(SocialPhoto.comment_id.in_(comment_ids)))
     for photo in list(await db.scalars(
         select(SocialPhoto).where(SocialPhoto.issue_id == post.id)
     )):
