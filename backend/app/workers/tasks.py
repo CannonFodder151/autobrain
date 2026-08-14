@@ -4,9 +4,9 @@ import asyncio
 import base64
 import io
 import json
-import logging
-
 from celery import shared_task
+
+from app.core.logging import get_logger
 from pypdf import PdfReader
 
 from app.core.storage import get_object
@@ -20,7 +20,7 @@ from app.services.ai_client import extract_receipt, estimate_value
 from app.services.search import backfill_entity_embedding
 from app.ws.manager import manager
 
-logger = logging.getLogger("autobrain.workers")
+logger = get_logger("autobrain.workers")
 
 _loop = None
 
