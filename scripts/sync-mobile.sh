@@ -4,9 +4,10 @@
 #
 #   ./scripts/sync-mobile.sh <path-to-autobrain-mobile-checkout>
 #
-# Copies frontend/lib, frontend/assets, pubspec.yaml and the shared CHANGELOG
-# into the mobile checkout, then bumps the mobile version to match the server
-# APP_VERSION (build number incremented). Mobile-only deltas are preserved:
+# Copies frontend/lib + assets + the shared CHANGELOG into the mobile checkout,
+# then bumps the mobile version to match the server APP_VERSION (build number
+# incremented). pubspec.yaml dependencies are NOT copied — mobile keeps its own
+# (with mobile-only deltas like package_info_plus). Mobile-only deltas preserved:
 #   - lib/core/version_check.dart            (mobile-only file)
 #   - lib/core/auth_state.dart               (update-available prompt logic)
 #   - lib/core/config.dart                   (storeBuild, AUT-610)
@@ -47,6 +48,21 @@ git checkout -- lib/core/auth_state.dart lib/core/config.dart \
   lib/services/car/car_kit_service.dart 2>/dev/null || true
 cp -a "$FRONT/assets/." assets/ 2>/dev/null || true
 cp "$ROOT/CHANGELOG.md" CHANGELOG.md
+
+# --- Dependency guard ---------------------------------------------------------
+# lib/ sync can pull in new `package:` imports whose deps are not declared in
+# the mobile pubspec.yaml (AUT-455: trip_route_map.dart -> flutter_map/
+# latlong2/geolocator). pubspec.lock only resolves packages reachable from the
+# declared dependencies, so any import missing from it breaks `flutter test`
+# and every build. Fail the sync instead of pushing a broken lib/.
+missing="$(grep -rhoE "^import 'package:[a-z_0-9]+/" lib --include='*.dart' \
+  | sed -E "s/.*package:([a-z_0-9]+)\/.*/\1/" | sort -u \
+  | while read -r pkg; do grep -q "^  $pkg:" pubspec.lock || echo "$pkg"; done)"
+if [[ -n "$missing" ]]; then
+  echo "::error::lib/ imports packages missing from pubspec.yaml: $(echo $missing | tr '\n' ' ')" >&2
+  echo "::error::Add them to pubspec.yaml first (match frontend/pubspec.yaml versions), run flutter pub get, commit the lockfile." >&2
+  exit 1
+fi
 
 # --- Version -----------------------------------------------------------------
 SERVER="$(grep -E '^version: ' "$FRONT/pubspec.yaml" | head -1 | awk '{print $2}')"
