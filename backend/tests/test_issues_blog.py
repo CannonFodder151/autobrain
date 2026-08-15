@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from app.api import deps
+from app.api.v1 import admin as admin_api
 from app.api.v1 import issues as issues_api
 from app.api.v1 import social as social_api
 from app.db.session import Base, get_db
@@ -36,6 +37,7 @@ from app.services.search import ENTITY_TYPES, semantic_search
 
 STUB_USER = types.SimpleNamespace(id="u1", display_name="Alice", free_account=False, role="user")
 FREE_USER = types.SimpleNamespace(id="free-1", display_name="Freeloader", free_account=True, role="user")
+ADMIN_USER = types.SimpleNamespace(id="admin-1", display_name="Admin", free_account=False, role="admin", social_banned=False)
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -58,6 +60,7 @@ async def env(db_env, monkeypatch):
     maker, _ = db_env
     app = FastAPI()
     app.include_router(issues_api.router)
+    app.include_router(admin_api.admin_ops)
 
     async def _override_get_db():
         async with maker() as session:
@@ -66,6 +69,7 @@ async def env(db_env, monkeypatch):
     app.dependency_overrides[get_db] = _override_get_db
     app.dependency_overrides[deps.require_premium] = lambda: STUB_USER
     app.dependency_overrides[deps.require_premium_write] = lambda: STUB_USER
+    app.dependency_overrides[deps.require_admin] = lambda: ADMIN_USER
     app.dependency_overrides[social_api.require_social_feature] = lambda: None
 
     async def _fake_signed_url(key: str) -> str:
@@ -564,3 +568,103 @@ async def test_search_route_hides_issues_from_free_accounts(env):
         r = await c.get("/search", params={"q": "engine stalling"})
         assert r.status_code == 200
         assert any(item["type"] == "issue" for item in r.json())
+
+
+@pytest.mark.asyncio
+async def test_mine_filter_lists_only_own_posts(env):
+    """AUT-832: ?mine=true returns only the caller's posts (My Issues view)."""
+    app, maker = env
+    mine = await _new_issue(maker, title="My starter problem", author_user_id="u1")
+    other = await _new_issue(maker, title="Their tyre issue", author_user_id="u2")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.get("/social/issues")
+        assert r.status_code == 200
+        ids = [i["id"] for i in r.json()["items"]]
+        assert mine in ids and other in ids
+        r = await c.get("/social/issues", params={"mine": "true"})
+        ids = [i["id"] for i in r.json()["items"]]
+        assert mine in ids and other not in ids
+        # mine still honours tag/status/q filters
+        r = await c.get("/social/issues", params={"mine": "true", "q": "tyre"})
+        assert r.json()["items"] == []
+
+
+@pytest.mark.asyncio
+async def test_comment_flag_dedupe_and_review_queue(env):
+    """AUT-832: comments are flaggable, deduped per user, and surface in the
+    admin review hub with post+author context."""
+    app, maker = env
+    pid = await _new_issue(maker)
+    cid = await _new_comment(maker, pid)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.post(f"/social/issues/{pid}/comments/{cid}/flag", json={"reason": "Abusive"})
+        assert r.status_code == 201
+        # same user cannot re-flag the same comment
+        r = await c.post(f"/social/issues/{pid}/comments/{cid}/flag", json={"reason": "again"})
+        assert r.status_code == 409
+        # flag on a comment from another post 404s (no probing)
+        other = await _new_issue(maker)
+        r = await c.post(f"/social/issues/{other}/comments/{cid}/flag", json={"reason": "x"})
+        assert r.status_code == 404
+        # admin review queue shows it
+        r = await c.get("/admin/issues/review")
+        assert r.status_code == 200
+        items = r.json()["items"]
+        assert any(i["kind"] == "comment" and i["comment_id"] == cid and i["reason"] == "Abusive"
+                   for i in items)
+
+
+@pytest.mark.asyncio
+async def test_admin_review_queue_post_flags_and_delete(env):
+    """AUT-832: flagged posts appear in the review hub; admin can delete the
+    post or an individual comment."""
+    app, maker = env
+    pid = await _new_issue(maker, title="Dangerous advice")
+    cid = await _new_comment(maker, pid, body="Bad advice comment")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        assert (await c.post(f"/social/issues/{pid}/flag", json={"reason": "Misleading"})).status_code == 201
+        r = await c.get("/admin/issues/review")
+        assert any(i["kind"] == "post" and i["post_id"] == pid for i in r.json()["items"])
+        assert (await c.get("/admin/issues/flagged")).status_code == 200
+        # delete the comment -> gone from detail
+        r = await c.request("DELETE", f"/admin/issues/comments/{cid}")
+        assert r.status_code == 204
+        detail = (await c.get(f"/social/issues/{pid}")).json()
+        assert all(cm["id"] != cid for cm in detail["comments"])
+        # delete the post -> gone from browse and review
+        r = await c.request("DELETE", f"/admin/issues/posts/{pid}")
+        assert r.status_code == 204
+        assert (await c.get(f"/social/issues/{pid}")).status_code == 404
+        assert all(i["post_id"] != pid for i in (await c.get("/admin/issues/review")).json()["items"])
+
+
+@pytest.mark.asyncio
+async def test_social_ban_hides_posts_and_blocks_writes(env, monkeypatch):
+    """AUT-832: admin ban hides the user's posts and blocks their social
+    writes; unban restores. Read access is preserved."""
+    app, maker = env
+    pid = await _new_issue(maker, title="Mine pre-ban", author_user_id="u1")
+    async with maker() as s:
+        s.add(User(id="u1", email="alice@test.dev", display_name="Alice",
+                   hashed_password="x", role="user", max_vehicles=1))
+        await s.commit()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.post("/admin/users/u1/social-ban")
+        assert r.status_code == 200 and r.json()["social_banned"] is True
+        # post hidden from browse
+        assert all(i["id"] != pid for i in (await c.get("/social/issues")).json()["items"])
+        assert (await c.get(f"/social/issues/{pid}")).status_code == 404
+        # the write gate rejects a social_banned user (unit-level: the routes
+        # override require_premium_write in this harness, so hit the gate itself)
+        banned = types.SimpleNamespace(free_account=False, role="user", social_banned=True)
+        from httpx import AsyncClient as _AC
+        try:
+            await deps.require_premium_write(
+                banned, _read_only=types.SimpleNamespace(role="user"))
+            raise AssertionError("ban gate should have rejected")
+        except Exception as exc:
+            assert getattr(exc, "status_code", None) == 403, exc
+        # unban restores write + visibility
+        r = await c.post("/admin/users/u1/social-unban")
+        assert r.status_code == 200 and r.json()["social_banned"] is False
+        assert (await c.get("/social/issues")).json()["items"]

@@ -354,21 +354,25 @@ async def flagged_issues(db: AsyncSession = Depends(get_db)) -> dict:
             SocialIssuePost.title,
             SocialIssuePost.status,
             SocialIssuePost.status_hidden,
+            SocialIssuePost.author_user_id,
             SocialIssuePost.author_display_name,
             SocialIssuePost.created_at,
             func.count(SocialIssueFlag.id).label("flag_count"),
         )
         .join(SocialIssueFlag, SocialIssueFlag.post_id == SocialIssuePost.id)
+        .where(SocialIssueFlag.comment_id.is_(None))
         .group_by(SocialIssuePost.id)
         .order_by(func.count(SocialIssueFlag.id).desc())
     )
     return {
         "items": [
             {
-                "post_id": r.id,
+                "kind": "post",
+                "id": r.id,
                 "title": r.title,
                 "status": r.status,
                 "status_hidden": r.status_hidden,
+                "author_user_id": r.author_user_id,
                 "author_display_name": r.author_display_name,
                 "created_at": r.created_at.isoformat() if r.created_at else None,
                 "flag_count": r.flag_count,
@@ -376,6 +380,152 @@ async def flagged_issues(db: AsyncSession = Depends(get_db)) -> dict:
             for r in rows
         ]
     }
+
+
+@admin_ops.get("/issues/review")
+async def review_queue(db: AsyncSession = Depends(get_db)) -> dict:
+    """Unified moderation hub (AUT-832): every flagged post AND comment with
+    the reporting reasons and author info, newest report first."""
+    from app.social.models import SocialIssueComment, SocialIssueFlag, SocialIssuePost
+
+    stmt = (
+        select(
+            SocialIssueFlag.id.label("flag_id"),
+            SocialIssueFlag.reason,
+            SocialIssueFlag.created_at.label("flagged_at"),
+            SocialIssuePost.id.label("post_id"),
+            SocialIssuePost.title.label("post_title"),
+            SocialIssuePost.status_hidden,
+            SocialIssuePost.author_user_id.label("post_author_id"),
+            SocialIssuePost.author_display_name.label("post_author_name"),
+            SocialIssueComment.id.label("comment_id"),
+            SocialIssueComment.author_user_id.label("comment_author_id"),
+            SocialIssueComment.author_display_name.label("comment_author_name"),
+            SocialIssueComment.body.label("comment_body"),
+        )
+        .join(SocialIssuePost, SocialIssuePost.id == SocialIssueFlag.post_id)
+        .outerjoin(SocialIssueComment, SocialIssueComment.id == SocialIssueFlag.comment_id)
+        .order_by(SocialIssueFlag.created_at.desc())
+        .limit(200)
+    )
+    rows = (await db.execute(stmt)).all()
+    return {
+        "items": [
+            {
+                "flag_id": r.flag_id,
+                "reason": r.reason,
+                "flagged_at": r.flagged_at.isoformat() if r.flagged_at else None,
+                "kind": "comment" if r.comment_id else "post",
+                "post_id": r.post_id,
+                "post_title": r.post_title,
+                "post_hidden": r.status_hidden,
+                "post_author_user_id": r.post_author_id,
+                "post_author_display_name": r.post_author_name,
+                "comment_id": r.comment_id,
+                "comment_body": r.comment_body,
+                "comment_author_user_id": r.comment_author_id,
+                "comment_author_display_name": r.comment_author_name,
+            }
+            for r in rows
+        ]
+    }
+
+
+@admin_ops.delete("/issues/comments/{comment_id}", status_code=204)
+async def delete_comment_admin(
+    comment_id: str,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> None:
+    """Admin deletes a single issue comment (moderation hub, AUT-832)."""
+    from sqlalchemy import delete
+
+    from app.social.models import SocialIssueComment, SocialIssueFlag, SocialPhoto
+
+    comment = await db.get(SocialIssueComment, comment_id)
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    await db.execute(delete(SocialPhoto).where(SocialPhoto.comment_id == comment.id))
+    await db.execute(delete(SocialIssueFlag).where(SocialIssueFlag.comment_id == comment.id))
+    await db.delete(comment)
+    await db.commit()
+
+
+@admin_ops.delete("/issues/posts/{issue_id}", status_code=204)
+async def delete_issue_admin(
+    issue_id: str,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> None:
+    """Admin deletes an issue post outright (moderation hub, AUT-832)."""
+    from sqlalchemy import delete
+
+    from app.social.models import SocialIssueComment, SocialIssueFlag, SocialIssuePost, SocialPhoto
+
+    post = await db.get(SocialIssuePost, issue_id)
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    comment_ids = list(await db.scalars(
+        select(SocialIssueComment.id).where(SocialIssueComment.post_id == post.id)
+    ))
+    if comment_ids:
+        await db.execute(delete(SocialPhoto).where(SocialPhoto.comment_id.in_(comment_ids)))
+    await db.execute(delete(SocialPhoto).where(SocialPhoto.issue_id == post.id))
+    await db.execute(delete(SocialIssueComment).where(SocialIssueComment.post_id == post.id))
+    await db.execute(delete(SocialIssueFlag).where(SocialIssueFlag.post_id == post.id))
+    await db.delete(post)
+    await db.commit()
+
+
+@admin_ops.post("/users/{user_id}/social-ban")
+async def social_ban_user(
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> dict:
+    """Ban a user from posting in Community Garage and hide all their issue
+    posts (moderation hub, AUT-832). Unban restores the posts."""
+    from sqlalchemy import update
+
+    from app.social.models import SocialIssuePost
+
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.id == _admin.id:
+        raise HTTPException(status_code=400, detail="Cannot ban your own account")
+    user.social_banned = True
+    await db.execute(
+        update(SocialIssuePost)
+        .where(SocialIssuePost.author_user_id == user.id)
+        .values(status_hidden=True)
+    )
+    await db.commit()
+    return {"message": f"{user.display_name} banned from posting", "social_banned": True}
+
+
+@admin_ops.post("/users/{user_id}/social-unban")
+async def social_unban_user(
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> dict:
+    """Reverse a social ban and restore the user's issue posts."""
+    from sqlalchemy import update
+
+    from app.social.models import SocialIssuePost
+
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.social_banned = False
+    await db.execute(
+        update(SocialIssuePost)
+        .where(SocialIssuePost.author_user_id == user.id)
+        .values(status_hidden=False)
+    )
+    await db.commit()
+    return {"message": f"{user.display_name} unbanned", "social_banned": False}
 
 
 @admin_ops.patch("/issues/{issue_id}")

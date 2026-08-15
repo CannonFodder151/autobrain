@@ -127,7 +127,16 @@ async def require_premium_write(
     user: User = Depends(require_premium),
     _read_only: User = Depends(require_write),
 ) -> User:
-    """Social write routes: premium + not demo (demo accounts are read-only)."""
+    """Social write routes: premium + not demo + not social-banned.
+
+    Banned users are blocked from posting, commenting and flagging (AUT-832
+    moderation hub); they keep read access.
+    """
+    if user.social_banned:
+        raise HTTPException(
+            status_code=403,
+            detail="Your account has been suspended from posting in Community Garage.",
+        )
     return user
 
 

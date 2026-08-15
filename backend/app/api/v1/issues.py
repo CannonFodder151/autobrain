@@ -384,11 +384,15 @@ async def list_issues(
     tag: str | None = Query(default=None, max_length=32),
     status: str | None = Query(default=None, max_length=20),
     q: str | None = Query(default=None, max_length=150),
+    mine: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(require_premium),
     _rl: None = Depends(social_rate_limit(30)),
 ) -> dict:
-    """Blog list — reverse-chronological with keyset cursor pagination."""
+    """Blog list — reverse-chronological with keyset cursor pagination.
+
+    `mine=true` filters to the caller's own posts ("My Issues", AUT-832).
+    """
     from app.api.v1.social import _sync_federation
 
     await _sync_federation(db)
@@ -399,6 +403,8 @@ async def list_issues(
         raise HTTPException(status_code=400, detail=f"Unknown status: {status}")
 
     stmt = select(SocialIssuePost).where(SocialIssuePost.status_hidden.is_(False))
+    if mine:
+        stmt = stmt.where(SocialIssuePost.author_user_id == _user.id)
     if tag:
         stmt = stmt.where(await _tags_contains(db, tag))
     if status:
@@ -700,6 +706,42 @@ async def flag_issue(
         raise HTTPException(status_code=409, detail="You already flagged this post")
     db.add(SocialIssueFlag(
         post_id=post.id,
+        flagged_by_user_id=user.id,
+        reason=reason,
+    ))
+    await db.commit()
+    return {"message": "Flag submitted for review"}
+
+
+@router.post("/{post_id}/comments/{comment_id}/flag", status_code=201)
+async def flag_issue_comment(
+    post_id: str,
+    comment_id: str,
+    payload: FlagIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_premium_write),
+    _rl: None = Depends(social_rate_limit(5)),
+    _user_rl: None = Depends(social_user_rate_limit("issues-flag-comment", 5)),
+) -> dict:
+    """Report a comment on an issue post (AUT-832 moderation queue)."""
+    post = await _get_visible(db, post_id)
+    comment = await db.get(SocialIssueComment, comment_id)
+    if not comment or comment.post_id != post.id:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    reason = _plaintext(payload.reason).strip()
+    if not reason:
+        raise HTTPException(status_code=422, detail="Reason cannot be empty")
+    existing = await db.scalar(
+        select(SocialIssueFlag).where(
+            SocialIssueFlag.comment_id == comment.id,
+            SocialIssueFlag.flagged_by_user_id == user.id,
+        )
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="You already flagged this comment")
+    db.add(SocialIssueFlag(
+        post_id=post.id,
+        comment_id=comment.id,
         flagged_by_user_id=user.id,
         reason=reason,
     ))
