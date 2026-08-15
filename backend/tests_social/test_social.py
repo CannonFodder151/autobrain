@@ -779,3 +779,50 @@ async def test_upload_and_create_with_photo(monkeypatch) -> None:
         assert resp.status_code == 201, resp.text
         photo_id = resp.json()["id"]
         assert photo_id
+
+
+@pytest.mark.asyncio
+async def test_delete_build_with_photos_returns_to_pool(monkeypatch) -> None:
+    """AUT-703: DELETE /social/posts/{id} on a build with photos must not 500 —
+    photos return to the user's unassigned pool so they can be re-attached."""
+    async def _fake_upload(user_id, data, content_type=None):
+        return (f"social/{user_id}/a.webp", "http://assets/a.webp", 640, 480)
+
+    monkeypatch.setattr("app.api.v1.social.upload_photo", _fake_upload)
+    await _enable_feature(True)
+    async with _SessionLocal() as db:
+        owner = await _new_user(db, "del@example.com", "Del")
+        vehicle = await _new_vehicle(db, owner.id)
+        token = create_access_token(owner.id)
+        vehicle_id = vehicle.id
+    async with await _client(token) as c:
+        p1 = (await c.post("/api/v1/social/uploads",
+                           files={"file": ("a.webp", b"aaaa", "image/webp")})).json()
+        p2 = (await c.post("/api/v1/social/uploads",
+                           files={"file": ("b.webp", b"bbbb", "image/webp")})).json()
+        created = await c.post("/api/v1/social/posts", json={
+            "vehicle_id": vehicle_id,
+            "title": "Delete me",
+            "photo_ids": [p1["id"], p2["id"]],
+        })
+        assert created.status_code == 201, created.text
+        post_id = created.json()["id"]
+
+        gone = await c.delete(f"/api/v1/social/posts/{post_id}")
+        assert gone.status_code == 204, gone.text
+        assert (await c.get(f"/api/v1/social/posts/{post_id}")).status_code == 404
+
+    # empty gone too
+    async with _SessionLocal() as db:
+        gone2 = await db.scalar(select(SocialBuild).where(SocialBuild.id == post_id))
+        assert gone2 is None
+
+    # photos are back in the unassigned pool → reusable on a fresh build
+    async with await _client(token) as c:
+        reused = await c.post("/api/v1/social/posts", json={
+            "vehicle_id": vehicle_id,
+            "title": "Reused",
+            "photo_ids": [p1["id"], p2["id"]],
+        })
+        assert reused.status_code == 201, reused.text
+        assert reused.json()["photo_ids"] == [p1["id"], p2["id"]]

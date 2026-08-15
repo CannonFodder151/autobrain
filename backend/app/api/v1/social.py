@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_premium, require_premium_write
@@ -679,12 +679,18 @@ async def delete_post(
         # 404, not 403, so non-owners cannot tell a post exists (PW-8).
         raise HTTPException(status_code=404, detail="Post not found")
     scope = await db.scalar(select(SocialShareScope).where(SocialShareScope.build_id == build.id))
-    photos = list(await db.scalars(select(SocialPhoto).where(SocialPhoto.build_id == build.id)))
+    # Bulk-release photos back to the user's unassigned pool (matches the PATCH
+    # detach semantics). A bulk UPDATE runs immediately, so build_id is cleared
+    # before the parent DELETE — an ORM db.delete loop does not order child
+    # deletes first (no relationship/cascade) and 500s on the FK (AUT-703).
+    await db.execute(
+        update(SocialPhoto)
+        .where(SocialPhoto.build_id == build.id)
+        .values(build_id=None)
+    )
     await db.execute(delete(SocialComment).where(SocialComment.build_id == build.id))
     await db.execute(delete(SocialLike).where(SocialLike.build_id == build.id))
     if scope:
         await db.delete(scope)
-    for photo in photos:
-        await db.delete(photo)
     await db.delete(build)
     await db.commit()
