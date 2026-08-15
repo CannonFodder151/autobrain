@@ -54,6 +54,11 @@ SALE_CAP = 100
 # Stripe retries the card; unpaid/canceled do not).
 ACTIVE_STATUSES = frozenset({"active", "trialing", "past_due"})
 
+# Stripe statuses for a checkout that was started but not paid yet (3DS
+# pending, failed cards in dunning, or abandoned before payment). The user has
+# no paid access but the licence is "pending" until the check completes.
+PENDING_STATUSES = frozenset({"incomplete", "incomplete_expired", "unpaid"})
+
 # Store-native IAP product ids (AUT-610/617). The store teams configure these
 # exact ids in App Store Connect / Play Console; both stores use the same ids.
 # Each maps to the plan + billing interval it grants.
@@ -265,6 +270,30 @@ def has_paid_subscription(user: User) -> bool:
     )
 
 
+def license_status(user: User) -> str:
+    """Effective licence lifecycle state, one of `active` | `pending` | `free`.
+
+    - `active`: a paid entitlement (Stripe sub in an active status or a live
+      store IAP grant).
+    - `pending`: a licence is expected but not paid yet — either a Stripe
+      subscription whose checkout is incomplete/unpaid, or a non-free account
+      with no paid subscription (admin-granted/re-upgraded access that has not
+      actually been paid for).
+    - `free`: no licence, no pending payment, plain free tier.
+
+    Drives the License screen badge (green / orange / blue). An account is
+    never reported `active` without a paid entitlement, so a non-paying user
+    cannot show as "registered".
+    """
+    if has_paid_subscription(user):
+        return "active"
+    if user.stripe_subscription_status in PENDING_STATUSES:
+        return "pending"
+    if not user.free_account:
+        return "pending"
+    return "free"
+
+
 def apply_plan(user: User, plan_key: str) -> None:
     plan = PLANS[plan_key]
     user.free_account = False
@@ -284,7 +313,13 @@ async def create_checkout_session(
         raise ValueError("Unknown plan")
     # Sponsored/re-upgraded accounts (paid benefits, no Stripe subscription)
     # cannot buy a licence — the admin has already granted them access.
-    if not user.free_account and not has_paid_subscription(user):
+    # A subscription record in a pending status is NOT granted access: it is an
+    # unfinished/failed checkout, so the user may retry paying for it.
+    if (
+        not user.free_account
+        and not has_paid_subscription(user)
+        and not user.stripe_subscription_id
+    ):
         raise ValueError("Licence upgrades are disabled on this account")
     price_id = price_for(plan_key, billing)
     if not price_id:

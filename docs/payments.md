@@ -29,6 +29,8 @@ Two paid tiers plus a free tier. Prices in AUD (AUT-523); source of truth is `sc
 - Cancel: at period end; access kept until the period ends.
 - Webhook: `POST /billing/webhook` (signature verified via `STRIPE_WEBHOOK_SECRET`). Source of truth for tier changes — promotes on active, demotes on cancel/lapse.
 - Statuses granting access: `active`, `trialing`, `past_due`. `unpaid`/`canceled` do not.
+- Licence state: `/auth/me` exposes `license_status` (`active` / `pending` / `free`). A subscription stuck in `incomplete`/`incomplete_expired`/`unpaid` (checkout started, not paid) or a granted-but-unpaid account is reported `pending`; nothing shows `active` without a paid entitlement. The License screen renders `pending` orange.
+- A user with a pending (incomplete/unpaid) checkout can retry paying; only sponsored accounts with no subscription record are blocked from buying a licence.
 - Upgrade overlap: a newly completed subscription auto-cancels a previous one (no double billing).
 - Admin re-upgrade grants paid benefits without a Stripe subscription; sponsored accounts are blocked from buying a licence.
 - Billing endpoints return **503** until `STRIPE_SECRET_KEY` is set.
