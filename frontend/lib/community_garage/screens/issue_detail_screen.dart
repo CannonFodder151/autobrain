@@ -59,7 +59,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
     if (!mounted) return;
     setState(() => _pickedPhoto = (
       name: file.name,
-      mime: file.mimeType ?? 'image/jpeg',
+      mime: (file.mimeType?.trim().isNotEmpty ?? false) ? file.mimeType! : 'image/jpeg',
       bytes: bytes,
     ));
   }
