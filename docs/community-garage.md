@@ -132,7 +132,7 @@ Source: [AUT-294](https://paperclip.nathanmartina.com/AUT/issues/AUT-294) — pl
 
 # Community Garage — Issues Blog (AUT-627)
 
-> **STATUS: PLANNED — board approved plan 2026-08-14.** Implementation is in flight (P1/P2 backend + frontend), gated on the P3 QA + security gate before launch. This section documents the approved design; nothing here is shipped until the gate clears. Schema tables are pending the P1 migration.
+> **STATUS: SHIPPED — live on `main`.** Backend (AUT-643) + frontend (AUT-644) landed 2026-08-14 via PR #126, with follow-ups: photos (AUT-709/736/756), federation (AUT-756), demo seed (AUT-712), rate-limit/XFF hardening (AUT-670). This section describes the shipped behaviour.
 
 ## 1. Concept
 
@@ -151,63 +151,71 @@ A **blog-style help forum** inside Community Garage. An owner posts a car proble
 
 ## 3. Data model
 
-New models in `backend/app/social/` (extend the Community Garage module):
+Models in `backend/app/social/models.py`, migration `u1v2w3x4y5z6_add_issue_blog_tables.py`:
 
 ```
 social_issue_posts
   id, author_user_id, author_display_name, server_name
-  title (<=150), body (<=4000, plaintext)
-  vehicle_snapshot_json   # deterministic snapshot from vehicle at post time (make/model/year/mileage bucket) — same pattern as SocialBuild.snapshot_json
-  tags (string[] of fixed vocabulary)
+  title (<=150), body (Text, plaintext; control chars stripped)
+  vehicle_snapshot_json   # deterministic make/model/year snapshot from vehicle at post time
+  tags (string[] of fixed vocabulary, indexed)
   status: open|answered|resolved (default open)
   resolved_comment_id (nullable, set on resolution)
   origin: local|remote|demo
-  remote_post_id, remote_server_id   # federation identity (mirrors SocialBuild)
-  status_hidden: bool                # admin moderation flag
-  created_at, updated_at
-  embedding vector(1536)             # title + body + tags, via existing pgvector hybrid path
+  remote_post_id (unique), remote_server_id   # federation identity (mirrors SocialBuild)
+  photo_urls_json   # remote copies carry origin's signed photo URLs (AUT-756)
+  status_hidden: bool   # admin moderation flag (excluded from browse + search)
+  created_at (indexed; client-side microsecond-faithful default for keyset cursors), updated_at
+  embedding vector(_dim)   # title + body, via existing pgvector hybrid path
 
 social_issue_comments
-  id, post_id (FK), author_user_id, author_display_name, server_name
-  body (<=2000, plaintext), is_answer (bool, one per post)
+  id, post_id (FK), author_user_id (nullable for federated), author_display_name, server_name
+  body (Text, plaintext), is_answer (bool, one per post)
+  remote_comment_id   # origin comment id for matching answer events (AUT-756)
   created_at
 
 social_issue_flags
-  id, post_id, flagged_by_user_id, reason (<=200), created_at
+  id, post_id (FK), flagged_by_user_id, reason (<=200), created_at
+  UNIQUE(post_id, flagged_by_user_id)   # one flag per user per post
 ```
 
 - Reuses `SocialServerConfig`, the federation client (`federation.py`), `media.py` (photos), and `rate_limit.py`.
-- DB migration via the existing Alembic flow (AUT-643).
-- **Not in the database until the P1 migration lands.**
+- **Shipped** — tables live in the DB on `main`.
 
 ## 4. API routes
 
-Extends `backend/app/api/v1/social.py` (or a sibling `issues.py` router) under `/api/v1`:
+`backend/app/api/v1/issues.py` (router prefix `/social/issues`, under the Community Garage feature toggle — `403 "Disabled by your admin"` when off):
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET    | `/social/issues` | Blog list — reverse-chronological; filters `tag`, `status`, `q`; pagination (`cursor`/`limit`) |
-| POST   | `/social/issues` | Create issue post (premium write, rate-limited) |
+| GET    | `/social/issues` | Blog list — reverse-chronological; filters `tag`, `status`, `q`; keyset cursor pagination (`cursor`/`limit`, max 50) |
+| POST   | `/social/issues` | Create issue post (premium write, 5/min per user; up to 4 photos) |
 | GET    | `/social/issues/{id}` | Full post page incl. comments |
-| PATCH  | `/social/issues/{id}` | Author edit (title/body/status) |
-| POST   | `/social/issues/{id}/comments` | Add help comment (premium write) |
-| POST   | `/social/issues/{id}/comments/{cid}/answer` | Mark answer + set post `resolved` (author or helper) |
-| POST   | `/social/issues/{id}/flag` | Report abuse |
-| DELETE | `/social/issues/{id}` | Author delete (mirrors build delete; 404-for-non-owners) |
-| Admin  | hide/restore + list flagged | Via the existing admin API pattern |
+| PATCH  | `/social/issues/{id}` | Author edit (title/body/status) — 404 for non-owners |
+| POST   | `/social/issues/{id}/comments` | Add help comment (premium write, 10/min per user; optional 1 photo) |
+| POST   | `/social/issues/{id}/comments/{cid}/answer` | Pin answer + set post `resolved` (author only; 404 otherwise) |
+| POST   | `/social/issues/{id}/flag` | Report abuse (5/min per user; 409 if already flagged) |
+| DELETE | `/social/issues/{id}` | Author delete (cascades comments + flags + photos; 404 for non-owners) |
+
+Admin moderation (`backend/app/api/v1/admin.py`):
+| Method | Path | Purpose |
+|---|---|---|
+| GET    | `/admin/issues/flagged` | Moderation queue — flagged posts with flag count, desc |
+| PATCH  | `/admin/issues/{issue_id}` | Hide/restore (`status_hidden`) and/or change status |
 
 ## 5. Search integration
 
-Register `issue` in `_ENTITY_MAP` (`backend/app/services/search.py`) as a **community-visible** entity (no vehicle scope). Keyword ILIKE always runs; pgvector cosine similarity ranks when embeddings are available. Blog browse stays deterministic — keyword-only fallback is already built in.
+`issue` is registered in `_ENTITY_MAP` (`backend/app/services/search.py`) as a **community-visible** entity (`community: True`, no vehicle scope), searchable columns `title` + `body`, hidden posts excluded. Blog browse itself is deterministic: the list endpoint runs keyword ILIKE on `title`/`body` (LIKE-injection escaped); pgvector cosine similarity ranks when embeddings are available, else keyword-only.
 
 ## 6. Moderation
 
-- Flag/report flow: `POST /social/issues/{id}/flag` (flags capped per user per time window).
-- Admin hide/restore sets `status_hidden`; hidden posts are excluded from search and browse.
-- No AI moderation decisions — rule-based flag thresholds → admin queue.
+- Flag/report flow: `POST /social/issues/{id}/flag` — one flag per user per post (UNIQUE), reason required, per-user rate-limited.
+- Admin queue: `GET /admin/issues/flagged` (flag counts, desc); `PATCH /admin/issues/{id}` hides/restores (`status_hidden`) or changes status.
+- Hidden posts excluded from browse, detail, and search.
+- No AI moderation decisions — rule-based flag queue → admin action.
 
 ## 7. Delivery & gate
 
-P1 backend (AUT-643) → P2 frontend (AUT-644) → P3 QA + security (AUT-645/646) blocks launch → P4 docs + marketing (this doc, AUT-648/647) → P5 launch (AUT-649). Branch: `feat/issues-blog`. **No release until P3 is green.**
+Backend (AUT-643) + frontend (AUT-644) shipped 2026-08-14 (PR #126); photos (AUT-709/736), federation (AUT-756), demo seed (AUT-712), and hardening (AUT-670) landed as follow-ups. **Shipped — live.**
 
 Source: [AUT-627](https://paperclip.nathanmartina.com/AUT/issues/AUT-627) — plan document (rev 1, confirmed 2026-08-14).

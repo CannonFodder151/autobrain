@@ -18,6 +18,7 @@
 - OBD-II fault-code library with AI diagnostics integration
 - Flutter web + Android (Google Play)
 - Docker Compose (dev, prod, hosted), Kubernetes manifests
+- Community Garage Issues Blog — blog-style help forum where owners post car issues and get help (AUT-627; shipped 2026-08-14)
 
 ## In progress
 
@@ -35,7 +36,6 @@
 - Container health dashboard (Portainer integration)
 - Offline-mode sync (mobile → server on reconnect)
 - Hosted stack move to Oracle Cloud (Phase 3)
-- Community Garage Issues Blog — blog-style help forum where owners post car issues and get help (AUT-627; gated on QA + security)
 
 ## Deferred / future
 

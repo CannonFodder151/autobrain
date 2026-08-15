@@ -116,31 +116,33 @@ id, vehicle_id (FK), code, description, source (obd/manual), is_resolved, create
 
 Fault codes captured from a Bluetooth OBD2 adapter; pushed into the diagnostic AI tool.
 
-## Community Garage — Issues Blog (AUT-627, planned)
+## Community Garage — Issues Blog (AUT-627, shipped)
 
-> **Status: PLANNED — not in the database yet.** Tables land with the P1 migration (AUT-643) in `backend/app/social/`. Pending that, `alembic` has no revisions for them and no model maps them.
+> **Status: SHIPPED.** Tables live in `backend/app/social/models.py`, migration `u1v2w3x4y5z6_add_issue_blog_tables.py` (with merge revision `m3rge02`).
 
 ```
 social_issue_posts
-  id, author_user_id, author_display_name, server_name
-  title (<=150), body (<=4000, plaintext)
-  vehicle_snapshot_json   # deterministic snapshot from vehicle at post time (make/model/year/mileage bucket)
-  tags (string[] of fixed vocabulary)
+  id (PK), author_user_id (FK users, nullable), author_display_name, server_name
+  title (<=150), body (Text, plaintext)
+  vehicle_snapshot_json   # deterministic make/model/year snapshot at post time
+  tags (string[], fixed vocabulary, indexed)
   status: open|answered|resolved (default open)
-  resolved_comment_id (nullable, set on resolution)
-  origin: local|remote|demo
-  remote_post_id, remote_server_id   # federation identity (mirrors SocialBuild)
-  status_hidden: bool                # admin moderation flag
-  created_at, updated_at
-  embedding vector(1536)             # title + body + tags
+  resolved_comment_id, origin (local|remote|demo)
+  remote_post_id (unique), remote_server_id
+  photo_urls_json (remote copies, AUT-756), status_hidden (bool, indexed)
+  created_at (indexed), updated_at
+  embedding vector(EMBEDDING_DIMENSION)   # title + body
 
 social_issue_comments
-  id, post_id (FK social_issue_posts), author_user_id, author_display_name, server_name
-  body (<=2000, plaintext), is_answer (bool, one per post)
+  id (PK), post_id (FK social_issue_posts, indexed), author_user_id (FK users, nullable)
+  author_display_name, server_name, body (Text, plaintext)
+  is_answer (bool), remote_comment_id (indexed)
   created_at
 
 social_issue_flags
-  id, post_id (FK social_issue_posts), flagged_by_user_id, reason (<=200), created_at
+  id (PK), post_id (FK social_issue_posts, indexed), flagged_by_user_id (FK users)
+  reason (<=200), created_at
+  UNIQUE(post_id, flagged_by_user_id)
 ```
 
-Deterministic auto-tags from a fixed vocabulary (`engine`, `brakes`, `electrical`, `interior`, `suspension`, `transmission`) + vehicle data; optional AI refinement is a fallback only. Vector embedding on `social_issue_posts` feeds the existing pgvector hybrid search path (keyword-only fallback when embeddings are unavailable).
+Deterministic auto-tags from a fixed vocabulary (20 terms incl. `engine`, `brakes`, `electrical`, `interior`, `suspension`, `transmission`, `cooling`, `exhaust`, `fuel`, `steering`, `battery`, `starting`, `overheating`, `tyres`, `body`, `clutch`, `oil`, `noise`, `vibration`, `warning`, plus high-precision aliases); no AI in the tagging path. Vector embedding on `social_issue_posts.title` + `body` feeds the pgvector hybrid search path (keyword-only fallback when embeddings are unavailable).

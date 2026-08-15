@@ -154,23 +154,24 @@ A diagnostic auto-flips to `resolved` when its linked service is completed.
 | POST   | `/cancel` | Cancel the subscription |
 | POST   | `/webhook` | Stripe webhook (subscription lifecycle) |
 
-## Social — Issues Blog (AUT-627, planned)
+## Social — Issues Blog (AUT-627)
 
-> **Status: PLANNED.** Community Garage Issues Blog (AUT-627). Not yet in the served OpenAPI spec — pending backend implementation (AUT-643) and the P3 QA + security gate. Routes extend the `/api/v1/social.py` router; all write routes are premium-only (server-side entitlement), rate-limited, and reject the demo role. `403 "Disabled by your admin"` when the Community Garage feature toggle is off.
+> **Status: SHIPPED.** Community Garage Issues Blog (AUT-627), live on `main` (PR #126 + follow-ups). Routes live in `backend/app/api/v1/issues.py` under the `/api/v1` router. All write routes are premium-only (server-side entitlement), per-user rate-limited, and reject the demo role. `403 "Disabled by your admin"` when the Community Garage feature toggle is off.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET    | `/social/issues` | Blog list — reverse-chronological; filters `tag`, `status`, `q`; pagination (`cursor`/`limit`) |
-| POST   | `/social/issues` | Create issue post (premium write, rate-limited) |
+| GET    | `/social/issues` | Blog list — reverse-chronological; filters `tag`, `status`, `q`; keyset cursor pagination (`cursor`/`limit`, max 50) |
+| POST   | `/social/issues` | Create issue post (premium write, 5/min per user; up to 4 photos) |
 | GET    | `/social/issues/{id}` | Full post page incl. comments |
 | PATCH  | `/social/issues/{id}` | Author edit (title/body/status) — 404 for non-owners |
-| POST   | `/social/issues/{id}/comments` | Add help comment (premium write) |
-| POST   | `/social/issues/{id}/comments/{cid}/answer` | Mark comment as answer + set post `resolved` (author or helper) |
-| POST   | `/social/issues/{id}/flag` | Report abuse (flags capped per user per time window) |
+| POST   | `/social/issues/{id}/comments` | Add help comment (premium write, 10/min per user; optional 1 photo) |
+| POST   | `/social/issues/{id}/comments/{cid}/answer` | Pin answer + set post `resolved` (author only; 404 otherwise) |
+| POST   | `/social/issues/{id}/flag` | Report abuse (5/min per user; 409 if already flagged) |
 | DELETE | `/social/issues/{id}` | Author delete — 404 for non-owners |
-| GET/PATCH | `/admin/social/issues` (pattern) | Admin: list flagged + hide/restore (`status_hidden`) |
+| GET    | `/admin/issues/flagged` | Admin: moderation queue — flagged posts with flag counts |
+| PATCH  | `/admin/issues/{issue_id}` | Admin: hide/restore (`status_hidden`) + change status |
 
-Search: issue posts are registered as a community-visible entity in `_ENTITY_MAP` (no vehicle scope); keyword ILIKE always runs, pgvector cosine ranks when embeddings available.
+Search: `issue` is a community-visible entity in `_ENTITY_MAP` (no vehicle scope, hidden posts excluded); keyword ILIKE on `title`/`body` always runs, pgvector cosine ranks when embeddings available.
 
 ## Search
 
