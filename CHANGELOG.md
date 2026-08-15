@@ -17,6 +17,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security
+- Backend caps stored GPS samples per trip at 5000 (mirrors the client's 2400
+  cap with headroom), bounding per-trip payload size on logbook create/update
+  (AUT-852).
+
 ## [0.3.86] - 2026-08-15
 
 ### Added
