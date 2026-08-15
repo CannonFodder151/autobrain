@@ -166,8 +166,22 @@ async def _sync_federation(db: AsyncSession) -> None:
     caption metadata (FD-2).
     """
     cfg = await get_server_config(db)
-    if not cfg.federation_enabled or cfg.hub_status != "registered" or not cfg.hub_server_id:
+    if not cfg.federation_enabled or cfg.hub_status not in ("registered", "pending") or not cfg.hub_server_id:
         return
+    # AUT-731: a `pending` registration can only federate once the hub operator
+    # approves it (AUT-525). Poll the hub's public status endpoint so the
+    # server self-heals into `registered` without a manual re-register.
+    if cfg.hub_status == "pending":
+        try:
+            info = await federation.get_server_status(cfg)
+        except FederationUnavailable as exc:
+            logger.warning("social_federation_status_check_failed", error=str(exc))
+            return
+        if info.get("status") in ("approved", "registered"):
+            cfg.hub_status = "registered"
+            await db.flush()
+        else:
+            return
     last_sync = cfg.last_inbox_sync
     if last_sync is not None:
         if last_sync.tzinfo is None:  # sqlite stores tz-aware columns as naive

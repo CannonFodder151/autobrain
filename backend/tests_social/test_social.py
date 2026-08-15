@@ -172,6 +172,97 @@ def test_federation_register_sends_hosted_registration_key(monkeypatch) -> None:
     assert payload["registration_key"] == ""
 
 
+@pytest.mark.asyncio
+async def test_register_pending_reflected(monkeypatch) -> None:
+    """AUT-731: the hub's approval workflow (AUT-525) returns `status: pending`
+    for new registrations. The client must reflect that instead of claiming
+    `registered`, so federation isn't silently dead until the operator approves."""
+    import httpx
+
+    from app.social import federation
+
+    async def _handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={
+            "server_id": "deadbeef", "api_key": "k",
+            "status": "pending", "license_status": "pending_checkout",
+        })
+
+    _orig_client = httpx.AsyncClient
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kw: _orig_client(transport=httpx.MockTransport(_handler)))
+    monkeypatch.setattr(federation, "_hub_url", lambda cfg: "https://hub.example.invalid")
+
+    from app.social.models import SocialServerConfig
+
+    async with _SessionLocal() as db:
+        admin = await _new_user(db, "reg-pending@example.com", "RegAdmin", role="admin")
+        admin_token = create_access_token(admin.id)
+        cfg = SocialServerConfig(id=1, feature_enabled=True, federation_enabled=True,
+                                 server_name="Reg", server_email="reg@example.com",
+                                 hub_status="unregistered")
+        await db.merge(cfg)
+        await db.commit()
+    async with await _client(admin_token) as c:
+        got = await c.get("/api/v1/admin/social")
+        assert got.json()["hub_status"] == "unregistered"
+        reg = await c.post("/api/v1/admin/social/register")
+        assert reg.status_code == 200, reg.text
+        assert reg.json()["hub_status"] == "pending"
+        assert reg.json()["hub_server_id"] == "deadbeef"
+    async with _SessionLocal() as db:
+        cfg = await db.get(SocialServerConfig, 1)
+        assert cfg.hub_status == "pending"
+
+
+@pytest.mark.asyncio
+async def test_pending_registration_self_heals_on_approval(monkeypatch) -> None:
+    """AUT-731: a `pending` registration flips to `registered` (and starts
+    federating) once the hub operator approves it — checked against the hub's
+    public status endpoint on feed load, no manual re-register needed."""
+    async def _no_inbox(_cfg):
+        return []
+
+    async def _no_events(_cfg, after):
+        return {"events": [], "next_cursor": 0}
+
+    async def _status_pending(_cfg):
+        return {"server_id": "deadbeef", "status": "pending", "license_status": "pending_checkout"}
+
+    monkeypatch.setattr("app.social.federation.pull_inbox", _no_inbox)
+    monkeypatch.setattr("app.social.federation.pull_events", _no_events)
+    monkeypatch.setattr("app.social.federation.get_server_status", _status_pending)
+    async with _SessionLocal() as db:
+        cfg = SocialServerConfig(id=1, feature_enabled=True, federation_enabled=True,
+                                 hub_status="pending", hub_server_id="deadbeef",
+                                 last_inbox_sync=None, last_event_sync=None)
+        await db.merge(cfg)
+        await db.commit()
+        user = await _new_user(db, "pending@example.com", "Pending")
+        token = create_access_token(user.id)
+    async with await _client(token) as c:
+        feed = await c.get("/api/v1/social/feed")
+        assert feed.status_code == 200
+    async with _SessionLocal() as db:
+        cfg = await db.get(SocialServerConfig, 1)
+        assert cfg.hub_status == "pending"  # still pending → not federating
+
+    # hub operator approves → next feed flips it to registered and syncs
+    async def _status_approved(_cfg):
+        return {"server_id": "deadbeef", "status": "approved", "license_status": "active"}
+
+    monkeypatch.setattr("app.social.federation.get_server_status", _status_approved)
+    async with _SessionLocal() as db:
+        cfg = await db.get(SocialServerConfig, 1)
+        cfg.last_inbox_sync = None  # force a fresh sync
+        await db.commit()
+    async with await _client(token) as c:
+        feed = await c.get("/api/v1/social/feed")
+        assert feed.status_code == 200
+    async with _SessionLocal() as db:
+        cfg = await db.get(SocialServerConfig, 1)
+        assert cfg.hub_status == "registered"
+        assert cfg.last_inbox_sync is not None
+
+
 def test_compress_to_webp() -> None:
     import io
 

@@ -221,9 +221,11 @@ class _ServerSettingsState extends State<ServerSettings> {
     final status = _cfg!.hubStatus ?? 'unregistered';
     final color = status == 'registered'
         ? Colors.green
-        : status == 'error'
-            ? Colors.red
-            : scheme.onSurfaceVariant;
+        : status == 'pending'
+            ? Colors.amber
+            : status == 'error'
+                ? Colors.red
+                : scheme.onSurfaceVariant;
     return Card(
       child: ListTile(
         leading: Icon(Icons.hub, color: color),
@@ -236,7 +238,11 @@ class _ServerSettingsState extends State<ServerSettings> {
             if (_cfg!.hubUrl != null)
               Text('Hub: ${_cfg!.hubUrl}',
                   overflow: TextOverflow.ellipsis),
-            if (!_cfg!.registered)
+            if (status == 'pending')
+              const Text(
+                  'Registration pending hub-operator approval. The hub must '
+                  'approve this server before builds are exchanged.')
+            else if (!_cfg!.registered)
               const Text('Register to federate builds with other servers.'),
           ],
         ),
@@ -245,10 +251,15 @@ class _ServerSettingsState extends State<ServerSettings> {
                 onPressed: _saving ? null : _unregister,
                 child: const Text('Unregister'),
               )
-            : FilledButton(
-                onPressed: _saving ? null : _register,
-                child: const Text('Register'),
-              ),
+            : status == 'pending'
+                ? OutlinedButton(
+                    onPressed: _saving ? null : _load,
+                    child: const Text('Refresh'),
+                  )
+                : FilledButton(
+                    onPressed: _saving ? null : _register,
+                    child: const Text('Register'),
+                  ),
       ),
     );
   }

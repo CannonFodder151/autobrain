@@ -302,7 +302,7 @@ async def register_social_server(db: AsyncSession = Depends(get_db)) -> dict:
         cfg.hub_status = "error"
         await db.commit()
         raise HTTPException(status_code=502, detail=f"Hub unreachable: {exc}")
-    cfg.hub_status = "registered"
+    cfg.hub_status = "registered" if result.get("status") in ("approved", "registered") else "pending"
     cfg.hub_server_id = str(result.get("server_id"))
     cfg.hub_api_key = str(result.get("api_key"))
     cfg.hub_private_key = private_key
@@ -311,6 +311,7 @@ async def register_social_server(db: AsyncSession = Depends(get_db)) -> dict:
         "hub_status": cfg.hub_status,
         "hub_server_id": cfg.hub_server_id,
         "server_name": cfg.server_name,
+        "license_status": result.get("license_status"),
     }
 
 
