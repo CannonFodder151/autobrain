@@ -6,11 +6,13 @@ Restoring wipes existing data (admin-only operation) then re-inserts the
 snapshot with original IDs, so foreign keys and relationships are preserved.
 """
 
+import asyncio
 import json
 from datetime import datetime, timezone
 
 import sqlalchemy
 from sqlalchemy import delete, select
+from sqlalchemy.exc import InterfaceError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
@@ -25,6 +27,9 @@ logger = get_logger(__name__)
 # `vehicle_shares`, so full backups silently dropped those tables and a restore
 # of such a snapshot wiped the corresponding rows (AUT-521).
 _TABLES = {name: table for name, table in Base.metadata.tables.items()}
+
+_SERIALIZE_ATTEMPTS = 3
+_SERIALIZE_BACKOFF = 0.2
 
 
 def _backup_order() -> list[str]:
@@ -43,7 +48,24 @@ def _jsonable(value):
 
 
 async def serialize_all(db: AsyncSession) -> dict:
-    """Serialize every table into a JSON-ready dict."""
+    """Serialize every table into a JSON-ready dict.
+
+    Retries on transient DB errors (broken/closed connection mid-deploy, DB
+    restart) so the hourly backup doesn't alert on a blip (AUT-696).
+    """
+    for attempt in range(_SERIALIZE_ATTEMPTS):
+        try:
+            return await _serialize_once(db)
+        except (OperationalError, InterfaceError) as exc:
+            if attempt == _SERIALIZE_ATTEMPTS - 1:
+                raise
+            logger.warning("backup_serialize_transient_retry", attempt=attempt + 1, error=str(exc))
+            await db.rollback()
+            await asyncio.sleep(_SERIALIZE_BACKOFF * (attempt + 1))
+    raise RuntimeError("unreachable")  # pragma: no cover
+
+
+async def _serialize_once(db: AsyncSession) -> dict:
     data: dict[str, list[dict]] = {}
     for name in _backup_order():
         table = _TABLES.get(name)

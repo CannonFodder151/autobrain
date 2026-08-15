@@ -28,6 +28,7 @@ os.environ["MARKET_DATA_URL"] = ""
 os.environ["MARKET_DATA_API_KEY"] = ""
 
 import pytest  # noqa: E402
+from sqlalchemy.exc import OperationalError  # noqa: E402
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine  # noqa: E402
 
 # Self-contained sqlite engine so this file is immune to suite import order:
@@ -99,3 +100,29 @@ async def test_restore_roundtrip_keeps_shares() -> None:
     async with SessionLocal() as db:
         shares = (await db.execute(VehicleShare.__table__.select())).mappings().all()
     assert len(shares) == 1
+
+
+class _FlakySession:
+    """Delegates to a real session but fails the first execute with a
+    transient OperationalError (closed connection), like a mid-deploy blip."""
+
+    def __init__(self, inner: AsyncSession) -> None:
+        self._inner = inner
+
+    async def execute(self, *args, **kwargs):
+        if not hasattr(self, "_failed"):
+            self._failed = True
+            raise OperationalError("stmt", {}, Exception("server closed the connection"))
+        return await self._inner.execute(*args, **kwargs)
+
+    async def rollback(self) -> None:
+        return await self._inner.rollback()
+
+
+@pytest.mark.asyncio
+async def test_serialize_retries_transient_error() -> None:
+    await _reset_schema()
+    await _seed_share()
+    async with SessionLocal() as db:
+        data = await serialize_all(_FlakySession(db))
+    assert set(data["data"]) == set(Base.metadata.tables)
