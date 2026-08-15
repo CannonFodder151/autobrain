@@ -8,6 +8,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > user-facing change ships with an entry here under `[Unreleased]` — see
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
+## [Unreleased]
+
+### Added
+- Issues Blog posts now share across the federation like build posts do: a new
+  help post is pushed to the hub and appears on other registered servers with
+  its photos, and replies + resolved answers sync back (AUT-756).
+
+### Fixed
+- Photo uploads on the web app no longer fail silently ("nothing happens after
+  I select the file"): the frontend CSP now allows same-origin `blob:` URLs
+  that Flutter's image picker uses to preview/read picked images, and the
+  compose screens surface a "Could not read that photo" message instead of
+  dropping the selection silently (AUT-756).
+
 
 
 
