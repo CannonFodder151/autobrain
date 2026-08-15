@@ -129,6 +129,87 @@ void main() {
     });
   });
 
+  group('gps route recording', () {
+    test('feedPosition accumulates fixes on the active trip', () async {
+      final r = _Recorder().recorder;
+      r.bind('v1');
+      r.feed(const IgnitionSample(voltage: 14.0));
+      r.feed(const IgnitionSample(voltage: 14.0));
+      expect(r.isTripActive, isTrue);
+
+      r.feedPosition(-37.6385, 145.1936);
+      r.feedPosition(-37.6386, 145.1937);
+      expect(r.activeTrip!.gpsSamples, hasLength(2));
+      expect(r.activeTrip!.gpsSamples.last['lat'], -37.6386);
+      expect(r.activeTrip!.gpsSamples.last['lng'], 145.1937);
+      expect(r.activeTrip!.gpsSamples.last['t'],
+          DateTime.utc(2026, 8, 11, 10, 0, 0)
+              .millisecondsSinceEpoch ~/
+              1000);
+    });
+
+    test('invalid 0,0 no-fix and out-of-range fixes are dropped', () async {
+      final r = _Recorder().recorder;
+      r.bind('v1');
+      r.feed(const IgnitionSample(voltage: 14.0));
+      r.feed(const IgnitionSample(voltage: 14.0));
+      r.feedPosition(0, 0); // no lock
+      r.feedPosition(-91, 145.0); // out of range
+      r.feedPosition(-37.6, 145.1);
+      expect(r.activeTrip!.gpsSamples, hasLength(1));
+      expect(r.activeTrip!.gpsSamples.first['lat'], -37.6);
+    });
+
+    test('fixes while no trip is active are ignored', () async {
+      final r = _Recorder().recorder;
+      r.bind('v1');
+      r.feedPosition(-37.6, 145.1);
+      expect(r.isTripActive, isFalse);
+    });
+
+    test('route survives trip end and lands on the backend', () async {
+      final rec = _Recorder();
+      final r = rec.recorder;
+      r.bind('v1');
+      r.feed(const IgnitionSample(voltage: 14.0));
+      r.feed(const IgnitionSample(voltage: 14.0));
+      r.feedPosition(-37.6385, 145.1936);
+      r.feedPosition(-37.6387, 145.1939);
+      r.feed(const IgnitionSample(voltage: 12.4, rpm: 0));
+      r.feed(const IgnitionSample(voltage: 12.4, rpm: 0));
+      r.feed(const IgnitionSample(voltage: 12.4, rpm: 0));
+      expect(r.pending, hasLength(1));
+      expect(r.pending.first.gpsSamples, hasLength(2));
+      await r.flush();
+      expect(rec.writes, hasLength(1));
+      expect(rec.writes.first.gpsSamples, hasLength(2));
+    });
+
+    test('gpsSamples round-trips through ActiveTrip/PendingTrip JSON', () {
+      final a = ActiveTrip(
+        vehicleId: 'v1',
+        startedAt: DateTime.utc(2026, 8, 11, 9, 0, 0),
+        gpsSamples: [
+          {'t': 1723348800, 'lat': -37.6, 'lng': 145.1},
+        ],
+      );
+      final a2 = ActiveTrip.fromJson(a.toJson());
+      expect(a2!.gpsSamples, hasLength(1));
+
+      final p = PendingTrip(
+        vehicleId: 'v1',
+        startedAt: DateTime.utc(2026, 8, 11, 9, 0, 0),
+        endedAt: DateTime.utc(2026, 8, 11, 9, 30, 0),
+        gpsSamples: [
+          {'t': 1723348800, 'lat': -37.6, 'lng': 145.1},
+        ],
+      );
+      final p2 = PendingTrip.fromJson(p.toJson());
+      expect(p2!.gpsSamples, hasLength(1));
+      expect(p2.gpsSamples.first['lat'], -37.6);
+    });
+  });
+
   group('buffering across app kill', () {
     test('active trip is restored from the store on restart', () async {
       final setup = _Recorder(now: () => DateTime.utc(2026, 8, 11, 9, 0, 0));
