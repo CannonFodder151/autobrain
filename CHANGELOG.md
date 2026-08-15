@@ -11,7 +11,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.83] - 2026-08-15
 
 ### Added
 - Android Auto / car-kit trips now record their GPS route: position fixes are
