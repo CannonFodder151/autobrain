@@ -616,7 +616,7 @@ def _test_root_leaf() -> tuple:
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import ec
     from cryptography.x509.oid import NameOID
-    from jose import jwt as jose_jwt
+    import jwt as jose_jwt
 
     now = datetime.datetime.now(datetime.timezone.utc)
 
@@ -674,7 +674,7 @@ def _sign_payload(root_pem: str, root_key, data: dict, notification_type: str = 
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import ec
     from cryptography.x509.oid import NameOID
-    from jose import jwt as jose_jwt
+    import jwt as jose_jwt
 
     now = datetime.datetime.now(datetime.timezone.utc)
     key = ec.generate_private_key(ec.SECP256R1())
@@ -722,7 +722,7 @@ async def test_apple_webhook_refreshes_matched_user(monkeypatch) -> None:
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import ec
     from cryptography.x509.oid import NameOID
-    from jose import jwt as jose_jwt
+    import jwt as jose_jwt
 
     now = datetime.datetime.now(datetime.timezone.utc)
     key = ec.generate_private_key(ec.SECP256R1())
@@ -816,7 +816,7 @@ def test_apple_webhook_rejects_forged_root_with_copied_subject() -> None:
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import ec
     from cryptography.x509.oid import NameOID
-    from jose import jwt as jose_jwt
+    import jwt as jose_jwt
 
     now = datetime.datetime.now(datetime.timezone.utc)
     subject = x509.Name(
@@ -875,7 +875,7 @@ def test_apple_webhook_rejects_forged_root_with_copied_subject() -> None:
 
 
 def test_google_push_auth_rejects_wrong_issuer(monkeypatch) -> None:
-    from jose import jwt as jose_jwt
+    import jwt as jose_jwt
 
     monkeypatch.setattr(settings, "IAP_GOOGLE_PUBSUB_AUDIENCE", "https://autobrain.app/webhook/google")
     token = jose_jwt.encode(
@@ -892,7 +892,7 @@ def test_google_push_auth_rejects_wrong_issuer(monkeypatch) -> None:
 
 
 def test_google_push_auth_rejects_expired_token(monkeypatch) -> None:
-    from jose import jwt as jose_jwt
+    import jwt as jose_jwt
 
     monkeypatch.setattr(settings, "IAP_GOOGLE_PUBSUB_AUDIENCE", "https://autobrain.app/webhook/google")
     token = jose_jwt.encode(

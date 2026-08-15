@@ -78,7 +78,7 @@ async def _me(access: str) -> int:
 
 @pytest.mark.asyncio
 async def test_access_token_carries_ver() -> None:
-    from jose import jwt as jose_jwt
+    import jwt as jose_jwt
 
     from app.core.config import settings
 
@@ -93,7 +93,7 @@ async def test_access_token_carries_ver() -> None:
 
 @pytest.mark.asyncio
 async def test_refresh_token_carries_jti_and_ver() -> None:
-    from jose import jwt as jose_jwt
+    import jwt as jose_jwt
 
     from app.core.config import settings
     from app.core.security import create_refresh_token
@@ -124,7 +124,7 @@ async def test_refresh_rotates_and_denylists_old() -> None:
 
 @pytest.mark.asyncio
 async def test_denylist_row_written() -> None:
-    from jose import jwt as jose_jwt
+    import jwt as jose_jwt
 
     from app.core.config import settings
 

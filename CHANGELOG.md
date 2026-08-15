@@ -20,6 +20,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   (PYSEC-2026-35/2141/3552/3553/3554, GHSA-537c-gmf6-5ccf) covering JWT
   signing, federation Ed25519 keys, and TLS/OpenSSL. CI now runs pip-audit on
   pinned backend + AI deps (AUT-781).
+- Backend/AI: remediated transitive CVEs in the resolved dependency tree —
+  bumped `fastapi` to 0.133.0 with `starlette` 1.3.1 (clears the starlette
+  PYSEC-2026-161/248/249/1942/1941/2281/2280 set) and replaced the unmaintained
+  `python-jose` (whose transitive `ecdsa` 0.19.2 carries PYSEC-2026-1325, with
+  no patched release published) with `PyJWT[crypto]` (AUT-794).
+- CI: added a weekly full-resolution dependency scan
+  (`.github/workflows/security-scan.yml`) that audits the fully-resolved
+  backend + AI tree — the PR-time `--no-deps` pip-audit gate cannot see
+  transitive CVEs (AUT-794).
 
 ## [0.3.81] - 2026-08-15
 
