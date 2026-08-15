@@ -76,6 +76,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- License screen now distinguishes **License pending** (orange) from **Subscription active** (green): if a checkout was started but not paid (`incomplete` / `incomplete_expired` / `unpaid`) — or the account was granted but never actually paid for — the status shows "License pending" instead of implying the licence is active. `GET /auth/me` now reports a derived `license_status` (`active` / `pending` / `free`) so web + mobile agree, and never reports `active` without a paid entitlement.
+- Users stuck with an unfinished/failed checkout (a pending Stripe subscription) can now retry paying — only sponsored accounts with no subscription record are blocked from buying a licence.
+
 ## [0.3.73] - 2026-08-14
 
 ### Added

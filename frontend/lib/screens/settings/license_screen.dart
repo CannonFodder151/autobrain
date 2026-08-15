@@ -34,10 +34,21 @@ class _LicenseScreenState extends State<LicenseScreen> {
   String? _error;
 
   String? get _subStatus => _profile?['subscription_status'] as String?;
-  bool get _hasSub =>
-      _subStatus == 'active' ||
-      _subStatus == 'trialing' ||
-      _subStatus == 'past_due';
+  /// Server-reported licence lifecycle state (active / pending / free). Falls
+  /// back to the raw Stripe status for hosts on older backends.
+  String? get _licenseStatus {
+    final s = _profile?['license_status'] as String?;
+    if (s != null) return s;
+    final sub = _subStatus;
+    if (sub == 'active' || sub == 'trialing' || sub == 'past_due') return 'active';
+    if (sub == 'incomplete' || sub == 'incomplete_expired' || sub == 'unpaid') {
+      return 'pending';
+    }
+    return 'free';
+  }
+
+  bool get _hasSub => _licenseStatus == 'active';
+  bool get _hasPending => _licenseStatus == 'pending';
   int get _maxVehicles => (_profile?['max_vehicles'] as int?) ?? 1;
 
   @override
@@ -397,6 +408,12 @@ class _LicenseScreenState extends State<LicenseScreen> {
       title = 'Subscription active';
       subtitle = 'You have full access to AutoBrain. '
           'Managed by Stripe.';
+    } else if (_hasPending) {
+      icon = Icons.hourglass_top;
+      color = Colors.orange;
+      title = 'License pending';
+      subtitle = 'Your licence payment has not been confirmed yet. '
+          'Finish the checkout, or try upgrading again.';
     } else {
       icon = Icons.info_outline;
       color = Colors.blue;
