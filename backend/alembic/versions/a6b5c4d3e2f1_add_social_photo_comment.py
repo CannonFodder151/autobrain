@@ -45,10 +45,23 @@ def upgrade() -> None:
     if not _has_column("social_photos", "comment_id"):
         op.add_column(
             "social_photos",
-            sa.Column("comment_id", sa.String(36), sa.ForeignKey("social_issue_comments.id"), nullable=True),
+            sa.Column("comment_id", sa.String(36), sa.ForeignKey("social_issue_comments.id", ondelete="CASCADE"), nullable=True),
         )
     if not _has_index("ix_social_photos_comment_id", "social_photos"):
         op.create_index("ix_social_photos_comment_id", "social_photos", ["comment_id"])
+    if _online():
+        insp = sa.inspect(op.get_bind())
+        fk = next(
+            (f for f in insp.get_foreign_keys("social_photos")
+             if set(f.get("constrained_columns", [])) == {"comment_id"}),
+            None,
+        )
+        if fk and not str(fk.get("ondelete", "")).upper().startswith("CASCADE"):
+            op.drop_constraint(fk["name"], "social_photos", type_="foreignkey")
+            op.create_foreign_key(
+                fk["name"], "social_photos", "social_issue_comments",
+                ["comment_id"], ["id"], ondelete="CASCADE",
+            )
 
 
 def downgrade() -> None:

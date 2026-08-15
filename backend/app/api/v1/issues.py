@@ -506,13 +506,10 @@ async def delete_issue(
     comment_ids = list(await db.scalars(
         select(SocialIssueComment.id).where(SocialIssueComment.post_id == post.id)
     ))
-    await db.execute(delete(SocialIssueComment).where(SocialIssueComment.post_id == post.id))
-    await db.execute(delete(SocialIssueFlag).where(SocialIssueFlag.post_id == post.id))
     if comment_ids:
         await db.execute(delete(SocialPhoto).where(SocialPhoto.comment_id.in_(comment_ids)))
-    for photo in list(await db.scalars(
-        select(SocialPhoto).where(SocialPhoto.issue_id == post.id)
-    )):
-        await db.delete(photo)
+    await db.execute(delete(SocialPhoto).where(SocialPhoto.issue_id == post.id))
+    await db.execute(delete(SocialIssueComment).where(SocialIssueComment.post_id == post.id))
+    await db.execute(delete(SocialIssueFlag).where(SocialIssueFlag.post_id == post.id))
     await db.delete(post)
     await db.commit()
