@@ -10,7 +10,8 @@ on:
 
 jobs:
   audit:
-    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
 

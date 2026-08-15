@@ -22,8 +22,8 @@ on:
 
 jobs:
   auto-bump:
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, linux, x64]
     permissions:
       contents: write
     steps:
@@ -41,7 +41,8 @@ jobs:
 
   build:
     needs: auto-bump
-    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    runs-on: [self-hosted, linux, x64]
     permissions:
       contents: read
       packages: write
