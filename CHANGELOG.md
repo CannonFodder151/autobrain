@@ -79,7 +79,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.79] - 2026-08-15
 
 ### Fixed
 - The social federation server key no longer regenerates on every registration attempt (AUT-758). The Ed25519 keypair is now generated once and persisted in `social_server_config.hub_private_key`, so retrying a join reuses the same identity instead of rotating the key mid-join and failing. Regression test in `tests_social/test_social.py`.
