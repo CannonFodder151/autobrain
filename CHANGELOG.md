@@ -13,6 +13,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- Android Auto / car-kit trips now record their GPS route: position fixes are
+  captured while a drive is active and saved to the logbook trip, so a drive
+  logs a drawn path on the trip map (AUT-427).
+- Logbook trip view now has an "Open in Google Maps" button that opens the
+  trip's route drawn on Google Maps (AUT-427).
+
 ## [0.3.82] - 2026-08-15
 
 ### Security
