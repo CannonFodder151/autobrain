@@ -29,10 +29,8 @@ from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
 
 import httpx
+import jwt
 from cryptography.exceptions import InvalidSignature
-from jose import jwk as jose_jwk
-from jose import jws as jose_jws
-from jose import jwt as jose_jwt
 from sqlalchemy import select
 
 from app.core.config import settings
@@ -174,7 +172,7 @@ async def _google_access_token(client: httpx.AsyncClient) -> str:
     """Short-lived OAuth token from the Play service-account JWT assertion."""
     sa = _load_service_account()
     now = int(time.time())
-    assertion = jose_jwt.encode(
+    assertion = jwt.encode(
         {
             "iss": sa["client_email"],
             "scope": "https://www.googleapis.com/auth/androidpublisher",
@@ -234,7 +232,7 @@ def _google_expiry_ms(data: dict) -> str | None:
 def _apple_bearer() -> str:
     """Short-lived ES256 JWT signed with the App Store Connect API key."""
     now = int(time.time())
-    return jose_jwt.encode(
+    return jwt.encode(
         {
             "iss": settings.IAP_APPLE_ISSUER_ID,
             "iat": now,
@@ -250,7 +248,7 @@ def _apple_bearer() -> str:
 
 def _decode_signed_transaction(signed: str) -> dict:
     """Decode the (untrusted-envelope) signedTransaction JWS claims."""
-    return jose_jwt.get_unverified_claims(signed)
+    return jwt.decode(signed, options={"verify_signature": False})
 
 
 async def _apple_transaction(client: httpx.AsyncClient, transaction_id: str) -> dict:
@@ -315,11 +313,8 @@ def _chain_verified(certs, trusted_root) -> bool:
 def _verify_apple_signed_payload(signed: str) -> dict:
     """Verify an App Store Server Notification v2 signedPayload (JWS with x5c
     chain terminating at Apple Root CA - G3) and return its claims."""
-    from jose import JWTError
-    from jose import exceptions as jose_exc
-
     try:
-        header = jose_jws.get_unverified_header(signed)
+        header = jwt.get_unverified_header(signed)
         x5c = header.get("x5c")
         if not x5c:
             raise VerificationError("Notification is missing its certificate chain")
@@ -329,9 +324,24 @@ def _verify_apple_signed_payload(signed: str) -> dict:
         root = x509.load_pem_x509_certificate(APPLE_ROOT_CA_G3.encode())
         if not _chain_verified(certs, root):
             raise VerificationError("Notification certificate chain is untrusted")
-        payload = jose_jws.verify(signed, certs[0].public_key(), algorithms=["ES256"])
-        return json.loads(payload)
-    except (JWTError, jose_exc.JWSError, ValueError, TypeError, InvalidSignature):
+        # Signature-only verification, matching the old python-jose jws.verify():
+        # Apple's notification claims carry no exp/aud and the chain check above
+        # is the trust anchor.
+        claims = jwt.decode(
+            signed,
+            certs[0].public_key(),
+            algorithms=["ES256"],
+            options={
+                "verify_exp": False,
+                "verify_nbf": False,
+                "verify_iat": False,
+                "verify_aud": False,
+                "verify_iss": False,
+                "require": [],
+            },
+        )
+        return claims
+    except (jwt.PyJWTError, ValueError, TypeError, InvalidSignature):
         raise VerificationError("Notification JWS could not be verified")
 
 
@@ -346,6 +356,15 @@ _GOOGLE_ISSUERS = frozenset({"https://accounts.google.com", "accounts.google.com
 _JWKS_CACHE: dict = {"fetched_at": 0.0, "keys": []}
 
 
+def _jwk_to_rsa_public_key(key: dict):
+    """Build an RSAPublicKey from a standard RSA JWK (kty/n/e)."""
+    from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
+
+    n = int.from_bytes(_b64decode(key["n"]), "big")
+    e = int.from_bytes(_b64decode(key["e"]), "big")
+    return RSAPublicNumbers(e, n).public_key()
+
+
 async def _google_jwks(client: httpx.AsyncClient, kid: str):
     """JWKS for Google's signing keys, cached ~24h and refetched on unknown kid."""
     cache = _JWKS_CACHE
@@ -358,7 +377,7 @@ async def _google_jwks(client: httpx.AsyncClient, kid: str):
         cache["fetched_at"] = time.time()
     for key in cache["keys"]:
         if key.get("kid") == kid:
-            return jose_jwk.construct(key, algorithm="RS256")
+            return _jwk_to_rsa_public_key(key)
     return None
 
 
@@ -368,14 +387,12 @@ async def _verify_google_push_auth(client: httpx.AsyncClient, auth_header: str) 
     The token's audience defaults to the push endpoint URL; operators may
     override via IAP_GOOGLE_PUBSUB_AUDIENCE.
     """
-    from jose import JWTError
-
     if not auth_header.startswith("Bearer "):
         raise VerificationError("Missing Google Pub/Sub auth token")
     token = auth_header[len("Bearer ") :]
     try:
-        unverified = jose_jwt.get_unverified_claims(token)
-    except JWTError:
+        unverified = jwt.decode(token, options={"verify_signature": False})
+    except jwt.PyJWTError:
         raise VerificationError("Google Pub/Sub auth token is malformed")
     expected_aud = (
         settings.IAP_GOOGLE_PUBSUB_AUDIENCE
@@ -388,13 +405,13 @@ async def _verify_google_push_auth(client: httpx.AsyncClient, auth_header: str) 
     exp = unverified.get("exp")
     if isinstance(exp, int) and exp < int(time.time()):
         raise VerificationError("Google Pub/Sub token has expired")
-    kid = jose_jwt.get_unverified_header(token).get("kid")
+    kid = jwt.get_unverified_header(token).get("kid")
     signing_key = await _google_jwks(client, kid)
     if signing_key is None:
         raise VerificationError("Google Pub/Sub signing key not found")
     try:
-        jose_jwt.decode(token, signing_key, algorithms=["RS256"], audience=expected_aud)
-    except JWTError:
+        jwt.decode(token, signing_key, algorithms=["RS256"], audience=expected_aud)
+    except jwt.PyJWTError:
         raise VerificationError("Google Pub/Sub token signature is invalid")
 
 
