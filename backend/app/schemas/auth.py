@@ -106,6 +106,7 @@ class AdminUserUpdate(BaseModel):
     free_account: bool | None = None
     obd_enabled: bool | None = None
     obd_auto_connect: bool | None = None
+    social_banned: bool | None = None
 
 
 class UserAdminOut(BaseModel):
@@ -119,6 +120,7 @@ class UserAdminOut(BaseModel):
     free_account: bool = False
     obd_enabled: bool = False
     obd_auto_connect: bool = False
+    social_banned: bool = False
     created_at: datetime | None = None
     pending: bool = False
 
