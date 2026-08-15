@@ -21,7 +21,7 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import select
+from sqlalchemy import event, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -29,6 +29,7 @@ from app.api import deps
 from app.api.v1 import issues as issues_api
 from app.api.v1 import social as social_api
 from app.db.session import Base, get_db
+from app.models.user import User
 from app.social import models as sm
 from app.social.rate_limit import _user_window, _window
 from app.services.search import ENTITY_TYPES, semantic_search
@@ -383,6 +384,62 @@ async def test_comment_photo_attach_serialize_reject_and_cascade(env):
             select(sm.SocialPhoto).where(sm.SocialPhoto.id == "mine")
         ))
     assert leftover is None
+
+
+@pytest.mark.asyncio
+async def test_reply_photo_delete_cascade_fk_enforced(monkeypatch):
+    """AUT-736 F1 regression: with foreign keys enforced (as on Postgres),
+    deleting a post that carries a photo reply must not 500. Pre-fix
+    delete_issue removed comments before reply photos, tripping the NO ACTION
+    comment_id FK on FK-enforcing backends."""
+    engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool)
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def _fk_on(dbapi_conn, _record):
+        cur = dbapi_conn.cursor()
+        cur.execute("PRAGMA foreign_keys=ON")
+        cur.close()
+
+    maker = async_sessionmaker(engine, expire_on_commit=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    async with maker() as s:
+        s.add(User(id="u1", email="a@test.local", display_name="Alice",
+                   hashed_password="x", role="user"))
+        s.add(sm.SocialServerConfig(
+            id=1, feature_enabled=True, federation_enabled=False, server_name="Server A",
+        ))
+        await s.commit()
+
+    app = FastAPI()
+    app.include_router(issues_api.router)
+
+    async def _override_get_db():
+        async with maker() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = _override_get_db
+    app.dependency_overrides[deps.require_premium] = lambda: STUB_USER
+    app.dependency_overrides[deps.require_premium_write] = lambda: STUB_USER
+    app.dependency_overrides[social_api.require_social_feature] = lambda: None
+    monkeypatch.setattr(issues_api, "signed_url", lambda key: f"https://cdn.test/{key}")
+
+    pid = await _new_issue(maker, author_user_id="u1")
+    cid = await _new_comment(maker, pid, author_user_id="u1")
+    async with maker() as s:
+        s.add(sm.SocialPhoto(id="postpic", uploader_user_id="u1",
+                             file_key="social/u1/p.webp", issue_id=pid))
+        s.add(sm.SocialPhoto(id="rep", uploader_user_id="u1",
+                             file_key="social/u1/r.webp", comment_id=cid))
+        await s.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.request("DELETE", f"/social/issues/{pid}")
+        assert r.status_code == 204, r.text
+
+    async with maker() as s:
+        leftover = list((await s.scalars(select(sm.SocialPhoto))).all())
+    assert leftover == []
 
 
 @pytest.mark.asyncio
