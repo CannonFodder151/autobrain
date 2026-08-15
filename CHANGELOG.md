@@ -9,7 +9,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
 
+
 ## [Unreleased]
+
+## [0.3.81] - 2026-08-15
 
 ### Fixed
 - Community Garage photo uploads now accept iPhone/Android camera photos in
