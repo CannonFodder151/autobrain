@@ -696,6 +696,35 @@ async def test_unban_keeps_admin_hidden_posts_hidden(env):
 
 
 @pytest.mark.asyncio
+async def test_admin_deletes_purge_media_keys(env, monkeypatch):
+    """AUT-844 F4: admin comment/post deletes await _best_effort_delete_media,
+    so MinIO delete_object runs for every collected photo file_key (regression:
+    the coroutine was created and discarded; objects were never removed)."""
+    from app.core import storage
+
+    called: list[str] = []
+    async def _fake_delete_object(key: str) -> None:
+        called.append(key)
+
+    monkeypatch.setattr(storage, "delete_object", _fake_delete_object)
+    app, maker = env
+    pid = await _new_issue(maker, title="Media purge")
+    cid = await _new_comment(maker, pid, body="comment with photo")
+    async with maker() as s:
+        s.add(sm.SocialPhoto(id="postpic", uploader_user_id="u1",
+                             file_key="social/u1/post.webp", issue_id=pid))
+        s.add(sm.SocialPhoto(id="cmpic", uploader_user_id="u1",
+                             file_key="social/u1/comment.webp", comment_id=cid))
+        await s.commit()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        assert (await c.request("DELETE", f"/admin/issues/comments/{cid}")).status_code == 204
+        assert called == ["social/u1/comment.webp"]
+        called.clear()
+        assert (await c.request("DELETE", f"/admin/issues/posts/{pid}")).status_code == 204
+        assert called == ["social/u1/post.webp"]
+
+
+@pytest.mark.asyncio
 async def test_comment_flag_then_post_flag_not_blocked(env):
     """AUT-832 F2: flagging a comment on a post does not 409 the post flag
     (regression: post-flag dedupe ignored comment_id)."""

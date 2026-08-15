@@ -458,7 +458,7 @@ async def delete_comment_admin(
                 post.status = "open"
     await db.delete(comment)
     await db.commit()
-    _best_effort_delete_media(photo_keys)
+    await _best_effort_delete_media(photo_keys)
 
 
 @admin_ops.delete("/issues/posts/{issue_id}", status_code=204)
@@ -492,7 +492,7 @@ async def delete_issue_admin(
     await db.execute(delete(SocialIssueFlag).where(SocialIssueFlag.post_id == post.id))
     await db.delete(post)
     await db.commit()
-    _best_effort_delete_media(media_keys)
+    await _best_effort_delete_media(media_keys)
 
 
 async def _best_effort_delete_media(file_keys: list[str]) -> None:
