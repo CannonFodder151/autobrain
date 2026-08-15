@@ -15,7 +15,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.87] - 2026-08-15
 
 ### Security
 - Backend caps stored GPS samples per trip at 5000 (mirrors the client's 2400
