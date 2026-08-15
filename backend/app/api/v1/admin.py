@@ -295,7 +295,14 @@ async def register_social_server(db: AsyncSession = Depends(get_db)) -> dict:
             status_code=400,
             detail="Set server_name and server_email first (PATCH /admin/social)",
         )
-    private_key, public_key = fed.generate_keypair()
+    # AUT-758: the server keypair is generated once and reused on every
+    # (re)registration attempt — it must not rotate while trying to join.
+    if cfg.hub_private_key:
+        private_key = cfg.hub_private_key
+        public_key = fed.public_key_from_private(private_key)
+    else:
+        private_key, public_key = fed.generate_keypair()
+        cfg.hub_private_key = private_key
     try:
         result = await fed.register(cfg, cfg.server_name, cfg.server_email, public_key)
     except fed.FederationUnavailable as exc:

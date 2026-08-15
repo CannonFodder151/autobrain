@@ -214,6 +214,57 @@ async def test_register_pending_reflected(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_register_reuses_stored_server_key(monkeypatch) -> None:
+    """AUT-758: the server keypair is generated once and persisted; re-registering
+    (e.g. after a failed join) must reuse the stored key, not rotate it."""
+    import json
+
+    import httpx
+
+    from app.social import federation
+    from app.social.federation import _sign, public_key_from_private
+
+    seen_keys: list[dict] = []
+
+    async def _handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        seen_keys.append({"public_key": payload["public_key"]})
+        return httpx.Response(200, json={
+            "server_id": "deadbeef", "api_key": "k",
+            "status": "approved", "license_status": "active",
+        })
+
+    _orig_client = httpx.AsyncClient
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kw: _orig_client(transport=httpx.MockTransport(_handler)))
+    monkeypatch.setattr(federation, "_hub_url", lambda cfg: "https://hub.example.invalid")
+
+    from app.social.models import SocialServerConfig
+
+    async with _SessionLocal() as db:
+        admin = await _new_user(db, "reuse-key@example.com", "ReuseAdmin", role="admin")
+        admin_token = create_access_token(admin.id)
+        cfg = SocialServerConfig(id=1, feature_enabled=True, federation_enabled=True,
+                                 server_name="Reuse", server_email="reuse@example.com",
+                                 hub_status="unregistered")
+        await db.merge(cfg)
+        await db.commit()
+    async with await _client(admin_token) as c:
+        for _ in range(2):
+            got = await c.post("/api/v1/admin/social/register")
+            assert got.status_code == 200, got.text
+    async with _SessionLocal() as db:
+        cfg = await db.get(SocialServerConfig, 1)
+        assert cfg.hub_private_key is not None
+        # hub saw the same public key on both attempts → key did not rotate
+        assert len(seen_keys) == 2
+        assert seen_keys[0]["public_key"] == seen_keys[1]["public_key"]
+        # stored private key matches the public key the hub registered
+        assert public_key_from_private(cfg.hub_private_key) == seen_keys[0]["public_key"]
+        # persisted key actually signs requests (no re-derive regression)
+        assert _sign(cfg.hub_private_key, b"canonical")
+
+
+@pytest.mark.asyncio
 async def test_pending_registration_self_heals_on_approval(monkeypatch) -> None:
     """AUT-731: a `pending` registration flips to `registered` (and starts
     federating) once the hub operator approves it — checked against the hub's

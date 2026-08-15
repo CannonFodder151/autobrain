@@ -61,6 +61,18 @@ def generate_keypair() -> tuple[str, str]:
     return private_hex, public_hex
 
 
+def public_key_from_private(private_key_hex: str) -> str:
+    """Derive the public key hex from a stored private key (AUT-758)."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    priv = Ed25519PrivateKey.from_private_bytes(bytes.fromhex(private_key_hex))
+    return priv.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    ).hex()
+
+
 def _hub_url(cfg: SocialServerConfig) -> str:
     url = cfg.server_hub_url or settings.SOCIAL_FEDERATION_HUB_URL
     if not url:
