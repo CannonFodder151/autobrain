@@ -4,6 +4,23 @@
 
 Chronological log of verified test passes and verification runs. Real state only — mirrors repo `docs/qa-run-logs.md`. Newest first.
 
+## 2026-08-14 — Post-push pass: AUT-712 demo issue-blog seed (AUT-722, Gate 2)
+
+Gate 2 post-push pass for the demo issue-blog seed. Change under test: `_seed_demo_issues()` in `backend/app/db/seed.py` seeds 16 Community Garage issue-blog posts (1-3 replies each) on demo boot with `DEMO_RESET=true`; `reset_demo` now clears the demo user's posts/replies/flags before the user delete (FK-safe). Shipped via PR #135 (merge `16f96d8`), deployed to the demo tier by AUT-718. Verified on the checked-out workspace at HEAD `30b03d8` (contains `16f96d8`).
+
+**Automated suites (offline, sqlite; no Postgres/MinIO/9Router needed):**
+
+- `tests/test_seed_reset_demo.py` + `tests/test_issues_blog.py` — **15 passed** (seed regression incl. `test_demo_seeds_issues_blog_and_reset_cleans_it` — ≥15 posts, each with replies, answered/resolved posts pin an answer; reset completes FK-safe — plus the issues-blog suite incl. AUT-709 photos-up-to-4).
+- `tests_social` — **19 passed**.
+- `ruff check backend/app/db/seed.py` — clean.
+
+**Live demo tier check (https://demo.autobrainservice.app, demo@autobrainservice.app / demo):**
+
+- Login OK (HTTP 200, access + refresh token).
+- `GET /api/v1/social/issues` → HTTP 200, **16 posts** returned (≥15 required). Every post has `comment_count` 1-3 (replies render); all `answered`/`resolved` posts carry a pinned `resolved_comment_id`, all `open` posts carry none. Titles match the seeded 16 (Rough idle and stalling on cold start … Oil leak from the front of the engine).
+
+**Findings:** none. No release-blocking issue. Verdict: **deliverable**. Fix ownership for any follow-up: AUT-718 (Deployment Lead).
+
 ## 2026-08-13 — Pre-merge pass: AUT-523 billing hardening PR #107 (AUT-581, Gate 2)
 
 Gate 2 verification of PR https://github.com/CannonFodder151/autobrain/pull/107 (branch `fix/AUT-523-billing-hardening` @ `c500753`, base `main` @ `574260b`). Change scope: billing entitlement hardening — an active subscription on a price this deploy doesn't map (e.g. a grandfathered pre-AUT-523 USD price archived in Stripe) **preserves** the user's entitlement instead of demoting them to free while Stripe keeps billing; demotion only on lapse/cancel. `plan_for_user` infers the plan from persisted entitlement for such subs. `scripts/stripe-setup.py` refuses to archive a wrong-currency price that active subscriptions still reference; `assert` → `sys.exit` (survives `python -O`).
