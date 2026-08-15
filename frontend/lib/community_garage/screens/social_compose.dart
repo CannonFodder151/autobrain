@@ -76,7 +76,7 @@ class _SocialComposeScreenState extends State<SocialComposeScreen> {
         if (picked.length + _picked.length >= 15) break;
         picked.add((
           name: f.name,
-          mime: f.mimeType ?? 'image/jpeg',
+          mime: (f.mimeType?.trim().isNotEmpty ?? false) ? f.mimeType! : 'image/jpeg',
           bytes: await f.readAsBytes(),
         ));
       }

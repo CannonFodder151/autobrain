@@ -14,6 +14,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- Community Garage photo upload no longer crashes for photos whose MIME can't be
+  detected (e.g. HEIC from the iOS camera roll): `image_picker` returns an empty
+  string for `mimeType`, which used to blow up `MediaType.parse("")` and surface
+  as "Could not save: … Invalid media type". The upload now sanitizes the content
+  type (filename-derived MIME fallback, else `application/octet-stream`) and the
+  photo pickers treat an empty MIME as missing, defaulting to `image/jpeg`
+  (AUT-796, unblocks AUT-793).
+
 ## [0.3.83] - 2026-08-15
 
 ### Added

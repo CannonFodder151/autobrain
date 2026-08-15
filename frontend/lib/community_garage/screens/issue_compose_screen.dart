@@ -75,7 +75,7 @@ class _IssueComposeScreenState extends State<IssueComposeScreen> {
         if (picked.length + _picked.length >= 4) break;
         picked.add((
           name: f.name,
-          mime: f.mimeType ?? 'image/jpeg',
+          mime: (f.mimeType?.trim().isNotEmpty ?? false) ? f.mimeType! : 'image/jpeg',
           bytes: await f.readAsBytes(),
         ));
       }

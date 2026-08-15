@@ -85,7 +85,7 @@ class _EditBuildScreenState extends State<EditBuildScreen> {
         _photos.add(_PhotoEntry(
           bytes: await f.readAsBytes(),
           name: f.name,
-          mime: f.mimeType ?? 'image/jpeg',
+          mime: (f.mimeType?.trim().isNotEmpty ?? false) ? f.mimeType! : 'image/jpeg',
         ));
       }
     } catch (_) {
