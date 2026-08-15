@@ -12,6 +12,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security
+- `cryptography` bumped `44.0.1` → `50.0.0` to clear 7 known CVEs
+  (PYSEC-2026-35/2141/3552/3553/3554, GHSA-537c-gmf6-5ccf) covering JWT
+  signing, federation Ed25519 keys, and TLS/OpenSSL. CI now runs pip-audit on
+  pinned backend + AI deps (AUT-781).
+
 ## [0.3.81] - 2026-08-15
 
 ### Fixed

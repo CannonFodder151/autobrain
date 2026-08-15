@@ -51,6 +51,18 @@ jobs:
           fi
           echo "changelog gate OK — CHANGELOG.md iterated with app/docker changes"
 
+  pip-audit-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pip-audit
+        run: pip install --quiet pip-audit
+      - name: Fail on known-vuln pinned deps (AUT-781)
+        run: |
+          set -euo pipefail
+          pip-audit --disable-pip --no-deps \
+            -r backend/requirements.txt -r ai/requirements.txt
+
   auto-bump:
     needs: changelog-gate
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
