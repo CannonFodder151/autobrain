@@ -12,7 +12,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.84] - 2026-08-15
 
 ### Fixed
 - Community Garage photo upload no longer crashes for photos whose MIME can't be
