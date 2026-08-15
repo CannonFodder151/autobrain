@@ -10,7 +10,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.82] - 2026-08-15
 
 ### Security
 - `cryptography` bumped `44.0.1` → `50.0.0` to clear 7 known CVEs
