@@ -1,10 +1,9 @@
 /// Mobile-only "Car Play / Android Auto Integration" settings submenu.
 ///
 /// Honest explainer of what car integration can and cannot do — head-unit OBD
-/// gauges and CarPlay OBD are blocked by Google/Apple category policy and the
-/// Android-only Bluetooth SPP stack (see AUT-364 research) — plus the
-/// "auto-start trip logging when connected to the car" master toggle and a
-/// connection / last-trip status line.
+/// gauges and CarPlay OBD are blocked by Google/Apple category policy (see
+/// AUT-364 research) — plus the "auto-start trip logging when connected to
+/// the car" master toggle and a connection / last-trip status line.
 ///
 /// Mobile-only by design: the entry point in the shared Settings screen is
 /// guarded with `!kIsWeb`, and this file is not referenced by the web build's
@@ -13,44 +12,23 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../core/auth_state.dart';
 import '../../services/car/car_kit_service.dart';
 import '../../services/car/car_kit_trip_monitor.dart';
-import '../../services/obd/obd_connection.dart';
 import '../../services/obd/obd_trip_monitor.dart';
 
 /// Formats the submenu status line from live monitor state. Pure so it unit
 /// tests without a running connection.
 String carIntegrationStatusLine({
-  required ObdStatus connectionStatus,
-  String? adapterLabel,
   required bool tripActive,
   DateTime? tripStartedAt,
   DateTime? lastTripAt,
   CarKitLinkState carKitLink = CarKitLinkState.disconnected,
 }) {
-  final carKit = switch (carKitLink) {
+  final base = switch (carKitLink) {
     CarKitLinkState.connected => 'Car-kit connected',
-    CarKitLinkState.disconnected => null,
-  };
-  final connection = switch (connectionStatus) {
-    ObdStatus.connected =>
-      adapterLabel == null || adapterLabel.isEmpty
-          ? 'Connected to car adapter'
-          : 'Connected — $adapterLabel',
-    ObdStatus.connecting => 'Connecting…',
-    ObdStatus.off => null,
-    ObdStatus.error => 'Adapter error',
-  };
-  // Prefer whatever signal is live; "Not connected" only when neither is.
-  final base = switch ((connection, carKit)) {
-    (final String c, final String k) => '$c · $k',
-    (final String c, null) => c,
-    (null, final String k) => k,
-    (null, null) => 'Not connected',
+    CarKitLinkState.disconnected => 'Not connected',
   };
   if (tripActive) {
     final t = tripStartedAt?.toLocal();
@@ -92,7 +70,6 @@ class _CarIntegrationScreenState extends State<CarIntegrationScreen> {
       CarKitTripMonitorService.instance.monitor;
 
   bool _autoLogging = false;
-  bool _obdEnabled = true;
   DateTime? _lastTripAt;
 
   @override
@@ -116,13 +93,6 @@ class _CarIntegrationScreenState extends State<CarIntegrationScreen> {
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
-    try {
-      final me = await context
-          .read<AuthState>()
-          .api
-          .get('/auth/me') as Map<String, dynamic>;
-      _obdEnabled = (me['obd_enabled'] as bool?) ?? false;
-    } catch (_) {}
     if (!mounted) return;
     setState(() {
       _autoLogging = prefs.getBool(prefKey) ?? false;
@@ -135,39 +105,16 @@ class _CarIntegrationScreenState extends State<CarIntegrationScreen> {
     final prefs = await SharedPreferences.getInstance();
     setState(() => _autoLogging = value);
     await prefs.setBool(prefKey, value);
-    // The master switch gates BOTH auto-trip trigger paths: the OBD adapter
-    // link (AUT-362) and the phone car-kit BT + GPS path (AUT-367). The phone
-    // path needs no OBD adapter, so it is armed whenever the switch is on.
+    // The master switch drives the phone car-kit BT + GPS path (AUT-367),
+    // which needs no OBD adapter.
     await CarKitTripMonitorService.instance.setEnabled(value);
-    if (value && _obdEnabled) {
-      await prefs.setBool('obd_auto_connect', true);
-      _monitor.setAutoConnect(true);
-      try {
-        await context
-            .read<AuthState>()
-            .api
-            .patch('/auth/settings', {'obd_auto_connect': true});
-      } catch (_) {}
-    } else {
-      await prefs.setBool('obd_auto_connect', value && _obdEnabled);
-      _monitor.setAutoConnect(value && _obdEnabled);
-      try {
-        await context
-            .read<AuthState>()
-            .api
-            .patch('/auth/settings', {'obd_auto_connect': value && _obdEnabled});
-      } catch (_) {}
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final c = _monitor.connection;
     final r = _monitor.recorder;
     final carKitLink = _carKitMonitor?.link ?? CarKitLinkState.disconnected;
     final status = carIntegrationStatusLine(
-      connectionStatus: c.status,
-      adapterLabel: c.adapterLabel,
       tripActive: r.isTripActive,
       tripStartedAt: r.activeTrip?.startedAt,
       lastTripAt: _lastTripAt,

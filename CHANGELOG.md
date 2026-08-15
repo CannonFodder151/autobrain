@@ -20,6 +20,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Logbook trip view now has an "Open in Google Maps" button that opens the
   trip's route drawn on Google Maps (AUT-427).
 
+### Removed
+- Generic ELM327 OBD2 adapter support removed (AUT-427): the app now supports
+  only the custom-built OBD2 adapter. Bluetooth adapter connect/live-PID/VIN/
+  DTC-from-adapter UI and the ELM327 protocol + BT-SPP transport layers were
+  stripped. Trip start/stop comes from the phone-side car-kit / Android Auto
+  path (AUT-367) with GPS route recording. The fault-code library + manual
+  VIN entry remain.
+
 ## [0.3.82] - 2026-08-15
 
 ### Security

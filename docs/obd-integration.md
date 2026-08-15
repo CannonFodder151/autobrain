@@ -2,6 +2,15 @@
 
 Live OBD-II logging via a Bluetooth OBD2 adapter is an in-progress roadmap item for the Android & iPhone apps. The backend/API seam and a "Work in progress" UI already landed; this page captures the plan and next steps (mirror of the Outline doc).
 
+> **Direction change (AUT-427):** the app no longer supports **generic ELM327**
+> adapters (VGate iCar Pro, OBDLink, etc.). Only the custom-built AutoBrain
+> OBD2 adapter is supported, and trip start/stop comes from the phone-side
+> car-kit / Android Auto path (AUT-367) with GPS route recording. The generic
+> ELM327 Bluetooth paths (`elm327.dart`, `obd_bt_transport.dart`,
+> `obd_connection.dart`) were removed from the mobile app. The fault-code
+> library + manual VIN entry remain. Sections below marked "shipped" that
+> describe the generic adapter are historical.
+
 ## Phone-free trip logging (firmware PoC)
 
 See [`README.md`](https://github.com/CannonFodder151/autobrain-obd2-diy) and `DECISION.md` in the private firmware repo `CannonFodder151/autobrain-obd2-diy` for the full build-vs-buy picture (AUT-363 research → AUT-369 firmware PoC). Short version: ESP32 DIY board (US$15–30) with TWAI CAN + DS3231 RTC captures phone-dead trips to on-board flash; Freematics ONE+ (US$135) is the reference buy path. Firmware is written and compile-verified for the DIY path.
