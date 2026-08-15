@@ -253,6 +253,7 @@ async def me(
             "vehicles_remaining": remaining,
             "plan": billing_svc.plan_for_user(current),
             "subscription_status": subscription_status,
+            "license_status": billing_svc.license_status(current),
             "iap_status": iap_state,
         }
     )
