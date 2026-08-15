@@ -7,9 +7,15 @@ import asyncio
 import uuid
 from io import BytesIO
 
+from pillow_heif import register_heif_opener
 from PIL import Image, UnidentifiedImageError
 
 from app.core.storage import ensure_bucket, presigned_url, upload_object
+
+# iPhone default camera format — Pillow cannot decode it until the HEIF opener
+# is registered (deterministic, no AI). pillow-heif bundles libheif, so the
+# slim base image needs no extra apt packages.
+register_heif_opener()
 
 # Input gate matches the 15MB caps used by receipts/fuel/logbook photo
 # uploads. The stored object is still downscaled to 2048px + webp here, so a
@@ -18,7 +24,8 @@ MAX_UPLOAD_BYTES = 15 * 1024 * 1024
 UPLOAD_READ_CHUNK = 64 * 1024
 MAX_IMAGE_DIMENSION = 2048
 # Raster formats Pillow can decode; everything lands in MinIO as webp.
-ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+# image/heic + image/heif are iPhone/Android camera defaults (AUT-764).
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"}
 WEBP_QUALITY = 82
 
 
@@ -40,7 +47,9 @@ def compress_to_webp(data: bytes, content_type: str | None = None) -> bytes:
     except Image.DecompressionBombError as exc:
         raise MediaError("Image exceeds the maximum allowed pixel dimensions") from exc
     except (UnidentifiedImageError, OSError) as exc:
-        raise MediaError("Uploaded file is not a decodable image") from exc
+        raise MediaError(
+            "That photo can't be processed. Use JPEG, PNG, WebP or HEIC."
+        ) from exc
     if max(img.size) > MAX_IMAGE_DIMENSION:
         img.thumbnail((MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION), Image.LANCZOS)
     if img.mode not in ("RGB", "RGBA"):

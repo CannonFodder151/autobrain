@@ -11,6 +11,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- Community Garage photo uploads now accept iPhone/Android camera photos in
+  HEIC/HEIF format: the backend decodes them (via pillow-heif) and stores the
+  same compressed webp every other photo gets, so "photos still fail to upload"
+  for default-format phone photos is resolved. Unsupported file types now show
+  a clear "That photo can't be processed" message instead of a generic one
+  (AUT-764).
+
 ## [0.3.80] - 2026-08-15
 
 ### Added
