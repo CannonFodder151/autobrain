@@ -691,11 +691,9 @@ async def delete_post(
     if build.author_user_id != user.id:
         # 404, not 403, so non-owners cannot tell a post exists (PW-8).
         raise HTTPException(status_code=404, detail="Post not found")
-    scope = await db.scalar(select(SocialShareScope).where(SocialShareScope.build_id == build.id))
-    # Bulk-release photos back to the user's unassigned pool (matches the PATCH
-    # detach semantics). A bulk UPDATE runs immediately, so build_id is cleared
-    # before the parent DELETE — an ORM db.delete loop does not order child
-    # deletes first (no relationship/cascade) and 500s on the FK (AUT-703).
+    # Bulk deletes/update run immediately, so every child row is gone before the
+    # parent DELETE — an ORM db.delete loop does not order child deletes first
+    # (no relationship/cascade) and 500s on the FK (AUT-703, AUT-762).
     await db.execute(
         update(SocialPhoto)
         .where(SocialPhoto.build_id == build.id)
@@ -703,7 +701,6 @@ async def delete_post(
     )
     await db.execute(delete(SocialComment).where(SocialComment.build_id == build.id))
     await db.execute(delete(SocialLike).where(SocialLike.build_id == build.id))
-    if scope:
-        await db.delete(scope)
+    await db.execute(delete(SocialShareScope).where(SocialShareScope.build_id == build.id))
     await db.delete(build)
     await db.commit()
