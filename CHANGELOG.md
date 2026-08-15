@@ -14,7 +14,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.86] - 2026-08-15
 
 ### Added
 - Issues Blog "My Issues" filter shows only your own posts (AUT-832).
