@@ -16,6 +16,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   its photos, and replies + resolved answers sync back (AUT-756).
 
 ### Fixed
+- Unsharing a Community Garage build no longer returns HTTP 500 even when the
+  build has a share scope (AUT-762). The AUT-703 fix (0.3.78) covered photos,
+  comments and likes, but the per-build `social_share_scopes` row was still
+  deleted through the ORM, which does not order child deletes before the parent
+  delete (no `relationship()`/cascade), so Postgres rejected it with a
+  `social_share_scopes_build_id_fkey` FK violation. The scope row is now
+  bulk-deleted with the other child rows before the build. Regression test in
+  `tests_social/test_social.py`.
 - Photo uploads on the web app no longer fail silently ("nothing happens after
   I select the file"): the frontend CSP now allows same-origin `blob:` URLs
   that Flutter's image picker uses to preview/read picked images, and the
