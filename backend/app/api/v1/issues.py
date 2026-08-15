@@ -700,6 +700,7 @@ async def flag_issue(
         select(SocialIssueFlag).where(
             SocialIssueFlag.post_id == post.id,
             SocialIssueFlag.flagged_by_user_id == user.id,
+            SocialIssueFlag.comment_id.is_(None),
         )
     )
     if existing:

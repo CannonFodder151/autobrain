@@ -440,15 +440,25 @@ async def delete_comment_admin(
     """Admin deletes a single issue comment (moderation hub, AUT-832)."""
     from sqlalchemy import delete
 
-    from app.social.models import SocialIssueComment, SocialIssueFlag, SocialPhoto
+    from app.social.models import SocialIssueComment, SocialIssueFlag, SocialIssuePost, SocialPhoto
 
     comment = await db.get(SocialIssueComment, comment_id)
     if not comment:
         raise HTTPException(status_code=404, detail="Comment not found")
+    photo_keys = list(await db.scalars(
+        select(SocialPhoto.file_key).where(SocialPhoto.comment_id == comment.id)
+    ))
     await db.execute(delete(SocialPhoto).where(SocialPhoto.comment_id == comment.id))
     await db.execute(delete(SocialIssueFlag).where(SocialIssueFlag.comment_id == comment.id))
+    if comment.is_answer:
+        post = await db.get(SocialIssuePost, comment.post_id)
+        if post:
+            post.resolved_comment_id = None
+            if post.status == "resolved":
+                post.status = "open"
     await db.delete(comment)
     await db.commit()
+    _best_effort_delete_media(photo_keys)
 
 
 @admin_ops.delete("/issues/posts/{issue_id}", status_code=204)
@@ -468,13 +478,35 @@ async def delete_issue_admin(
     comment_ids = list(await db.scalars(
         select(SocialIssueComment.id).where(SocialIssueComment.post_id == post.id)
     ))
+    media_keys: list[str] = []
     if comment_ids:
+        media_keys += list(await db.scalars(
+            select(SocialPhoto.file_key).where(SocialPhoto.comment_id.in_(comment_ids))
+        ))
         await db.execute(delete(SocialPhoto).where(SocialPhoto.comment_id.in_(comment_ids)))
+    media_keys += list(await db.scalars(
+        select(SocialPhoto.file_key).where(SocialPhoto.issue_id == post.id)
+    ))
     await db.execute(delete(SocialPhoto).where(SocialPhoto.issue_id == post.id))
     await db.execute(delete(SocialIssueComment).where(SocialIssueComment.post_id == post.id))
     await db.execute(delete(SocialIssueFlag).where(SocialIssueFlag.post_id == post.id))
     await db.delete(post)
     await db.commit()
+    _best_effort_delete_media(media_keys)
+
+
+async def _best_effort_delete_media(file_keys: list[str]) -> None:
+    """Best-effort MinIO cleanup on admin takedowns (AUT-832 F4). Object removal
+    must never fail a moderation delete, so any storage error is swallowed."""
+    if not file_keys:
+        return
+    try:
+        from app.core.storage import delete_object
+
+        for key in file_keys:
+            await delete_object(key)
+    except Exception:
+        return
 
 
 @admin_ops.post("/users/{user_id}/social-ban")
@@ -484,7 +516,12 @@ async def social_ban_user(
     _admin: User = Depends(require_admin),
 ) -> dict:
     """Ban a user from posting in Community Garage and hide all their issue
-    posts (moderation hub, AUT-832). Unban restores the posts."""
+    posts (moderation hub, AUT-832). Unban restores only what the ban hid —
+    posts an admin hid separately stay hidden.
+
+    Scope note: the ban gates every social write (incl. replies/builds) but
+    only *hides* issue posts; comments and build posts are removed via the
+    hub's per-item delete actions instead (intended, AUT-832 F5)."""
     from sqlalchemy import update
 
     from app.social.models import SocialIssuePost
@@ -497,8 +534,11 @@ async def social_ban_user(
     user.social_banned = True
     await db.execute(
         update(SocialIssuePost)
-        .where(SocialIssuePost.author_user_id == user.id)
-        .values(status_hidden=True)
+        .where(
+            SocialIssuePost.author_user_id == user.id,
+            SocialIssuePost.status_hidden.is_(False),
+        )
+        .values(status_hidden=True, hidden_by_ban=True)
     )
     await db.commit()
     return {"message": f"{user.display_name} banned from posting", "social_banned": True}
@@ -510,7 +550,7 @@ async def social_unban_user(
     db: AsyncSession = Depends(get_db),
     _admin: User = Depends(require_admin),
 ) -> dict:
-    """Reverse a social ban and restore the user's issue posts."""
+    """Reverse a social ban, restoring only the posts the ban itself hid."""
     from sqlalchemy import update
 
     from app.social.models import SocialIssuePost
@@ -521,8 +561,11 @@ async def social_unban_user(
     user.social_banned = False
     await db.execute(
         update(SocialIssuePost)
-        .where(SocialIssuePost.author_user_id == user.id)
-        .values(status_hidden=False)
+        .where(
+            SocialIssuePost.author_user_id == user.id,
+            SocialIssuePost.hidden_by_ban.is_(True),
+        )
+        .values(status_hidden=False, hidden_by_ban=False)
     )
     await db.commit()
     return {"message": f"{user.display_name} unbanned", "social_banned": False}

@@ -151,6 +151,9 @@ class SocialIssuePost(Base):
     photo_urls_json: Mapped[str | None] = mapped_column(Text)
     # Admin moderation flag: hidden posts are excluded from browse + search.
     status_hidden: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    # True only when status_hidden was set BY a social ban (AUT-832). Unban
+    # restores these; posts an admin hid directly stay hidden.
+    hidden_by_ban: Mapped[bool] = mapped_column(Boolean, default=False)
     # Client-side microsecond-faithful default so keyset cursors compare exactly
     # on every dialect (sqlite's func.now() is second-precision text).
     created_at: Mapped[datetime] = mapped_column(

@@ -159,35 +159,33 @@ class _ModerationHubScreenState extends State<ModerationHubScreen> {
             const SizedBox(height: 6),
             Text('Reported: ${item['reason'] as String? ?? ''}',
                 style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
-            if (authorId == null)
-              const SizedBox(height: 8)
-            else
-              Align(
-                alignment: Alignment.centerRight,
-                child: Wrap(
-                  spacing: 8,
-                  children: [
-                    TextButton.icon(
-                      onPressed: _busy.contains(postId) ? null : () => _guard(
-                          isComment ? 'Delete this reply?' : 'Delete this post?',
-                          () async {
-                        setState(() => _busy.add(postId));
-                        try {
-                          if (isComment && commentId != null) {
-                            await SocialApi(context.read<AuthState>().api)
-                                .adminDeleteComment(commentId);
-                          } else {
-                            await SocialApi(context.read<AuthState>().api)
-                                .adminDeletePost(postId);
-                          }
-                        } finally {
-                          if (mounted) setState(() => _busy.remove(postId));
+            Align(
+              alignment: Alignment.centerRight,
+              child: Wrap(
+                spacing: 8,
+                children: [
+                  TextButton.icon(
+                    onPressed: _busy.contains(postId) ? null : () => _guard(
+                        isComment ? 'Delete this reply?' : 'Delete this post?',
+                        () async {
+                      setState(() => _busy.add(postId));
+                      try {
+                        if (isComment && commentId != null) {
+                          await SocialApi(context.read<AuthState>().api)
+                              .adminDeleteComment(commentId);
+                        } else {
+                          await SocialApi(context.read<AuthState>().api)
+                              .adminDeletePost(postId);
                         }
-                      }),
-                      icon: const Icon(Icons.delete_outline, size: 18),
-                      label: const Text('Delete'),
-                      style: TextButton.styleFrom(foregroundColor: scheme.error),
-                    ),
+                      } finally {
+                        if (mounted) setState(() => _busy.remove(postId));
+                      }
+                    }),
+                    icon: const Icon(Icons.delete_outline, size: 18),
+                    label: const Text('Delete'),
+                    style: TextButton.styleFrom(foregroundColor: scheme.error),
+                  ),
+                  if (authorId != null)
                     TextButton.icon(
                       onPressed: _busy.contains(authorId) ? null : () => _guard(
                           'Ban this user from posting?',
@@ -204,9 +202,9 @@ class _ModerationHubScreenState extends State<ModerationHubScreen> {
                       label: const Text('Ban user'),
                       style: TextButton.styleFrom(foregroundColor: scheme.error),
                     ),
-                  ],
-                ),
+                ],
               ),
+            ),
           ],
         ),
       ),

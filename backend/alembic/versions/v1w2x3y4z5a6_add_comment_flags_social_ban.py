@@ -4,7 +4,7 @@ AUT-832 moderation hub: comment flags on social_issue_flags (comment_id +
 per-target dedupe indexes) and the users.social_banned moderation flag.
 
 Revision ID: v1w2x3y4z5a6
-Revises: u1v2w3x4y5z6
+Revises: a6b5c4d3e2f2
 Create Date: 2026-08-15 00:00:00.000000
 
 AUT-510 pattern: every DDL op is guarded so DBs where the tables were created
@@ -16,7 +16,7 @@ import sqlalchemy as sa
 from alembic import context, op
 
 revision: str = "v1w2x3y4z5a6"
-down_revision: Union[str, None] = "u1v2w3x4y5z6"
+down_revision: Union[str, None] = "a6b5c4d3e2f2"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -49,6 +49,11 @@ def _has_index(name: str, table: str) -> bool:
 def upgrade() -> None:
     if _has_table("users") and not _has_column("users", "social_banned"):
         op.add_column("users", sa.Column("social_banned", sa.Boolean(), nullable=False, server_default=sa.false()))
+    if _has_table("social_issue_posts") and not _has_column("social_issue_posts", "hidden_by_ban"):
+        op.add_column(
+            "social_issue_posts",
+            sa.Column("hidden_by_ban", sa.Boolean(), nullable=False, server_default=sa.false()),
+        )
     if not _has_table("social_issue_flags"):
         return
     if not _has_column("social_issue_flags", "comment_id"):
@@ -95,6 +100,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    if _has_table("social_issue_posts") and _has_column("social_issue_posts", "hidden_by_ban"):
+        op.drop_column("social_issue_posts", "hidden_by_ban")
     if _has_table("social_issue_flags"):
         for name in ("ix_social_issue_flags_comment_id", "uq_social_issue_flag_comment", "uq_social_issue_flag_post"):
             if _has_index(name, "social_issue_flags"):

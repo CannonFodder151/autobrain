@@ -668,3 +668,73 @@ async def test_social_ban_hides_posts_and_blocks_writes(env, monkeypatch):
         r = await c.post("/admin/users/u1/social-unban")
         assert r.status_code == 200 and r.json()["social_banned"] is False
         assert (await c.get("/social/issues")).json()["items"]
+
+
+@pytest.mark.asyncio
+async def test_unban_keeps_admin_hidden_posts_hidden(env):
+    """AUT-832 F1: unban restores only what the ban hid; a post the admin hid
+    separately stays hidden (regression: was clobbered to visible)."""
+    app, maker = env
+    await _new_issue(maker, title="Admin-hid", author_user_id="u-hid")
+    pid2 = await _new_issue(maker, title="Ban-hid", author_user_id="u-hid")
+    async with maker() as s:
+        s.add(User(id="u-hid", email="hid@test.dev", display_name="Hidden",
+                   hashed_password="x", role="user", max_vehicles=1))
+        await s.commit()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        posts = (await c.get("/social/issues")).json()["items"]
+        admin_hid = next(p["id"] for p in posts if p["title"] == "Admin-hid")
+        # admin hides a post directly (separate moderation action)
+        r = await c.request("PATCH", f"/admin/issues/{admin_hid}", json={"status_hidden": True})
+        assert r.status_code == 200
+        # ban then unban
+        assert (await c.post("/admin/users/u-hid/social-ban")).status_code == 200
+        assert (await c.post("/admin/users/u-hid/social-unban")).status_code == 200
+        # both hidden posts gone from browse; the ban-hid one restored, admin-hid stays hidden
+        assert (await c.get(f"/social/issues/{pid2}")).status_code == 200
+        assert (await c.get(f"/social/issues/{admin_hid}")).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_comment_flag_then_post_flag_not_blocked(env):
+    """AUT-832 F2: flagging a comment on a post does not 409 the post flag
+    (regression: post-flag dedupe ignored comment_id)."""
+    app, maker = env
+    pid = await _new_issue(maker, title="Flag both")
+    cid = await _new_comment(maker, pid, body="comment")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        assert (await c.post(
+            f"/social/issues/{pid}/comments/{cid}/flag",
+            json={"reason": "bad comment"})).status_code == 201
+        assert (await c.post(
+            f"/social/issues/{pid}/flag",
+            json={"reason": "bad post"})).status_code == 201
+        # and the reverse order still works (post then comment)
+        pid2 = await _new_issue(maker, title="Flag both 2")
+        cid2 = await _new_comment(maker, pid2, body="comment2")
+        assert (await c.post(
+            f"/social/issues/{pid2}/flag",
+            json={"reason": "bad post"})).status_code == 201
+        assert (await c.post(
+            f"/social/issues/{pid2}/comments/{cid2}/flag",
+            json={"reason": "bad comment"})).status_code == 201
+
+
+@pytest.mark.asyncio
+async def test_admin_delete_answer_comment_unresolves_post(env):
+    """AUT-832 F3: deleting the pinned answer clears resolved_comment_id and
+    reopens the post (regression: dangling resolved reference)."""
+    app, maker = env
+    pid = await _new_issue(maker, author_user_id="u1", title="Resolved post")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.post(f"/social/issues/{pid}/comments", json={"body": "Try the relay"})
+        assert r.status_code == 201
+        cid = r.json()["id"]
+        assert (await c.post(f"/social/issues/{pid}/comments/{cid}/answer")).status_code == 200
+        detail = (await c.get(f"/social/issues/{pid}")).json()
+        assert detail["status"] == "resolved" and detail["resolved_comment_id"] == cid
+        # admin deletes the answer comment
+        assert (await c.request("DELETE", f"/admin/issues/comments/{cid}")).status_code == 204
+        detail = (await c.get(f"/social/issues/{pid}")).json()
+        assert detail["status"] == "open"
+        assert detail["resolved_comment_id"] is None
