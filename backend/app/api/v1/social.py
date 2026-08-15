@@ -201,6 +201,13 @@ async def _sync_federation(db: AsyncSession) -> None:
         build = item.get("build") or item
         if not isinstance(build, dict):
             continue
+        if build.get("type") == "issue":
+            # Federated Issues Blog posts (AUT-756) live in the blog list, not
+            # the build feed. Lazy import avoids the issues->social import cycle.
+            from app.api.v1.issues import pull_remote_issue
+
+            await pull_remote_issue(db, item, build)
+            continue
         rid = build.get("remote_build_id") or build.get("build_id")
         if not rid:
             continue
@@ -241,6 +248,12 @@ async def _apply_event(db: AsyncSession, event: dict) -> None:
         return
     payload = event.get("payload") or {}
     if not isinstance(payload, dict):
+        return
+    if payload.get("post_type") == "issue":
+        # Federated Issues Blog comment/answer event (AUT-756).
+        from app.api.v1.issues import apply_issue_event
+
+        await apply_issue_event(db, event)
         return
     build_id = payload.get("build_id")
     if not build_id:

@@ -44,6 +44,10 @@ keep read-only access (curated demo feed); write routes reject the demo role.
   `GET /social/share/{token}` resolves it.
 - `POST /social/uploads` — multipart image; webp-compressed on upload
   (`app/social/media.py`), stored in MinIO, returned as a signed short-lived URL.
+- `GET/POST /social/issues...` — the Issues Blog (`app/api/v1/issues.py`).
+  Posts, replies and answers federate like builds (AUT-756): outbox payloads
+  carry `type: "issue"` and the sync loop routes them into `social_issue_posts`
+  with `origin="remote"` + the origin's signed photo URLs.
 
 ## Share scope (req 11)
 

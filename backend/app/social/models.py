@@ -144,6 +144,9 @@ class SocialIssuePost(Base):
     origin: Mapped[str] = mapped_column(String(10), default="local", index=True)
     remote_post_id: Mapped[str | None] = mapped_column(String(64), index=True)
     remote_server_id: Mapped[str | None] = mapped_column(String(64))
+    # Remote copies carry the origin's signed photo URLs (AUT-756); local posts
+    # keep using the social_photos table + MinIO presigns instead.
+    photo_urls_json: Mapped[str | None] = mapped_column(Text)
     # Admin moderation flag: hidden posts are excluded from browse + search.
     status_hidden: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     # Client-side microsecond-faithful default so keyset cursors compare exactly
@@ -169,6 +172,9 @@ class SocialIssueComment(Base):
     server_name: Mapped[str | None] = mapped_column(String(120))
     body: Mapped[str] = mapped_column(Text)
     is_answer: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Origin comment id for remote copies, so answer events can be matched
+    # exactly instead of by body (AUT-756).
+    remote_comment_id: Mapped[str | None] = mapped_column(String(64), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
