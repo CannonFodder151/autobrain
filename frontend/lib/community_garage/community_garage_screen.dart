@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../core/auth_state.dart';
 import 'screens/issues_blog_screen.dart';
+import 'screens/moderation_hub_screen.dart';
 import 'screens/my_builds_screen.dart';
 import 'screens/server_settings.dart';
 import 'screens/social_screen.dart';
@@ -27,14 +28,17 @@ class CommunityGarageScreen extends StatelessWidget {
             if (isAdmin)
               PopupMenuButton<String>(
                 tooltip: 'Community Garage options',
-                onSelected: (_) {
+                onSelected: (value) {
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                        builder: (_) => const ServerSettings()),
+                        builder: (_) => value == 'review'
+                            ? const ModerationHubScreen()
+                            : const ServerSettings()),
                   );
                 },
                 itemBuilder: (_) => const [
                   PopupMenuItem(value: 'settings', child: Text('Settings')),
+                  PopupMenuItem(value: 'review', child: Text('To review')),
                 ],
               ),
           ],

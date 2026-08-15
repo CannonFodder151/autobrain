@@ -48,6 +48,17 @@ keep read-only access (curated demo feed); write routes reject the demo role.
   Posts, replies and answers federate like builds (AUT-756): outbox payloads
   carry `type: "issue"` and the sync loop routes them into `social_issue_posts`
   with `origin="remote"` + the origin's signed photo URLs.
+  - `GET /social/issues?mine=true` — the caller's own posts (My Issues, AUT-832).
+  - `POST /social/issues/{id}/flag` — report a post; deduped per user per post.
+  - `POST /social/issues/{id}/comments/{cid}/flag` — report a comment (AUT-832);
+    deduped per user per comment.
+- `GET /admin/issues/review` — **moderation hub (AUT-832)**: every flagged post
+  and comment with reporting reason + author, newest first.
+- `DELETE /admin/issues/posts/{id}` / `DELETE /admin/issues/comments/{cid}` —
+  admin deletes a reported entry (cascades flags/photos).
+- `POST /admin/users/{id}/social-ban` / `social-unban` — suspend a user from
+  posting in Community Garage (hides/restores their posts; write routes reject
+  the ban via `require_premium_write`).
 
 ## Share scope (req 11)
 

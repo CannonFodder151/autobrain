@@ -37,6 +37,7 @@ class _IssuesBlogScreenState extends State<IssuesBlogScreen> {
   String _query = '';
   String? _tag;
   IssueStatus? _status;
+  bool _mine = false;
 
   @override
   void initState() {
@@ -88,7 +89,7 @@ class _IssuesBlogScreenState extends State<IssuesBlogScreen> {
     });
     try {
       final result = await api.issues(
-          q: _query, tag: _tag, status: _status, cursor: _nextCursor);
+          q: _query, tag: _tag, status: _status, cursor: _nextCursor, mine: _mine);
       setState(() {
         _posts = result.items;
         _nextCursor = result.nextCursor;
@@ -111,7 +112,7 @@ class _IssuesBlogScreenState extends State<IssuesBlogScreen> {
     setState(() => _loadingMore = true);
     try {
       final result = await SocialApi(context.read<AuthState>().api).issues(
-          q: _query, tag: _tag, status: _status, cursor: _nextCursor);
+          q: _query, tag: _tag, status: _status, cursor: _nextCursor, mine: _mine);
       if (mounted) {
         setState(() {
           final known = _posts.map((p) => p.id).toSet();
@@ -171,9 +172,11 @@ class _IssuesBlogScreenState extends State<IssuesBlogScreen> {
                       const SizedBox(height: 160),
                       Center(
                         child: Text(
-                          _query.isEmpty && _tag == null && _status == null
-                              ? 'No issues yet — tap "Ask for help" to post the first one.'
-                              : 'No issues match your filters.',
+                          _mine
+                              ? 'No issues here yet — tap "Ask for help" to post your first one.'
+                              : _query.isEmpty && _tag == null && _status == null
+                                  ? 'No issues yet — tap "Ask for help" to post the first one.'
+                                  : 'No issues match your filters.',
                           style: const TextStyle(color: Colors.grey),
                           textAlign: TextAlign.center,
                         ),
@@ -248,9 +251,18 @@ class _IssuesBlogScreenState extends State<IssuesBlogScreen> {
               padding: const EdgeInsets.symmetric(vertical: 8),
               children: [
                 _filterChip(
-                  label: 'All',
-                  selected: _tag == null && _status == null,
+                  label: 'My Issues',
+                  selected: _mine,
                   onSelected: () => setState(() {
+                    _mine = !_mine;
+                    _reload();
+                  }),
+                ),
+                _filterChip(
+                  label: 'All',
+                  selected: _tag == null && _status == null && !_mine,
+                  onSelected: () => setState(() {
+                    _mine = false;
                     _tag = null;
                     _status = null;
                     _reload();

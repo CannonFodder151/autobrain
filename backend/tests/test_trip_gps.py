@@ -28,7 +28,7 @@ from app.main import app  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.models.vehicle import Vehicle  # noqa: E402
 from app.schemas.logbook import LogEntryCreate  # noqa: E402
-from app.services.trip_gps import clean_samples, parse_board_csv  # noqa: E402
+from app.services.trip_gps import MAX_GPS_SAMPLES, clean_samples, parse_board_csv  # noqa: E402
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -81,6 +81,16 @@ def test_clean_samples_drops_invalid_and_dedupes() -> None:
         (5, -37.6, 145.2),
     ]
     assert clean_samples(None) is None
+
+
+def test_clean_samples_caps_length_at_max() -> None:
+    samples = [{"t": i, "lat": -37.6, "lon": 145.1 + (i % 10) * 1e-6} for i in range(MAX_GPS_SAMPLES + 100)]
+    cleaned = clean_samples(samples)
+    assert cleaned is not None
+    assert len(cleaned) == MAX_GPS_SAMPLES
+    # keeps the earliest fixes, not the tail
+    assert cleaned[0].t == 0
+    assert cleaned[-1].t == MAX_GPS_SAMPLES - 1
 
 
 def test_schema_validator_rejects_bad_samples() -> None:
