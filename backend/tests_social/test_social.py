@@ -28,7 +28,7 @@ from app.models.mod import Modification
 from app.models.user import User
 from app.models.vehicle import Vehicle
 from app.social.media import compress_to_webp
-from app.social.models import SocialBuild, SocialServerConfig
+from app.social.models import SocialBuild, SocialServerConfig, SocialShareScope
 from app.social.snapshot import build_snapshot, dumps, loads
 
 _engine = create_async_engine(os.environ["DATABASE_URL"])
@@ -863,10 +863,13 @@ async def test_delete_build_with_photos_returns_to_pool(monkeypatch) -> None:
         assert gone.status_code == 204, gone.text
         assert (await c.get(f"/api/v1/social/posts/{post_id}")).status_code == 404
 
-    # empty gone too
+    # empty gone too — the build AND its per-build share-scope row are deleted
+    # (AUT-762: the scope was still ORM-deleted, so its FK 500'd the DELETE)
     async with _SessionLocal() as db:
         gone2 = await db.scalar(select(SocialBuild).where(SocialBuild.id == post_id))
         assert gone2 is None
+        scope = await db.scalar(select(SocialShareScope).where(SocialShareScope.build_id == post_id))
+        assert scope is None
 
     # photos are back in the unassigned pool → reusable on a fresh build
     async with await _client(token) as c:
