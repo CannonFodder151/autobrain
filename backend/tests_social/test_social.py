@@ -886,6 +886,60 @@ async def test_delete_build_with_photos_returns_to_pool(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_admin_deleted_remote_copy_stays_removed_across_sync(monkeypatch) -> None:
+    """AUT-910: an admin-removed federated copy must NOT resurrect on the next
+    federation sync. A tombstone records the remote_build_id so the inbox pull
+    skips it; the tombstone is pruned once the hub stops routing the build."""
+    inbox = [{
+        "remote_build_id": "hub-keep",
+        "server_id": "server-b",
+        "author_display_name": "Bob",
+        "server_name": "Bob's Garage",
+        "title": "Tombstone Clubman",
+        "caption": "From another server",
+        "snapshot": {"title": "Tombstone Clubman", "mods": []},
+    }]
+
+    async def _fake_pull(_cfg):
+        return inbox
+
+    async def _no_events(_cfg, after):
+        return {"events": [], "next_cursor": 0}
+
+    monkeypatch.setattr("app.social.federation.pull_inbox", _fake_pull)
+    monkeypatch.setattr("app.social.federation.pull_events", _no_events)
+    async with _SessionLocal() as db:
+        cfg = SocialServerConfig(id=1, feature_enabled=True, federation_enabled=True,
+                                 hub_status="registered", hub_server_id="me",
+                                 hub_api_key="k", hub_private_key="ab" * 32,
+                                 last_inbox_sync=None, last_event_sync=None)
+        await db.merge(cfg)
+        admin = await _new_user(db, "tomb@example.com", "Tomb", role="admin")
+        token = create_access_token(admin.id)
+
+    def _tombstone_copies(items):
+        return [i for i in items if i["title"] == "Tombstone Clubman"]
+
+    async with await _client(token) as c:
+        feed = await c.get("/api/v1/social/feed")
+        assert feed.status_code == 200, feed.text
+        assert len(_tombstone_copies(feed.json()["items"])) == 1
+        copy_id = _tombstone_copies(feed.json()["items"])[0]["id"]
+        resp = await c.delete(f"/api/v1/social/posts/{copy_id}")
+        assert resp.status_code == 204, resp.text
+        assert _tombstone_copies((await c.get("/api/v1/social/feed")).json()["items"]) == []
+        # Force another sync: skip the TTL gate by clearing the last sync time.
+        async with _SessionLocal() as db:
+            cfg = await db.get(SocialServerConfig, 1)
+            cfg.last_inbox_sync = None
+            await db.commit()
+        feed = await c.get("/api/v1/social/feed")
+        assert feed.status_code == 200, feed.text
+        assert _tombstone_copies(feed.json()["items"]) == [], \
+            "admin-deleted federated copy resurrected on re-sync"
+
+
+@pytest.mark.asyncio
 async def test_remove_event_deletes_federated_copies(monkeypatch) -> None:
     """AUT-902: a hub `remove` event deletes the local copy of a federated
     build AND issue post — removed posts must not linger in the community hub."""

@@ -30,6 +30,7 @@ from app.social.models import (
     SocialComment,
     SocialLike,
     SocialPhoto,
+    SocialRemoteTombstone,
     SocialShareScope,
     get_server_config,
 )
@@ -221,6 +222,9 @@ async def _sync_federation(db: AsyncSession) -> None:
         logger.warning("social_federation_sync_failed", error=str(exc))
         return
     events = event_data.get("events", []) if isinstance(event_data, dict) else []
+    # Two passes because the inbox is a full snapshot of builds routed here.
+    # Pass 1: collect routed remote ids (federated issue posts handled inline).
+    routed: dict[str, tuple[dict, dict]] = {}
     for item in remote_builds:
         if not isinstance(item, dict):
             continue
@@ -235,12 +239,24 @@ async def _sync_federation(db: AsyncSession) -> None:
             await pull_remote_issue(db, item, build)
             continue
         rid = build.get("remote_build_id") or build.get("build_id")
-        if not rid:
-            continue
-        existing = await db.scalar(
-            select(SocialBuild).where(SocialBuild.remote_build_id == str(rid))
+        if rid:
+            routed[str(rid)] = (item, build)
+    # AUT-910: admin-removed federated copies must not resurrect. The hub keeps
+    # routing the removed build's post event, so the next sync would re-add the
+    # copy; a tombstone blocks that. A tombstone whose build is no longer
+    # routed is safe to prune, keeping the table bounded. Skip pruning when the
+    # snapshot is empty so a transient hub gap cannot wipe every tombstone.
+    tombstoned: set[str] = set(await db.scalars(select(SocialRemoteTombstone.remote_build_id)))
+    if routed:
+        for rid in tombstoned - routed.keys():
+            await db.delete(await db.get(SocialRemoteTombstone, rid))
+    existing: set[str] = set(await db.scalars(
+        select(SocialBuild.remote_build_id).where(
+            SocialBuild.remote_build_id.in_(routed.keys())
         )
-        if existing:
+    ))
+    for rid, (item, build) in routed.items():
+        if rid in tombstoned or rid in existing:
             continue
         db.add(SocialBuild(
             author_display_name=build.get("author_display_name", "Unknown"),
@@ -249,7 +265,7 @@ async def _sync_federation(db: AsyncSession) -> None:
             title=build.get("title", "Untitled build"),
             caption=build.get("caption"),
             origin="remote",
-            remote_build_id=str(rid),
+            remote_build_id=rid,
             remote_server_id=item.get("origin_server") or build.get("server_id"),
             snapshot_json=dumps(build.get("snapshot") or {}),
         ))
@@ -754,6 +770,11 @@ async def delete_post(
     if not is_author and user.role != "admin":
         raise HTTPException(status_code=404, detail="Post not found")
     origin = build.origin
+    # AUT-910: a removed federated copy must stay removed — the hub keeps
+    # routing the build's post event, so the next inbox sync would re-add it.
+    # The tombstone makes the removal durable across federation syncs.
+    if origin == "remote" and build.remote_build_id:
+        await db.merge(SocialRemoteTombstone(remote_build_id=build.remote_build_id))
     # Bulk deletes/update run immediately, so every child row is gone before the
     # parent DELETE — an ORM db.delete loop does not order child deletes first
     # (no relationship/cascade) and 500s on the FK (AUT-703, AUT-762).
