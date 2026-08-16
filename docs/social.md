@@ -42,6 +42,10 @@ keep read-only access (curated demo feed); write routes reject the demo role.
 - `POST/GET /social/posts/{id}/comments`, `POST/GET /social/posts/{id}/likes`.
 - `POST /social/posts/{id}/share-link` → `{token, url}`;
   `GET /social/share/{token}` resolves it.
+- `POST /social/posts/{id}/report` `{reason}` — report a build (AUT-896).
+  Records a `social_build_flags` row locally and pushes a hub-local `report`
+  event (AUT-896) so the federation-hub operator sees it in the Reported posts
+  queue. Idempotent per user per post; hub failures never fail the report.
 - `POST /social/uploads` — multipart image; webp-compressed on upload
   (`app/social/media.py`), stored in MinIO, returned as a signed short-lived URL.
 - `GET/POST /social/issues...` — the Issues Blog (`app/api/v1/issues.py`).

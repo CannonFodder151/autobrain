@@ -184,6 +184,29 @@ async def push_event(cfg: SocialServerConfig, build_id: str, event_type: str, pa
     })
 
 
+async def push_report(
+    cfg: SocialServerConfig,
+    build_id: str,
+    reason: str,
+    reporter_display_name: str,
+    server_name: str | None,
+) -> None:
+    """Push a moderation report for a build to the hub (AUT-896).
+
+    Report events are hub-local: the hub stores them for the operator's
+    moderation queue and never fans them out to other servers.
+    """
+    await _post(cfg, "/v1/events", {
+        "event_type": "report",
+        "payload": {
+            "build_id": build_id,
+            "reason": reason,
+            "reporter_display_name": reporter_display_name,
+            "server_name": server_name,
+        },
+    })
+
+
 async def pull_inbox(cfg: SocialServerConfig) -> list[dict]:
     """Fetch remote builds the hub routes to this server."""
     data = await _get(cfg, "/v1/inbox")

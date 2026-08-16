@@ -132,6 +132,11 @@ class SocialApi {
 
   Future<void> deletePost(String postId) => _api.delete('/social/posts/$postId');
 
+  /// Report a build post for review (AUT-896) — kept locally and fanned to
+  /// the federation hub's moderation queue.
+  Future<void> reportBuild(String postId, String reason) =>
+      _api.post('/social/posts/$postId/report', {'reason': reason});
+
   Future<SocialBuild> resolveShare(String token) async {
     final data = await _api.get('/social/share/$token') as Map<String, dynamic>;
     return SocialBuild.fromJson(data);
