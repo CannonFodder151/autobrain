@@ -20,6 +20,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Fixed
+- Build edit PATCH now clears the caption when the client sends an explicit
+  `null` (previously an explicit `null` was treated as "leave unchanged" and
+  the caption stayed put) (AUT-903).
 - Admin build takedown now deletes the build's photo rows instead of leaving
   them orphaned in the uploader's pool pointing at purged MinIO objects
   (AUT-889).
