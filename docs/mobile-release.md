@@ -209,7 +209,11 @@ built `.aab` to the **Play Console closed testing** track. No manual upload.
   configured in Play Console, the script commits the release as a **draft**
   (still uploaded + versionCode-visible on the track, ready to roll out from the
   Play Console) and logs a warning. Once testers are added, the same pipeline
-  commits directly as `completed` with no code change.
+  commits directly as `completed` with no code change. When the run falls back
+  to draft, the pipeline also posts an embed to Discord **`#approvals`** asking
+  Nathan to do the one-time track setup (play.google.com/console →
+  `com.autobrainservice.app` → Testing → Closed testing → the `testing` track →
+  add testers + country availability, restOfWorld on).
 - Production is never touched — a promo to production is a separate, human-gated
   action in Play Console.
 
