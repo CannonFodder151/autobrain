@@ -7,7 +7,11 @@ import 'dongle_ble.dart';
 class BleImpl {
   static bool get supported => false;
 
-  static Future<String> provision(String payload) {
+  static Future<List<DonglePeripheral>> scan() {
+    throw DongleBleException('BLE provisioning is only supported on the app.');
+  }
+
+  static Future<String> provision(String payload, {required String deviceId}) {
     throw DongleBleException('BLE provisioning is only supported on the app.');
   }
 }
