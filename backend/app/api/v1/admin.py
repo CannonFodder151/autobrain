@@ -516,7 +516,12 @@ async def delete_issue_admin(
     _admin: User = Depends(require_admin),
 ) -> None:
     """Admin deletes an issue post outright (moderation hub, AUT-832). A
-    locally-hosted post takedown also fans out via the hub (AUT-902)."""
+    locally-hosted post takedown also fans out via the hub (AUT-902).
+
+    Only posts hosted on this server (origin="local") can be deleted here;
+    federated copies are owned by their origin server (AUT-935). A local admin
+    moderating an abusive remote post hides it via PATCH /admin/issues/{id}
+    instead of deleting the origin's copy."""
     from sqlalchemy import delete
 
     from app.social import federation
@@ -532,6 +537,12 @@ async def delete_issue_admin(
     post = await db.get(SocialIssuePost, issue_id)
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
+    if post.origin == "remote":
+        raise HTTPException(
+            status_code=403,
+            detail="Remote posts are hosted on their origin server; "
+            "delete them there or hide them locally",
+        )
     origin = post.origin
     comment_ids = list(await db.scalars(
         select(SocialIssueComment.id).where(SocialIssueComment.post_id == post.id)
