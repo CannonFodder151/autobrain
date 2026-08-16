@@ -290,6 +290,11 @@ async def apply_issue_event(db: AsyncSession, event: dict) -> None:
             )
         if not post:
             return
+        # Defense-in-depth (AUT-907): never let a hub-relayed `remove` take down
+        # a locally-hosted issue post; only this server's own delete path (via
+        # hub /v1/remove) can do that.
+        if getattr(post, "origin", None) == "local":
+            return
         await _purge_issue_post(db, post)
         await db.flush()
         return

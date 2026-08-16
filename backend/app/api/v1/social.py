@@ -291,6 +291,12 @@ async def _apply_event(db: AsyncSession, event: dict) -> None:
             )
         if not build or build.status != "published":
             return
+        # Defense-in-depth (AUT-907): only purge federated copies. A locally
+        # hosted build is removed only through its own server's delete/sharing
+        # actions (which call the hub's origin-verified /v1/remove) — a hub
+        # relayed `remove` must never be able to take down a peer's local post.
+        if build.origin == "local":
+            return
         await _purge_build(db, build)
         await db.flush()
         return

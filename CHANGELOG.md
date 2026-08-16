@@ -35,6 +35,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Community Garage admins can now remove any build post directly from the feed
   (community pages) — previously the delete button 404'd on posts they didn't author,
   and federated copies had no delete action at all (AUT-902).
+- Security hardening: servers now ignore hub-relayed `remove` events for their own
+  locally-hosted builds and issue posts — a takedown can only ever reach a federated
+  copy, never the origin's local post. The federation hub also rejects `remove`
+  produced through the generic event relay, closing a bypass of the origin check
+  (AUT-907).
 
 ### Added
 - Report buttons on build posts and build comments — reports join the admin
