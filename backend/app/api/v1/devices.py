@@ -128,7 +128,11 @@ async def upload_trips(
             start_odometer_km=trip.start_odometer_km,
             end_odometer_km=trip.end_odometer_km,
             distance_km=trip.distance_km,
-            gps_samples=trip.gps_samples,
+            gps_samples=(
+                [s.model_dump() for s in trip.gps_samples]
+                if trip.gps_samples is not None
+                else None
+            ),
         )
         db.add(entry)
         accepted += 1
