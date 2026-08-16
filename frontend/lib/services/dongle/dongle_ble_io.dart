@@ -5,6 +5,9 @@
 /// characteristic 6E400003 (provisioning). The firmware writes its ack
 /// ("ok" / "err:…") back to the SAME 6E400003 characteristic, so we subscribe
 /// to notifications there, write the compact payload, and read the reply.
+/// The ack is best-effort (AUT-968 F1): firmware from AUT-918 delivers it via
+/// NOTIFY (fixed in the AUT-968 firmware PR), but a completed WRITE is already
+/// success — we never block long on a reply that older firmware cannot send.
 ///
 /// Package choice: flutter_blue_plus 1.32.8 (BSD-3). The 2.x line moved to a
 /// paid commercial license for connect(), which a commercial app must not use.
@@ -24,7 +27,9 @@ import 'dongle_ble.dart';
 const _serviceUuid = '6E400001-B5A3-F393-E0A9-E50E24DCCA9E';
 const _provisionCharUuid = '6E400003-B5A3-F393-E0A9-E50E24DCCA9E';
 const _scanTimeout = Duration(seconds: 15);
-const _provisionTimeout = Duration(seconds: 25);
+// Ack wait: fixed firmware notifies in milliseconds, so 8s is ample; older
+// firmware cannot notify at all and we must not block a success on it.
+const _provisionTimeout = Duration(seconds: 8);
 const _peripheralHint = 'AutoBrain-Tripper';
 
 class BleImpl {
@@ -59,10 +64,22 @@ class BleImpl {
             'Dongle found, but it did not expose the AutoBrain provisioning '
             'service. Is this an AutoBrain-Tripper?');
       }
-      final ack = char.onValueReceived.timeout(_provisionTimeout).first;
+      // Subscribe, write, then read the ack. The ack is best-effort: on fixed
+      // firmware the reply arrives in ms; if no reply comes (older firmware
+      // without NOTIFY, or a dropped notification) the WRITE completing is
+      // success on its own — surface any err: we DO hear, never block 25s.
+      final ackFuture = char.onValueReceived
+          .timeout(_provisionTimeout)
+          .first
+          .then((v) => utf8.decode(v).trim())
+          .catchError((_) => '');
       await char.setNotifyValue(true);
       await char.write(utf8.encode(payload));
-      return utf8.decode(await ack).trim();
+      final ack = await ackFuture;
+      if (ack.startsWith('err:')) {
+        throw DongleBleException(_ackMessage(ack));
+      }
+      return ack.isEmpty ? 'ok' : ack;
     } on DongleBleException {
       rethrow;
     } catch (e) {
@@ -73,6 +90,18 @@ class BleImpl {
         await device.disconnect().catchError((_) {});
       }
     }
+  }
+
+  /// Maps a firmware ack ("err:…") to a friendly, actionable message.
+  /// Fw1's first-write-only gate is the one users actually hit on a re-push
+  /// (AUT-968 F5); other err: are surfaced with the terse prefix stripped.
+  static String _ackMessage(String ack) {
+    final msg = ack.startsWith('err:') ? ack.substring(4) : ack;
+    if (msg == 'already configured') {
+      return 'This dongle is already provisioned — factory-reset it before '
+          'pushing new WiFi settings.';
+    }
+    return msg.trim();
   }
 
   /// Scans for the dongle and returns it, or throws a user-facing error.

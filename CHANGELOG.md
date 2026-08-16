@@ -30,6 +30,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   current account. SSID and WiFi password lengths are validated (1–32 /
   8–63 octets) before the BLE write.
 
+### Fixed
+- Dongle BLE provisioning ack (AUT-968): firmware now delivers the ack over a
+  NOTIFY-enabled provisioning characteristic (firmware PR #4), and the app
+  treats a completed BLE write as success when no ack arrives (older
+  firmware) instead of timing out after 25 s and reporting a false failure.
+  `err:already configured` reads as "already provisioned — factory-reset to
+  re-push".
+- Dongle WiFi input guards (AUT-968): SSID/password containing `"` or `\` are
+  rejected up front (the dongle's substring parser cannot unescape them), and
+  the SSID (32) / WPA2 passphrase (63) fields cap input at the firmware buffer
+  sizes. A failed device-list load now shows a "could not reach the server"
+  hint instead of silently showing "no dongle linked".
+
 ### Added
 - Mobile dongle WiFi upload setup (AUT-936): Settings → Dongle WiFi upload
   enables the AutoBrain-Tripper's WiFi auto-upload, links the dongle to the

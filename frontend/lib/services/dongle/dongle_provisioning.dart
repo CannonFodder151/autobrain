@@ -35,9 +35,17 @@ String _escape(String value) =>
 
 /// Validates WiFi inputs against the IEEE 802.11 / WPA2 limits before the
 /// payload is written over BLE: SSID is 1–32 octets, the WPA2 passphrase is
-/// 8–63 octets (AUT-963 F3). Returns a user-facing message, or null when the
-/// inputs are provisionable.
+/// 8–63 octets (AUT-963 F3). Also rejects `"` and `\` in the SSID/pass: the
+/// firmware's substring extractor terminates values at the first `"` and never
+/// unescapes, so those characters would be silently truncated on the dongle
+/// (AUT-968 F2). Returns a user-facing message, or null when provisionable.
 String? validateWifiInput({required String ssid, required String pass}) {
+  if (ssid.contains('"') ||
+      ssid.contains('\\') ||
+      pass.contains('"') ||
+      pass.contains('\\')) {
+    return 'WiFi name and password cannot contain " or \\ characters.';
+  }
   final s = utf8.encode(ssid).length;
   if (s == 0) return 'Enter the WiFi network name (SSID) first.';
   if (s > 32) return 'SSID must be 32 characters or fewer.';

@@ -97,6 +97,14 @@ void main() {
     test('counts octets, not characters, for non-ASCII input', () {
       expect(validateWifiInput(ssid: 'é' * 33, pass: '12345678'), contains('SSID'));
     });
+
+    test('rejects " or \\ in ssid/pass — firmware cannot unescape (AUT-968 F2)',
+        () {
+      expect(validateWifiInput(ssid: 'Net"5', pass: '12345678'), contains('" or \\'));
+      expect(validateWifiInput(ssid: r'Net\5', pass: '12345678'), isNotNull);
+      expect(validateWifiInput(ssid: 'Home', pass: 'pa"ssword1'), isNotNull);
+      expect(validateWifiInput(ssid: 'Home', pass: r'p\assword1'), isNotNull);
+    });
   });
 
   group('DongleApi', () {

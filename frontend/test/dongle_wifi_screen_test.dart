@@ -29,6 +29,17 @@ class _FakeApi extends ApiClient {
   Future<dynamic> post(String path, [Object? body]) async => null;
 }
 
+class _FailingApi extends ApiClient {
+  _FailingApi() : super(null);
+
+  @override
+  Future<dynamic> get(String path) async => throw Exception('boom');
+
+  @override
+  Future<dynamic> post(String path, [Object? body]) async =>
+      throw Exception('boom');
+}
+
 class _FakeAuthState extends AuthState {
   _FakeAuthState(this._api);
   final ApiClient _api;
@@ -36,7 +47,10 @@ class _FakeAuthState extends AuthState {
   ApiClient get api => _api;
 }
 
-Future<void> _pump(WidgetTester tester, List<Map<String, dynamic>> devices) async {
+Future<void> _pump(WidgetTester tester, List<Map<String, dynamic>> devices) =>
+    _pumpWith(tester, _FakeApi(devices));
+
+Future<void> _pumpWith(WidgetTester tester, ApiClient api) async {
   SharedPreferences.setMockInitialValues({
     'dongle_wifi_enabled': true,
     'dongle_wifi_ssid': 'Home',
@@ -50,7 +64,7 @@ Future<void> _pump(WidgetTester tester, List<Map<String, dynamic>> devices) asyn
   });
   await tester.pumpWidget(
     ChangeNotifierProvider<AuthState>(
-      create: (_) => _FakeAuthState(_FakeApi(devices)),
+      create: (_) => _FakeAuthState(api),
       child: const MaterialApp(home: DongleWifiScreen()),
     ),
   );
@@ -87,5 +101,31 @@ void main() {
     ]);
 
     expect(find.text('Push credentials'), findsOneWidget);
+  });
+
+  testWidgets('device-list fetch failure surfaces server hint, not no-dongle',
+      (tester) async {
+    await _pumpWith(tester, _FailingApi());
+
+    expect(find.text('Could not reach the server.'), findsOneWidget);
+    expect(find.textContaining('No dongle linked yet'), findsNothing);
+  });
+
+  testWidgets('SSID/pass fields cap length at firmware buffer sizes (AUT-968 F3)',
+      (tester) async {
+    await _pump(tester, [
+      {
+        'id': 'dev-1',
+        'name': 'Tripper',
+        'vehicle_id': 'v9',
+        'last_seen_at': null,
+        'created_at': '2026-08-16T10:00:00Z',
+      }
+    ]);
+
+    final fields = tester.widgetList<TextField>(find.byType(TextField)).toList();
+    expect(fields.length, greaterThanOrEqualTo(2));
+    expect(fields[0].maxLength, 32); // ssid[33] on the dongle
+    expect(fields[1].maxLength, 63); // pass[64] on the dongle
   });
 }
