@@ -19,7 +19,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.91] - 2026-08-16
 
 ### Added
 - Dongle WiFi trip auto-upload (AUT-918): per-device API key header auth,
