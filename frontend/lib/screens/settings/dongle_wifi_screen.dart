@@ -85,14 +85,16 @@ class _DongleWifiScreenState extends State<DongleWifiScreen> {
     setState(() => _loading = false);
   }
 
-  /// Reuse the saved device when it still exists; otherwise fall back to the
-  /// first device (GET /devices is ordered newest-first) or none.
+  /// Reuses the saved device only when it still exists in the current
+  /// account's list; otherwise returns null so the user re-links. Never falls
+  /// back to a different device — that would push the previous account's key
+  /// into a device the user never chose (AUT-963 F1).
   DongleDevice? _resolveLinked(List<DongleDevice> devices, DongleConfig cfg) {
     if (devices.isEmpty) return null;
     for (final d in devices) {
       if (d.id == cfg.deviceId) return d;
     }
-    return devices.first;
+    return null;
   }
 
   String? _apiUrlForSelfHosted() =>
@@ -261,16 +263,17 @@ class _DongleWifiScreenState extends State<DongleWifiScreen> {
     final cfg = _config;
     final ssid = _ssid.text.trim();
     final pass = _pass.text;
-    if (ssid.isEmpty) {
-      setState(() => _status = 'Enter the WiFi network name (SSID) first.');
-      return;
-    }
-    if (pass.isEmpty) {
-      setState(() => _status = 'Enter the WiFi password first.');
+    final inputError = validateWifiInput(ssid: ssid, pass: pass);
+    if (inputError != null) {
+      setState(() => _status = inputError);
       return;
     }
     if (cfg.deviceId == null || cfg.apiKey == null) {
       setState(() => _status = 'Link the dongle to your account first.');
+      return;
+    }
+    if (_linked == null || _linked!.id != cfg.deviceId) {
+      setState(() => _status = 'Re-link the dongle to your account first.');
       return;
     }
     final payload = buildProvisioningPayload(

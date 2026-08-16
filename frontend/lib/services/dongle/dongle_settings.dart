@@ -54,6 +54,19 @@ class DongleSettings {
       apiKey: apiKey,
     );
   }
+
+  /// Clears every dongle store — the credentials in secure storage
+  /// (WiFi password + one-time API key) and the non-sensitive prefs.
+  /// Called on logout / server switch so a previous account's device key
+  /// can never be pushed from another account (AUT-963 F1).
+  static Future<void> clear() async {
+    final prefs = await SharedPreferences.getInstance();
+    for (final key in prefs.getKeys().where((k) => k.startsWith('dongle_'))) {
+      await prefs.remove(key);
+    }
+    await _storage.delete(key: _pass);
+    await _storage.delete(key: _apiKey);
+  }
 }
 
 class DongleConfig {

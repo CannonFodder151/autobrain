@@ -22,6 +22,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security
+- Dongle provisioning (AUT-963): logout / server switch now clear the saved
+  dongle credentials (WiFi password + one-time API key) so a previous
+  account's device can never be re-provisioned from another account, and the
+  app re-links the dongle when the saved device no longer belongs to the
+  current account. SSID and WiFi password lengths are validated (1–32 /
+  8–63 octets) before the BLE write.
+
 ### Added
 - Mobile dongle WiFi upload setup (AUT-936): Settings → Dongle WiFi upload
   enables the AutoBrain-Tripper's WiFi auto-upload, links the dongle to the
