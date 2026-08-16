@@ -16,6 +16,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
 
 ### Added
@@ -27,6 +28,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   human-readably (title, author, make/model, caption, mod/photo counts) with
   text wrapping instead of raw JSON, and a Reported posts moderation list with
   Remove/Dismiss actions (AUT-896).
+
+## [0.3.88] - 2026-08-16
 
 ### Fixed
 - Community Garage edit-build screen: tapping the share-scope checkboxes
