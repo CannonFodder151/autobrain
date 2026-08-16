@@ -43,6 +43,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   copy, never the origin's local post. The federation hub also rejects `remove`
   produced through the generic event relay, closing a bypass of the origin check
   (AUT-907).
+- Federated build copies that an admin removes from the feed now stay removed
+  instead of resurrecting on the next federation sync: the removal is recorded as a
+  tombstone and the inbox pull skips it, so a deleted copy does not reappear ~1 minute
+  later (AUT-910).
 
 ### Added
 - Report buttons on build posts and build comments — reports join the admin
