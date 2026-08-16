@@ -26,6 +26,7 @@ from app.main import app  # noqa: E402
 from app.models.device import Device  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.models.vehicle import Vehicle  # noqa: E402
+from app.services.device_keys import hash_key
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -185,6 +186,68 @@ async def test_dongle_upload_rejects_bad_key_and_wrong_device() -> None:
         headers={"X-Device-API-Key": other.json()["api_key"]},
     )
     assert wrong.status_code == 404, wrong.text
+
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_dongle_upload_survives_prefix_collision() -> None:
+    """Security F1: prefix-colliding keys must still resolve to the right device.
+
+    Forced collision (same api_key_prefix on two devices) used to let
+    `db.scalar()` silently pick an arbitrary row, giving the second device a
+    persistent 401. The lookup now checks every candidate with the full digest.
+    """
+    world = await _setup("dev-collide")
+    headers = {"Authorization": f"Bearer {world['token']}"}
+    client: AsyncClient = world["client"]
+
+    first = await client.post(
+        "/api/v1/devices",
+        json={"name": "Dongle A", "vehicle_id": world["vehicle_id"]},
+        headers=headers,
+    )
+    assert first.status_code == 201, first.text
+    first_key = first.json()["api_key"]
+    first_id = first.json()["id"]
+
+    # Forge a genuine prefix collision: a second key that shares the first
+    # key's 10-char prefix but has a different body, and store it on another
+    # device row. Real-world collisions are equally rare (65,536 prefixes) but
+    # must still resolve to the owning device instead of a random row.
+    second_key = first_key[:10] + ("9" * (len(first_key) - 10))
+    second = await client.post(
+        "/api/v1/devices",
+        json={"name": "Dongle B", "vehicle_id": world["vehicle_id"]},
+        headers=headers,
+    )
+    assert second.status_code == 201, second.text
+    second_id = second.json()["id"]
+
+    async with SessionLocal() as db:
+        dev = await db.get(Device, second_id)
+        dev.api_key_prefix = first_key[:10]
+        dev.api_key_hash = hash_key(second_key)
+        await db.commit()
+
+    # The second device's real key must now upload even though the prefix
+    # collides with the first device.
+    resp = await client.post(
+        f"/api/v1/devices/{second_id}/trips",
+        json={"trips": [_trip("trip-collide")]},
+        headers={"X-Device-API-Key": second_key},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["accepted"] == 1, resp.text
+
+    # And the first device's key must still resolve to the first device
+    # (not be confused by the collision).
+    first_resp = await client.post(
+        f"/api/v1/devices/{first_id}/trips",
+        json={"trips": [_trip("trip-collide-first")]},
+        headers={"X-Device-API-Key": first_key},
+    )
+    assert first_resp.status_code == 200, first_resp.text
 
     await client.aclose()
 

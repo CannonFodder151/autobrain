@@ -183,10 +183,17 @@ async def get_device_from_key(
             detail="Missing X-Device-API-Key header",
             headers={"WWW-Authenticate": "DeviceKey"},
         )
-    device = await db.scalar(
-        select(Device).where(Device.api_key_prefix == key_prefix(supplied))
+    candidates = list(
+        (
+            await db.scalars(
+                select(Device).where(Device.api_key_prefix == key_prefix(supplied))
+            )
+        ).all()
     )
-    if device is None or not verify_key(supplied, device.api_key_hash):
+    device = next(
+        (d for d in candidates if verify_key(supplied, d.api_key_hash)), None
+    )
+    if device is None:
         raise HTTPException(
             status_code=401,
             detail="Invalid or expired device API key",
