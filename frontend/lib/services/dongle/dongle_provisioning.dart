@@ -33,6 +33,20 @@ String buildProvisioningPayload({
 String _escape(String value) =>
     value.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
 
+/// Appends the one-shot provisioning token (AUT-969 F2) to a built payload.
+/// The firmware substring-parses each key independently, so the token is
+/// appended before the closing brace and order stays irrelevant. The token is
+/// hex (never needs escaping). Returns the payload unchanged when [token] is
+/// empty so firmware that predates the token (or older boards that don't
+/// expose the token characteristic) keep working.
+String appendProvisionToken(String payload, String? token) {
+  if (token == null || token.isEmpty) return payload;
+  final trimmed = payload.trim();
+  if (!trimmed.endsWith('}')) return payload;
+  return '${trimmed.substring(0, trimmed.length - 1)}'
+      ',"prov_token":"$token"}';
+}
+
 /// Validates WiFi inputs against the IEEE 802.11 / WPA2 limits before the
 /// payload is written over BLE: SSID is 1–32 octets, the WPA2 passphrase is
 /// 8–63 octets (AUT-963 F3). Also rejects `"` and `\` in the SSID/pass: the

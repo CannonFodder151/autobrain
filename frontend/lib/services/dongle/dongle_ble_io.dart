@@ -23,9 +23,16 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import 'dongle_ble.dart';
+import 'dongle_provisioning.dart';
 
 const _serviceUuid = '6E400001-B5A3-F393-E0A9-E50E24DCCA9E';
 const _provisionCharUuid = '6E400003-B5A3-F393-E0A9-E50E24DCCA9E';
+// One-shot provisioning token (AUT-969 F2): firmware mints a fresh random
+// token when the provisioning window opens; the app must READ it here and echo
+// it back as prov_token in the payload or the write is rejected. Older
+// firmware does not expose this characteristic — then we just proceed (the
+// old board doesn't require the token).
+const _tokenCharUuid = '6E400004-B5A3-F393-E0A9-E50E24DCCA9E';
 const _scanTimeout = Duration(seconds: 15);
 // Ack wait: fixed firmware notifies in milliseconds, so 8s is ample; older
 // firmware cannot notify at all and we must not block a success on it.
@@ -47,14 +54,20 @@ class BleImpl {
     }
     final device = await _findDongle();
     BluetoothCharacteristic? char;
+    String? token;
     try {
       await device.connect(timeout: const Duration(seconds: 15));
       final services = await device.discoverServices();
       for (final s in services) {
         if (s.uuid.toString().toUpperCase() == _serviceUuid) {
           for (final c in s.characteristics) {
-            if (c.uuid.toString().toUpperCase() == _provisionCharUuid) {
+            final uuid = c.uuid.toString().toUpperCase();
+            if (uuid == _provisionCharUuid) {
               char = c;
+            } else if (uuid == _tokenCharUuid) {
+              // AUT-969 F2: read the one-shot provisioning token (if the
+              // firmware exposes it) so it can be echoed in the payload.
+              token = await _readToken(c);
             }
           }
         }
@@ -74,7 +87,7 @@ class BleImpl {
           .then((v) => utf8.decode(v).trim())
           .catchError((_) => '');
       await char.setNotifyValue(true);
-      await char.write(utf8.encode(payload));
+      await char.write(utf8.encode(appendProvisionToken(payload, token)));
       final ack = await ackFuture;
       if (ack.startsWith('err:')) {
         throw DongleBleException(_ackMessage(ack));
@@ -89,6 +102,19 @@ class BleImpl {
       if (device.isConnected) {
         await device.disconnect().catchError((_) {});
       }
+    }
+  }
+
+  /// Reads the one-shot provisioning token value (AUT-969 F2). A read failure
+  /// is non-fatal: older firmware has no token characteristic, and the write
+  /// is then attempted without an echo.
+  static Future<String?> _readToken(BluetoothCharacteristic c) async {
+    try {
+      final v = await c.read(timeout: const Duration(seconds: 5));
+      final s = utf8.decode(v).trim();
+      return s.isEmpty ? null : s;
+    } catch (_) {
+      return null;
     }
   }
 

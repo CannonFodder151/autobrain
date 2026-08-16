@@ -29,6 +29,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   app re-links the dongle when the saved device no longer belongs to the
   current account. SSID and WiFi password lengths are validated (1–32 /
   8–63 octets) before the BLE write.
+- Dongle provisioning one-shot token (AUT-969): the app now reads a fresh
+  random token from the dongle (characteristic 6E400004) and echoes it inside
+  the provisioning payload, which the new firmware requires before accepting
+  the WiFi/account config. Together with the firmware's LESC pairing and the
+  120 s provisioning write window, a nearby BLE peer can no longer read or
+  overwrite the WiFi password / device API key mid-setup (CWE-319 residual
+  from the AUT-962 review).
 
 ### Fixed
 - Dongle BLE provisioning ack (AUT-968): firmware now delivers the ack over a

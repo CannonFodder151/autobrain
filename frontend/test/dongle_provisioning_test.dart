@@ -77,6 +77,44 @@ void main() {
     });
   });
 
+  group('appendProvisionToken (AUT-969 F2)', () {
+    test('appends prov_token before the closing brace', () {
+      final payload = buildProvisioningPayload(
+        ssid: 'Home',
+        pass: 'wifi-password',
+        deviceId: 'dev-1',
+        apiKey: 'abdev_abc123',
+      );
+      final withToken = appendProvisionToken(payload, '0123456789abcdef');
+      expect(
+        withToken,
+        '{"ssid":"Home","pass":"wifi-password","device_id":"dev-1",'
+        '"api_key":"abdev_abc123","prov_token":"0123456789abcdef"}',
+      );
+      expect(withToken, isNot(contains(' ')));
+    });
+
+    test('keeps payload unchanged when no token (older firmware/boards)', () {
+      final payload = buildProvisioningPayload(
+        ssid: 'S',
+        pass: 'P',
+        deviceId: 'd',
+        apiKey: 'k',
+      );
+      expect(appendProvisionToken(payload, null), payload);
+      expect(appendProvisionToken(payload, ''), payload);
+    });
+
+    test('firmware can extract prov_token from any position', () {
+      final payload = appendProvisionToken(
+        '{"ssid":"S","pass":"P","device_id":"d","api_key":"k"}',
+        'a1b2c3d4e5f60718',
+      );
+      // The on-device extractor searches each key independently.
+      expect(payload, contains('"prov_token":"a1b2c3d4e5f60718"'));
+    });
+  });
+
   group('validateWifiInput (AUT-963 F3)', () {
     test('accepts boundary sizes (ssid 1–32, pass 8–63)', () {
       expect(validateWifiInput(ssid: 'A' * 32, pass: '12345678'), isNull);
