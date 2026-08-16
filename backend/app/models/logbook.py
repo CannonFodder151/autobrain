@@ -8,7 +8,7 @@ marked `purpose=work` count towards the business-use percentage.
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.session import Base
@@ -32,7 +32,13 @@ class LogEntry(Base):
 
     purpose: Mapped[str] = mapped_column(String(12), default="private")  # work/private
     reason: Mapped[str | None] = mapped_column(String(500))
-    source: Mapped[str] = mapped_column(String(20), default="manual")  # manual/obd_auto
+    source: Mapped[str] = mapped_column(String(20), default="manual")  # manual/obd_auto/car_auto/diy_dongle
+
+    # Dongle attribution + idempotency (AUT-918): routes that upload
+    # unattended (diy_dongle) key on (device_id, device_trip_id) so a WiFi
+    # retry never double-logs a trip. Manual/phone rows leave both NULL.
+    device_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("devices.id"))
+    device_trip_id: Mapped[str | None] = mapped_column(String(64))
 
     start_location: Mapped[str | None] = mapped_column(String(255))
     end_location: Mapped[str | None] = mapped_column(String(255))
@@ -50,3 +56,9 @@ class LogEntry(Base):
 
     status: Mapped[str] = mapped_column(String(20), default="in_progress")  # in_progress/completed
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        # Postgres unique indexes allow multiple NULLs, so manual/phone rows
+        # (device_id NULL) are unaffected while dongle rows dedupe strictly.
+        UniqueConstraint("device_id", "device_trip_id", name="uq_logbook_device_trip"),
+    )
