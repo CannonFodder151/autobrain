@@ -176,13 +176,16 @@ async def test_build_flags_in_admin_review_and_delete(env):
 async def test_admin_delete_build_purges_related_rows(env):
     """AUT-883: admin build delete cascades comments, likes and flags."""
     app, maker = env
-    from app.social.models import SocialLike
+    from app.social.models import SocialLike, SocialPhoto
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         pid = await _new_build(maker)
         cid = await _new_comment(maker, pid)
         async with maker() as s:
             s.add(SocialLike(build_id=pid, author_user_id="u2", author_display_name="Eve"))
+            s.add(SocialPhoto(
+                build_id=pid, uploader_user_id="u1", file_key="builds/abc.jpg",
+            ))
             await s.commit()
         assert (await c.post(f"/social/posts/{pid}/flag", json={"reason": "Spam"})).status_code == 201
         assert (await c.post(f"/social/posts/{pid}/comments/{cid}/flag", json={"reason": "Spam"})).status_code == 201
@@ -196,4 +199,7 @@ async def test_admin_delete_build_purges_related_rows(env):
             )) is None
             assert (await s.scalar(
                 select(sm.SocialBuildFlag).where(sm.SocialBuildFlag.build_id == pid)
+            )) is None
+            assert (await s.scalar(
+                select(SocialPhoto).where(SocialPhoto.build_id == pid)
             )) is None

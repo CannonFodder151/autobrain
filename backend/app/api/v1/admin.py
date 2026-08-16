@@ -570,7 +570,7 @@ async def delete_build_admin(
 ) -> None:
     """Admin deletes a build post outright (moderation hub, AUT-883):
     cascades comments, likes, share scope and flags, best-effort MinIO purge."""
-    from sqlalchemy import delete, update
+    from sqlalchemy import delete
 
     from app.social.models import (
         SocialBuild,
@@ -587,7 +587,7 @@ async def delete_build_admin(
     media_keys = list(await db.scalars(
         select(SocialPhoto.file_key).where(SocialPhoto.build_id == build.id)
     ))
-    await db.execute(update(SocialPhoto).where(SocialPhoto.build_id == build.id).values(build_id=None))
+    await db.execute(delete(SocialPhoto).where(SocialPhoto.build_id == build.id))
     await db.execute(delete(SocialComment).where(SocialComment.build_id == build.id))
     await db.execute(delete(SocialLike).where(SocialLike.build_id == build.id))
     await db.execute(delete(SocialShareScope).where(SocialShareScope.build_id == build.id))
