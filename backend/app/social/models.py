@@ -259,6 +259,19 @@ class SocialBuildFlag(Base):
     )
 
 
+class SocialRemoteTombstone(Base):
+    """Tombstone for an admin-removed federated copy (AUT-910).
+
+    The hub keeps routing a removed build's post event, so the next inbox sync
+    would re-add the copy. Recording the remote_build_id stops that. Rows are
+    pruned by _sync_federation once the hub stops routing the build.
+    """
+
+    __tablename__ = "social_remote_tombstones"
+
+    remote_build_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
 class SocialServerConfig(Base):
     """Singleton row holding the admin toggles + hub registration state.
 

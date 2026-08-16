@@ -20,6 +20,7 @@ from app.social.models import (
     SocialComment,
     SocialLike,
     SocialPhoto,
+    SocialRemoteTombstone,
     SocialServerConfig,
     SocialShareScope,
 )
@@ -51,4 +52,5 @@ __all__ = [
     "SocialLike",
     "SocialShareScope",
     "SocialServerConfig",
+    "SocialRemoteTombstone",
 ]
