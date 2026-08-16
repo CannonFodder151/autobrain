@@ -22,6 +22,35 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security
+- Dongle provisioning (AUT-963): logout / server switch now clear the saved
+  dongle credentials (WiFi password + one-time API key) so a previous
+  account's device can never be re-provisioned from another account, and the
+  app re-links the dongle when the saved device no longer belongs to the
+  current account. SSID and WiFi password lengths are validated (1–32 /
+  8–63 octets) before the BLE write.
+
+### Fixed
+- Dongle BLE provisioning ack (AUT-968): firmware now delivers the ack over a
+  NOTIFY-enabled provisioning characteristic (firmware PR #4), and the app
+  treats a completed BLE write as success when no ack arrives (older
+  firmware) instead of timing out after 25 s and reporting a false failure.
+  `err:already configured` reads as "already provisioned — factory-reset to
+  re-push".
+- Dongle WiFi input guards (AUT-968): SSID/password containing `"` or `\` are
+  rejected up front (the dongle's substring parser cannot unescape them), and
+  the SSID (32) / WPA2 passphrase (63) fields cap input at the firmware buffer
+  sizes. A failed device-list load now shows a "could not reach the server"
+  hint instead of silently showing "no dongle linked".
+
+### Added
+- Mobile dongle WiFi upload setup (AUT-936): Settings → Dongle WiFi upload
+  enables the AutoBrain-Tripper's WiFi auto-upload, links the dongle to the
+  account (one-time API key shown on create), picks a vehicle, and pushes the
+  WiFi credentials over BLE to the dongle. Pairing requires the Bluetooth
+  permission (declared for iOS + Android 12+). Backend + firmware landed in
+  AUT-918.
+
 ## [0.3.91] - 2026-08-16
 
 ### Added

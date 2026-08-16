@@ -169,6 +169,21 @@ flutter build apk --release \
 Artifact: `build/app/outputs/flutter-apk/app-release.apk`. Same version/versionCode
 rules as the `.aab`.
 
+### 3d. Dongle BLE provisioning permissions (AUT-936)
+
+Settings → Dongle WiFi upload provisions the AutoBrain-Tripper dongle over BLE
+(`flutter_blue_plus 1.32.8`, BSD-3). This adds release-affecting permission
+declarations — keep them in sync when packaging:
+
+- `ios/Runner/Info.plist` → `NSBluetoothAlwaysUsageDescription` (required, or
+  the app crashes on the BLE scan on iOS).
+- `android/app/src/main/AndroidManifest.xml` → `BLUETOOTH_SCAN` (+
+  `usesPermissionFlags="neverForLocation"`) and `BLUETOOTH_CONNECT` for
+  Android 12+; `ACCESS_FINE_LOCATION` covers Android 11- scan. The plugin
+  requests these at runtime, so no `permission_handler` call is needed.
+- `pubspec.yaml` must pin `flutter_blue_plus: 1.32.8` — the 2.x line is a
+  paid commercial license, do NOT bump it without a license purchase.
+
 ### 4. Create a GitHub Release and attach the `.aab`
 
 The CI pipeline (step 7 below) does this automatically and **publishes** the
