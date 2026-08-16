@@ -18,7 +18,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.90] - 2026-08-16
 
 ### Fixed
 - Android licence/checkout: external payment and billing links now resolve on
