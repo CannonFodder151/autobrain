@@ -11,7 +11,7 @@ a release `.aab` is produced, and Nathan knows where the change notes live.
 - Flutter lineage sync from the monorepo `frontend/` into `autobrain-mobile`
 - `.aab` / `.apk` builds + machine-keystore signing
 - GitHub Releases on `autobrain-mobile`
-- Play Console upload prep (artifact + changelog, pinged to Nathan to upload)
+- Play Console **closed testing** upload (automated: `scripts/play-upload-closed-testing.sh`, track `testing`)
 - Discord `#changelog` / `#updates` notes
 - `docs/mobile-release.md` + the release workflow
 
@@ -185,16 +185,33 @@ curl -s -X POST "<upload_url>?name=app-release.aab" \
   --data-binary @build/app/outputs/bundle/release/app-release.aab
 ```
 
-### 4b. Coordinate the Play Console upload (Nathan uploads)
+### 4b. Play Console closed testing upload (automated)
 
-The Release Engineer does **not** hold the Play Console / Google account. After the
-GitHub Release above:
+After the GitHub Release, the release pipeline automatically uploads the freshly
+built `.aab` to the **Play Console closed testing** track. No manual upload.
 
-1. Prepare the upload package: the signed `app-release.aab` + the release notes
-   (top entry of the shared `CHANGELOG.md`).
-2. Ping **Nathan** (owner of the Play listing / Google account) to upload the `.aab`
-   to Play Console and promote it.
-3. Nathan confirms when the upload is live.
+- Track: `testing` (a closed testing track; closed testing tracks have **custom
+  names**, there is no fixed API default — resolved live via the AndroidPublisher
+  Tracks API on first use).
+- Runner script: `scripts/play-upload-closed-testing.sh` in `autobrain-mobile`
+  (`bash scripts/play-upload-closed-testing.sh <app-release.aab> [track-id]`).
+  Requires the `bash`/`curl`/`jq`/`openssl` tools (present on runner images) and
+  the service-account JSON via `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` (GitHub Actions
+  secret `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`; never commit or print it).
+- It: talks to the `/upload/` media host for `bundles.upload` (the regular API
+  host hangs on that copy), assigns the release (`status: completed`) to the
+  track, then **commits the edit — which is what "submits for review" to Google
+  Play**. It re-checks the track via the Tracks API and fails if the new
+  versionCode is not visible.
+- **Closed testing requires a tester audience.** Play refuses a `completed`
+  ("live to testers") release on a closed testing track that has **no tester
+  group** ("Release in track targeting no countries"). Until a tester group is
+  configured in Play Console, the script commits the release as a **draft**
+  (still uploaded + versionCode-visible on the track, ready to roll out from the
+  Play Console) and logs a warning. Once testers are added, the same pipeline
+  commits directly as `completed` with no code change.
+- Production is never touched — a promo to production is a separate, human-gated
+  action in Play Console.
 
 ### 5. Post change notes to Discord (via n8n Reporter)
 
@@ -234,10 +251,12 @@ Automated pipeline now lives at `CannonFodder151/autobrain-mobile`
 7. Publishes a **published** GitHub Release (`softprops/action-gh-release@v2`
    with `draft: false`) on tag `v<X.Y.Z>+<build>` with that version's
    `CHANGELOG.md` section as the body and `app-release.aab` attached. The release
-   is **fully published by the workflow** — it does not stall as a draft. A
-   `Play Console upload checklist (Nathan)` step reminds that the Google-side
-   upload (step 4b) is the remaining manual step.
-8. Posts the release embeds to Discord via the internal reporter webhook (see
+   is **fully published by the workflow** — it does not stall as a draft.
+8. **Play closed-testing upload** (was the manual "Play Console upload checklist
+   (Nathan)" step): `scripts/play-upload-closed-testing.sh` uploads the built
+   `.aab` to the Play Console closed testing track `testing` and commits the edit
+   (submits for review). See step 4b for the tester-audience/draft fallback.
+9. Posts the release embeds to Discord via the internal reporter webhook (see
    the Outline "Discord reporter" doc): `changelog` (public, `0x2ECC71`) and
    `updates` (staff, `0x3498DB`). Payloads are built with `jq`
    (changelog text contains quotes that break inline JSON) and are best-effort
@@ -254,6 +273,7 @@ version=v<X.Y.Z>+<build>`).
 - **Change notes:** Discord **`#changelog`** on AutoBrain HQ (public) + GitHub Releases on
   `CannonFodder151/autobrain-mobile`.
 - **Artifact:** `app-release.aab` attached to the matching GitHub Release
-  (`https://github.com/CannonFodder151/autobrain-mobile/releases`), then uploaded to
-  Play Console by Nathan.
+  (`https://github.com/CannonFodder151/autobrain-mobile/releases`), then uploaded
+  **automatically** to the Play Console **closed testing** track
+  (play.google.com/console, `com.autobrainservice.app` → closed testing).
 - Staff summary: Discord **`#updates`**.
