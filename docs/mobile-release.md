@@ -202,7 +202,9 @@ built `.aab` to the **Play Console closed testing** track. No manual upload.
   host hangs on that copy), assigns the release (`status: completed`) to the
   track, then **commits the edit — which is what "submits for review" to Google
   Play**. It re-checks the track via the Tracks API and fails if the new
-  versionCode is not visible.
+  versionCode is not visible. Every API call prints its HTTP status + response
+  body, so a failure surfaces as an explicit `::error::` in the run log with the
+  exact Google error (no silent `curl` failures).
 - **Closed testing requires a tester audience.** Play refuses a `completed`
   ("live to testers") release on a closed testing track that has **no tester
   group** ("Release in track targeting no countries"). Until a tester group is
