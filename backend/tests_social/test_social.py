@@ -28,7 +28,7 @@ from app.models.mod import Modification
 from app.models.user import User
 from app.models.vehicle import Vehicle
 from app.social.media import compress_to_webp
-from app.social.models import SocialBuild, SocialServerConfig, SocialShareScope
+from app.social.models import SocialBuild, SocialIssuePost, SocialServerConfig, SocialShareScope
 from app.social.snapshot import build_snapshot, dumps, loads
 
 _engine = create_async_engine(os.environ["DATABASE_URL"])
@@ -880,3 +880,104 @@ async def test_delete_build_with_photos_returns_to_pool(monkeypatch) -> None:
         })
         assert reused.status_code == 201, reused.text
         assert reused.json()["photo_ids"] == [p1["id"], p2["id"]]
+
+
+# --- takedown / moderation (AUT-902) ------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_remove_event_deletes_federated_copies(monkeypatch) -> None:
+    """AUT-902: a hub `remove` event deletes the local copy of a federated
+    build AND issue post — removed posts must not linger in the community hub."""
+    async def _no_inbox(_cfg):
+        return []
+
+    async def _remove_events(_cfg, after):
+        return {"events": [
+            {"id": 1, "event_type": "remove",
+             "payload": {"build_id": "hub-del-build", "post_type": "build"}},
+            {"id": 2, "event_type": "remove",
+             "payload": {"build_id": "hub-del-issue", "post_type": "issue"}},
+        ], "next_cursor": 2}
+
+    monkeypatch.setattr("app.social.federation.pull_inbox", _no_inbox)
+    monkeypatch.setattr("app.social.federation.pull_events", _remove_events)
+    async with _SessionLocal() as db:
+        cfg = SocialServerConfig(id=1, feature_enabled=True, federation_enabled=True,
+                                 hub_status="registered", hub_server_id="me",
+                                 hub_api_key="k", hub_private_key="ab" * 32,
+                                 last_inbox_sync=None, last_event_sync=None)
+        await db.merge(cfg)
+        db.add(SocialBuild(id="local-build-1", author_display_name="A",
+                           title="Remote copy", origin="remote",
+                           remote_build_id="hub-del-build", snapshot_json="{}",
+                           status="published"))
+        db.add(SocialIssuePost(id="local-issue-1", author_display_name="B",
+                               title="Remote issue", body="x", origin="remote",
+                               remote_post_id="hub-del-issue"))
+        await db.commit()
+        user = await _new_user(db, "rm@example.com", "Rm")
+        token = create_access_token(user.id)
+    async with await _client(token) as c:
+        feed = await c.get("/api/v1/social/feed")
+        assert feed.status_code == 200, feed.text
+    async with _SessionLocal() as db:
+        assert await db.get(SocialBuild, "local-build-1") is None
+        assert await db.get(SocialIssuePost, "local-issue-1") is None
+
+
+@pytest.mark.asyncio
+async def test_admin_can_delete_any_build_from_feed() -> None:
+    """AUT-902: admins may remove any build on their server straight from the
+    community pages; non-owner non-admins still get a 404 (PW-8)."""
+    await _enable_feature(True)
+    async with _SessionLocal() as db:
+        owner = await _new_user(db, "own@example.com", "Owner")
+        vehicle = await _new_vehicle(db, owner.id)
+        admin = await _new_user(db, "boss@example.com", "Boss", role="admin")
+        other = await _new_user(db, "other@example.com", "Other")
+        owner_token = create_access_token(owner.id)
+        admin_token = create_access_token(admin.id)
+        other_token = create_access_token(other.id)
+        vehicle_id = vehicle.id
+    async with await _client(owner_token) as c:
+        created = await c.post("/api/v1/social/posts",
+                               json={"vehicle_id": vehicle_id, "title": "Admin target"})
+        assert created.status_code == 201, created.text
+        post_id = created.json()["id"]
+    async with await _client(other_token) as c:
+        resp = await c.delete(f"/api/v1/social/posts/{post_id}")
+        assert resp.status_code == 404, resp.text
+    async with await _client(admin_token) as c:
+        resp = await c.delete(f"/api/v1/social/posts/{post_id}")
+        assert resp.status_code == 204, resp.text
+        assert (await c.get(f"/api/v1/social/posts/{post_id}")).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_local_build_pushes_takedown(monkeypatch) -> None:
+    """AUT-902: deleting a locally-hosted build pushes a `remove` to the hub so
+    federated copies disappear everywhere, not just on this server."""
+    calls = []
+
+    async def _fake_removed(_cfg, build_id, post_type):
+        calls.append((build_id, post_type))
+
+    monkeypatch.setattr("app.social.federation.push_removed", _fake_removed)
+    async with _SessionLocal() as db:
+        cfg = SocialServerConfig(id=1, feature_enabled=True, federation_enabled=True,
+                                 hub_status="registered", hub_server_id="me",
+                                 hub_api_key="k", hub_private_key="ab" * 32)
+        await db.merge(cfg)
+        user = await _new_user(db, "push@example.com", "Push")
+        vehicle = await _new_vehicle(db, user.id)
+        token = create_access_token(user.id)
+        vehicle_id = vehicle.id
+    async with await _client(token) as c:
+        created = await c.post("/api/v1/social/posts",
+                               json={"vehicle_id": vehicle_id, "title": "Takedown me"})
+        assert created.status_code == 201, created.text
+        post_id = created.json()["id"]
+        gone = await c.delete(f"/api/v1/social/posts/{post_id}")
+        assert gone.status_code == 204, gone.text
+    assert calls and calls[-1] == (post_id, "build")

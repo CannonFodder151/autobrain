@@ -328,7 +328,7 @@ class _SocialScreenState extends State<SocialScreen> {
                           _refresh();
                         },
                         onShare: () => _share(build),
-                        onDelete: (auth.isAdmin && !build.isRemote)
+                        onDelete: auth.isAdmin
                             ? () => _delete(build)
                             : null,
                       );
@@ -342,14 +342,19 @@ class _SocialScreenState extends State<SocialScreen> {
 
   Future<void> _delete(SocialBuild build) async {
     final api = SocialApi(context.read<AuthState>().api);
+    final isAdmin = context.read<AuthState>().isAdmin;
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Unshare build?'),
-        content: Text('Remove "${build.title ?? 'this build'}" from the feed?'),
+        title: Text(isAdmin ? 'Remove post?' : 'Unshare build?'),
+        content: Text(
+            'Remove "${build.title ?? 'this build'}" from the feed?'
+            '${build.isRemote ? '\n\nThis only removes the copy on this server.' : ''}'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Unshare')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(isAdmin ? 'Remove' : 'Unshare')),
         ],
       ),
     );

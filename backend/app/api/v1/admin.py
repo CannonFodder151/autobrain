@@ -515,14 +515,24 @@ async def delete_issue_admin(
     db: AsyncSession = Depends(get_db),
     _admin: User = Depends(require_admin),
 ) -> None:
-    """Admin deletes an issue post outright (moderation hub, AUT-832)."""
+    """Admin deletes an issue post outright (moderation hub, AUT-832). A
+    locally-hosted post takedown also fans out via the hub (AUT-902)."""
     from sqlalchemy import delete
 
-    from app.social.models import SocialIssueComment, SocialIssueFlag, SocialIssuePost, SocialPhoto
+    from app.social import federation
+    from app.social.federation import FederationUnavailable
+    from app.social.models import (
+        SocialIssueComment,
+        SocialIssueFlag,
+        SocialIssuePost,
+        SocialPhoto,
+        get_server_config,
+    )
 
     post = await db.get(SocialIssuePost, issue_id)
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
+    origin = post.origin
     comment_ids = list(await db.scalars(
         select(SocialIssueComment.id).where(SocialIssueComment.post_id == post.id)
     ))
@@ -541,6 +551,15 @@ async def delete_issue_admin(
     await db.delete(post)
     await db.commit()
     await _best_effort_delete_media(media_keys)
+    if origin == "local":
+        cfg = await get_server_config(db)
+        if cfg.federation_enabled and cfg.hub_status == "registered" and cfg.hub_server_id:
+            try:
+                await federation.push_removed(cfg, str(post.id), "issue")
+            except (FederationUnavailable, Exception) as exc:
+                logger.warning(
+                    "social_issue_admin_remove_push_failed", post_id=post.id, error=str(exc)
+                )
 
 
 @admin_ops.delete("/social/comments/{comment_id}", status_code=204)

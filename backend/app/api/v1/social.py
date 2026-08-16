@@ -169,6 +169,21 @@ async def _get_published(db: AsyncSession, build_id: str) -> SocialBuild:
     return build
 
 
+async def _purge_build(db: AsyncSession, build: SocialBuild) -> None:
+    """Hard-delete a build + children (photos released, comments/likes/scope
+    removed). Bulk deletes run immediately so the parent DELETE never hits an
+    FK (AUT-703, AUT-762)."""
+    await db.execute(
+        update(SocialPhoto)
+        .where(SocialPhoto.build_id == build.id)
+        .values(build_id=None)
+    )
+    await db.execute(delete(SocialComment).where(SocialComment.build_id == build.id))
+    await db.execute(delete(SocialLike).where(SocialLike.build_id == build.id))
+    await db.execute(delete(SocialShareScope).where(SocialShareScope.build_id == build.id))
+    await db.delete(build)
+
+
 async def _sync_federation(db: AsyncSession) -> None:
     """Pull remote builds + like/comment events from the hub when due.
 
@@ -252,8 +267,32 @@ async def _sync_federation(db: AsyncSession) -> None:
 
 
 async def _apply_event(db: AsyncSession, event: dict) -> None:
-    """Apply a federated comment/like event to the matching local build copy."""
+    """Apply a federated comment/like/remove event to the matching local copy."""
     if not isinstance(event, dict):
+        return
+    if event.get("event_type") == "remove":
+        # Takedown (AUT-902): delete the local copy of a post the origin (or
+        # hub operator) removed. Issue blog posts are routed to their handler.
+        payload = event.get("payload") or {}
+        if not isinstance(payload, dict):
+            return
+        build_id = payload.get("build_id")
+        if not build_id:
+            return
+        if payload.get("post_type") == "issue":
+            from app.api.v1.issues import apply_issue_event
+
+            await apply_issue_event(db, event)
+            return
+        build = await db.get(SocialBuild, str(build_id))
+        if not build:
+            build = await db.scalar(
+                select(SocialBuild).where(SocialBuild.remote_build_id == str(build_id))
+            )
+        if not build or build.status != "published":
+            return
+        await _purge_build(db, build)
+        await db.flush()
         return
     if event.get("event_type") not in ("comment", "like"):
         return
@@ -697,11 +736,18 @@ async def delete_post(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_premium_write),
 ) -> None:
-    """Unshare a build (takedown propagates locally)."""
+    """Unshare a build (takedown propagates via the hub).
+
+    Authors may unshare their own builds; admins may remove any build on their
+    server (local or federated copy) directly from the community pages
+    (AUT-902). Non-owners get a 404, not a 403, so they cannot tell a post
+    exists (PW-8).
+    """
     build = await _get_published(db, post_id)
-    if build.author_user_id != user.id:
-        # 404, not 403, so non-owners cannot tell a post exists (PW-8).
+    is_author = build.author_user_id == user.id
+    if not is_author and user.role != "admin":
         raise HTTPException(status_code=404, detail="Post not found")
+    origin = build.origin
     # Bulk deletes/update run immediately, so every child row is gone before the
     # parent DELETE — an ORM db.delete loop does not order child deletes first
     # (no relationship/cascade) and 500s on the FK (AUT-703, AUT-762).
@@ -716,6 +762,15 @@ async def delete_post(
     await db.execute(delete(SocialBuildFlag).where(SocialBuildFlag.build_id == build.id))
     await db.delete(build)
     await db.commit()
+    # Takedown fan-out for locally-hosted posts only; a federated copy's
+    # origin is another server, so removing the local copy stays local.
+    if origin == "local":
+        cfg = await get_server_config(db)
+        if cfg.federation_enabled and cfg.hub_status == "registered" and cfg.hub_server_id:
+            try:
+                await federation.push_removed(cfg, str(build.id), "build")
+            except (FederationUnavailable, Exception) as exc:
+                logger.warning("social_remove_push_failed", build_id=build.id, error=str(exc))
 
 
 @router.post("/posts/{post_id}/flag", status_code=201)
