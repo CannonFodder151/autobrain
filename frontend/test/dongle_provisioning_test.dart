@@ -145,6 +145,31 @@ void main() {
     });
   });
 
+  group('provisionAckMessage (AUT-969 F6)', () {
+    test('maps first-write gate to a factory-reset hint (AUT-968 F5)', () {
+      expect(
+        provisionAckMessage('err:already configured'),
+        contains('factory-reset'),
+      );
+    });
+
+    test('maps token/expiry rejection to a re-pair hint (AUT-969 F6)', () {
+      expect(
+        provisionAckMessage('err:token missing or expired'),
+        contains('Re-pair'),
+      );
+    });
+
+    test('surfaces other err: verbatim without the prefix', () {
+      expect(provisionAckMessage('err:need ssid,device_id,api_key'),
+          'need ssid,device_id,api_key');
+    });
+
+    test('passes non-error acks through unchanged', () {
+      expect(provisionAckMessage('ok'), 'ok');
+    });
+  });
+
   group('DongleApi', () {
     test('create posts name + vehicle_id and parses the one-time key', () async {
       final api = _FakeApi()

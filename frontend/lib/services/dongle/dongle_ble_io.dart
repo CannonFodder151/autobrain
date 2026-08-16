@@ -90,7 +90,7 @@ class BleImpl {
       await char.write(utf8.encode(appendProvisionToken(payload, token)));
       final ack = await ackFuture;
       if (ack.startsWith('err:')) {
-        throw DongleBleException(_ackMessage(ack));
+        throw DongleBleException(provisionAckMessage(ack));
       }
       return ack.isEmpty ? 'ok' : ack;
     } on DongleBleException {
@@ -116,18 +116,6 @@ class BleImpl {
     } catch (_) {
       return null;
     }
-  }
-
-  /// Maps a firmware ack ("err:…") to a friendly, actionable message.
-  /// Fw1's first-write-only gate is the one users actually hit on a re-push
-  /// (AUT-968 F5); other err: are surfaced with the terse prefix stripped.
-  static String _ackMessage(String ack) {
-    final msg = ack.startsWith('err:') ? ack.substring(4) : ack;
-    if (msg == 'already configured') {
-      return 'This dongle is already provisioned — factory-reset it before '
-          'pushing new WiFi settings.';
-    }
-    return msg.trim();
   }
 
   /// Scans for the dongle and returns it, or throws a user-facing error.

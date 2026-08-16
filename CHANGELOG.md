@@ -23,6 +23,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- Dongle provisioning (AUT-969): when the dongle rejects a push with a token
+  or window error, the app now explains the fix (re-pair and retry right after
+  the pairing prompt) instead of echoing the firmware's terse
+  "token missing or expired".
+
 ## [0.3.92] - 2026-08-16
 
 ### Security
