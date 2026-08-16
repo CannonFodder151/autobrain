@@ -12,7 +12,10 @@ How code gets from a branch to running production services.
 | `release-mobile.yml` *(in `autobrain-mobile`)* | manual dispatch with a `version` input | Signed `.aab` + draft GitHub Release + Discord `#changelog`/`#updates` |
 
 All workflows run on `ubuntu-latest`. Builds are multi-arch (`linux/amd64`,
-`linux/arm64`) via `buildx`/QEMU.
+`linux/arm64`). Since AUT-987 each platform is built **natively** on its own
+self-hosted runner — amd64 on the x64 dev-box runner, arm64 on the ARM hosted
+server (152.69.188.133, Portainer EP5, `arm64`-labeled runner) — and combined
+into multi-arch manifests by a `*-manifest` job. No QEMU emulation.
 
 ## 1. Docker Hub publish (`dockerhub-publish.yml`)
 
@@ -27,8 +30,13 @@ Runs on every push to `main`, every pull request, and manual dispatch:
 2. **auto-bump** — cuts a release when `[Unreleased]` has content and pushes it
    to `main`, rebasing onto the latest main and retrying up to 3 times on
    concurrent-push conflicts (AUT-451).
-3. **publish** — builds and pushes `autobrain-backend`, `autobrain-ai`,
-   `autobrain-frontend` for both `latest` and `hosted` tags. The frontend build
+3. **publish** — matrix over `[amd64, arm64]`; each leg builds only its native
+   platform on the matching self-hosted runner and pushes a per-arch tag
+   (`autobrain-<svc>:<tag>-<arch>`). **publish-manifest** then runs
+   `docker buildx imagetools create` to assemble the multi-arch manifest lists
+   for `autobrain-backend`, `autobrain-worker`, `autobrain-ai`,
+   `autobrain-frontend`, `autobrain-market-data` for both `latest` and `hosted`
+   tags (plus the `default`-tier frontend). The frontend build
    is baked with `API_BASE_URL=https://hosted.autobrainservice.app/api/v1` and
    `WS_BASE_URL=wss://hosted.autobrainservice.app/ws`.
 4. **sync-changelog** — copies `CHANGELOG.md` into the
