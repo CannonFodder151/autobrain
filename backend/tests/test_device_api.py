@@ -17,6 +17,7 @@ os.environ.setdefault("SECRET_KEY", "test-secret")
 import uuid  # noqa: E402
 
 import pytest  # noqa: E402
+import pytest_asyncio  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 
 from app.core.security import create_access_token, hash_password  # noqa: E402
@@ -28,10 +29,10 @@ from app.models.vehicle import Vehicle  # noqa: E402
 from app.services.device_keys import hash_key
 
 
-@pytest.fixture(scope="module", autouse=True)
+@pytest_asyncio.fixture(scope="module", autouse=True, loop_scope="session")
 async def _init_schema() -> None:
-    # Runs on pytest-asyncio's session loop (pyproject asyncio_default_test_loop_scope)
-    # so the engine's asyncpg pool is not bound to a throwaway loop (AUT-918 QA).
+    # Session loop (pyproject asyncio_default_test_loop_scope) so the engine's
+    # asyncpg pool is not bound to a throwaway loop (AUT-918 QA).
     await init_db()
 
 
