@@ -76,7 +76,7 @@ class CommentIn(BaseModel):
 class PostUpdate(BaseModel):
     """Full build edit (AUT-675): title, caption, photo order/swap and scope.
 
-    `None` means "leave unchanged"; pass empty strings/lists to clear.
+    Omitted fields stay unchanged; pass `null` or an empty string to clear.
     """
     title: str | None = Field(default=None, max_length=200)
     caption: str | None = Field(default=None, max_length=1000)
@@ -445,7 +445,7 @@ async def update_post(
     fields = payload.model_fields_set
     if "title" in fields:
         build.title = payload.title.strip() if payload.title and payload.title.strip() else build.title
-    if "caption" in fields and payload.caption is not None:
+    if "caption" in fields:
         build.caption = payload.caption or None
     scope = await db.scalar(
         select(SocialShareScope).where(SocialShareScope.build_id == build.id)
