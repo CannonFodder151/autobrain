@@ -23,9 +23,10 @@ from app.services.ownership import get_accessible_vehicle
 from app.social import federation
 from app.social.federation import FederationUnavailable
 from app.social.media import MAX_UPLOAD_BYTES, MediaError, read_upload, signed_url, upload_photo
-from app.social.rate_limit import social_rate_limit
+from app.social.rate_limit import social_rate_limit, social_user_rate_limit
 from app.social.models import (
     SocialBuild,
+    SocialBuildFlag,
     SocialComment,
     SocialLike,
     SocialPhoto,
@@ -81,6 +82,16 @@ class PostUpdate(BaseModel):
     caption: str | None = Field(default=None, max_length=1000)
     photo_ids: list[str] | None = Field(default=None, max_length=12)
     share_scope: ShareScopeIn | None = None
+
+
+class FlagIn(BaseModel):
+    reason: str = Field(min_length=1, max_length=200)
+
+
+def _plaintext(value: str) -> str:
+    """Strip control characters so stored reasons never carry markup or raw
+    control codes (mirror of the issues-blog helper)."""
+    return "".join(c for c in value if c >= " " or c in "\n\t")
 
 
 async def _like_count(db: AsyncSession, build_id: str) -> int:
@@ -702,5 +713,74 @@ async def delete_post(
     await db.execute(delete(SocialComment).where(SocialComment.build_id == build.id))
     await db.execute(delete(SocialLike).where(SocialLike.build_id == build.id))
     await db.execute(delete(SocialShareScope).where(SocialShareScope.build_id == build.id))
+    await db.execute(delete(SocialBuildFlag).where(SocialBuildFlag.build_id == build.id))
     await db.delete(build)
     await db.commit()
+
+
+@router.post("/posts/{post_id}/flag", status_code=201)
+async def flag_build(
+    post_id: str,
+    payload: FlagIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_premium_write),
+    _rl: None = Depends(social_rate_limit(5)),
+    _user_rl: None = Depends(social_user_rate_limit("builds-flag", 5)),
+) -> dict:
+    """Report a build post (AUT-883 moderation queue). Deduped per user."""
+    build = await _get_published(db, post_id)
+    reason = _plaintext(payload.reason).strip()
+    if not reason:
+        raise HTTPException(status_code=422, detail="Reason cannot be empty")
+    existing = await db.scalar(
+        select(SocialBuildFlag).where(
+            SocialBuildFlag.build_id == build.id,
+            SocialBuildFlag.flagged_by_user_id == user.id,
+            SocialBuildFlag.comment_id.is_(None),
+        )
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="You already flagged this post")
+    db.add(SocialBuildFlag(
+        build_id=build.id,
+        flagged_by_user_id=user.id,
+        reason=reason,
+    ))
+    await db.commit()
+    return {"message": "Flag submitted for review"}
+
+
+@router.post("/posts/{post_id}/comments/{comment_id}/flag", status_code=201)
+async def flag_build_comment(
+    post_id: str,
+    comment_id: str,
+    payload: FlagIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_premium_write),
+    _rl: None = Depends(social_rate_limit(5)),
+    _user_rl: None = Depends(social_user_rate_limit("builds-flag-comment", 5)),
+) -> dict:
+    """Report a comment on a build (AUT-883 moderation queue)."""
+    build = await _get_published(db, post_id)
+    comment = await db.get(SocialComment, comment_id)
+    if not comment or comment.build_id != build.id:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    reason = _plaintext(payload.reason).strip()
+    if not reason:
+        raise HTTPException(status_code=422, detail="Reason cannot be empty")
+    existing = await db.scalar(
+        select(SocialBuildFlag).where(
+            SocialBuildFlag.comment_id == comment.id,
+            SocialBuildFlag.flagged_by_user_id == user.id,
+        )
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="You already flagged this comment")
+    db.add(SocialBuildFlag(
+        build_id=build.id,
+        comment_id=comment.id,
+        flagged_by_user_id=user.id,
+        reason=reason,
+    ))
+    await db.commit()
+    return {"message": "Flag submitted for review"}

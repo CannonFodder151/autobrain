@@ -18,7 +18,11 @@ import 'issue_compose_screen.dart';
 import 'issue_detail_screen.dart';
 
 class IssuesBlogScreen extends StatefulWidget {
-  const IssuesBlogScreen({super.key});
+  const IssuesBlogScreen({super.key, this.mineOnly = false});
+
+  /// True for the dedicated My Issues tab (AUT-883): the list is always the
+  /// caller's own posts and the search/filter bar is hidden.
+  final bool mineOnly;
 
   @override
   State<IssuesBlogScreen> createState() => _IssuesBlogScreenState();
@@ -42,6 +46,9 @@ class _IssuesBlogScreenState extends State<IssuesBlogScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.mineOnly) {
+      _mine = true;
+    }
     _scroll.addListener(_onScroll);
     _load();
   }
@@ -161,7 +168,7 @@ class _IssuesBlogScreenState extends State<IssuesBlogScreen> {
     }
     return Column(
       children: [
-        _filterBar(),
+        if (!widget.mineOnly) _filterBar(),
         Expanded(
           child: RefreshIndicator(
             onRefresh: _refresh,

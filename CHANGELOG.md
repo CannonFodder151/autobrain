@@ -19,6 +19,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- Admin build takedown now deletes the build's photo rows instead of leaving
+  them orphaned in the uploader's pool pointing at purged MinIO objects
+  (AUT-889).
+
+### Added
+- Report buttons on build posts and build comments — reports join the admin
+  "To review" hub alongside issue reports; admins can delete reported builds
+  and build comments (AUT-883).
+- Dedicated "My Issues" tab next to Issues Blog showing your own issue blog
+  posts (AUT-883).
+
 ## [0.3.88] - 2026-08-16
 
 ### Fixed
