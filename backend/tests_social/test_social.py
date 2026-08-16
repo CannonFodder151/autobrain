@@ -927,6 +927,48 @@ async def test_remove_event_deletes_federated_copies(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_remove_event_never_purges_local_build(monkeypatch) -> None:
+    """AUT-907: a hub-relayed `remove` must never take down a locally-hosted
+    build or issue post — only the origin server's own delete path may (local
+    deletes push via the hub's origin-verified /v1/remove)."""
+    async def _no_inbox(_cfg):
+        return []
+
+    async def _remove_events(_cfg, after):
+        return {"events": [
+            {"id": 7, "event_type": "remove",
+             "payload": {"build_id": "mine-own-build", "post_type": "build"}},
+            {"id": 8, "event_type": "remove",
+             "payload": {"build_id": "mine-own-issue", "post_type": "issue"}},
+        ], "next_cursor": 8}
+
+    monkeypatch.setattr("app.social.federation.pull_inbox", _no_inbox)
+    monkeypatch.setattr("app.social.federation.pull_events", _remove_events)
+    async with _SessionLocal() as db:
+        cfg = SocialServerConfig(id=1, feature_enabled=True, federation_enabled=True,
+                                 hub_status="registered", hub_server_id="me",
+                                 hub_api_key="k", hub_private_key="ab" * 32,
+                                 last_inbox_sync=None, last_event_sync=None)
+        await db.merge(cfg)
+        db.add(SocialBuild(id="mine-own-build-1", author_display_name="A",
+                           title="Local build", origin="local",
+                           remote_build_id="mine-own-build", snapshot_json="{}",
+                           status="published"))
+        db.add(SocialIssuePost(id="mine-own-issue-1", author_display_name="B",
+                               title="Local issue", body="x", origin="local",
+                               remote_post_id="mine-own-issue"))
+        await db.commit()
+        user = await _new_user(db, "keep@example.com", "Keep")
+        token = create_access_token(user.id)
+    async with await _client(token) as c:
+        feed = await c.get("/api/v1/social/feed")
+        assert feed.status_code == 200, feed.text
+    async with _SessionLocal() as db:
+        assert await db.get(SocialBuild, "mine-own-build-1") is not None
+        assert await db.get(SocialIssuePost, "mine-own-issue-1") is not None
+
+
+@pytest.mark.asyncio
 async def test_admin_can_delete_any_build_from_feed() -> None:
     """AUT-902: admins may remove any build on their server straight from the
     community pages; non-owner non-admins still get a 404 (PW-8)."""
