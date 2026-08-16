@@ -21,6 +21,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- Dongle WiFi trip auto-upload (AUT-918): per-device API key header auth,
+  idempotent POST /devices/{id}/trips upload surface, and the diy_dongle
+  logbook source. Offline-first firmware queue + BLE credential provisioning
+  ship in autobrain-obd2-diy; mobile settings/BLE push is AUT-936.
+
 ## [0.3.90] - 2026-08-16
 
 ### Fixed
