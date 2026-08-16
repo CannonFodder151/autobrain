@@ -109,6 +109,63 @@ class _SocialPostDetailScreenState extends State<SocialPostDetailScreen> {
     }
   }
 
+  Future<String?> _askReason(String title) async {
+    final controller = TextEditingController();
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 3,
+          maxLength: 200,
+          decoration: const InputDecoration(
+            labelText: 'Reason',
+            hintText: 'e.g. spam, abuse, misleading content',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('Report'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return (reason == null || reason.isEmpty) ? null : reason;
+  }
+
+  Future<void> _report() async {
+    final reason = await _askReason('Report this build');
+    if (reason == null || !mounted) return;
+    try {
+      await SocialApi(context.read<AuthState>().api).flagBuild(widget.postId, reason);
+      _toast('Thanks — your report has been submitted for review.');
+    } on ApiException catch (e) {
+      _toast(e.message);
+    } catch (e) {
+      _toast('Could not submit report: $e');
+    }
+  }
+
+  Future<void> _reportComment(SocialComment comment) async {
+    final reason = await _askReason('Report this comment');
+    if (reason == null || !mounted) return;
+    try {
+      await SocialApi(context.read<AuthState>().api)
+          .flagBuildComment(widget.postId, comment.id, reason);
+      _toast('Thanks — your report has been submitted for review.');
+    } on ApiException catch (e) {
+      _toast(e.message);
+    } catch (e) {
+      _toast('Could not submit report: $e');
+    }
+  }
+
   void _toast(String message) {
     if (mounted) {
       ScaffoldMessenger.of(context)
@@ -246,6 +303,12 @@ class _SocialPostDetailScreenState extends State<SocialPostDetailScreen> {
                   const Icon(Icons.chat_bubble_outline),
                   const SizedBox(width: 6),
                   Text('${_comments.length}'),
+                  const Spacer(),
+                  IconButton(
+                    tooltip: 'Report this build',
+                    icon: const Icon(Icons.flag_outlined),
+                    onPressed: auth.premium ? _report : null,
+                  ),
                 ],
               ),
               const Divider(height: 8),
@@ -281,10 +344,22 @@ class _SocialPostDetailScreenState extends State<SocialPostDetailScreen> {
               title: Text(c.authorDisplayName,
                   style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
               subtitle: Text(c.body),
-              trailing: c.serverName != null
-                  ? Text(c.serverName!,
-                      style: const TextStyle(fontSize: 11, color: Colors.grey))
-                  : null,
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (c.serverName != null)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Text(c.serverName!,
+                          style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                    ),
+                  IconButton(
+                    tooltip: 'Report this comment',
+                    icon: const Icon(Icons.flag_outlined, size: 16),
+                    onPressed: () => _reportComment(c),
+                  ),
+                ],
+              ),
             ),
         ] else
           const Padding(

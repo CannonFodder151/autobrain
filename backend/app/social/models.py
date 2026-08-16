@@ -108,27 +108,6 @@ class SocialLike(Base):
     __table_args__ = (UniqueConstraint("build_id", "author_user_id", name="uq_social_like"),)
 
 
-class SocialBuildFlag(Base):
-    """A user report on a shared build post (moderation queue, AUT-896).
-
-    The report fans out to the federation hub as a `report` event so the hub
-    operator can review it (and remove the post hub-wide); the local row keeps
-    a record on the reporting server. Mirrors SocialIssueFlag for builds.
-    """
-
-    __tablename__ = "social_build_flags"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    build_id: Mapped[str] = mapped_column(String(36), ForeignKey("social_builds.id"), index=True)
-    flagged_by_user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"))
-    reason: Mapped[str] = mapped_column(String(200))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-
-    __table_args__ = (
-        UniqueConstraint("build_id", "flagged_by_user_id", name="uq_social_build_flag"),
-    )
-
-
 class SocialShareScope(Base):
     """Per-build opt-in share scope (req 11). Default minimal: photos + specs + mods."""
 
@@ -234,6 +213,43 @@ class SocialIssueFlag(Base):
         ),
         Index(
             "uq_social_issue_flag_comment",
+            "comment_id",
+            "flagged_by_user_id",
+            unique=True,
+            postgresql_where=text("comment_id IS NOT NULL"),
+            sqlite_where=text("comment_id IS NOT NULL"),
+        ),
+    )
+
+
+class SocialBuildFlag(Base):
+    """A user report on a build post OR build comment (moderation queue,
+    AUT-883). Mirrors SocialIssueFlag: post flags leave comment_id NULL,
+    comment flags carry both the build anchor and the comment id. Dedupe is
+    per-target via partial unique indexes below."""
+
+    __tablename__ = "social_build_flags"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    build_id: Mapped[str] = mapped_column(String(36), ForeignKey("social_builds.id"), index=True)
+    comment_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("social_comments.id", ondelete="CASCADE"), index=True
+    )
+    flagged_by_user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"))
+    reason: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index(
+            "uq_social_build_flag_post",
+            "build_id",
+            "flagged_by_user_id",
+            unique=True,
+            postgresql_where=text("comment_id IS NULL"),
+            sqlite_where=text("comment_id IS NULL"),
+        ),
+        Index(
+            "uq_social_build_flag_comment",
             "comment_id",
             "flagged_by_user_id",
             unique=True,
