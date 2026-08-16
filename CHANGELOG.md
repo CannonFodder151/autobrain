@@ -20,7 +20,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.92] - 2026-08-16
 
 ### Security
 - Dongle provisioning (AUT-963): logout / server switch now clear the saved
