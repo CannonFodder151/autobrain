@@ -4,12 +4,15 @@ import hmac
 
 from fastapi import Depends, HTTPException, Request, WebSocket, status
 from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.security import decode_token
 from app.db.session import get_db
+from app.models.device import Device
 from app.models.user import User
+from app.services.device_keys import key_prefix, verify_key
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
@@ -161,3 +164,32 @@ async def require_admin_api_key(request: Request) -> None:
     if not supplied or not hmac.compare_digest(supplied, settings.ADMIN_API_KEY):
         raise HTTPException(status_code=401, detail="Invalid or missing admin API key")
     return None
+
+
+async def get_device_from_key(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> Device:
+    """Unattended device auth via X-Device-API-Key (dongle WiFi upload, AUT-918).
+
+    The raw key maps to a `devices` row by its short prefix index, then the
+    supplied key is verified against the stored sha256 digest in constant
+    time. The dongle carries only device id + key — no user JWT.
+    """
+    supplied = request.headers.get("X-Device-API-Key", "")
+    if not supplied:
+        raise HTTPException(
+            status_code=401,
+            detail="Missing X-Device-API-Key header",
+            headers={"WWW-Authenticate": "DeviceKey"},
+        )
+    device = await db.scalar(
+        select(Device).where(Device.api_key_prefix == key_prefix(supplied))
+    )
+    if device is None or not verify_key(supplied, device.api_key_hash):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired device API key",
+            headers={"WWW-Authenticate": "DeviceKey"},
+        )
+    return device
