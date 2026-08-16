@@ -110,7 +110,7 @@ class BleImpl {
   /// is then attempted without an echo.
   static Future<String?> _readToken(BluetoothCharacteristic c) async {
     try {
-      final v = await c.read(timeout: const Duration(seconds: 5));
+      final v = await c.read(timeout: 5);
       final s = utf8.decode(v).trim();
       return s.isEmpty ? null : s;
     } catch (_) {

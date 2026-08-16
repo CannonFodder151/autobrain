@@ -23,6 +23,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- Dongle BLE provisioning token read: pass the timeout as int seconds to match
+  `flutter_blue_plus` 1.32.8 `Characteristic.read()` (AUT-992). A `Duration`
+  here broke the mobile sync's analyze gate on main.
+
 ## [0.3.92] - 2026-08-16
 
 ### Security
