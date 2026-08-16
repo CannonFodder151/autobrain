@@ -53,6 +53,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   instead of resurrecting on the next federation sync: the removal is recorded as a
   tombstone and the inbox pull skips it, so a deleted copy does not reappear ~1 minute
   later (AUT-910).
+- Admins can no longer delete Issues Blog posts hosted on another server — the
+  admin delete endpoint now returns 403 for federated (origin="remote") posts;
+  moderating an abusive remote post hides it locally via the existing hide action
+  instead of deleting another server's copy (AUT-935).
 
 ### Added
 - Report buttons on build posts and build comments — reports join the admin
