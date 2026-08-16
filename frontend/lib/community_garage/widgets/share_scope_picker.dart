@@ -21,9 +21,10 @@ class ShareScopeState {
 }
 
 class ShareScopePicker extends StatelessWidget {
-  const ShareScopePicker({super.key, required this.scope});
+  const ShareScopePicker({super.key, required this.scope, this.onChanged});
 
   final ShareScopeState scope;
+  final VoidCallback? onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -37,7 +38,10 @@ class ShareScopePicker extends StatelessWidget {
         const SizedBox(height: 8),
         CheckboxListTile(
           value: scope.allowPhotos,
-          onChanged: (v) => scope.allowPhotos = v ?? true,
+          onChanged: (v) {
+            scope.allowPhotos = v ?? true;
+            onChanged?.call();
+          },
           dense: true,
           controlAffinity: ListTileControlAffinity.leading,
           contentPadding: EdgeInsets.zero,
@@ -45,7 +49,10 @@ class ShareScopePicker extends StatelessWidget {
         ),
         CheckboxListTile(
           value: scope.allowSpecs,
-          onChanged: (v) => scope.allowSpecs = v ?? true,
+          onChanged: (v) {
+            scope.allowSpecs = v ?? true;
+            onChanged?.call();
+          },
           dense: true,
           controlAffinity: ListTileControlAffinity.leading,
           contentPadding: EdgeInsets.zero,
@@ -53,7 +60,10 @@ class ShareScopePicker extends StatelessWidget {
         ),
         CheckboxListTile(
           value: scope.allowMods,
-          onChanged: (v) => scope.allowMods = v ?? true,
+          onChanged: (v) {
+            scope.allowMods = v ?? true;
+            onChanged?.call();
+          },
           dense: true,
           controlAffinity: ListTileControlAffinity.leading,
           contentPadding: EdgeInsets.zero,
@@ -61,7 +71,10 @@ class ShareScopePicker extends StatelessWidget {
         ),
         CheckboxListTile(
           value: scope.allowOdometer,
-          onChanged: (v) => scope.allowOdometer = v ?? true,
+          onChanged: (v) {
+            scope.allowOdometer = v ?? true;
+            onChanged?.call();
+          },
           dense: true,
           controlAffinity: ListTileControlAffinity.leading,
           contentPadding: EdgeInsets.zero,
@@ -69,7 +82,10 @@ class ShareScopePicker extends StatelessWidget {
         ),
         CheckboxListTile(
           value: scope.allowNotes,
-          onChanged: (v) => scope.allowNotes = v ?? true,
+          onChanged: (v) {
+            scope.allowNotes = v ?? true;
+            onChanged?.call();
+          },
           dense: true,
           controlAffinity: ListTileControlAffinity.leading,
           contentPadding: EdgeInsets.zero,

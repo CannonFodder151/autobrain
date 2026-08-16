@@ -183,7 +183,7 @@ class _EditBuildScreenState extends State<EditBuildScreen> {
           const SizedBox(height: 12),
           _photoEditor(),
           const SizedBox(height: 16),
-          ShareScopePicker(scope: _scope),
+          ShareScopePicker(scope: _scope, onChanged: () => setState(() {})),
         ],
       ),
     );
