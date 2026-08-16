@@ -184,6 +184,20 @@ async def push_event(cfg: SocialServerConfig, build_id: str, event_type: str, pa
     })
 
 
+async def push_removed(cfg: SocialServerConfig, build_id: str, post_type: str) -> None:
+    """Takedown (AUT-902): tell the hub a locally-hosted post was removed.
+
+    The hub drops every routed `post` event for `build_id` (so no peer's inbox
+    returns it again) and fans a `remove` event out so peers delete the local
+    copies already sitting in their community feeds. Only the origin server may
+    call this, so it is safe on author + admin deletes of local posts.
+    """
+    await _post(cfg, "/v1/remove", {
+        "build_id": build_id,
+        "post_type": post_type,
+    })
+
+
 async def pull_inbox(cfg: SocialServerConfig) -> list[dict]:
     """Fetch remote builds the hub routes to this server."""
     data = await _get(cfg, "/v1/inbox")

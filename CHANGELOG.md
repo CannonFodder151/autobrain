@@ -29,6 +29,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Admin build takedown now deletes the build's photo rows instead of leaving
   them orphaned in the uploader's pool pointing at purged MinIO objects
   (AUT-889).
+- Community Garage takedowns now propagate across the federation (AUT-902): deleting a
+  locally-hosted build or Issues Blog post (by the author or an admin) tells the hub to
+  drop the routed post and fan a `remove` event out, so the deleted post no longer
+  lingers in the community hub on other servers. Servers also apply incoming `remove`
+  events to their federated copies (builds and issue posts). The hub operator's
+  "Remove post" action in the hub admin GUI does the same (hub repo, AUT-902).
+- Community Garage admins can now remove any build post directly from the feed
+  (community pages) — previously the delete button 404'd on posts they didn't author,
+  and federated copies had no delete action at all (AUT-902).
 
 ### Added
 - Report buttons on build posts and build comments — reports join the admin
