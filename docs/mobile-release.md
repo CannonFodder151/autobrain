@@ -11,7 +11,7 @@ a release `.aab` is produced, and Nathan knows where the change notes live.
 - Flutter lineage sync from the monorepo `frontend/` into `autobrain-mobile`
 - `.aab` / `.apk` builds + machine-keystore signing
 - GitHub Releases on `autobrain-mobile`
-- Play Console **closed testing** upload (automated: `scripts/play-upload-closed-testing.sh`, track `testing`)
+- Play Console **closed testing** upload (automated: `scripts/play-upload-closed-testing.sh`, track `alpha` — the existing closed testing track that has testers)
 - Discord `#changelog` / `#updates` notes
 - `docs/mobile-release.md` + the release workflow
 
@@ -205,9 +205,11 @@ curl -s -X POST "<upload_url>?name=app-release.aab" \
 After the GitHub Release, the release pipeline automatically uploads the freshly
 built `.aab` to the **Play Console closed testing** track. No manual upload.
 
-- Track: `testing` (a closed testing track; closed testing tracks have **custom
-  names**, there is no fixed API default — resolved live via the AndroidPublisher
-  Tracks API on first use).
+- Track: `alpha` (the existing closed testing track — closed testing tracks have
+  **custom names**, no fixed API default; `alpha` already has a tester audience
+  so uploads land as `completed`/submitted for review). The pipeline **never
+  creates a new track** — it fails loudly instead if the target track is missing
+  (AUT-994).
 - Runner script: `scripts/play-upload-closed-testing.sh` in `autobrain-mobile`
   (`bash scripts/play-upload-closed-testing.sh <app-release.aab> [track-id]`).
   Requires the `bash`/`curl`/`jq`/`openssl` tools (present on runner images) and
@@ -280,8 +282,8 @@ Automated pipeline now lives at `CannonFodder151/autobrain-mobile`
    is **fully published by the workflow** — it does not stall as a draft.
 8. **Play closed-testing upload** (was the manual "Play Console upload checklist
    (Nathan)" step): `scripts/play-upload-closed-testing.sh` uploads the built
-   `.aab` to the Play Console closed testing track `testing` and commits the edit
-   (submits for review). See step 4b for the tester-audience/draft fallback.
+   `.aab` to the existing Play Console closed testing track `alpha` (has testers)
+   and commits the edit (submits for review). See step 4b for the tester-audience/draft fallback.
 9. Posts the release embeds to Discord via the internal reporter webhook (see
    the Outline "Discord reporter" doc): `changelog` (public, `0x2ECC71`) and
    `updates` (staff, `0x3498DB`). Payloads are built with `jq`
