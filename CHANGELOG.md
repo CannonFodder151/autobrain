@@ -20,6 +20,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- Android licence/checkout: external payment and billing links now resolve on
+  Android 11+ (manifest declares https/http VIEW intents) and fail with an
+  actionable error that copies the link, instead of a silent "Could not open
+  the link" (AUT-926).
+
 ## [0.3.89] - 2026-08-16
 
 ### Fixed
