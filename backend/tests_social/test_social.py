@@ -560,9 +560,9 @@ async def test_edit_build_title_photos_scope(monkeypatch) -> None:
         detail = (await c.get(f"/api/v1/social/posts/{post_id}")).json()
         assert p3["id"] not in detail["photo_ids"]
 
-        # F3: caption None = unchanged; explicit "" clears
+        # F3: explicit null or "" clears the caption (AUT-903)
         keep = await c.patch(f"/api/v1/social/posts/{post_id}", json={"caption": None})
-        assert keep.json()["caption"] == "Paint done"
+        assert keep.json()["caption"] is None
         cleared = await c.patch(f"/api/v1/social/posts/{post_id}", json={"caption": ""})
         assert cleared.json()["caption"] is None
 
