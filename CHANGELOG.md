@@ -17,7 +17,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.89] - 2026-08-16
 
 ### Fixed
 - Build edit PATCH now clears the caption when the client sends an explicit
