@@ -24,6 +24,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Fixed
+- Community Garage (AUT-997): posts deleted by their author (or by an admin)
+  no longer reappear in the feed after the next federation sync — a tombstone
+  now records every removed build (local + remote) so the hub re-routing the
+  post's event cannot resurrect it (mirrors the AUT-910 fix for remote
+  copies).
 - Dongle BLE provisioning token read: pass the timeout as int seconds to match
   `flutter_blue_plus` 1.32.8 `Characteristic.read()` (AUT-992). A `Duration`
   here broke the mobile sync's analyze gate on main.

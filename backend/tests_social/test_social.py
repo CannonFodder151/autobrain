@@ -940,6 +940,132 @@ async def test_admin_deleted_remote_copy_stays_removed_across_sync(monkeypatch) 
 
 
 @pytest.mark.asyncio
+async def test_author_deleted_build_stays_removed_across_sync(monkeypatch) -> None:
+    """AUT-997: after an author deletes their own published build, the deleted
+    post must NOT resurrect in the community garage feed. The hub keeps routing
+    a removed build's post event, so the next federation sync would re-add the
+    deleted local build (tombstone gap for local-origin builds)."""
+    async def _no_inbox(_cfg):
+        return []
+
+    async def _no_events(_cfg, after):
+        return {"events": [], "next_cursor": 0}
+
+    async def _noop(_cfg, *_a, **_k):
+        return None
+
+    monkeypatch.setattr("app.social.federation.pull_inbox", _no_inbox)
+    monkeypatch.setattr("app.social.federation.pull_events", _no_events)
+    monkeypatch.setattr("app.social.federation.push_outbox", _noop)
+    monkeypatch.setattr("app.social.federation.push_removed", _noop)
+    await _enable_feature(True)
+    async with _SessionLocal() as db:
+        cfg = SocialServerConfig(id=1, feature_enabled=True, federation_enabled=True,
+                                 hub_status="registered", hub_server_id="me",
+                                 hub_api_key="k", hub_private_key="ab" * 32,
+                                 server_name="Me", server_email="me@example.com",
+                                 last_inbox_sync=None, last_event_sync=None)
+        await db.merge(cfg)
+        author = await _new_user(db, "author-del@example.com", "Author")
+        token = create_access_token(author.id)
+        vehicle = await _new_vehicle(db, author.id)
+        vehicle_id = vehicle.id
+
+    def _gone(items):
+        return [i for i in items if i["title"] == "Gone build"]
+
+    async with await _client(token) as c:
+        created = await c.post("/api/v1/social/posts",
+                               json={"vehicle_id": vehicle_id, "title": "Gone build"})
+        assert created.status_code == 201, created.text
+        post_id = created.json()["id"]
+        assert len(_gone((await c.get("/api/v1/social/feed")).json()["items"])) == 1
+
+        gone = await c.delete(f"/api/v1/social/posts/{post_id}")
+        assert gone.status_code == 204, gone.text
+        assert _gone((await c.get("/api/v1/social/feed")).json()["items"]) == []
+
+        # Hub has not processed the remove yet and still routes the build back
+        # to us: the fake inbox returns it keyed by its local id.
+        inbox = [{
+            "build_id": post_id,
+            "server_id": "me",
+            "author_display_name": "Author",
+            "server_name": "Me",
+            "title": "Gone build",
+            "snapshot": {},
+        }]
+        async def _routed_inbox(_cfg):
+            return inbox
+
+        monkeypatch.setattr("app.social.federation.pull_inbox", _routed_inbox)
+        async with _SessionLocal() as db:
+            cfg = await db.get(SocialServerConfig, 1)
+            cfg.last_inbox_sync = None
+            await db.commit()
+        feed = await c.get("/api/v1/social/feed")
+        assert feed.status_code == 200, feed.text
+        assert _gone(feed.json()["items"]) == [], \
+            "author-deleted build resurrected in the feed on re-sync"
+
+
+@pytest.mark.asyncio
+async def test_admin_deleted_local_build_stays_removed_across_sync(monkeypatch) -> None:
+    """AUT-997: an admin takedown of a locally-hosted build must stay removed
+    from the feed too — same tombstone path as the author delete."""
+    async def _no_events(_cfg, after):
+        return {"events": [], "next_cursor": 0}
+
+    async def _noop(_cfg, *_a, **_k):
+        return None
+
+    monkeypatch.setattr("app.social.federation.pull_events", _no_events)
+    monkeypatch.setattr("app.social.federation.push_removed", _noop)
+    await _enable_feature(True)
+    async with _SessionLocal() as db:
+        cfg = SocialServerConfig(id=1, feature_enabled=True, federation_enabled=True,
+                                 hub_status="registered", hub_server_id="me",
+                                 hub_api_key="k", hub_private_key="ab" * 32,
+                                 last_inbox_sync=None, last_event_sync=None)
+        await db.merge(cfg)
+        admin = await _new_user(db, "admin-del@example.com", "AdminDel", role="admin")
+        token = create_access_token(admin.id)
+        db.add(SocialBuild(id="local-build-to-remove", author_display_name="A",
+                           title="Admin removals", origin="local", snapshot_json="{}",
+                           status="published"))
+        await db.commit()
+
+    def _gone(items):
+        return [i for i in items if i["title"] == "Admin removals"]
+
+    async with await _client(token) as c:
+        assert len(_gone((await c.get("/api/v1/social/feed")).json()["items"])) == 1
+        resp = await c.delete("/api/v1/admin/social/posts/local-build-to-remove")
+        assert resp.status_code == 204, resp.text
+        assert _gone((await c.get("/api/v1/social/feed")).json()["items"]) == []
+
+        async def _routed_inbox(_cfg):
+            return [{
+                "build_id": "local-build-to-remove",
+                "server_id": "me",
+                "author_display_name": "A",
+                "server_name": "Me",
+                "title": "Admin removals",
+                "snapshot": {},
+            }]
+
+        monkeypatch.setattr("app.social.federation.pull_inbox", _routed_inbox)
+        async with _SessionLocal() as db:
+            cfg = await db.get(SocialServerConfig, 1)
+            cfg.last_inbox_sync = None
+            await db.commit()
+        feed = await c.get("/api/v1/social/feed")
+        assert feed.status_code == 200, feed.text
+        assert _gone(feed.json()["items"]) == [], \
+            "admin-deleted local build resurrected in the feed on re-sync"
+
+
+@pytest.mark.asyncio
 async def test_remove_event_deletes_federated_copies(monkeypatch) -> None:
     """AUT-902: a hub `remove` event deletes the local copy of a federated
     build AND issue post — removed posts must not linger in the community hub."""
