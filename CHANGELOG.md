@@ -26,6 +26,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Tests
+- Alembic test guard (AUT-1009): new `test_alembic_revision_ids_unique` asserts every
+  revision id is unique, catching the add_devices duplicate `a1b2c3d4e5f6` collision.
+  Removed stray `a1b2c3d4e5f6_add_devices.bak` from migration versions.
 - Backup regression net (AUT-1023): full-schema `serialize -> dump -> restore` roundtrip test now seeds one representative row per table across all 32 tables (community garage + market-data included) and every column storage class — guards against silent backup data loss or restore failure if schema/types drift again.
 
 ## [0.3.94] - 2026-08-17
