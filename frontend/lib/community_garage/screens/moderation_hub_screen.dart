@@ -113,6 +113,7 @@ class _ModerationHubScreenState extends State<ModerationHubScreen> {
   Widget _tile(Map<String, dynamic> item) {
     final scheme = Theme.of(context).colorScheme;
     final isComment = item['kind'] == 'comment';
+    final isBuild = item['target'] == 'build';
     final author = isComment
         ? (item['comment_author_display_name'] as String? ?? 'Unknown')
         : (item['post_author_display_name'] as String? ?? 'Unknown');
@@ -133,12 +134,23 @@ class _ModerationHubScreenState extends State<ModerationHubScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: isComment ? scheme.secondaryContainer : scheme.tertiaryContainer,
+                    color: isBuild
+                        ? scheme.primaryContainer
+                        : isComment
+                            ? scheme.secondaryContainer
+                            : scheme.tertiaryContainer,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Text(isComment ? 'REPLY' : 'POST',
+                  child: Text(
+                      isBuild
+                          ? (isComment ? 'BUILD REPLY' : 'BUILD POST')
+                          : isComment
+                              ? 'REPLY'
+                              : 'POST',
                       style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
-                          color: scheme.onSecondaryContainer)),
+                          color: isBuild
+                              ? scheme.onPrimaryContainer
+                              : scheme.onSecondaryContainer)),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -171,11 +183,21 @@ class _ModerationHubScreenState extends State<ModerationHubScreen> {
                       setState(() => _busy.add(postId));
                       try {
                         if (isComment && commentId != null) {
-                          await SocialApi(context.read<AuthState>().api)
-                              .adminDeleteComment(commentId);
+                          if (isBuild) {
+                            await SocialApi(context.read<AuthState>().api)
+                                .adminDeleteBuildComment(commentId);
+                          } else {
+                            await SocialApi(context.read<AuthState>().api)
+                                .adminDeleteComment(commentId);
+                          }
                         } else {
-                          await SocialApi(context.read<AuthState>().api)
-                              .adminDeletePost(postId);
+                          if (isBuild) {
+                            await SocialApi(context.read<AuthState>().api)
+                                .adminDeleteBuildPost(postId);
+                          } else {
+                            await SocialApi(context.read<AuthState>().api)
+                                .adminDeletePost(postId);
+                          }
                         }
                       } finally {
                         if (mounted) setState(() => _busy.remove(postId));

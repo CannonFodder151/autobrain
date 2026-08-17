@@ -132,6 +132,11 @@ class SocialApi {
 
   Future<void> deletePost(String postId) => _api.delete('/social/posts/$postId');
 
+  /// Report a build post for review (AUT-896) — kept locally and fanned to
+  /// the federation hub's moderation queue.
+  Future<void> reportBuild(String postId, String reason) =>
+      _api.post('/social/posts/$postId/report', {'reason': reason});
+
   Future<SocialBuild> resolveShare(String token) async {
     final data = await _api.get('/social/share/$token') as Map<String, dynamic>;
     return SocialBuild.fromJson(data);
@@ -150,6 +155,14 @@ class SocialApi {
         as Map<String, dynamic>;
     return SocialComment.fromJson(data);
   }
+
+  /// Report a build post (AUT-883 moderation queue).
+  Future<void> flagBuild(String postId, String reason) =>
+      _api.post('/social/posts/$postId/flag', {'reason': reason});
+
+  /// Report a comment on a build (AUT-883 moderation queue).
+  Future<void> flagBuildComment(String postId, String commentId, String reason) =>
+      _api.post('/social/posts/$postId/comments/$commentId/flag', {'reason': reason});
 
   Future<({bool liked, int count})> toggleLike(String postId) async {
     final data =
@@ -274,6 +287,13 @@ class SocialApi {
 
   Future<void> adminDeleteComment(String commentId) =>
       _api.delete('/admin/issues/comments/$commentId');
+
+  /// Admin moderation of reported builds (AUT-883).
+  Future<void> adminDeleteBuildPost(String postId) =>
+      _api.delete('/admin/social/posts/$postId');
+
+  Future<void> adminDeleteBuildComment(String commentId) =>
+      _api.delete('/admin/social/comments/$commentId');
 
   Future<void> socialBan(String userId) =>
       _api.post('/admin/users/$userId/social-ban');

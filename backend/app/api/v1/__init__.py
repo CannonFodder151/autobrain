@@ -8,6 +8,7 @@ from app.api.v1 import (
     analytics,
     auth,
     billing,
+    devices,
     diagnostics,
     fuel,
     issues,
@@ -44,6 +45,7 @@ api_router.include_router(parts.router)
 api_router.include_router(valuation.router)
 api_router.include_router(analytics.router)
 api_router.include_router(notifications.router)
+api_router.include_router(devices.router)
 api_router.include_router(search.router)
 api_router.include_router(social.router)
 api_router.include_router(issues.router)

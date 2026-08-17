@@ -65,6 +65,20 @@ async def require_ai_vehicle(
         )
 
 
+async def require_logbook_enabled(vehicle: Vehicle) -> None:
+    """Digital logbook is disabled on club-reg vehicles (product rule [PR-1]):
+    Victoria requires the physical VicRoads club log book, so no trip rows may
+    be written for club-reg cars — from any source (app or dongle)."""
+    if vehicle.club_reg:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "This vehicle is club-registered — the digital logbook is "
+                "disabled (Victoria requires the physical VicRoads club log book)."
+            ),
+        )
+
+
 async def clear_primary(db: AsyncSession, user: User) -> None:
     await db.execute(
         Vehicle.__table__.update()
