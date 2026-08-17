@@ -26,6 +26,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Tests
+- Alembic test guard (AUT-1009): new `test_alembic_revision_ids_unique` asserts every
+  revision id is unique, catching the add_devices duplicate `a1b2c3d4e5f6` collision.
+  Removed stray `a1b2c3d4e5f6_add_devices.bak` from migration versions.
+
 ## [0.3.95] - 2026-08-17
 
 ### Tests
@@ -362,6 +367,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+
+### Tests
+- Alembic test guard (AUT-1009): new `test_alembic_revision_ids_unique` asserts every
+  revision id is unique, catching the add_devices duplicate `a1b2c3d4e5f6` collision.
+  Removed stray `a1b2c3d4e5f6_add_devices.bak` from migration versions.
 
 ## [0.3.79] - 2026-08-15
 
