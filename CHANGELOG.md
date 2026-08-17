@@ -27,6 +27,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- Alembic migration chain (AUT-1009): renumbered the duplicate `a1b2c3d4e5f6`
+  revision in `add_devices` to `z2a3b4c5d6e7` and added `m3rge03` to merge the
+  two remaining heads (`w5x6y7z8a9b0` + `z2a3b4c5d6e7`). `alembic upgrade head`
+  now works at bootstrap instead of falling back to `create_all`. Added
+  `test_alembic_revision_ids_unique` regression guard (from PR #187) to prevent
+  future duplicate revision IDs.
+
 ## [0.3.96] - 2026-08-17
 
 ### Tests

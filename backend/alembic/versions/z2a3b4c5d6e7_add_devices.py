@@ -13,7 +13,7 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import context, op
 
-revision: str = "a1b2c3d4e5f6"
+revision: str = "z2a3b4c5d6e7"
 down_revision: Union[str, None] = "x1y2z3a4b5c6"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
