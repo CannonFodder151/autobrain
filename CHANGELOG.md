@@ -55,7 +55,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   `-r market-data/requirements.txt`); `rego-lookup-api` (a separate repo) now
   runs its own identical weekly scan. Previously only backend + AI trees were
   scheduled for CVE scanning, leaving the Playwright/Selenium and market-data
-  transitive trees uncovered (AUT-1019).
+  transitive trees uncovered. The scan also moves from the self-hosted runner
+  to `ubuntu-latest` because the self-hosted runner's pip index is a stale
+  mirror that cannot resolve `uvicorn==0.34.0`, which would have failed the
+  scan on every run (AUT-1019).
 
 ## [0.3.92] - 2026-08-16
 
