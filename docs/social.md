@@ -37,17 +37,36 @@ keep read-only access (curated demo feed); write routes reject the demo role.
 - `POST /social/posts` — share a vehicle as a build: `{vehicle_id, caption?,
   share_scope?, photo_ids?}`. Snapshot is built deterministically from the
   vehicle + mods (no AI). Outbox push happens when federation is on.
-- `GET/DELETE /social/posts/{id}` — detail / unshare (takedown).
+- `GET/DELETE /social/posts/{id}` — detail / unshare (takedown). Authors may
+  unshare their own builds; admins may remove any build on their server (local
+  or federated copy) straight from the community pages. Deleting a
+  locally-hosted build fans a `remove` event out via the hub, so federated
+  copies disappear from every server's community hub (AUT-902).
 - `PATCH /social/posts/{id}` — edit the build's caption `{caption?}` (owner-only).
 - `POST/GET /social/posts/{id}/comments`, `POST/GET /social/posts/{id}/likes`.
 - `POST /social/posts/{id}/share-link` → `{token, url}`;
   `GET /social/share/{token}` resolves it.
+- `POST /social/posts/{id}/report` `{reason}` — report a build (AUT-896).
+  Records a `social_build_flags` row locally and pushes a hub-local `report`
+  event (AUT-896) so the federation-hub operator sees it in the Reported posts
+  queue. Idempotent per user per post; hub failures never fail the report.
 - `POST /social/uploads` — multipart image; webp-compressed on upload
   (`app/social/media.py`), stored in MinIO, returned as a signed short-lived URL.
 - `GET/POST /social/issues...` — the Issues Blog (`app/api/v1/issues.py`).
   Posts, replies and answers federate like builds (AUT-756): outbox payloads
   carry `type: "issue"` and the sync loop routes them into `social_issue_posts`
   with `origin="remote"` + the origin's signed photo URLs.
+  - `GET /social/issues?mine=true` — the caller's own posts (My Issues, AUT-832).
+  - `POST /social/issues/{id}/flag` — report a post; deduped per user per post.
+  - `POST /social/issues/{id}/comments/{cid}/flag` — report a comment (AUT-832);
+    deduped per user per comment.
+- `GET /admin/issues/review` — **moderation hub (AUT-832)**: every flagged post
+  and comment with reporting reason + author, newest first.
+- `DELETE /admin/issues/posts/{id}` / `DELETE /admin/issues/comments/{cid}` —
+  admin deletes a reported entry (cascades flags/photos).
+- `POST /admin/users/{id}/social-ban` / `social-unban` — suspend a user from
+  posting in Community Garage (hides/restores their posts; write routes reject
+  the ban via `require_premium_write`).
 
 ## Share scope (req 11)
 

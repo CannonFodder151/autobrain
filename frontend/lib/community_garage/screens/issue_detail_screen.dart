@@ -210,6 +210,44 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
     }
   }
 
+  Future<void> _reportComment(SocialIssueComment comment) async {
+    final controller = TextEditingController();
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Report this reply'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 3,
+          maxLength: 200,
+          decoration: const InputDecoration(
+            labelText: 'Reason',
+            hintText: 'e.g. spam, abuse, wrong category',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('Report'),
+          ),
+        ],
+      ),
+    );
+    if (reason == null || reason.isEmpty || !mounted) return;
+    try {
+      await SocialApi(context.read<AuthState>().api)
+          .flagIssueComment(_post!.id, comment.id, reason);
+      _toast('Thanks — your report has been submitted for review.');
+    } on ApiException catch (e) {
+      _toast(e.message);
+    } catch (e) {
+      _toast('Could not submit report: $e');
+    }
+  }
+
   Future<void> _delete() async {
     final post = _post;
     if (post == null) return;
@@ -502,6 +540,14 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                     ' · ${socialRelativeTime(c.createdAt)}',
                     style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
               ),
+              if (auth.premium)
+                IconButton(
+                  tooltip: 'Report this reply',
+                  icon: const Icon(Icons.flag_outlined, size: 16),
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  onPressed: () => _reportComment(c),
+                ),
               if (isAnswer)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),

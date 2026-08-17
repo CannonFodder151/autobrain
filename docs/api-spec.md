@@ -112,6 +112,40 @@ Product rule [PR-1](product-rules.md#pr-1--club-reg-disables-the-digital-logbook
 
 Trips may carry a GPS route: `gps_samples` is a list of `{"t": <epoch seconds>, "lat": deg, "lon": deg}` points (WGS84) accepted on POST/PATCH. Invalid `0,0` (no-fix) and out-of-range points are dropped server-side (deterministic, no AI). The board CSV schema `epoch,...,lat,lon` (raw degrees x10^7) is accepted by `backend/app/services/trip_gps.py::parse_board_csv`.
 
+## Dongle devices (`/devices`) & WiFi trip upload — AUT-918
+
+Dongle devices (esp32-diy board, BLE + WiFi) upload **completed** trips unattended. Design note (decision in AUT-918): a single idempotent device-scoped batch endpoint is used instead of the two-phase app logbook surface (POST start + PATCH complete) because the board deep-sleeps between drives and may upload days later — a split start/complete pair would leave orphan `in_progress` rows.
+
+User-scoped routes use JWT; the upload route is authenticated by an opaque per-device key:
+
+- **Device API key**: created via `POST /devices` (returned once, plaintext). Server stores only a sha256 digest + a 10-char prefix index. The dongle presents it as `X-Device-API-Key` — never a JWT (short-lived, would expire mid-offline queue).
+- **Vehicle binding**: `vehicle_id` is set at create time (or in-app later); every uploaded trip lands in that vehicle's logbook. Same PR-1 club-reg rule applies (403).
+- **Idempotency**: each trip carries the dongle's stable `device_trip_id`; server dedupes on `(device_id, device_trip_id)`, so WiFi retries never double-log.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | `/devices` | List my devices (id, name, vehicle_id, last_seen_at) — plaintext key never returned |
+| POST   | `/devices` | Create device (`{name, vehicle_id?}`) → returns `{...device, api_key}` (**one-time**; save it) |
+| POST   | `/devices/{device_id}/trips` | Upload batch of completed trips (`X-Device-API-Key`); returns `{accepted, duplicates, vehicle_id}` |
+
+Upload payload — `POST /devices/{device_id}/trips`:
+
+```json
+{
+  "trips": [{
+    "device_trip_id": "trip-1767200000",
+    "started_at": "2026-08-01T09:00:00Z",
+    "ended_at": "2026-08-01T09:30:00Z",
+    "start_odometer_km": null,
+    "end_odometer_km": null,
+    "distance_km": null,
+    "gps_samples": [{"t": 1767200000, "lat": -33.8687241, "lon": 151.2109053}]
+  }]
+}
+```
+
+Trips are created `status=completed`, `source=diy_dongle`. `gps_samples` runs through the same deterministic cleaner as the app logbook. Errors: `401` bad/missing key, `404` key≠path device, `409` no vehicle bound / bound vehicle gone, `403` club-reg vehicle.
+
 ## OBD-II (`/vehicles/{id}/obd`)
 
 | Method | Path | Description |
