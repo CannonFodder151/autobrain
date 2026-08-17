@@ -186,7 +186,7 @@ jobs:
     # Both matrix legs must succeed first, so this runs only after `publish`.
     needs: publish
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
