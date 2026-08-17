@@ -614,6 +614,11 @@ async def delete_build_admin(
     build = await db.get(SocialBuild, build_id)
     if not build:
         raise HTTPException(status_code=404, detail="Post not found")
+    # AUT-997: tombstone deleted builds (local + remote) so a later federation
+    # sync cannot re-add them to the feed while the hub still routes them.
+    from app.api.v1.social import _tombstone_removed_build
+
+    await _tombstone_removed_build(db, build)
     media_keys = list(await db.scalars(
         select(SocialPhoto.file_key).where(SocialPhoto.build_id == build.id)
     ))
