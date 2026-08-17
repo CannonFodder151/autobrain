@@ -74,6 +74,10 @@ class CommentIn(BaseModel):
     body: str = Field(min_length=1, max_length=1000)
 
 
+class ReportIn(BaseModel):
+    reason: str = Field(min_length=1, max_length=200)
+
+
 class PostUpdate(BaseModel):
     """Full build edit (AUT-675): title, caption, photo order/swap and scope.
 
@@ -709,6 +713,47 @@ async def _push_event_safe(db: AsyncSession, build: SocialBuild, kind: str, payl
         await federation.push_event(cfg, origin_build_id, kind, payload)
     except (FederationUnavailable, Exception) as exc:
         logger.warning("social_event_push_failed", kind=kind, build_id=build.id, error=str(exc))
+
+
+@router.post("/posts/{post_id}/report", status_code=201)
+async def report_post(
+    post_id: str,
+    payload: ReportIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_premium_write),
+    _rl: None = Depends(social_rate_limit(10)),
+) -> dict:
+    """Report a build post for review (AUT-896).
+
+    Keeps a local moderation row and pushes a `report` event to the hub so the
+    operator can review it across servers. Hub failures never fail the report
+    — the local record still stands. Ownership check matches delete (404 for
+    non-existent posts, PW-8).
+    """
+    build = await _get_published(db, post_id)
+    existing = await db.scalar(select(SocialBuildFlag).where(
+        SocialBuildFlag.build_id == build.id,
+        SocialBuildFlag.flagged_by_user_id == user.id,
+    ))
+    if existing:
+        existing.reason = payload.reason
+    else:
+        db.add(SocialBuildFlag(
+            build_id=build.id,
+            flagged_by_user_id=user.id,
+            reason=payload.reason,
+        ))
+    await db.commit()
+    cfg = await get_server_config(db)
+    if cfg.federation_enabled and cfg.hub_status == "registered":
+        origin_build_id = build.remote_build_id if build.origin == "remote" else build.id
+        try:
+            await federation.push_report(
+                cfg, origin_build_id, payload.reason, user.display_name, cfg.server_name
+            )
+        except (FederationUnavailable, Exception) as exc:
+            logger.warning("social_report_push_failed", build_id=build.id, error=str(exc))
+    return {"reported": True}
 
 
 @router.post("/posts/{post_id}/share-link")

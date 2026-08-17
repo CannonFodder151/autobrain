@@ -125,6 +125,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   and build comments (AUT-883).
 - Dedicated "My Issues" tab next to Issues Blog showing your own issue blog
   posts (AUT-883).
+- Build posts on the Community Garage hub feed can be reported ("Report post"
+  in the build-detail menu). Reports are recorded locally and sent to the
+  federation hub, where the operator sees them in a new Reported posts queue
+  with the full post content, reason and reporter (AUT-896).
+- Federation hub operator console: the Posts view now shows each post
+  human-readably (title, author, make/model, caption, mod/photo counts) with
+  text wrapping instead of raw JSON, and a Reported posts moderation list with
+  Remove/Dismiss actions (AUT-896).
 
 ## [0.3.88] - 2026-08-16
 
