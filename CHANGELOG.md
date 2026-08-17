@@ -22,7 +22,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.94] - 2026-08-17
 
 ### Fixed
 - Dongle provisioning (AUT-969): when the dongle rejects a push with a token
