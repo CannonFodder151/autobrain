@@ -26,15 +26,26 @@ jobs:
     if: github.event_name != 'pull_request'
     runs-on: [self-hosted, linux, x64]
     steps:
-      - uses: actions/checkout@v4
-        with:
-          path: autobrain
+      - name: Checkout autobrain repo
+        run: |
+          set -euo pipefail
+          if [ -d autobrain/.git ]; then
+            cd autobrain && git fetch origin && git checkout -f main && git reset --hard origin/main
+          else
+            rm -rf autobrain
+            git clone --branch main "https://github.com/${{ github.repository }}.git" autobrain
+          fi
 
-      - uses: actions/checkout@v4
-        with:
-          repository: CannonFodder151/autobrain-mobile
-          token: ${{ secrets.MOBILE_SYNC_TOKEN }}
-          path: autobrain-mobile
+      - name: Checkout mobile repo
+        run: |
+          set -euo pipefail
+          if [ -d autobrain-mobile/.git ]; then
+            cd autobrain-mobile && git fetch origin && git checkout -f main && git reset --hard origin/main
+          else
+            git clone "https://x-access-token:${MOBILE_SYNC_TOKEN}@github.com/CannonFodder151/autobrain-mobile.git" autobrain-mobile
+          fi
+        env:
+          MOBILE_SYNC_TOKEN: ${{ secrets.MOBILE_SYNC_TOKEN }}
 
       - name: Sync lineage + version into autobrain-mobile
         working-directory: autobrain

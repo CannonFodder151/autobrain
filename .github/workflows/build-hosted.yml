@@ -27,9 +27,17 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - name: Checkout repository
+        run: |
+          set -euo pipefail
+          if [ -d .git ]; then
+            git fetch origin
+          else
+            git init && git remote add origin "https://github.com/${{ github.repository }}.git" || true
+            git fetch origin
+          fi
+          git checkout -f main
+          git reset --hard origin/main
       - name: Cut a release if [Unreleased] has content (AUT-240)
         run: |
           set -euo pipefail
@@ -47,9 +55,12 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
+      - name: Checkout repository
+        run: |
+          set -euo pipefail
+          git fetch origin
+          git checkout -f main
+          git reset --hard origin/main
 
       - uses: docker/setup-qemu-action@v3
         if: ${{ github.event.inputs.platforms != 'linux/amd64' }}
