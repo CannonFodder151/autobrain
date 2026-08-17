@@ -53,6 +53,26 @@ String appendProvisionToken(String payload, String? token) {
 /// firmware's substring extractor terminates values at the first `"` and never
 /// unescapes, so those characters would be silently truncated on the dongle
 /// (AUT-968 F2). Returns a user-facing message, or null when provisionable.
+/// Maps a firmware ack ("err:…") to a friendly, actionable message.
+/// Fw1's first-write-only gate is the one users actually hit on a re-push
+/// (AUT-968 F5); other err: are surfaced with the terse prefix stripped.
+String provisionAckMessage(String ack) {
+  final msg = ack.startsWith('err:') ? ack.substring(4) : ack;
+  switch (msg) {
+    case 'already configured':
+      return 'This dongle is already provisioned — factory-reset it before '
+          'pushing new WiFi settings.';
+    case 'token missing or expired':
+      // AUT-969 F6: the token read raced pairing, or the 120 s provisioning
+      // window lapsed mid-flow. The write is fail-closed by design; re-pair
+      // and retry quickly.
+      return 'The dongle rejected the push. Re-pair and try again immediately '
+          'after the phone asks to pair.';
+    default:
+      return msg.trim();
+  }
+}
+
 String? validateWifiInput({required String ssid, required String pass}) {
   if (ssid.contains('"') ||
       ssid.contains('\\') ||
