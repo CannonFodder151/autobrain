@@ -18,6 +18,10 @@ on:
       - 'scripts/sync-mobile.sh'
   workflow_dispatch:
 
+concurrency:
+  group: sync-mobile-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
