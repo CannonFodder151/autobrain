@@ -29,6 +29,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   or window error, the app now explains the fix (re-pair and retry right after
   the pairing prompt) instead of echoing the firmware's terse
   "token missing or expired".
+- Community Garage (AUT-992): duplicate `_report()` dropped the post-report
+  path to the single AUT-896 `reportBuild` implementation — the leftover
+  AUT-883 `flagBuild` copy was a merge duplicate that broke the mobile sync's
+  analyze gate on main after PR #160 merged.
 
 ## [0.3.93] - 2026-08-17
 

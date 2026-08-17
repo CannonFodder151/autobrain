@@ -139,19 +139,6 @@ class _SocialPostDetailScreenState extends State<SocialPostDetailScreen> {
     return (reason == null || reason.isEmpty) ? null : reason;
   }
 
-  Future<void> _report() async {
-    final reason = await _askReason('Report this build');
-    if (reason == null || !mounted) return;
-    try {
-      await SocialApi(context.read<AuthState>().api).flagBuild(widget.postId, reason);
-      _toast('Thanks — your report has been submitted for review.');
-    } on ApiException catch (e) {
-      _toast(e.message);
-    } catch (e) {
-      _toast('Could not submit report: $e');
-    }
-  }
-
   Future<void> _reportComment(SocialComment comment) async {
     final reason = await _askReason('Report this comment');
     if (reason == null || !mounted) return;
