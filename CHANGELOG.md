@@ -27,6 +27,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- Hosted worker/beat SECRET_KEY (AUT-996): added `SECRET_KEY` env var to the
+  hosted `worker` and `beat` services in `docker-compose.hosted.yml`. Without
+  this, Celery worker and beat processes could not sign/verify JWT tokens,
+  causing task authentication failures on the hosted stack.
+
 ## [0.3.96] - 2026-08-17
 
 ### Tests
