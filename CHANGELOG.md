@@ -25,7 +25,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.97] - 2026-08-17
 
 ### Fixed
 - Alembic migration chain (AUT-1009): renumbered the duplicate `a1b2c3d4e5f6`
