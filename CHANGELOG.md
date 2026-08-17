@@ -49,6 +49,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   `flutter_blue_plus` 1.32.8 `Characteristic.read()` (AUT-992). A `Duration`
   here broke the mobile sync's analyze gate on main.
 
+### Security
+- CI: weekly full-resolution dependency scan now also audits the `market-data`
+  service tree (`.github/workflows/security-scan.yml` adds
+  `-r market-data/requirements.txt`); `rego-lookup-api` (a separate repo) now
+  runs its own identical weekly scan. Previously only backend + AI trees were
+  scheduled for CVE scanning, leaving the Playwright/Selenium and market-data
+  transitive trees uncovered (AUT-1019).
+
 ## [0.3.92] - 2026-08-16
 
 ### Security
