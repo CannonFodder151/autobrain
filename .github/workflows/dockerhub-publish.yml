@@ -6,6 +6,13 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Only one publish pipeline per branch at a time. A newer push cancels any
+# in-flight run so stale auto-bump-triggered publishes never starve the
+# latest commit (AUT-967).
+concurrency:
+  group: dockerhub-publish-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   changelog-gate:
     runs-on: ubuntu-latest
@@ -93,20 +100,11 @@ jobs:
           exit 1
 
   publish:
-    # Build each platform natively on its own runner (AUT-987): amd64 on the
-    # x64 dev-box runner, arm64 on the ARM hosted server (152.69.188.133) via
-    # an arm64-labeled self-hosted runner. No QEMU emulation needed.
+    # amd64 only on the x64 dev-box runner (AUT-987). The arm64 runner is
+    # offline; multi-arch builds are handled by build-hosted.yml (AUT-967).
     needs: auto-bump
     if: github.event_name != 'pull_request'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: amd64
-            runs_on: [self-hosted, linux, x64]
-          - arch: arm64
-            runs_on: [self-hosted, linux, arm64]
-    runs-on: ${{ matrix.runs_on }}
+    runs-on: [self-hosted, linux, x64]
     permissions:
       contents: read
     steps:
@@ -141,16 +139,15 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push images (linux/${{ matrix.arch }})
+      - name: Build and push images (linux/amd64)
         if: steps.version_only.outputs.skip != 'true'
         env:
-          ARCH: ${{ matrix.arch }}
           API_BASE_URL: https://hosted.autobrainservice.app/api/v1
           WS_BASE_URL: wss://hosted.autobrainservice.app/ws
         run: |
           set -euo pipefail
           VERSION="$(grep -E 'APP_VERSION: str' backend/app/core/config.py | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/')"
-          echo "==> building images tagged with version $VERSION (linux/$ARCH)"
+          echo "==> building images tagged with version $VERSION (linux/amd64)"
           for svc in backend worker ai frontend market-data; do
             case "$svc" in
               backend)  ctx=.;        df=docker/backend/Dockerfile;   args="";;
@@ -160,30 +157,30 @@ jobs:
               market-data) ctx=./market-data; df=market-data/Dockerfile; args="";;
             esac
             for tag in latest hosted "$VERSION"; do
-              echo "==> building autobrain-${svc}:${tag}-${ARCH}"
-              docker buildx build --platform linux/${ARCH} --push \
-                -t "cannonfodder151/autobrain-${svc}:${tag}-${ARCH}" \
+              echo "==> building autobrain-${svc}:${tag}-amd64"
+              docker buildx build --platform linux/amd64 --push \
+                -t "cannonfodder151/autobrain-${svc}:${tag}-amd64" \
                 ${args} -f "${df}" "${ctx}"
             done
           done
 
-      - name: Build and push default-tier frontend image (linux/${{ matrix.arch }})
+      - name: Build and push default-tier frontend image (linux/amd64)
         if: steps.version_only.outputs.skip != 'true'
         env:
-          ARCH: ${{ matrix.arch }}
           API_BASE_URL: https://default.autobrainservice.app/api/v1
           WS_BASE_URL: wss://default.autobrainservice.app/ws
         run: |
           set -euo pipefail
-          echo "==> building autobrain-frontend:default-${ARCH}"
-          docker buildx build --platform linux/${ARCH} --push \
-            -t "cannonfodder151/autobrain-frontend:default-${ARCH}" \
+          echo "==> building autobrain-frontend:default-amd64"
+          docker buildx build --platform linux/amd64 --push \
+            -t "cannonfodder151/autobrain-frontend:default-amd64" \
             --build-arg API_BASE_URL=${API_BASE_URL} --build-arg WS_BASE_URL=${WS_BASE_URL} \
             -f docker/frontend/Dockerfile .
 
   publish-manifest:
-    # Combine the per-arch images into multi-arch manifest lists (AUT-987).
-    # Both matrix legs must succeed first, so this runs only after `publish`.
+    # Tag the amd64 images as the default platform manifest (AUT-967).
+    # Multi-arch manifests (amd64+arm64) are built by build-hosted.yml when
+    # the arm64 runner is available.
     needs: publish
     if: github.event_name != 'pull_request'
     runs-on: [self-hosted, linux, x64]
@@ -218,26 +215,24 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Assemble multi-arch manifests
+      - name: Assemble amd64 manifest tags
         if: steps.version_only.outputs.skip != 'true'
         run: |
           set -euo pipefail
           VERSION="$(grep -E 'APP_VERSION: str' backend/app/core/config.py | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/')"
-          echo "==> assembling multi-arch manifests (version $VERSION)"
+          echo "==> tagging amd64 images as default platform manifests (version $VERSION)"
           for svc in backend worker ai frontend market-data; do
             for tag in latest hosted "$VERSION"; do
               echo "==> manifest autobrain-${svc}:${tag}"
               docker buildx imagetools create \
                 -t "cannonfodder151/autobrain-${svc}:${tag}" \
-                "cannonfodder151/autobrain-${svc}:${tag}-amd64" \
-                "cannonfodder151/autobrain-${svc}:${tag}-arm64"
+                "cannonfodder151/autobrain-${svc}:${tag}-amd64"
             done
           done
           echo "==> manifest autobrain-frontend:default"
           docker buildx imagetools create \
             -t "cannonfodder151/autobrain-frontend:default" \
-            "cannonfodder151/autobrain-frontend:default-amd64" \
-            "cannonfodder151/autobrain-frontend:default-arm64"
+            "cannonfodder151/autobrain-frontend:default-amd64"
 
   sync-changelog:
     needs: publish-manifest
