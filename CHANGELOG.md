@@ -21,7 +21,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.93] - 2026-08-17
 
 ### Fixed
 - Community Garage (AUT-997): posts deleted by their author (or by an admin)
