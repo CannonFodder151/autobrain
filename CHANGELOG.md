@@ -23,7 +23,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.95] - 2026-08-17
 
 ### Tests
 - Alembic test guard (AUT-1009): new `test_alembic_revision_ids_unique` asserts every

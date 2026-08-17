@@ -1,7 +1,7 @@
 name: autobrain
 description: AI-powered car enthusiast companion.
 publish_to: 'none'
-version: 0.3.94+93
+version: 0.3.95+94
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
