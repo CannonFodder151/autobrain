@@ -53,6 +53,12 @@ Docs live in the Outline wiki and are mirrored to `docs/`. Update both when you
 change behaviour. The API spec is generated from OpenAPI and stored in
 `docs/api-spec.md`.
 
+## Test cleanup (mandatory)
+
+- Any test that creates accounts, data, or containers MUST remove them when
+  done — see [docs/test-cleanup-policy.md](docs/test-cleanup-policy.md). An
+  issue is not closed with test resources still on the box.
+
 ## Security
 
 - Every change needs Security sign-off BEFORE implementation starts (Gate 1,

@@ -272,16 +272,33 @@ async def pull_remote_issue(db: AsyncSession, item: dict, payload: dict) -> None
 
 
 async def apply_issue_event(db: AsyncSession, event: dict) -> None:
-    """Apply a federated issue comment/answer event to the local copy."""
+    """Apply a federated issue comment/answer/remove event to the local copy."""
     if not isinstance(event, dict):
-        return
-    if event.get("event_type") != "comment":
         return
     payload = event.get("payload") or {}
     if not isinstance(payload, dict) or payload.get("post_type") != "issue":
         return
     build_id = payload.get("build_id")
     if not build_id:
+        return
+    if event.get("event_type") == "remove":
+        # Takedown (AUT-902): delete the local copy of a removed issue post.
+        post = await db.get(SocialIssuePost, str(build_id))
+        if not post:
+            post = await db.scalar(
+                select(SocialIssuePost).where(SocialIssuePost.remote_post_id == str(build_id))
+            )
+        if not post:
+            return
+        # Defense-in-depth (AUT-907): never let a hub-relayed `remove` take down
+        # a locally-hosted issue post; only this server's own delete path (via
+        # hub /v1/remove) can do that.
+        if getattr(post, "origin", None) == "local":
+            return
+        await _purge_issue_post(db, post)
+        await db.flush()
+        return
+    if event.get("event_type") != "comment":
         return
     post = await db.get(SocialIssuePost, build_id)
     if not post:
@@ -384,11 +401,15 @@ async def list_issues(
     tag: str | None = Query(default=None, max_length=32),
     status: str | None = Query(default=None, max_length=20),
     q: str | None = Query(default=None, max_length=150),
+    mine: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(require_premium),
     _rl: None = Depends(social_rate_limit(30)),
 ) -> dict:
-    """Blog list — reverse-chronological with keyset cursor pagination."""
+    """Blog list — reverse-chronological with keyset cursor pagination.
+
+    `mine=true` filters to the caller's own posts ("My Issues", AUT-832).
+    """
     from app.api.v1.social import _sync_federation
 
     await _sync_federation(db)
@@ -399,6 +420,8 @@ async def list_issues(
         raise HTTPException(status_code=400, detail=f"Unknown status: {status}")
 
     stmt = select(SocialIssuePost).where(SocialIssuePost.status_hidden.is_(False))
+    if mine:
+        stmt = stmt.where(SocialIssuePost.author_user_id == _user.id)
     if tag:
         stmt = stmt.where(await _tags_contains(db, tag))
     if status:
@@ -694,12 +717,49 @@ async def flag_issue(
         select(SocialIssueFlag).where(
             SocialIssueFlag.post_id == post.id,
             SocialIssueFlag.flagged_by_user_id == user.id,
+            SocialIssueFlag.comment_id.is_(None),
         )
     )
     if existing:
         raise HTTPException(status_code=409, detail="You already flagged this post")
     db.add(SocialIssueFlag(
         post_id=post.id,
+        flagged_by_user_id=user.id,
+        reason=reason,
+    ))
+    await db.commit()
+    return {"message": "Flag submitted for review"}
+
+
+@router.post("/{post_id}/comments/{comment_id}/flag", status_code=201)
+async def flag_issue_comment(
+    post_id: str,
+    comment_id: str,
+    payload: FlagIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_premium_write),
+    _rl: None = Depends(social_rate_limit(5)),
+    _user_rl: None = Depends(social_user_rate_limit("issues-flag-comment", 5)),
+) -> dict:
+    """Report a comment on an issue post (AUT-832 moderation queue)."""
+    post = await _get_visible(db, post_id)
+    comment = await db.get(SocialIssueComment, comment_id)
+    if not comment or comment.post_id != post.id:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    reason = _plaintext(payload.reason).strip()
+    if not reason:
+        raise HTTPException(status_code=422, detail="Reason cannot be empty")
+    existing = await db.scalar(
+        select(SocialIssueFlag).where(
+            SocialIssueFlag.comment_id == comment.id,
+            SocialIssueFlag.flagged_by_user_id == user.id,
+        )
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="You already flagged this comment")
+    db.add(SocialIssueFlag(
+        post_id=post.id,
+        comment_id=comment.id,
         flagged_by_user_id=user.id,
         reason=reason,
     ))
@@ -714,10 +774,26 @@ async def delete_issue(
     user: User = Depends(require_premium_write),
     _rl: None = Depends(social_rate_limit(5)),
 ) -> None:
-    """Delete the author's own post (cascades comments + flags)."""
+    """Delete the author's own post (cascades comments + flags, takedown fans
+    out via the hub)."""
     post = await db.get(SocialIssuePost, post_id)
     if not post or post.author_user_id != user.id:
         raise HTTPException(status_code=404, detail="Post not found")
+    origin = post.origin
+    await _purge_issue_post(db, post)
+    await db.commit()
+    # Takedown fan-out for locally-hosted posts only (AUT-902).
+    if origin == "local":
+        cfg = await get_server_config(db)
+        if cfg.federation_enabled and cfg.hub_status == "registered" and cfg.hub_server_id:
+            try:
+                await federation.push_removed(cfg, str(post.id), "issue")
+            except (FederationUnavailable, Exception) as exc:
+                logger.warning("social_issue_remove_push_failed", post_id=post.id, error=str(exc))
+
+
+async def _purge_issue_post(db: AsyncSession, post: SocialIssuePost) -> None:
+    """Hard-delete an issue post + children (photos, comments, flags)."""
     from sqlalchemy import delete
 
     comment_ids = list(await db.scalars(
@@ -729,4 +805,3 @@ async def delete_issue(
     await db.execute(delete(SocialIssueComment).where(SocialIssueComment.post_id == post.id))
     await db.execute(delete(SocialIssueFlag).where(SocialIssueFlag.post_id == post.id))
     await db.delete(post)
-    await db.commit()

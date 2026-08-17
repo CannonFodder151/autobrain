@@ -7,11 +7,13 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column
@@ -149,6 +151,9 @@ class SocialIssuePost(Base):
     photo_urls_json: Mapped[str | None] = mapped_column(Text)
     # Admin moderation flag: hidden posts are excluded from browse + search.
     status_hidden: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    # True only when status_hidden was set BY a social ban (AUT-832). Unban
+    # restores these; posts an admin hid directly stay hidden.
+    hidden_by_ban: Mapped[bool] = mapped_column(Boolean, default=False)
     # Client-side microsecond-faithful default so keyset cursors compare exactly
     # on every dialect (sqlite's func.now() is second-precision text).
     created_at: Mapped[datetime] = mapped_column(
@@ -179,20 +184,93 @@ class SocialIssueComment(Base):
 
 
 class SocialIssueFlag(Base):
-    """A user report on an issue post (moderation queue)."""
+    """A user report on an issue post OR comment (moderation queue, AUT-832).
+
+    Post flags leave comment_id NULL; comment flags carry both the post anchor
+    (context) and the comment id. Dedupe is per-target: one report per user per
+    post, and one per user per comment (partial unique indexes below).
+    """
 
     __tablename__ = "social_issue_flags"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     post_id: Mapped[str] = mapped_column(String(36), ForeignKey("social_issue_posts.id"), index=True)
+    comment_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("social_issue_comments.id", ondelete="CASCADE"), index=True
+    )
     flagged_by_user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"))
     reason: Mapped[str] = mapped_column(String(200))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (
-        UniqueConstraint("post_id", "flagged_by_user_id", name="uq_social_issue_flag"),
+        Index(
+            "uq_social_issue_flag_post",
+            "post_id",
+            "flagged_by_user_id",
+            unique=True,
+            postgresql_where=text("comment_id IS NULL"),
+            sqlite_where=text("comment_id IS NULL"),
+        ),
+        Index(
+            "uq_social_issue_flag_comment",
+            "comment_id",
+            "flagged_by_user_id",
+            unique=True,
+            postgresql_where=text("comment_id IS NOT NULL"),
+            sqlite_where=text("comment_id IS NOT NULL"),
+        ),
     )
 
+
+class SocialBuildFlag(Base):
+    """A user report on a build post OR build comment (moderation queue,
+    AUT-883). Mirrors SocialIssueFlag: post flags leave comment_id NULL,
+    comment flags carry both the build anchor and the comment id. Dedupe is
+    per-target via partial unique indexes below."""
+
+    __tablename__ = "social_build_flags"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    build_id: Mapped[str] = mapped_column(String(36), ForeignKey("social_builds.id"), index=True)
+    comment_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("social_comments.id", ondelete="CASCADE"), index=True
+    )
+    flagged_by_user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"))
+    reason: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index(
+            "uq_social_build_flag_post",
+            "build_id",
+            "flagged_by_user_id",
+            unique=True,
+            postgresql_where=text("comment_id IS NULL"),
+            sqlite_where=text("comment_id IS NULL"),
+        ),
+        Index(
+            "uq_social_build_flag_comment",
+            "comment_id",
+            "flagged_by_user_id",
+            unique=True,
+            postgresql_where=text("comment_id IS NOT NULL"),
+            sqlite_where=text("comment_id IS NOT NULL"),
+        ),
+    )
+
+
+class SocialRemoteTombstone(Base):
+    """Tombstone for an admin-removed federated copy (AUT-910).
+
+    The hub keeps routing a removed build's post event, so the next inbox sync
+    would re-add the copy. Recording the remote_build_id stops that. Rows are
+    pruned by _sync_federation once the hub stops routing the build.
+    """
+
+    __tablename__ = "social_remote_tombstones"
+
+    remote_build_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 class SocialServerConfig(Base):
     """Singleton row holding the admin toggles + hub registration state.

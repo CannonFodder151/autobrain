@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'api_client.dart';
 import 'config.dart';
 import 'token_store.dart';
+import '../services/dongle/dongle_settings.dart';
 
 enum LoginOutcome { ok, mfaRequired, mfaSetupRequired, failed }
 
@@ -96,6 +97,7 @@ class AuthState extends ChangeNotifier {
     _licenseEnabled = false;
     _freeAccount = false;
     await _tokens.clear();
+    await DongleSettings.clear();
     _loadConfig();
     notifyListeners();
   }
@@ -222,6 +224,7 @@ class AuthState extends ChangeNotifier {
     _client = null;
     _freeAccount = false;
     await _tokens.clear();
+    await DongleSettings.clear();
     if (refreshToken != null) {
       // Best effort, non-blocking: the server bumps the account's
       // token_version, killing every outstanding token.

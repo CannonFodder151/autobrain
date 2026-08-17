@@ -21,6 +21,10 @@ class User(Base):
     display_name: Mapped[str] = mapped_column(String(120), nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(20), default="user", nullable=False)  # admin/user
+    # Moderation: banned users cannot write social content (issues, comments,
+    # flags, builds). Their existing posts stay visible but admin-hidden when
+    # banned (see admin moderation hub, AUT-832).
+    social_banned: Mapped[bool] = mapped_column(default=False)
     max_vehicles: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     is_active: Mapped[bool] = mapped_column(default=True)
     # Invited/self-signed-up but never completed registration (set a password).

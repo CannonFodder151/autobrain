@@ -180,7 +180,7 @@ class _SocialComposeScreenState extends State<SocialComposeScreen> {
                     const SizedBox(height: 12),
                     _photoPicker(),
                     const SizedBox(height: 16),
-                    ShareScopePicker(scope: _scope),
+                    ShareScopePicker(scope: _scope, onChanged: () => setState(() {})),
                   ],
                 ),
     );

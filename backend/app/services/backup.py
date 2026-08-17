@@ -287,6 +287,11 @@ async def _delete_user_data(db: AsyncSession, user_id: str) -> None:
         )).scalars().all())
     if build_ids:
         await db.execute(
+            _TABLES["social_build_flags"].delete().where(
+                _TABLES["social_build_flags"].c.build_id.in_(build_ids)
+            )
+        )
+        await db.execute(
             _TABLES["social_share_scopes"].delete().where(
                 _TABLES["social_share_scopes"].c.build_id.in_(build_ids)
             )
@@ -317,6 +322,14 @@ async def _delete_user_data(db: AsyncSession, user_id: str) -> None:
         await db.execute(
             _TABLES["social_builds"].delete().where(
                 _TABLES["social_builds"].c.id.in_(build_ids)
+            )
+        )
+    # The user's own build reports on other people's posts (AUT-905): the
+    # flagged_by_user_id FK would otherwise strand rows and fail the user delete.
+    if "social_build_flags" in _TABLES:
+        await db.execute(
+            _TABLES["social_build_flags"].delete().where(
+                _TABLES["social_build_flags"].c.flagged_by_user_id == user_id
             )
         )
     if "social_comments" in _TABLES:

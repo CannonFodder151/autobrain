@@ -18,7 +18,11 @@ import 'issue_compose_screen.dart';
 import 'issue_detail_screen.dart';
 
 class IssuesBlogScreen extends StatefulWidget {
-  const IssuesBlogScreen({super.key});
+  const IssuesBlogScreen({super.key, this.mineOnly = false});
+
+  /// True for the dedicated My Issues tab (AUT-883): the list is always the
+  /// caller's own posts and the search/filter bar is hidden.
+  final bool mineOnly;
 
   @override
   State<IssuesBlogScreen> createState() => _IssuesBlogScreenState();
@@ -37,10 +41,14 @@ class _IssuesBlogScreenState extends State<IssuesBlogScreen> {
   String _query = '';
   String? _tag;
   IssueStatus? _status;
+  bool _mine = false;
 
   @override
   void initState() {
     super.initState();
+    if (widget.mineOnly) {
+      _mine = true;
+    }
     _scroll.addListener(_onScroll);
     _load();
   }
@@ -88,7 +96,7 @@ class _IssuesBlogScreenState extends State<IssuesBlogScreen> {
     });
     try {
       final result = await api.issues(
-          q: _query, tag: _tag, status: _status, cursor: _nextCursor);
+          q: _query, tag: _tag, status: _status, cursor: _nextCursor, mine: _mine);
       setState(() {
         _posts = result.items;
         _nextCursor = result.nextCursor;
@@ -111,7 +119,7 @@ class _IssuesBlogScreenState extends State<IssuesBlogScreen> {
     setState(() => _loadingMore = true);
     try {
       final result = await SocialApi(context.read<AuthState>().api).issues(
-          q: _query, tag: _tag, status: _status, cursor: _nextCursor);
+          q: _query, tag: _tag, status: _status, cursor: _nextCursor, mine: _mine);
       if (mounted) {
         setState(() {
           final known = _posts.map((p) => p.id).toSet();
@@ -160,7 +168,7 @@ class _IssuesBlogScreenState extends State<IssuesBlogScreen> {
     }
     return Column(
       children: [
-        _filterBar(),
+        if (!widget.mineOnly) _filterBar(),
         Expanded(
           child: RefreshIndicator(
             onRefresh: _refresh,
@@ -171,9 +179,11 @@ class _IssuesBlogScreenState extends State<IssuesBlogScreen> {
                       const SizedBox(height: 160),
                       Center(
                         child: Text(
-                          _query.isEmpty && _tag == null && _status == null
-                              ? 'No issues yet — tap "Ask for help" to post the first one.'
-                              : 'No issues match your filters.',
+                          _mine
+                              ? 'No issues here yet — tap "Ask for help" to post your first one.'
+                              : _query.isEmpty && _tag == null && _status == null
+                                  ? 'No issues yet — tap "Ask for help" to post the first one.'
+                                  : 'No issues match your filters.',
                           style: const TextStyle(color: Colors.grey),
                           textAlign: TextAlign.center,
                         ),
@@ -248,9 +258,18 @@ class _IssuesBlogScreenState extends State<IssuesBlogScreen> {
               padding: const EdgeInsets.symmetric(vertical: 8),
               children: [
                 _filterChip(
-                  label: 'All',
-                  selected: _tag == null && _status == null,
+                  label: 'My Issues',
+                  selected: _mine,
                   onSelected: () => setState(() {
+                    _mine = !_mine;
+                    _reload();
+                  }),
+                ),
+                _filterChip(
+                  label: 'All',
+                  selected: _tag == null && _status == null && !_mine,
+                  onSelected: () => setState(() {
+                    _mine = false;
                     _tag = null;
                     _status = null;
                     _reload();
