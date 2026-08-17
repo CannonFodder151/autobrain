@@ -30,6 +30,7 @@ from app.social.models import (
     SocialComment,
     SocialLike,
     SocialPhoto,
+    SocialRemoteTombstone,
     SocialShareScope,
     get_server_config,
 )
@@ -80,7 +81,7 @@ class ReportIn(BaseModel):
 class PostUpdate(BaseModel):
     """Full build edit (AUT-675): title, caption, photo order/swap and scope.
 
-    `None` means "leave unchanged"; pass empty strings/lists to clear.
+    Omitted fields stay unchanged; pass `null` or an empty string to clear.
     """
     title: str | None = Field(default=None, max_length=200)
     caption: str | None = Field(default=None, max_length=1000)
@@ -173,6 +174,21 @@ async def _get_published(db: AsyncSession, build_id: str) -> SocialBuild:
     return build
 
 
+async def _purge_build(db: AsyncSession, build: SocialBuild) -> None:
+    """Hard-delete a build + children (photos released, comments/likes/scope
+    removed). Bulk deletes run immediately so the parent DELETE never hits an
+    FK (AUT-703, AUT-762)."""
+    await db.execute(
+        update(SocialPhoto)
+        .where(SocialPhoto.build_id == build.id)
+        .values(build_id=None)
+    )
+    await db.execute(delete(SocialComment).where(SocialComment.build_id == build.id))
+    await db.execute(delete(SocialLike).where(SocialLike.build_id == build.id))
+    await db.execute(delete(SocialShareScope).where(SocialShareScope.build_id == build.id))
+    await db.delete(build)
+
+
 async def _sync_federation(db: AsyncSession) -> None:
     """Pull remote builds + like/comment events from the hub when due.
 
@@ -210,6 +226,9 @@ async def _sync_federation(db: AsyncSession) -> None:
         logger.warning("social_federation_sync_failed", error=str(exc))
         return
     events = event_data.get("events", []) if isinstance(event_data, dict) else []
+    # Two passes because the inbox is a full snapshot of builds routed here.
+    # Pass 1: collect routed remote ids (federated issue posts handled inline).
+    routed: dict[str, tuple[dict, dict]] = {}
     for item in remote_builds:
         if not isinstance(item, dict):
             continue
@@ -224,12 +243,24 @@ async def _sync_federation(db: AsyncSession) -> None:
             await pull_remote_issue(db, item, build)
             continue
         rid = build.get("remote_build_id") or build.get("build_id")
-        if not rid:
-            continue
-        existing = await db.scalar(
-            select(SocialBuild).where(SocialBuild.remote_build_id == str(rid))
+        if rid:
+            routed[str(rid)] = (item, build)
+    # AUT-910: admin-removed federated copies must not resurrect. The hub keeps
+    # routing the removed build's post event, so the next sync would re-add the
+    # copy; a tombstone blocks that. A tombstone whose build is no longer
+    # routed is safe to prune, keeping the table bounded. Skip pruning when the
+    # snapshot is empty so a transient hub gap cannot wipe every tombstone.
+    tombstoned: set[str] = set(await db.scalars(select(SocialRemoteTombstone.remote_build_id)))
+    if routed:
+        for rid in tombstoned - routed.keys():
+            await db.delete(await db.get(SocialRemoteTombstone, rid))
+    existing: set[str] = set(await db.scalars(
+        select(SocialBuild.remote_build_id).where(
+            SocialBuild.remote_build_id.in_(routed.keys())
         )
-        if existing:
+    ))
+    for rid, (item, build) in routed.items():
+        if rid in tombstoned or rid in existing:
             continue
         db.add(SocialBuild(
             author_display_name=build.get("author_display_name", "Unknown"),
@@ -238,7 +269,7 @@ async def _sync_federation(db: AsyncSession) -> None:
             title=build.get("title", "Untitled build"),
             caption=build.get("caption"),
             origin="remote",
-            remote_build_id=str(rid),
+            remote_build_id=rid,
             remote_server_id=item.get("origin_server") or build.get("server_id"),
             snapshot_json=dumps(build.get("snapshot") or {}),
         ))
@@ -256,8 +287,38 @@ async def _sync_federation(db: AsyncSession) -> None:
 
 
 async def _apply_event(db: AsyncSession, event: dict) -> None:
-    """Apply a federated comment/like event to the matching local build copy."""
+    """Apply a federated comment/like/remove event to the matching local copy."""
     if not isinstance(event, dict):
+        return
+    if event.get("event_type") == "remove":
+        # Takedown (AUT-902): delete the local copy of a post the origin (or
+        # hub operator) removed. Issue blog posts are routed to their handler.
+        payload = event.get("payload") or {}
+        if not isinstance(payload, dict):
+            return
+        build_id = payload.get("build_id")
+        if not build_id:
+            return
+        if payload.get("post_type") == "issue":
+            from app.api.v1.issues import apply_issue_event
+
+            await apply_issue_event(db, event)
+            return
+        build = await db.get(SocialBuild, str(build_id))
+        if not build:
+            build = await db.scalar(
+                select(SocialBuild).where(SocialBuild.remote_build_id == str(build_id))
+            )
+        if not build or build.status != "published":
+            return
+        # Defense-in-depth (AUT-907): only purge federated copies. A locally
+        # hosted build is removed only through its own server's delete/sharing
+        # actions (which call the hub's origin-verified /v1/remove) — a hub
+        # relayed `remove` must never be able to take down a peer's local post.
+        if build.origin == "local":
+            return
+        await _purge_build(db, build)
+        await db.flush()
         return
     if event.get("event_type") not in ("comment", "like"):
         return
@@ -449,7 +510,7 @@ async def update_post(
     fields = payload.model_fields_set
     if "title" in fields:
         build.title = payload.title.strip() if payload.title and payload.title.strip() else build.title
-    if "caption" in fields and payload.caption is not None:
+    if "caption" in fields:
         build.caption = payload.caption or None
     scope = await db.scalar(
         select(SocialShareScope).where(SocialShareScope.build_id == build.id)
@@ -742,11 +803,23 @@ async def delete_post(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_premium_write),
 ) -> None:
-    """Unshare a build (takedown propagates locally)."""
+    """Unshare a build (takedown propagates via the hub).
+
+    Authors may unshare their own builds; admins may remove any build on their
+    server (local or federated copy) directly from the community pages
+    (AUT-902). Non-owners get a 404, not a 403, so they cannot tell a post
+    exists (PW-8).
+    """
     build = await _get_published(db, post_id)
-    if build.author_user_id != user.id:
-        # 404, not 403, so non-owners cannot tell a post exists (PW-8).
+    is_author = build.author_user_id == user.id
+    if not is_author and user.role != "admin":
         raise HTTPException(status_code=404, detail="Post not found")
+    origin = build.origin
+    # AUT-910: a removed federated copy must stay removed — the hub keeps
+    # routing the build's post event, so the next inbox sync would re-add it.
+    # The tombstone makes the removal durable across federation syncs.
+    if origin == "remote" and build.remote_build_id:
+        await db.merge(SocialRemoteTombstone(remote_build_id=build.remote_build_id))
     # Bulk deletes/update run immediately, so every child row is gone before the
     # parent DELETE — an ORM db.delete loop does not order child deletes first
     # (no relationship/cascade) and 500s on the FK (AUT-703, AUT-762).
@@ -761,6 +834,15 @@ async def delete_post(
     await db.execute(delete(SocialBuildFlag).where(SocialBuildFlag.build_id == build.id))
     await db.delete(build)
     await db.commit()
+    # Takedown fan-out for locally-hosted posts only; a federated copy's
+    # origin is another server, so removing the local copy stays local.
+    if origin == "local":
+        cfg = await get_server_config(db)
+        if cfg.federation_enabled and cfg.hub_status == "registered" and cfg.hub_server_id:
+            try:
+                await federation.push_removed(cfg, str(build.id), "build")
+            except (FederationUnavailable, Exception) as exc:
+                logger.warning("social_remove_push_failed", build_id=build.id, error=str(exc))
 
 
 @router.post("/posts/{post_id}/flag", status_code=201)

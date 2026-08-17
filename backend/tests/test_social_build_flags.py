@@ -21,7 +21,7 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import delete, select
+from sqlalchemy import delete, event, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -29,6 +29,7 @@ from app.api import deps
 from app.api.v1 import admin as admin_api
 from app.api.v1 import social as social_api
 from app.db.session import Base, get_db
+from app.models.user import User
 from app.social import models as sm
 from app.social.rate_limit import _user_window, _window
 
@@ -39,6 +40,15 @@ ADMIN_USER = types.SimpleNamespace(id="admin-1", display_name="Admin", free_acco
 @pytest_asyncio.fixture(scope="module")
 async def db_env():
     engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool)
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def _fk_on(dbapi_conn, _record):
+        # FK enforcement is OFF by default in SQLite; without it the flag
+        # cleanup gaps below are invisible (AUT-905).
+        cursor = dbapi_conn.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
     maker = async_sessionmaker(engine, expire_on_commit=False)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -46,6 +56,13 @@ async def db_env():
         s.add(sm.SocialServerConfig(
             id=1, feature_enabled=True, federation_enabled=False, server_name="Server A",
         ))
+        for uid, email, name in (
+            ("u1", "u1@test.com", "Alice"),
+            ("u2", "u2@test.com", "Bob"),
+            ("u3", "u3@test.com", "Owner"),
+            ("u4", "u4@test.com", "Reporter"),
+        ):
+            s.add(User(id=uid, email=email, display_name=name, hashed_password="x"))
         await s.commit()
     yield maker, engine
     await engine.dispose()
@@ -203,3 +220,71 @@ async def test_admin_delete_build_purges_related_rows(env):
             assert (await s.scalar(
                 select(SocialPhoto).where(SocialPhoto.build_id == pid)
             )) is None
+
+
+@pytest.mark.asyncio
+async def test_flag_rows_purged_on_post_and_user_deletion(env):
+    """AUT-905: a flagged build must not strand rows / 500 the delete paths.
+
+    With FK enforcement ON (see db_env PRAGMA), each flow below fails with an
+    IntegrityError when flag rows are not cleaned up: DELETE /social/posts/{id}
+    (AUT-901 review of PR #160), and delete_user_complete for both the reporter
+    (flagged_by_user_id FK) and the build owner (build_id FK)."""
+    from app.models.vehicle import Vehicle
+    from app.services.backup import delete_user_complete
+
+    app, maker = env
+
+    async def _add_flag(build_id, user_id):
+        async with maker() as s:
+            s.add(sm.SocialBuildFlag(
+                build_id=build_id, flagged_by_user_id=user_id, reason="Spam",
+            ))
+            await s.commit()
+
+    async def _flag_count(build_id):
+        async with maker() as s:
+            return await s.scalar(
+                select(sm.SocialBuildFlag).where(sm.SocialBuildFlag.build_id == build_id)
+            )
+
+    # u3 (Owner) owns vehicle v1 + build b1; u1 posts + deletes b0 via the API.
+    async with maker() as s:
+        s.add(Vehicle(id="v1", user_id="u3", nickname="Owner ride"))
+        s.add(sm.SocialBuild(
+            id="b1", vehicle_id="v1", author_user_id="u3",
+            author_display_name="Owner", server_name="Server A",
+            title="Flagged build", origin="local", status="published",
+        ))
+        await s.commit()
+
+    # 1. DELETE /social/posts/{id} by the author clears its flags -> 204.
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        pid = await _new_build(maker)
+        assert (await c.post(f"/social/posts/{pid}/flag", json={"reason": "Spam"})).status_code == 201
+        assert (await c.delete(f"/social/posts/{pid}")).status_code == 204
+        assert await _flag_count(pid) is None
+
+    # 2. Reporter deletion: u4 flagged u3's build, then the account is deleted.
+    await _add_flag("b1", "u4")
+    async with maker() as s:
+        await delete_user_complete(s, "u4")
+    async with maker() as s:
+        assert await s.get(User, "u4") is None
+        assert await s.get(sm.SocialBuild, "b1") is not None
+        assert (await s.scalar(
+            select(sm.SocialBuildFlag).where(sm.SocialBuildFlag.flagged_by_user_id == "u4")
+        )) is None
+
+    # 3. Owner deletion: a third-party flag on u3's build must not block the
+    #    build/vehicle/user teardown.
+    await _add_flag("b1", "u2")
+    async with maker() as s:
+        await delete_user_complete(s, "u3")
+    async with maker() as s:
+        assert await s.get(User, "u3") is None
+        assert await s.get(Vehicle, "v1") is None
+        assert await s.get(sm.SocialBuild, "b1") is None
+        assert (await s.scalar(
+            select(sm.SocialBuildFlag).where(sm.SocialBuildFlag.build_id == "b1")
+        )) is None

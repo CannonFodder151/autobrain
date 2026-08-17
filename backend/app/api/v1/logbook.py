@@ -19,7 +19,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_write
-from app.services.ownership import get_accessible_vehicle, require_ai_vehicle
+from app.services.ownership import get_accessible_vehicle, require_ai_vehicle, require_logbook_enabled
 from app.core.storage import detect_mime, ensure_bucket, upload_object
 from app.db.session import get_db
 from app.models.logbook import LogEntry
@@ -39,15 +39,9 @@ from app.services.rate_limit import require_ai_rate_limit
 router = APIRouter(prefix="/vehicles/{vehicle_id}/logbook", tags=["logbook"])
 
 
-def _require_logbook(vehicle) -> None:
-    if vehicle.club_reg:
-        raise HTTPException(
-            status_code=403,
-            detail=(
-                "This vehicle is club-registered — the digital logbook is "
-                "disabled (Victoria requires the physical VicRoads club log book)."
-            ),
-        )
+# Shared product-rule gate (PR-1) — reused by the dongle upload route so both
+# surfaces enforce the same club-reg rule (Victoria physical log book).
+_require_logbook = require_logbook_enabled
 
 
 def _fy_bounds(fy: int) -> tuple[datetime, datetime]:

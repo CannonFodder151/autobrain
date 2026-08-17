@@ -17,12 +17,102 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
+
+
+
 ## [Unreleased]
 
 ### Fixed
+- Dongle BLE provisioning token read: pass the timeout as int seconds to match
+  `flutter_blue_plus` 1.32.8 `Characteristic.read()` (AUT-992). A `Duration`
+  here broke the mobile sync's analyze gate on main.
+
+## [0.3.92] - 2026-08-16
+
+### Security
+- Dongle provisioning (AUT-963): logout / server switch now clear the saved
+  dongle credentials (WiFi password + one-time API key) so a previous
+  account's device can never be re-provisioned from another account, and the
+  app re-links the dongle when the saved device no longer belongs to the
+  current account. SSID and WiFi password lengths are validated (1–32 /
+  8–63 octets) before the BLE write.
+- Dongle provisioning one-shot token (AUT-969): the app now reads a fresh
+  random token from the dongle (characteristic 6E400004) and echoes it inside
+  the provisioning payload, which the new firmware requires before accepting
+  the WiFi/account config. Together with the firmware's LESC pairing and the
+  120 s provisioning write window, a nearby BLE peer can no longer read or
+  overwrite the WiFi password / device API key mid-setup (CWE-319 residual
+  from the AUT-962 review).
+
+### Fixed
+- Dongle BLE provisioning ack (AUT-968): firmware now delivers the ack over a
+  NOTIFY-enabled provisioning characteristic (firmware PR #4), and the app
+  treats a completed BLE write as success when no ack arrives (older
+  firmware) instead of timing out after 25 s and reporting a false failure.
+  `err:already configured` reads as "already provisioned — factory-reset to
+  re-push".
+- Dongle WiFi input guards (AUT-968): SSID/password containing `"` or `\` are
+  rejected up front (the dongle's substring parser cannot unescape them), and
+  the SSID (32) / WPA2 passphrase (63) fields cap input at the firmware buffer
+  sizes. A failed device-list load now shows a "could not reach the server"
+  hint instead of silently showing "no dongle linked".
+
+### Added
+- Mobile dongle WiFi upload setup (AUT-936): Settings → Dongle WiFi upload
+  enables the AutoBrain-Tripper's WiFi auto-upload, links the dongle to the
+  account (one-time API key shown on create), picks a vehicle, and pushes the
+  WiFi credentials over BLE to the dongle. Pairing requires the Bluetooth
+  permission (declared for iOS + Android 12+). Backend + firmware landed in
+  AUT-918.
+
+## [0.3.91] - 2026-08-16
+
+### Added
+- Dongle WiFi trip auto-upload (AUT-918): per-device API key header auth,
+  idempotent POST /devices/{id}/trips upload surface, and the diy_dongle
+  logbook source. Offline-first firmware queue + BLE credential provisioning
+  ship in autobrain-obd2-diy; mobile settings/BLE push is AUT-936.
+
+## [0.3.90] - 2026-08-16
+
+### Fixed
+- Android licence/checkout: external payment and billing links now resolve on
+  Android 11+ (manifest declares https/http VIEW intents) and fail with an
+  actionable error that copies the link, instead of a silent "Could not open
+  the link" (AUT-926).
+
+## [0.3.89] - 2026-08-16
+
+### Fixed
+- Build edit PATCH now clears the caption when the client sends an explicit
+  `null` (previously an explicit `null` was treated as "leave unchanged" and
+  the caption stayed put) (AUT-903).
 - Admin build takedown now deletes the build's photo rows instead of leaving
   them orphaned in the uploader's pool pointing at purged MinIO objects
   (AUT-889).
+- Community Garage takedowns now propagate across the federation (AUT-902): deleting a
+  locally-hosted build or Issues Blog post (by the author or an admin) tells the hub to
+  drop the routed post and fan a `remove` event out, so the deleted post no longer
+  lingers in the community hub on other servers. Servers also apply incoming `remove`
+  events to their federated copies (builds and issue posts). The hub operator's
+  "Remove post" action in the hub admin GUI does the same (hub repo, AUT-902).
+- Community Garage admins can now remove any build post directly from the feed
+  (community pages) — previously the delete button 404'd on posts they didn't author,
+  and federated copies had no delete action at all (AUT-902).
+- Security hardening: servers now ignore hub-relayed `remove` events for their own
+  locally-hosted builds and issue posts — a takedown can only ever reach a federated
+  copy, never the origin's local post. The federation hub also rejects `remove`
+  produced through the generic event relay, closing a bypass of the origin check
+  (AUT-907).
+- Federated build copies that an admin removes from the feed now stay removed
+  instead of resurrecting on the next federation sync: the removal is recorded as a
+  tombstone and the inbox pull skips it, so a deleted copy does not reappear ~1 minute
+  later (AUT-910).
+- Admins can no longer delete Issues Blog posts hosted on another server — the
+  admin delete endpoint now returns 403 for federated (origin="remote") posts;
+  moderating an abusive remote post hides it locally via the existing hide action
+  instead of deleting another server's copy (AUT-935).
 
 ### Added
 - Report buttons on build posts and build comments — reports join the admin

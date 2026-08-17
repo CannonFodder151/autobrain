@@ -37,7 +37,11 @@ keep read-only access (curated demo feed); write routes reject the demo role.
 - `POST /social/posts` — share a vehicle as a build: `{vehicle_id, caption?,
   share_scope?, photo_ids?}`. Snapshot is built deterministically from the
   vehicle + mods (no AI). Outbox push happens when federation is on.
-- `GET/DELETE /social/posts/{id}` — detail / unshare (takedown).
+- `GET/DELETE /social/posts/{id}` — detail / unshare (takedown). Authors may
+  unshare their own builds; admins may remove any build on their server (local
+  or federated copy) straight from the community pages. Deleting a
+  locally-hosted build fans a `remove` event out via the hub, so federated
+  copies disappear from every server's community hub (AUT-902).
 - `PATCH /social/posts/{id}` — edit the build's caption `{caption?}` (owner-only).
 - `POST/GET /social/posts/{id}/comments`, `POST/GET /social/posts/{id}/likes`.
 - `POST /social/posts/{id}/share-link` → `{token, url}`;
