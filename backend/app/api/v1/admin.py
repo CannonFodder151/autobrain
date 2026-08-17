@@ -384,9 +384,20 @@ async def flagged_issues(db: AsyncSession = Depends(get_db)) -> dict:
 
 @admin_ops.get("/issues/review")
 async def review_queue(db: AsyncSession = Depends(get_db)) -> dict:
-    """Unified moderation hub (AUT-832): every flagged post AND comment with
-    the reporting reasons and author info, newest report first."""
-    from app.social.models import SocialIssueComment, SocialIssueFlag, SocialIssuePost
+    """Unified moderation hub (AUT-832 + AUT-883): every flagged issue OR build
+    post/comment with the reporting reasons and author info, newest report
+    first. `target` distinguishes issue entries from build entries so the hub
+    can route deletes to the right admin endpoint."""
+    from app.social.models import (
+        SocialBuild,
+        SocialBuildFlag,
+        SocialComment,
+        SocialIssueComment,
+        SocialIssueFlag,
+        SocialIssuePost,
+    )
+
+    items: list[dict] = []
 
     stmt = (
         select(
@@ -408,27 +419,64 @@ async def review_queue(db: AsyncSession = Depends(get_db)) -> dict:
         .order_by(SocialIssueFlag.created_at.desc())
         .limit(200)
     )
-    rows = (await db.execute(stmt)).all()
-    return {
-        "items": [
-            {
-                "flag_id": r.flag_id,
-                "reason": r.reason,
-                "flagged_at": r.flagged_at.isoformat() if r.flagged_at else None,
-                "kind": "comment" if r.comment_id else "post",
-                "post_id": r.post_id,
-                "post_title": r.post_title,
-                "post_hidden": r.status_hidden,
-                "post_author_user_id": r.post_author_id,
-                "post_author_display_name": r.post_author_name,
-                "comment_id": r.comment_id,
-                "comment_body": r.comment_body,
-                "comment_author_user_id": r.comment_author_id,
-                "comment_author_display_name": r.comment_author_name,
-            }
-            for r in rows
-        ]
-    }
+    for r in (await db.execute(stmt)).all():
+        items.append({
+            "flag_id": r.flag_id,
+            "reason": r.reason,
+            "flagged_at": r.flagged_at.isoformat() if r.flagged_at else None,
+            "target": "issue",
+            "kind": "comment" if r.comment_id else "post",
+            "post_id": r.post_id,
+            "post_title": r.post_title,
+            "post_hidden": r.status_hidden,
+            "post_author_user_id": r.post_author_id,
+            "post_author_display_name": r.post_author_name,
+            "comment_id": r.comment_id,
+            "comment_body": r.comment_body,
+            "comment_author_user_id": r.comment_author_id,
+            "comment_author_display_name": r.comment_author_name,
+        })
+
+    build_stmt = (
+        select(
+            SocialBuildFlag.id.label("flag_id"),
+            SocialBuildFlag.reason,
+            SocialBuildFlag.created_at.label("flagged_at"),
+            SocialBuild.id.label("post_id"),
+            SocialBuild.title.label("post_title"),
+            SocialBuild.status.label("build_status"),
+            SocialBuild.author_user_id.label("post_author_id"),
+            SocialBuild.author_display_name.label("post_author_name"),
+            SocialComment.id.label("comment_id"),
+            SocialComment.author_user_id.label("comment_author_id"),
+            SocialComment.author_display_name.label("comment_author_name"),
+            SocialComment.body.label("comment_body"),
+        )
+        .join(SocialBuild, SocialBuild.id == SocialBuildFlag.build_id)
+        .outerjoin(SocialComment, SocialComment.id == SocialBuildFlag.comment_id)
+        .order_by(SocialBuildFlag.created_at.desc())
+        .limit(200)
+    )
+    for r in (await db.execute(build_stmt)).all():
+        items.append({
+            "flag_id": r.flag_id,
+            "reason": r.reason,
+            "flagged_at": r.flagged_at.isoformat() if r.flagged_at else None,
+            "target": "build",
+            "kind": "comment" if r.comment_id else "post",
+            "post_id": r.post_id,
+            "post_title": r.post_title,
+            "post_hidden": r.build_status != "published",
+            "post_author_user_id": r.post_author_id,
+            "post_author_display_name": r.post_author_name,
+            "comment_id": r.comment_id,
+            "comment_body": r.comment_body,
+            "comment_author_user_id": r.comment_author_id,
+            "comment_author_display_name": r.comment_author_name,
+        })
+
+    items.sort(key=lambda i: i["flagged_at"] or "", reverse=True)
+    return {"items": items[:200]}
 
 
 @admin_ops.delete("/issues/comments/{comment_id}", status_code=204)
@@ -467,14 +515,35 @@ async def delete_issue_admin(
     db: AsyncSession = Depends(get_db),
     _admin: User = Depends(require_admin),
 ) -> None:
-    """Admin deletes an issue post outright (moderation hub, AUT-832)."""
+    """Admin deletes an issue post outright (moderation hub, AUT-832). A
+    locally-hosted post takedown also fans out via the hub (AUT-902).
+
+    Only posts hosted on this server (origin="local") can be deleted here;
+    federated copies are owned by their origin server (AUT-935). A local admin
+    moderating an abusive remote post hides it via PATCH /admin/issues/{id}
+    instead of deleting the origin's copy."""
     from sqlalchemy import delete
 
-    from app.social.models import SocialIssueComment, SocialIssueFlag, SocialIssuePost, SocialPhoto
+    from app.social import federation
+    from app.social.federation import FederationUnavailable
+    from app.social.models import (
+        SocialIssueComment,
+        SocialIssueFlag,
+        SocialIssuePost,
+        SocialPhoto,
+        get_server_config,
+    )
 
     post = await db.get(SocialIssuePost, issue_id)
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
+    if post.origin == "remote":
+        raise HTTPException(
+            status_code=403,
+            detail="Remote posts are hosted on their origin server; "
+            "delete them there or hide them locally",
+        )
+    origin = post.origin
     comment_ids = list(await db.scalars(
         select(SocialIssueComment.id).where(SocialIssueComment.post_id == post.id)
     ))
@@ -491,6 +560,74 @@ async def delete_issue_admin(
     await db.execute(delete(SocialIssueComment).where(SocialIssueComment.post_id == post.id))
     await db.execute(delete(SocialIssueFlag).where(SocialIssueFlag.post_id == post.id))
     await db.delete(post)
+    await db.commit()
+    await _best_effort_delete_media(media_keys)
+    if origin == "local":
+        cfg = await get_server_config(db)
+        if cfg.federation_enabled and cfg.hub_status == "registered" and cfg.hub_server_id:
+            try:
+                await federation.push_removed(cfg, str(post.id), "issue")
+            except (FederationUnavailable, Exception) as exc:
+                logger.warning(
+                    "social_issue_admin_remove_push_failed", post_id=post.id, error=str(exc)
+                )
+
+
+@admin_ops.delete("/social/comments/{comment_id}", status_code=204)
+async def delete_build_comment_admin(
+    comment_id: str,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> None:
+    """Admin deletes a single build comment (moderation hub, AUT-883)."""
+    from sqlalchemy import delete
+
+    from app.social.models import SocialBuildFlag, SocialComment
+
+    comment = await db.get(SocialComment, comment_id)
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    await db.execute(delete(SocialBuildFlag).where(SocialBuildFlag.comment_id == comment.id))
+    await db.delete(comment)
+    await db.commit()
+
+
+@admin_ops.delete("/social/posts/{build_id}", status_code=204)
+async def delete_build_admin(
+    build_id: str,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> None:
+    """Admin deletes a build post outright (moderation hub, AUT-883):
+    cascades comments, likes, share scope and flags, best-effort MinIO purge."""
+    from sqlalchemy import delete
+
+    from app.social.models import (
+        SocialBuild,
+        SocialBuildFlag,
+        SocialComment,
+        SocialLike,
+        SocialPhoto,
+        SocialShareScope,
+    )
+
+    build = await db.get(SocialBuild, build_id)
+    if not build:
+        raise HTTPException(status_code=404, detail="Post not found")
+    # AUT-997: tombstone deleted builds (local + remote) so a later federation
+    # sync cannot re-add them to the feed while the hub still routes them.
+    from app.api.v1.social import _tombstone_removed_build
+
+    await _tombstone_removed_build(db, build)
+    media_keys = list(await db.scalars(
+        select(SocialPhoto.file_key).where(SocialPhoto.build_id == build.id)
+    ))
+    await db.execute(delete(SocialPhoto).where(SocialPhoto.build_id == build.id))
+    await db.execute(delete(SocialComment).where(SocialComment.build_id == build.id))
+    await db.execute(delete(SocialLike).where(SocialLike.build_id == build.id))
+    await db.execute(delete(SocialShareScope).where(SocialShareScope.build_id == build.id))
+    await db.execute(delete(SocialBuildFlag).where(SocialBuildFlag.build_id == build.id))
+    await db.delete(build)
     await db.commit()
     await _best_effort_delete_media(media_keys)
 

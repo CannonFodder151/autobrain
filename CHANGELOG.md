@@ -15,10 +15,187 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
+
+
+
+
+
+
+
+
 ## [Unreleased]
 
 ### Changed
 - Community Garage enabled live on AutoBrain-Hosted via compose toggles (AUT-468) — `SOCIAL_FEATURE_ENABLED`/`SOCIAL_FEDERATION_ENABLED`/`SOCIAL_FEDERATION_HUB_URL`/`SOCIAL_FEDERATION_HOSTED` now default on so redeploys never revert the flip.
+## [0.3.95] - 2026-08-17
+
+### Tests
+- Backup regression net (AUT-1023): full-schema `serialize -> dump -> restore` roundtrip test now seeds one representative row per table across all 32 tables (community garage + market-data included) and every column storage class — guards against silent backup data loss or restore failure if schema/types drift again.
+
+## [0.3.94] - 2026-08-17
+
+### Fixed
+- Alembic migration chain (AUT-996): the AUT-918 dongle-devices migration
+  reused revision ID `a1b2c3d4e5f6` (already claimed by
+  `add_user_max_vehicles`), so `alembic upgrade head` failed at bootstrap and
+  every deploy silently fell back to `create_all`. Renamed the revision to
+  `d1e2f3a4b5c6` and added merge `m3rge03` re-unifying the build-flags and
+  remote-tombstones/devices branches — `alembic heads` reports a single head
+  again and fresh or stamped databases migrate cleanly. No schema change.
+- Dongle provisioning (AUT-969): when the dongle rejects a push with a token
+  or window error, the app now explains the fix (re-pair and retry right after
+  the pairing prompt) instead of echoing the firmware's terse
+  "token missing or expired".
+- Community Garage (AUT-992): duplicate `_report()` dropped the post-report
+  path to the single AUT-896 `reportBuild` implementation — the leftover
+  AUT-883 `flagBuild` copy was a merge duplicate that broke the mobile sync's
+  analyze gate on main after PR #160 merged.
+
+## [0.3.93] - 2026-08-17
+
+### Fixed
+- Community Garage (AUT-997): posts deleted by their author (or by an admin)
+  no longer reappear in the feed after the next federation sync — a tombstone
+  now records every removed build (local + remote) so the hub re-routing the
+  post's event cannot resurrect it (mirrors the AUT-910 fix for remote
+  copies).
+- Dongle BLE provisioning token read: pass the timeout as int seconds to match
+  `flutter_blue_plus` 1.32.8 `Characteristic.read()` (AUT-992). A `Duration`
+  here broke the mobile sync's analyze gate on main.
+
+### Security
+- CI: weekly full-resolution dependency scan now also audits the `market-data`
+  service tree (`.github/workflows/security-scan.yml` audits
+  `backend`, `ai` and `market-data` requirements each in their own resolution);
+  `rego-lookup-api` (a separate repo) now runs its own identical weekly scan.
+  Previously only backend + AI trees were scheduled for CVE scanning, leaving
+  the Playwright/Selenium and market-data transitive trees uncovered. The scan
+  runs on `ubuntu-latest` (GitHub-hosted, live PyPI) because the self-hosted
+  runner's pip index is a stale mirror that cannot resolve `uvicorn==0.34.0`,
+  which would have failed the scan on every run.
+- Market-data: the newly-enabled scan found `starlette 0.41.3` (via
+  `fastapi==0.115.6`) in the market-data tree carrying the
+  PYSEC-2026-161/248/249/1942/1941/2281/2280 CVE set. Bumped
+  `market-data/requirements.txt` to `fastapi==0.133.0` +
+  `starlette==1.3.1`, matching the backend/AI pins from AUT-794. Local
+  `test_auth.py` + `test_scrape.py` pass against the bumped deps (AUT-1019).
+
+## [0.3.92] - 2026-08-16
+
+### Security
+- Dongle provisioning (AUT-963): logout / server switch now clear the saved
+  dongle credentials (WiFi password + one-time API key) so a previous
+  account's device can never be re-provisioned from another account, and the
+  app re-links the dongle when the saved device no longer belongs to the
+  current account. SSID and WiFi password lengths are validated (1–32 /
+  8–63 octets) before the BLE write.
+- Dongle provisioning one-shot token (AUT-969): the app now reads a fresh
+  random token from the dongle (characteristic 6E400004) and echoes it inside
+  the provisioning payload, which the new firmware requires before accepting
+  the WiFi/account config. Together with the firmware's LESC pairing and the
+  120 s provisioning write window, a nearby BLE peer can no longer read or
+  overwrite the WiFi password / device API key mid-setup (CWE-319 residual
+  from the AUT-962 review).
+
+### Fixed
+- Dongle BLE provisioning ack (AUT-968): firmware now delivers the ack over a
+  NOTIFY-enabled provisioning characteristic (firmware PR #4), and the app
+  treats a completed BLE write as success when no ack arrives (older
+  firmware) instead of timing out after 25 s and reporting a false failure.
+  `err:already configured` reads as "already provisioned — factory-reset to
+  re-push".
+- Dongle WiFi input guards (AUT-968): SSID/password containing `"` or `\` are
+  rejected up front (the dongle's substring parser cannot unescape them), and
+  the SSID (32) / WPA2 passphrase (63) fields cap input at the firmware buffer
+  sizes. A failed device-list load now shows a "could not reach the server"
+  hint instead of silently showing "no dongle linked".
+
+### Added
+- Mobile dongle WiFi upload setup (AUT-936): Settings → Dongle WiFi upload
+  enables the AutoBrain-Tripper's WiFi auto-upload, links the dongle to the
+  account (one-time API key shown on create), picks a vehicle, and pushes the
+  WiFi credentials over BLE to the dongle. Pairing requires the Bluetooth
+  permission (declared for iOS + Android 12+). Backend + firmware landed in
+  AUT-918.
+
+## [0.3.91] - 2026-08-16
+
+### Added
+- Dongle WiFi trip auto-upload (AUT-918): per-device API key header auth,
+  idempotent POST /devices/{id}/trips upload surface, and the diy_dongle
+  logbook source. Offline-first firmware queue + BLE credential provisioning
+  ship in autobrain-obd2-diy; mobile settings/BLE push is AUT-936.
+
+## [0.3.90] - 2026-08-16
+
+### Fixed
+- Android licence/checkout: external payment and billing links now resolve on
+  Android 11+ (manifest declares https/http VIEW intents) and fail with an
+  actionable error that copies the link, instead of a silent "Could not open
+  the link" (AUT-926).
+
+## [0.3.89] - 2026-08-16
+
+### Fixed
+- Build edit PATCH now clears the caption when the client sends an explicit
+  `null` (previously an explicit `null` was treated as "leave unchanged" and
+  the caption stayed put) (AUT-903).
+- Admin build takedown now deletes the build's photo rows instead of leaving
+  them orphaned in the uploader's pool pointing at purged MinIO objects
+  (AUT-889).
+- Community Garage takedowns now propagate across the federation (AUT-902): deleting a
+  locally-hosted build or Issues Blog post (by the author or an admin) tells the hub to
+  drop the routed post and fan a `remove` event out, so the deleted post no longer
+  lingers in the community hub on other servers. Servers also apply incoming `remove`
+  events to their federated copies (builds and issue posts). The hub operator's
+  "Remove post" action in the hub admin GUI does the same (hub repo, AUT-902).
+- Community Garage admins can now remove any build post directly from the feed
+  (community pages) — previously the delete button 404'd on posts they didn't author,
+  and federated copies had no delete action at all (AUT-902).
+- Security hardening: servers now ignore hub-relayed `remove` events for their own
+  locally-hosted builds and issue posts — a takedown can only ever reach a federated
+  copy, never the origin's local post. The federation hub also rejects `remove`
+  produced through the generic event relay, closing a bypass of the origin check
+  (AUT-907).
+- Federated build copies that an admin removes from the feed now stay removed
+  instead of resurrecting on the next federation sync: the removal is recorded as a
+  tombstone and the inbox pull skips it, so a deleted copy does not reappear ~1 minute
+  later (AUT-910).
+- Admins can no longer delete Issues Blog posts hosted on another server — the
+  admin delete endpoint now returns 403 for federated (origin="remote") posts;
+  moderating an abusive remote post hides it locally via the existing hide action
+  instead of deleting another server's copy (AUT-935).
+
+### Added
+- Report buttons on build posts and build comments — reports join the admin
+  "To review" hub alongside issue reports; admins can delete reported builds
+  and build comments (AUT-883).
+- Dedicated "My Issues" tab next to Issues Blog showing your own issue blog
+  posts (AUT-883).
+- Build posts on the Community Garage hub feed can be reported ("Report post"
+  in the build-detail menu). Reports are recorded locally and sent to the
+  federation hub, where the operator sees them in a new Reported posts queue
+  with the full post content, reason and reporter (AUT-896).
+- Federation hub operator console: the Posts view now shows each post
+  human-readably (title, author, make/model, caption, mod/photo counts) with
+  text wrapping instead of raw JSON, and a Reported posts moderation list with
+  Remove/Dismiss actions (AUT-896).
+
+## [0.3.88] - 2026-08-16
+
+### Fixed
+- Community Garage edit-build screen: tapping the share-scope checkboxes
+  (Photos / Vehicle specs / Mod list / Odometer / Notes) now toggles them. They
+  previously appeared to do nothing because the picker mutated shared state
+  without re-rendering (AUT-893).
+
+## [0.3.87] - 2026-08-15
+
+### Security
+- Backend caps stored GPS samples per trip at 5000 (mirrors the client's 2400
+  cap with headroom), bounding per-trip payload size on logbook create/update
+  (AUT-852).
 
 ## [0.3.86] - 2026-08-15
 

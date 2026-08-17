@@ -725,6 +725,32 @@ async def test_admin_deletes_purge_media_keys(env, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_admin_cannot_delete_remote_post_only_local(env):
+    """AUT-935: admins may only delete issue blog posts hosted on their own
+    server. A federated (origin="remote") copy returns 403 and stays put; the
+    admin can still hide it locally via PATCH, and a local post still deletes."""
+    app, maker = env
+    local = await _new_issue(maker, origin="local", author_user_id="u1")
+    remote = await _new_issue(
+        maker, origin="remote", author_user_id=None,
+        author_display_name="Bob", server_name="Server B",
+    )
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.request("DELETE", f"/admin/issues/posts/{remote}")
+        assert r.status_code == 403, r.text
+        # remote copy survives
+        assert (await c.get(f"/social/issues/{remote}")).status_code == 200
+        # local moderation of the remote copy is still available: hide it
+        r = await c.request("PATCH", f"/admin/issues/{remote}", json={"status_hidden": True})
+        assert r.status_code == 200
+        assert (await c.get(f"/social/issues/{remote}")).status_code == 404
+        # a locally-hosted post still deletes as before
+        r = await c.request("DELETE", f"/admin/issues/posts/{local}")
+        assert r.status_code == 204
+        assert (await c.get(f"/social/issues/{local}")).status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_comment_flag_then_post_flag_not_blocked(env):
     """AUT-832 F2: flagging a comment on a post does not 409 the post flag
     (regression: post-flag dedupe ignored comment_id)."""

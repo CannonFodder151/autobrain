@@ -272,16 +272,33 @@ async def pull_remote_issue(db: AsyncSession, item: dict, payload: dict) -> None
 
 
 async def apply_issue_event(db: AsyncSession, event: dict) -> None:
-    """Apply a federated issue comment/answer event to the local copy."""
+    """Apply a federated issue comment/answer/remove event to the local copy."""
     if not isinstance(event, dict):
-        return
-    if event.get("event_type") != "comment":
         return
     payload = event.get("payload") or {}
     if not isinstance(payload, dict) or payload.get("post_type") != "issue":
         return
     build_id = payload.get("build_id")
     if not build_id:
+        return
+    if event.get("event_type") == "remove":
+        # Takedown (AUT-902): delete the local copy of a removed issue post.
+        post = await db.get(SocialIssuePost, str(build_id))
+        if not post:
+            post = await db.scalar(
+                select(SocialIssuePost).where(SocialIssuePost.remote_post_id == str(build_id))
+            )
+        if not post:
+            return
+        # Defense-in-depth (AUT-907): never let a hub-relayed `remove` take down
+        # a locally-hosted issue post; only this server's own delete path (via
+        # hub /v1/remove) can do that.
+        if getattr(post, "origin", None) == "local":
+            return
+        await _purge_issue_post(db, post)
+        await db.flush()
+        return
+    if event.get("event_type") != "comment":
         return
     post = await db.get(SocialIssuePost, build_id)
     if not post:
@@ -757,10 +774,26 @@ async def delete_issue(
     user: User = Depends(require_premium_write),
     _rl: None = Depends(social_rate_limit(5)),
 ) -> None:
-    """Delete the author's own post (cascades comments + flags)."""
+    """Delete the author's own post (cascades comments + flags, takedown fans
+    out via the hub)."""
     post = await db.get(SocialIssuePost, post_id)
     if not post or post.author_user_id != user.id:
         raise HTTPException(status_code=404, detail="Post not found")
+    origin = post.origin
+    await _purge_issue_post(db, post)
+    await db.commit()
+    # Takedown fan-out for locally-hosted posts only (AUT-902).
+    if origin == "local":
+        cfg = await get_server_config(db)
+        if cfg.federation_enabled and cfg.hub_status == "registered" and cfg.hub_server_id:
+            try:
+                await federation.push_removed(cfg, str(post.id), "issue")
+            except (FederationUnavailable, Exception) as exc:
+                logger.warning("social_issue_remove_push_failed", post_id=post.id, error=str(exc))
+
+
+async def _purge_issue_post(db: AsyncSession, post: SocialIssuePost) -> None:
+    """Hard-delete an issue post + children (photos, comments, flags)."""
     from sqlalchemy import delete
 
     comment_ids = list(await db.scalars(
@@ -772,4 +805,3 @@ async def delete_issue(
     await db.execute(delete(SocialIssueComment).where(SocialIssueComment.post_id == post.id))
     await db.execute(delete(SocialIssueFlag).where(SocialIssueFlag.post_id == post.id))
     await db.delete(post)
-    await db.commit()

@@ -1,6 +1,7 @@
 """ORM models. Imported for Alembic autogenerate and app wiring."""
 
 from app.models.user import User
+from app.models.device import Device
 from app.models.vehicle import Vehicle, VehicleEvent
 from app.models.logbook import LogEntry
 from app.models.obd import ObdCode
@@ -20,12 +21,14 @@ from app.social.models import (
     SocialComment,
     SocialLike,
     SocialPhoto,
+    SocialRemoteTombstone,
     SocialServerConfig,
     SocialShareScope,
 )
 
 __all__ = [
     "User",
+    "Device",
     "Vehicle",
     "VehicleEvent",
     "LogEntry",
@@ -51,4 +54,5 @@ __all__ = [
     "SocialLike",
     "SocialShareScope",
     "SocialServerConfig",
+    "SocialRemoteTombstone",
 ]

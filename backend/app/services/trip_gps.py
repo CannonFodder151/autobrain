@@ -17,12 +17,20 @@ class _Sample(BaseModel):
     lon: float
 
 
+# Server-side cap on stored samples per trip, mirroring the client's
+# `maxGpsSamples` (2400) with headroom for longer trips (AUT-852, AUT-786).
+MAX_GPS_SAMPLES = 5000
+
+
 def clean_samples(samples: list | None) -> list[_Sample] | None:
     """Drop invalid `0,0` (no-fix) and out-of-range samples, deterministically.
 
     Keeps the same list/None shape as the input so Create/Update payloads round
     trip without surprises. Accepts dicts or objects exposing `t`/`lat`/`lon`
     (pydantic already coerced the payload by the time the schema validator runs).
+
+    Returns at most `MAX_GPS_SAMPLES` samples, keeping the earliest fixes, so
+    per-trip payload size stays bounded even if a client sends more.
     """
     if samples is None:
         return None
@@ -49,7 +57,8 @@ def clean_samples(samples: list | None) -> list[_Sample] | None:
     for s in cleaned:
         if not deduped or (s.lat, s.lon) != (deduped[-1].lat, deduped[-1].lon):
             deduped.append(s)
-    return deduped
+    # Cap payload size: keep the earliest fixes past the cap (AUT-852).
+    return deduped[:MAX_GPS_SAMPLES]
 
 
 def parse_board_csv(text: str) -> list[dict]:

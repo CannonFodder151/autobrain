@@ -103,6 +103,32 @@ All git operations MUST follow this procedure:
 - CORS is locked to configured origins in production (empty = same-origin).
 - Hosted instance enforces MFA, rate-limits auth endpoints (`LOGIN_MAX_ATTEMPTS=5`, `LOGIN_WINDOW_SECONDS=10800`), and runs behind a Cloudflare-reverse-proxied domain.
 
+### Hosted host: Portainer agent exposure (AUT-472)
+
+The Portainer agent on the Oracle VM (`152.69.188.133:9001`) must never be
+reachable from the public internet (full Docker control = container escape /
+secrets exfiltration). It is restricted by source at the host firewall:
+
+- Allowed source for `tcp/9001`: the Portainer server egress IP
+  `122.199.30.128/32` (dev box / Portainer-Host network). Everything else is
+  dropped.
+- Enforced by the `fw-keeper` container (image `autobrain-fw-keeper:1`,
+  `network_mode: host`, `privileged`, `restart: unless-stopped`) on the hosted
+  host. It re-applies the rules every 60s at boot/restart because Ubuntu Core's
+  `/etc` is read-only (no iptables-persistent). The container's `cmd` is the
+  canonical rule source; the image has no other purpose.
+- Rules applied: `iptables -I INPUT 1 -p tcp --dport 9001 ! -s 122.199.30.128 -j DROP`
+  (docker-proxy/local socket path) and
+  `iptables -I DOCKER-USER 1 -p tcp --dport 9001 ! -s 122.199.30.128 -j DROP`
+  (DNAT forward path).
+- Verification (2026-08-13, AUT-472): 25/25 external check-host.net nodes
+  timed out on `:9001`; Portainer EP5 management still works from the allowed
+  source; `GET /ping` answers `204` only from the allowlisted IP.
+- Defense-in-depth pending: OCI security list rule to restrict `tcp/9001`
+  ingress to `122.199.30.128/32` at the VCN level (needs OCI console access).
+- If the Portainer server egress IP ever changes, update the source in the
+  `fw-keeper` container command and re-apply.
+
 ## Data protection
 
 - Receipts/photos stored in MinIO; keys are random per upload.
@@ -121,4 +147,5 @@ See [SECURITY.md](../../SECURITY.md) for the reporting policy.
 - [ ] Restrict CORS origins.
 - [ ] Enable HTTPS (TLS termination on nginx or a load balancer).
 - [ ] Restrict SSH (key-only auth).
+- [x] Restrict Portainer agent (`tcp/9001`) to Portainer server IP via `fw-keeper` (AUT-472).
 - [ ] Backups encrypted + off-site.

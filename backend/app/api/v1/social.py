@@ -23,12 +23,14 @@ from app.services.ownership import get_accessible_vehicle
 from app.social import federation
 from app.social.federation import FederationUnavailable
 from app.social.media import MAX_UPLOAD_BYTES, MediaError, read_upload, signed_url, upload_photo
-from app.social.rate_limit import social_rate_limit
+from app.social.rate_limit import social_rate_limit, social_user_rate_limit
 from app.social.models import (
     SocialBuild,
+    SocialBuildFlag,
     SocialComment,
     SocialLike,
     SocialPhoto,
+    SocialRemoteTombstone,
     SocialShareScope,
     get_server_config,
 )
@@ -72,15 +74,29 @@ class CommentIn(BaseModel):
     body: str = Field(min_length=1, max_length=1000)
 
 
+class ReportIn(BaseModel):
+    reason: str = Field(min_length=1, max_length=200)
+
+
 class PostUpdate(BaseModel):
     """Full build edit (AUT-675): title, caption, photo order/swap and scope.
 
-    `None` means "leave unchanged"; pass empty strings/lists to clear.
+    Omitted fields stay unchanged; pass `null` or an empty string to clear.
     """
     title: str | None = Field(default=None, max_length=200)
     caption: str | None = Field(default=None, max_length=1000)
     photo_ids: list[str] | None = Field(default=None, max_length=12)
     share_scope: ShareScopeIn | None = None
+
+
+class FlagIn(BaseModel):
+    reason: str = Field(min_length=1, max_length=200)
+
+
+def _plaintext(value: str) -> str:
+    """Strip control characters so stored reasons never carry markup or raw
+    control codes (mirror of the issues-blog helper)."""
+    return "".join(c for c in value if c >= " " or c in "\n\t")
 
 
 async def _like_count(db: AsyncSession, build_id: str) -> int:
@@ -158,6 +174,41 @@ async def _get_published(db: AsyncSession, build_id: str) -> SocialBuild:
     return build
 
 
+async def _purge_build(db: AsyncSession, build: SocialBuild) -> None:
+    """Hard-delete a build + children (photos released, comments/likes/scope
+    removed). Bulk deletes run immediately so the parent DELETE never hits an
+    FK (AUT-703, AUT-762)."""
+    await db.execute(
+        update(SocialPhoto)
+        .where(SocialPhoto.build_id == build.id)
+        .values(build_id=None)
+    )
+    await db.execute(delete(SocialComment).where(SocialComment.build_id == build.id))
+    await db.execute(delete(SocialLike).where(SocialLike.build_id == build.id))
+    await db.execute(delete(SocialShareScope).where(SocialShareScope.build_id == build.id))
+    await db.delete(build)
+
+
+async def _tombstone_removed_build(db: AsyncSession, build: SocialBuild) -> None:
+    """Record a durable removal so a later federation sync cannot re-add a
+    deleted build to the feed while the hub still routes its post event.
+
+    Remote copies tombstone their `remote_build_id` (AUT-910); local builds
+    tombstone their own id — the routed key for origin-created builds — so an
+    author/admin delete of a local post stays gone from its origin feed
+    (AUT-997). Requires an active hub registration, else the tombstone is
+    unnecessary and would linger.
+    """
+    if build.origin == "remote" and build.remote_build_id:
+        await db.merge(SocialRemoteTombstone(remote_build_id=build.remote_build_id))
+        return
+    if build.origin != "local":
+        return
+    cfg = await get_server_config(db)
+    if cfg.federation_enabled and cfg.hub_status in ("registered", "pending") and cfg.hub_server_id:
+        await db.merge(SocialRemoteTombstone(remote_build_id=build.id))
+
+
 async def _sync_federation(db: AsyncSession) -> None:
     """Pull remote builds + like/comment events from the hub when due.
 
@@ -195,6 +246,9 @@ async def _sync_federation(db: AsyncSession) -> None:
         logger.warning("social_federation_sync_failed", error=str(exc))
         return
     events = event_data.get("events", []) if isinstance(event_data, dict) else []
+    # Two passes because the inbox is a full snapshot of builds routed here.
+    # Pass 1: collect routed remote ids (federated issue posts handled inline).
+    routed: dict[str, tuple[dict, dict]] = {}
     for item in remote_builds:
         if not isinstance(item, dict):
             continue
@@ -209,12 +263,24 @@ async def _sync_federation(db: AsyncSession) -> None:
             await pull_remote_issue(db, item, build)
             continue
         rid = build.get("remote_build_id") or build.get("build_id")
-        if not rid:
-            continue
-        existing = await db.scalar(
-            select(SocialBuild).where(SocialBuild.remote_build_id == str(rid))
+        if rid:
+            routed[str(rid)] = (item, build)
+    # AUT-910: admin-removed federated copies must not resurrect. The hub keeps
+    # routing the removed build's post event, so the next sync would re-add the
+    # copy; a tombstone blocks that. A tombstone whose build is no longer
+    # routed is safe to prune, keeping the table bounded. Skip pruning when the
+    # snapshot is empty so a transient hub gap cannot wipe every tombstone.
+    tombstoned: set[str] = set(await db.scalars(select(SocialRemoteTombstone.remote_build_id)))
+    if routed:
+        for rid in tombstoned - routed.keys():
+            await db.delete(await db.get(SocialRemoteTombstone, rid))
+    existing: set[str] = set(await db.scalars(
+        select(SocialBuild.remote_build_id).where(
+            SocialBuild.remote_build_id.in_(routed.keys())
         )
-        if existing:
+    ))
+    for rid, (item, build) in routed.items():
+        if rid in tombstoned or rid in existing:
             continue
         db.add(SocialBuild(
             author_display_name=build.get("author_display_name", "Unknown"),
@@ -223,7 +289,7 @@ async def _sync_federation(db: AsyncSession) -> None:
             title=build.get("title", "Untitled build"),
             caption=build.get("caption"),
             origin="remote",
-            remote_build_id=str(rid),
+            remote_build_id=rid,
             remote_server_id=item.get("origin_server") or build.get("server_id"),
             snapshot_json=dumps(build.get("snapshot") or {}),
         ))
@@ -241,8 +307,38 @@ async def _sync_federation(db: AsyncSession) -> None:
 
 
 async def _apply_event(db: AsyncSession, event: dict) -> None:
-    """Apply a federated comment/like event to the matching local build copy."""
+    """Apply a federated comment/like/remove event to the matching local copy."""
     if not isinstance(event, dict):
+        return
+    if event.get("event_type") == "remove":
+        # Takedown (AUT-902): delete the local copy of a post the origin (or
+        # hub operator) removed. Issue blog posts are routed to their handler.
+        payload = event.get("payload") or {}
+        if not isinstance(payload, dict):
+            return
+        build_id = payload.get("build_id")
+        if not build_id:
+            return
+        if payload.get("post_type") == "issue":
+            from app.api.v1.issues import apply_issue_event
+
+            await apply_issue_event(db, event)
+            return
+        build = await db.get(SocialBuild, str(build_id))
+        if not build:
+            build = await db.scalar(
+                select(SocialBuild).where(SocialBuild.remote_build_id == str(build_id))
+            )
+        if not build or build.status != "published":
+            return
+        # Defense-in-depth (AUT-907): only purge federated copies. A locally
+        # hosted build is removed only through its own server's delete/sharing
+        # actions (which call the hub's origin-verified /v1/remove) — a hub
+        # relayed `remove` must never be able to take down a peer's local post.
+        if build.origin == "local":
+            return
+        await _purge_build(db, build)
+        await db.flush()
         return
     if event.get("event_type") not in ("comment", "like"):
         return
@@ -434,7 +530,7 @@ async def update_post(
     fields = payload.model_fields_set
     if "title" in fields:
         build.title = payload.title.strip() if payload.title and payload.title.strip() else build.title
-    if "caption" in fields and payload.caption is not None:
+    if "caption" in fields:
         build.caption = payload.caption or None
     scope = await db.scalar(
         select(SocialShareScope).where(SocialShareScope.build_id == build.id)
@@ -619,6 +715,47 @@ async def _push_event_safe(db: AsyncSession, build: SocialBuild, kind: str, payl
         logger.warning("social_event_push_failed", kind=kind, build_id=build.id, error=str(exc))
 
 
+@router.post("/posts/{post_id}/report", status_code=201)
+async def report_post(
+    post_id: str,
+    payload: ReportIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_premium_write),
+    _rl: None = Depends(social_rate_limit(10)),
+) -> dict:
+    """Report a build post for review (AUT-896).
+
+    Keeps a local moderation row and pushes a `report` event to the hub so the
+    operator can review it across servers. Hub failures never fail the report
+    — the local record still stands. Ownership check matches delete (404 for
+    non-existent posts, PW-8).
+    """
+    build = await _get_published(db, post_id)
+    existing = await db.scalar(select(SocialBuildFlag).where(
+        SocialBuildFlag.build_id == build.id,
+        SocialBuildFlag.flagged_by_user_id == user.id,
+    ))
+    if existing:
+        existing.reason = payload.reason
+    else:
+        db.add(SocialBuildFlag(
+            build_id=build.id,
+            flagged_by_user_id=user.id,
+            reason=payload.reason,
+        ))
+    await db.commit()
+    cfg = await get_server_config(db)
+    if cfg.federation_enabled and cfg.hub_status == "registered":
+        origin_build_id = build.remote_build_id if build.origin == "remote" else build.id
+        try:
+            await federation.push_report(
+                cfg, origin_build_id, payload.reason, user.display_name, cfg.server_name
+            )
+        except (FederationUnavailable, Exception) as exc:
+            logger.warning("social_report_push_failed", build_id=build.id, error=str(exc))
+    return {"reported": True}
+
+
 @router.post("/posts/{post_id}/share-link")
 async def create_share_link(
     post_id: str,
@@ -686,11 +823,19 @@ async def delete_post(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_premium_write),
 ) -> None:
-    """Unshare a build (takedown propagates locally)."""
+    """Unshare a build (takedown propagates via the hub).
+
+    Authors may unshare their own builds; admins may remove any build on their
+    server (local or federated copy) directly from the community pages
+    (AUT-902). Non-owners get a 404, not a 403, so they cannot tell a post
+    exists (PW-8).
+    """
     build = await _get_published(db, post_id)
-    if build.author_user_id != user.id:
-        # 404, not 403, so non-owners cannot tell a post exists (PW-8).
+    is_author = build.author_user_id == user.id
+    if not is_author and user.role != "admin":
         raise HTTPException(status_code=404, detail="Post not found")
+    origin = build.origin
+    await _tombstone_removed_build(db, build)
     # Bulk deletes/update run immediately, so every child row is gone before the
     # parent DELETE — an ORM db.delete loop does not order child deletes first
     # (no relationship/cascade) and 500s on the FK (AUT-703, AUT-762).
@@ -702,5 +847,83 @@ async def delete_post(
     await db.execute(delete(SocialComment).where(SocialComment.build_id == build.id))
     await db.execute(delete(SocialLike).where(SocialLike.build_id == build.id))
     await db.execute(delete(SocialShareScope).where(SocialShareScope.build_id == build.id))
+    await db.execute(delete(SocialBuildFlag).where(SocialBuildFlag.build_id == build.id))
     await db.delete(build)
     await db.commit()
+    # Takedown fan-out for locally-hosted posts only; a federated copy's
+    # origin is another server, so removing the local copy stays local.
+    if origin == "local":
+        cfg = await get_server_config(db)
+        if cfg.federation_enabled and cfg.hub_status == "registered" and cfg.hub_server_id:
+            try:
+                await federation.push_removed(cfg, str(build.id), "build")
+            except (FederationUnavailable, Exception) as exc:
+                logger.warning("social_remove_push_failed", build_id=build.id, error=str(exc))
+
+
+@router.post("/posts/{post_id}/flag", status_code=201)
+async def flag_build(
+    post_id: str,
+    payload: FlagIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_premium_write),
+    _rl: None = Depends(social_rate_limit(5)),
+    _user_rl: None = Depends(social_user_rate_limit("builds-flag", 5)),
+) -> dict:
+    """Report a build post (AUT-883 moderation queue). Deduped per user."""
+    build = await _get_published(db, post_id)
+    reason = _plaintext(payload.reason).strip()
+    if not reason:
+        raise HTTPException(status_code=422, detail="Reason cannot be empty")
+    existing = await db.scalar(
+        select(SocialBuildFlag).where(
+            SocialBuildFlag.build_id == build.id,
+            SocialBuildFlag.flagged_by_user_id == user.id,
+            SocialBuildFlag.comment_id.is_(None),
+        )
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="You already flagged this post")
+    db.add(SocialBuildFlag(
+        build_id=build.id,
+        flagged_by_user_id=user.id,
+        reason=reason,
+    ))
+    await db.commit()
+    return {"message": "Flag submitted for review"}
+
+
+@router.post("/posts/{post_id}/comments/{comment_id}/flag", status_code=201)
+async def flag_build_comment(
+    post_id: str,
+    comment_id: str,
+    payload: FlagIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_premium_write),
+    _rl: None = Depends(social_rate_limit(5)),
+    _user_rl: None = Depends(social_user_rate_limit("builds-flag-comment", 5)),
+) -> dict:
+    """Report a comment on a build (AUT-883 moderation queue)."""
+    build = await _get_published(db, post_id)
+    comment = await db.get(SocialComment, comment_id)
+    if not comment or comment.build_id != build.id:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    reason = _plaintext(payload.reason).strip()
+    if not reason:
+        raise HTTPException(status_code=422, detail="Reason cannot be empty")
+    existing = await db.scalar(
+        select(SocialBuildFlag).where(
+            SocialBuildFlag.comment_id == comment.id,
+            SocialBuildFlag.flagged_by_user_id == user.id,
+        )
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="You already flagged this comment")
+    db.add(SocialBuildFlag(
+        build_id=build.id,
+        comment_id=comment.id,
+        flagged_by_user_id=user.id,
+        reason=reason,
+    ))
+    await db.commit()
+    return {"message": "Flag submitted for review"}
