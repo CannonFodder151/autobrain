@@ -23,34 +23,46 @@ jobs:
       - name: Require changelog iteration on app/docker changes (AUT-168)
         run: |
           set -euo pipefail
-          # Enforced on pull_request only. On push/workflow_dispatch the merge
-          # process already grafts [Unreleased] entries, so checking here would
-          # only misfire post-merge (AUT-451).
-          if [ "${{ github.event_name }}" != "pull_request" ]; then
-            echo "changelog gate skipped outside pull_request (AUT-451)"
+          # PRs: diff against the merge-base (AUT-633). Pushes to main: diff
+          # against the previous head so a changelog-less app/docker merge can
+          # never ship — the failing gate blocks auto-bump + publish, which
+          # would otherwise cut/redeploy under a stale version (AUT-1141).
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # Dependabot bumps never touch CHANGELOG.md; forcing it reds every
+            # dependency PR forever (AUT-540).
+            if [ "${{ github.actor }}" = "dependabot[bot]" ]; then
+              echo "dependabot PR — skipping changelog gate"
+              exit 0
+            fi
+            BASE="${{ github.event.pull_request.base.sha }}"
+            if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+              echo "no usable base SHA — skipping changelog gate"
+              exit 0
+            fi
+            # Diff against the merge-base, not base.sha: base.sha is the live
+            # tip of the target branch, so on a stale PR it drags in unrelated
+            # main changes — false-failing docs-only PRs and, worse, masking a
+            # missing CHANGELOG.md entry when main happened to move one (AUT-633).
+            MB="$(git merge-base "$BASE" "$GITHUB_SHA")"
+            if [ -z "$MB" ]; then
+              echo "no merge-base with base SHA — skipping changelog gate"
+              exit 0
+            fi
+            CHANGED="$(git diff --name-only "$MB" "$GITHUB_SHA")"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            BEFORE="$(git rev-parse "${{ github.event.before }}" 2>/dev/null || echo '')"
+            if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+              echo "no usable before SHA — skipping changelog gate"
+              exit 0
+            fi
+            # Auto-bump release cuts always touch CHANGELOG.md (unreleased ->
+            # versioned), so they pass the gate. A plain merge without a
+            # CHANGELOG.md entry fails here — that is the point (AUT-1141).
+            CHANGED="$(git diff --name-only "$BEFORE" "$GITHUB_SHA")"
+          else
+            echo "changelog gate skipped (AUT-451)"
             exit 0
           fi
-          # Dependabot bumps never touch CHANGELOG.md; forcing it reds every
-          # dependency PR forever (AUT-540).
-          if [ "${{ github.actor }}" = "dependabot[bot]" ]; then
-            echo "dependabot PR — skipping changelog gate"
-            exit 0
-          fi
-          BASE="${{ github.event.pull_request.base.sha }}"
-          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
-            echo "no usable base SHA — skipping changelog gate"
-            exit 0
-          fi
-          # Diff against the merge-base, not base.sha: base.sha is the live
-          # tip of the target branch, so on a stale PR it drags in unrelated
-          # main changes — false-failing docs-only PRs and, worse, masking a
-          # missing CHANGELOG.md entry when main happened to move one (AUT-633).
-          MB="$(git merge-base "$BASE" "$GITHUB_SHA")"
-          if [ -z "$MB" ]; then
-            echo "no merge-base with base SHA — skipping changelog gate"
-            exit 0
-          fi
-          CHANGED="$(git diff --name-only "$MB" "$GITHUB_SHA")"
           APP_CHANGED="$(printf '%s\n' "$CHANGED" | grep -E '^(backend/|ai/|frontend/|docker/|docker-compose)' || true)"
           if [ -n "$APP_CHANGED" ] && ! printf '%s\n' "$CHANGED" | grep -qx 'CHANGELOG.md'; then
             echo "::error::App/docker files changed but CHANGELOG.md was not updated. Add an entry under [Unreleased] (see CONTRIBUTING.md) before merging."
