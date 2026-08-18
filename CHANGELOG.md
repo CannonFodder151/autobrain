@@ -9,7 +9,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
 
+
 ## [Unreleased]
+
+## [0.3.100] - 2026-08-18
 
 ### Fixed
 - Hosted worker/beat SECRET_KEY (AUT-996): added `SECRET_KEY` env var to the
