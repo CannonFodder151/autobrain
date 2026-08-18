@@ -18,6 +18,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   causing task authentication failures on the hosted stack.
 
 ### Changed
+- Hub registration keys wired into hosted compose (AUT-528): `docker-compose.hosted.yml` now passes `HUB_HOSTED_REGISTRATION_KEY` to the hub service (was missing — hub fails closed without it) and `SOCIAL_FEDERATION_HOSTED_REGISTRATION_KEY` to the backend so hosted servers present the registration key when registering with the hub. The repo compose reference now matches the live EP5 stack, which already had both vars set and the key rotated.
+
 - App launcher icon (AUT-1106): updated mobile app icon for Android and iOS with fresh branding.
 
 ## [0.3.99] - 2026-08-18
@@ -352,6 +354,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 - Demo issues-blog content (AUT-712): the demo instance's Community Garage Issues Blog is seeded with 16 posts, each with 1–3 replies (~30 total), on next boot with `DEMO_RESET=true`. Answered/resolved posts pin their answer. Deterministic content (fixed tag vocabulary, `origin="demo"`, fictional replier names, staggered `created_at`) — no AI in the seed path. `reset_demo` now clears the demo user's posts/replies/flags before deleting the user (FK-safe on Postgres).
+
 
 ## [0.3.70] - 2026-08-14
 
