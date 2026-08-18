@@ -180,6 +180,19 @@ async def reset_demo() -> None:
                     )
                 )
                 await db.execute(delete(Vehicle).where(Vehicle.user_id == user.id))
+            # Issues-blog content authored by the demo user (AUT-712): posts,
+            # their replies and flags must go before the user delete (FK NO
+            # ACTION would block the reset on Postgres). Other users' posts are
+            # preserved.
+            from app.social.models import SocialIssueComment, SocialIssueFlag, SocialIssuePost
+
+            demo_post_ids = list((await db.scalars(
+                select(SocialIssuePost.id).where(SocialIssuePost.author_user_id == user.id)
+            )).all())
+            if demo_post_ids:
+                await db.execute(delete(SocialIssueFlag).where(SocialIssueFlag.post_id.in_(demo_post_ids)))
+                await db.execute(delete(SocialIssueComment).where(SocialIssueComment.post_id.in_(demo_post_ids)))
+                await db.execute(delete(SocialIssuePost).where(SocialIssuePost.id.in_(demo_post_ids)))
             await db.execute(delete(User).where(User.id == user.id))
             await db.commit()
             logger.info("demo_reset_deleted", user=user.id)
@@ -460,6 +473,165 @@ async def _seed_demo_data(db, user_id: str) -> None:
             ))
 
     await _seed_demo_social(db, user_id)
+    await _seed_demo_issues(db, user_id)
+
+
+async def _seed_demo_issues(db, user_id: str) -> None:
+    """Seed the Community Garage issues blog: 16 demo posts with replies.
+
+    Deterministic, human-readable help content (AUT-712). Tags come from the
+    fixed vocabulary via detect_tags — no AI in the seed path. origin='demo'
+    mirrors the demo builds; replies carry fictional display names with a null
+    author_user_id (the federated-comment shape) so the blog looks lived-in
+    without creating extra accounts. Idempotent: only runs on first seed / reset.
+    """
+    from app.social.models import SocialIssueComment, SocialIssuePost
+    from app.social.snapshot import dumps
+    from app.social.tags import detect_tags
+
+    vehicles = {
+        v.nickname: v
+        for v in (await db.scalars(select(Vehicle).where(Vehicle.user_id == user_id))).all()
+    }
+
+    def _snapshot(nickname: str) -> dict | None:
+        v = vehicles.get(nickname)
+        if v is None:
+            return None
+        return {k: getattr(v, k) for k in ("make", "model", "year") if getattr(v, k)}
+
+    # (nickname, days_ago, status, title, body, replies[(author, body, is_answer)])
+    posts = [
+        ("Skyline R34", 2, "resolved",
+         "Rough idle and stalling on cold start",
+         "Every cold morning the engine fires, runs rough for about 30 seconds, "
+         "then sometimes stalls. Once warm it idles fine. No check-engine light. "
+         "Coolant level is normal. Anyone had the same with the RB26?",
+         [("TurboTom", "Check the idle air control valve — they gum up and stall cold starts.", False),
+          ("MelbJDM", "Had the same. Cleaning the IACV fixed it for me.", False),
+          ("NismoNick", "Mine was a dirty MAF sensor, engine ran lean until warm. Clean both, cheap fix.", True)]),
+        ("Family Commuter", 5, "answered",
+         "Spongy brake pedal after new pads",
+         "Fitted new front brake pads over the weekend and bled the brakes, but the "
+         "pedal is spongy and the car pulls slightly under heavy braking. Did I miss a step?",
+         [("GarageGuru", "If the car pulls, a caliper may be sticking — grease the sliders.", False),
+          ("PadQueen", "Re-bleed it. Air in the system feels exactly like this. Do the rears too.", True),
+          ("TurboTom", "Also check the brake lines for a soft spot, common on 2020 Camrys.", False)]),
+        ("Weekend MX-5", 8, "open",
+         "Clutch pedal sticks halfway to the floor",
+         "The clutch pedal sometimes sticks halfway down and only returns if I hook "
+         "my foot under it. Fluid level is fine. This started after a track morning.",
+         [("MelbJDM", "Sounds like the slave cylinder is failing, or the pedal pivot needs grease.", False),
+          ("NismoNick", "Bleed the clutch. Old fluid boils on track days and causes exactly this.", False)]),
+        ("Tradie Hilux", 11, "open",
+         "Shudder when taking off in first gear",
+         "There's a vibration through the whole car when I pull away in first, worse "
+         "when the tray is loaded. Fine once moving. Clutch was replaced last year.",
+         [("GarageGuru", "Check the engine mounts — loaded up they let the driveline bind.", False)]),
+        ("Project Silvia", 3, "answered",
+         "Turbo smoking after a track day",
+         "After a hard track session the SR20 now puffs blue smoke under boost. Oil "
+         "consumption is up but it doesn't smoke at idle. Turbo seals or rings?",
+         [("TurboTom", "Blue smoke under boost only usually means turbo oil seals.", False),
+          ("MelbJDM", "Pull the intake pipe and check for oil in the compressor housing — if it's oily, it's the turbo.", True)]),
+        ("Skyline R34", 15, "resolved",
+         "Overheats in traffic, fine on the highway",
+         "The temp needle climbs in stop-start traffic but drops straight back down "
+         "on the highway. Coolant is topped up, no leaks that I can see. Fans kick in late?",
+         [("CoolantKing", "Test your radiator fan switch — late engagement is classic for this.", False),
+          ("PadQueen", "Also worth flushing the cooling system; a clogged rad core does this.", False),
+          ("GarageGuru", "Replaced the fan switch and flushed the radiator, no overheating since.", True)]),
+        ("Family Commuter", 18, "answered",
+         "Battery dies after sitting overnight",
+         "If the car sits for more than a day the battery is flat. New battery six months "
+         "ago. I've checked the interior lights are off. Parasitic drain?",
+         [("SparkySam", "Definitely a parasitic drain. Measure current draw after the car sleeps.", False),
+          ("NismoNick", "First thing I'd test is the alternator — a dying diode drains the battery.", False),
+          ("SparkySam", "Found it: the boot light was staying on. 80 mA drain. Fixed.", True)]),
+        ("Kawasaki Ninja", 21, "answered",
+         "Front brake lever feels soft",
+         "Front brake lever pulls almost to the bar since I topped up the fluid. Brakes "
+         "feel mushy and the pads have plenty of life. Bleeding didn't change it.",
+         [("BikeMike", "If bleeding didn't help, the master cylinder seals are likely gone.", False),
+          ("CornerCrafter", "Top-up without a bleed often aerates the system — bleed it properly at the caliper.", True)]),
+        ("Ducati Monster", 24, "open",
+         "Clunk from the rear when shifting",
+         "There's a metallic clunk and noise from the rear when I change gear, mostly on "
+         "the up-shift. Chain looks tensioned correctly. Could it be the transmission "
+         "mounts or the cush drive?",
+         [("BikeMike", "Check cush drive rubbers in the rear sprocket carrier — they go soft.", False),
+          ("CornerCrafter", "Could also be the chain out of alignment. Check both sprockets are straight.", False)]),
+        ("Weekend MX-5", 27, "open",
+         "Alternator whine in the stereo",
+         "I get a whine that rises with engine rpm through the speakers. Only with the "
+         "engine running. Aftermarket head unit installed last month.",
+         [("SparkySam", "Classic earth loop — ground the head unit to the chassis at the same point as the battery.", False)]),
+        ("Tradie Hilux", 30, "answered",
+         "Steering wheel shakes at 110 km/h",
+         "The steering wheel vibrates from about 110 km/h, smooth below that. New tyres "
+         "recently. Wheel balance or steering linkage?",
+         [("GarageGuru", "90% of the time after new tyres it's balance or a tight tyre fitment.", False),
+          ("WheelWizard", "Rebalanced all four and the shake is gone. One wheel was 40g out.", True)]),
+        ("Project Silvia", 33, "open",
+         "Exhaust bangs on deceleration",
+         "The exhaust pops and bangs when I back off in gear. Is this normal with the "
+         "aftermarket cat-back or a sign of a lean condition?",
+         [("MelbJDM", "Unburnt fuel igniting in the exhaust — common with free-flowing cat-backs.", False)]),
+        ("Family Commuter", 36, "answered",
+         "Air-con blows warm air",
+         "The air-con blows warm air even on the coldest setting. The clutch engages "
+         "and the system was regassed last summer. No obvious leaks.",
+         [("CoolantKing", "If the compressor kicks in but it's warm, suspect the expansion valve or a partial block.", False),
+          ("GarageGuru", "New expansion valve and a full service — cold air again.", True)]),
+        ("Skyline R34", 39, "open",
+         "Gearbox crunches into second",
+         "Second gear crunches unless I double-clutch, and it gets worse when the box "
+         "is warm. Synchro gone? The box has done 140k.",
+         [("NismoNick", "Second-gear synchro, almost certainly. Common on the RB25 box.", False)]),
+        ("Kawasaki Ninja", 42, "answered",
+         "Tyres wearing unevenly on the edges",
+         "The rear tyre is scrubbing on the outer edges only after 3,000 km. Pressure "
+         "is correct. Suspension sag or too much camber?",
+         [("CornerCrafter", "Edges only = under-inflation or sagging suspension. Set sag for your weight.", False),
+          ("BikeMike", "Adjusted the rear preload and it's wearing evenly now.", True)]),
+        ("Ducati Monster", 45, "open",
+         "Oil leak from the front of the engine",
+         "Fresh oil on the front of the engine after a long ride. Just changed the oil — "
+         "could the filter or cooler line be weeping?",
+         [("BikeMike", "Wipe it clean, run it warm, and chase the weep. Most likely the oil cooler line.", False)]),
+    ]
+    for nickname, days_ago, status, title, body, replies in posts:
+        snapshot = _snapshot(nickname)
+        post = SocialIssuePost(
+            author_user_id=user_id,
+            author_display_name=settings.DEMO_DISPLAY_NAME,
+            server_name=None,
+            title=title,
+            body=body,
+            vehicle_snapshot_json=dumps(snapshot) if snapshot else None,
+            tags=detect_tags(title, body, snapshot),
+            status=status,
+            origin="demo",
+            created_at=datetime.now(timezone.utc) - timedelta(days=days_ago),
+        )
+        db.add(post)
+        await db.flush()
+        answer_id = None
+        for author, reply_body, is_answer in replies:
+            comment = SocialIssueComment(
+                post_id=post.id,
+                author_user_id=None,
+                author_display_name=author,
+                server_name=None,
+                body=reply_body,
+                is_answer=is_answer,
+            )
+            db.add(comment)
+            await db.flush()
+            if is_answer:
+                answer_id = comment.id
+        if answer_id:
+            post.resolved_comment_id = answer_id
 
 
 async def _seed_demo_social(db, user_id: str) -> None:

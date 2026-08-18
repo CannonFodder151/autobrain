@@ -79,13 +79,18 @@ class _EditBuildScreenState extends State<EditBuildScreen> {
       imageQuality: 82,
     );
     if (files.isEmpty) return;
-    for (final f in files) {
-      if (_photos.length >= _maxPhotos) break;
-      _photos.add(_PhotoEntry(
-        bytes: await f.readAsBytes(),
-        name: f.name,
-        mime: f.mimeType ?? 'image/jpeg',
-      ));
+    try {
+      for (final f in files) {
+        if (_photos.length >= _maxPhotos) break;
+        _photos.add(_PhotoEntry(
+          bytes: await f.readAsBytes(),
+          name: f.name,
+          mime: (f.mimeType?.trim().isNotEmpty ?? false) ? f.mimeType! : 'image/jpeg',
+        ));
+      }
+    } catch (_) {
+      _toast('Could not read that photo. Try a different file.');
+      return;
     }
     if (mounted) setState(() {});
   }
@@ -178,7 +183,7 @@ class _EditBuildScreenState extends State<EditBuildScreen> {
           const SizedBox(height: 12),
           _photoEditor(),
           const SizedBox(height: 16),
-          ShareScopePicker(scope: _scope),
+          ShareScopePicker(scope: _scope, onChanged: () => setState(() {})),
         ],
       ),
     );

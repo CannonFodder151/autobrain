@@ -7,10 +7,6 @@ on:
         description: Image tag
         required: true
         default: hosted
-      platforms:
-        description: Comma-separated platforms
-        required: true
-        default: linux/amd64,linux/arm64
       api_base_url:
         description: Frontend API base URL
         required: true
@@ -20,38 +16,69 @@ on:
         required: true
         default: wss://hosted.autobrainservice.app/ws
 
+# Only one pipeline per ref at a time. A newer dispatch cancels any in-flight
+# run so two auto-bumps never race on the same push (non-fast-forward on main).
+concurrency:
+  group: build-hosted-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   auto-bump:
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, linux, x64]
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - name: Checkout repository
+        run: |
+          set -euo pipefail
+          if [ -d .git ]; then
+            git fetch origin
+          else
+            git init && git remote add origin "https://github.com/${{ github.repository }}.git" || true
+            git fetch origin
+          fi
+          git checkout -f main
+          git reset --hard origin/main
       - name: Cut a release if [Unreleased] has content (AUT-240)
         run: |
           set -euo pipefail
           git config user.name "AutoBrain Release Bot"
           git config user.email "release@autobrainservice.app"
           ./scripts/auto-bump.sh
+          for i in 1 2 3; do
+            git push origin main && break
+            echo "==> push raced with main updates — rebasing and retrying (attempt $i/3)"
+            git pull --rebase origin main
+          done
           git push origin main
           echo "==> auto-bump done"
 
   build:
     needs: auto-bump
-    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runs_on: [self-hosted, linux, x64]
+          - arch: arm64
+            runs_on: [self-hosted, linux, x64]
+    runs-on: ${{ matrix.runs_on }}
     permissions:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
+      - name: Checkout repository
+        run: |
+          set -euo pipefail
+          git fetch origin
+          git checkout -f main
+          git reset --hard origin/main
 
       - uses: docker/setup-qemu-action@v3
-        if: ${{ github.event.inputs.platforms != 'linux/amd64' }}
+        if: matrix.arch == 'arm64'
 
       - uses: docker/setup-buildx-action@v3
 
@@ -61,10 +88,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push images
+      - name: Build and push images (linux/${{ matrix.arch }})
         env:
           TAG: ${{ github.event.inputs.tag }}
-          PLATFORMS: ${{ github.event.inputs.platforms }}
+          ARCH: ${{ matrix.arch }}
           API_BASE_URL: ${{ github.event.inputs.api_base_url }}
           WS_BASE_URL: ${{ github.event.inputs.ws_base_url }}
         run: |
@@ -77,8 +104,35 @@ jobs:
               frontend) ctx=.;        df=docker/frontend/Dockerfile;   args="--build-arg API_BASE_URL=${API_BASE_URL} --build-arg WS_BASE_URL=${WS_BASE_URL}";;
               market-data) ctx=./market-data; df=market-data/Dockerfile; args="";;
             esac
-            echo "==> building autobrain-${svc}:${TAG} for ${PLATFORMS}"
-            docker buildx build --platform "${PLATFORMS}" --push \
-              -t "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}" \
+            echo "==> building autobrain-${svc}:${TAG}-${ARCH} for linux/${ARCH}"
+            docker buildx build --platform linux/${ARCH} --push \
+              -t "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}-${ARCH}" \
               ${args} -f "${df}" "${ctx}"
+          done
+
+  build-manifest:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: [self-hosted, linux, x64]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Assemble multi-arch manifests
+        env:
+          TAG: ${{ github.event.inputs.tag }}
+        run: |
+          set -euo pipefail
+          for svc in backend worker ai frontend market-data; do
+            echo "==> manifest autobrain-${svc}:${TAG}"
+            docker buildx imagetools create \
+              -t "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}" \
+              "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}-amd64" \
+              "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}-arm64"
           done

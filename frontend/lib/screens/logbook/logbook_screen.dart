@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-import '../../core/api_client.dart';
 import '../../core/auth_state.dart';
 import '../../core/download.dart';
 import '../../core/geoloc.dart';
@@ -96,6 +96,22 @@ class _LogbookScreenState extends State<LogbookScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Expanded(child: TripRouteMap(route: route)),
+                  const SizedBox(height: 8),
+                  FilledButton.icon(
+                    icon: const Icon(Icons.map_outlined),
+                    label: const Text('Open in Google Maps'),
+                    onPressed: () async {
+                      final ok = await launchUrl(
+                        Uri.parse(googleMapsRouteUrl(route)),
+                        mode: LaunchMode.externalApplication,
+                      );
+                      if (!ok && mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('Could not open Google Maps')));
+                      }
+                    },
+                  ),
                   const SizedBox(height: 8),
                   Text(
                     '${route.length} GPS points · ${entry.startedAt?.substring(0, 16) ?? ''}',

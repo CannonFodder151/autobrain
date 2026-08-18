@@ -8,6 +8,20 @@ import 'package:http_parser/http_parser.dart';
 
 import '../core/config.dart';
 
+/// Resolve a safe multipart content type. Empty/unparseable values (e.g. the
+/// empty string `XFile.mimeType` returns for HEIC) fall back to a
+/// filename-derived MIME, then to octet-stream, so `MediaType.parse` never
+/// throws (AUT-796).
+MediaType safeContentType(String contentType, String filename) {
+  final trimmed = contentType.trim();
+  if (trimmed.isNotEmpty) {
+    try {
+      return MediaType.parse(trimmed);
+    } catch (_) {}
+  }
+  return MediaType.parse(mimeForFile(filename));
+}
+
 /// Best-effort MIME guess from a filename extension (upload helper).
 String mimeForFile(String filename,
     [String fallback = 'application/octet-stream']) {
@@ -66,7 +80,7 @@ class ApiClient {
         'file',
         bytes,
         filename: filename,
-        contentType: MediaType.parse(contentType),
+        contentType: safeContentType(contentType, filename),
       ));
     final streamed = await request.send().timeout(_timeout);
     final response = await http.Response.fromStream(streamed).timeout(_timeout);
@@ -80,7 +94,7 @@ class ApiClient {
             'file',
             bytes,
             filename: filename,
-            contentType: MediaType.parse(contentType),
+            contentType: safeContentType(contentType, filename),
           ));
         final retried = await retry.send().timeout(_timeout);
         return _decode(await http.Response.fromStream(retried).timeout(_timeout));

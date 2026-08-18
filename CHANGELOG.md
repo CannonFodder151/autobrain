@@ -9,72 +9,345 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ## [Unreleased]
 
 ### Changed
 - Hub registration keys wired into hosted compose (AUT-528): `docker-compose.hosted.yml` now passes `HUB_HOSTED_REGISTRATION_KEY` to the hub service (was missing — hub fails closed without it) and `SOCIAL_FEDERATION_HOSTED_REGISTRATION_KEY` to the backend so hosted servers present the registration key when registering with the hub. The repo compose reference now matches the live EP5 stack, which already had both vars set and the key rotated.
+
+- App launcher icon (AUT-1106): updated mobile app icon for Android and iOS with fresh branding.
+
+## [0.3.99] - 2026-08-18
+
+### Added
+- Knowledge graph tooling (AUT-1013): added graphify skill/agent for codebase
+  analysis, queryable knowledge graph at `graphify-out/`, AST extraction, and
+  cross-file relationship mapping. Supports `/graphify` command for efficient
+  codebase navigation.
+
+## [0.3.98] - 2026-08-18
+
+### Fixed
+- License screen (AUT-1004): when IAP is enabled but products aren't available for the current platform (e.g., store not yet published Play Console / App Store), the screen now falls back to Stripe checkout instead of showing a blank screen. Previously, if the server had IAP enabled but the store hadn't published products, the plans list was empty and users couldn't select upgrades. Now the screen shows Stripe-based upgrade plans as a fallback.
+
+## [0.3.97] - 2026-08-17
+
+### Fixed
+- Alembic migration chain (AUT-1009): renumbered the duplicate `a1b2c3d4e5f6`
+  revision in `add_devices` to `z2a3b4c5d6e7` and added `m3rge03` to merge the
+  two remaining heads (`w5x6y7z8a9b0` + `z2a3b4c5d6e7`). `alembic upgrade head`
+  now works at bootstrap instead of falling back to `create_all`. Added
+  `test_alembic_revision_ids_unique` regression guard (from PR #187) to prevent
+  future duplicate revision IDs.
+
+## [0.3.96] - 2026-08-17
+
+### Tests
+- Alembic test guard (AUT-1009): new `test_alembic_revision_ids_unique` asserts every
+  revision id is unique, catching the add_devices duplicate `a1b2c3d4e5f6` collision.
+  Removed stray `a1b2c3d4e5f6_add_devices.bak` from migration versions.
+
+## [0.3.95] - 2026-08-17
+
+### Tests
+- Backup regression net (AUT-1023): full-schema `serialize -> dump -> restore` roundtrip test now seeds one representative row per table across all 32 tables (community garage + market-data included) and every column storage class — guards against silent backup data loss or restore failure if schema/types drift again.
+
+## [0.3.94] - 2026-08-17
+
+### Fixed
+- Dongle provisioning (AUT-969): when the dongle rejects a push with a token
+  or window error, the app now explains the fix (re-pair and retry right after
+  the pairing prompt) instead of echoing the firmware's terse
+  "token missing or expired".
+- Community Garage (AUT-992): duplicate `_report()` dropped the post-report
+  path to the single AUT-896 `reportBuild` implementation — the leftover
+  AUT-883 `flagBuild` copy was a merge duplicate that broke the mobile sync's
+  analyze gate on main after PR #160 merged.
+
+## [0.3.93] - 2026-08-17
+
+### Fixed
+- Community Garage (AUT-997): posts deleted by their author (or by an admin)
+  no longer reappear in the feed after the next federation sync — a tombstone
+  now records every removed build (local + remote) so the hub re-routing the
+  post's event cannot resurrect it (mirrors the AUT-910 fix for remote
+  copies).
+- Dongle BLE provisioning token read: pass the timeout as int seconds to match
+  `flutter_blue_plus` 1.32.8 `Characteristic.read()` (AUT-992). A `Duration`
+  here broke the mobile sync's analyze gate on main.
+
+### Security
+- CI: weekly full-resolution dependency scan now also audits the `market-data`
+  service tree (`.github/workflows/security-scan.yml` audits
+  `backend`, `ai` and `market-data` requirements each in their own resolution);
+  `rego-lookup-api` (a separate repo) now runs its own identical weekly scan.
+  Previously only backend + AI trees were scheduled for CVE scanning, leaving
+  the Playwright/Selenium and market-data transitive trees uncovered. The scan
+  runs on `ubuntu-latest` (GitHub-hosted, live PyPI) because the self-hosted
+  runner's pip index is a stale mirror that cannot resolve `uvicorn==0.34.0`,
+  which would have failed the scan on every run.
+- Market-data: the newly-enabled scan found `starlette 0.41.3` (via
+  `fastapi==0.115.6`) in the market-data tree carrying the
+  PYSEC-2026-161/248/249/1942/1941/2281/2280 CVE set. Bumped
+  `market-data/requirements.txt` to `fastapi==0.133.0` +
+  `starlette==1.3.1`, matching the backend/AI pins from AUT-794. Local
+  `test_auth.py` + `test_scrape.py` pass against the bumped deps (AUT-1019).
+
+## [0.3.92] - 2026-08-16
+
+### Security
+- Dongle provisioning (AUT-963): logout / server switch now clear the saved
+  dongle credentials (WiFi password + one-time API key) so a previous
+  account's device can never be re-provisioned from another account, and the
+  app re-links the dongle when the saved device no longer belongs to the
+  current account. SSID and WiFi password lengths are validated (1–32 /
+  8–63 octets) before the BLE write.
+- Dongle provisioning one-shot token (AUT-969): the app now reads a fresh
+  random token from the dongle (characteristic 6E400004) and echoes it inside
+  the provisioning payload, which the new firmware requires before accepting
+  the WiFi/account config. Together with the firmware's LESC pairing and the
+  120 s provisioning write window, a nearby BLE peer can no longer read or
+  overwrite the WiFi password / device API key mid-setup (CWE-319 residual
+  from the AUT-962 review).
+
+### Fixed
+- Dongle BLE provisioning ack (AUT-968): firmware now delivers the ack over a
+  NOTIFY-enabled provisioning characteristic (firmware PR #4), and the app
+  treats a completed BLE write as success when no ack arrives (older
+  firmware) instead of timing out after 25 s and reporting a false failure.
+  `err:already configured` reads as "already provisioned — factory-reset to
+  re-push".
+- Dongle WiFi input guards (AUT-968): SSID/password containing `"` or `\` are
+  rejected up front (the dongle's substring parser cannot unescape them), and
+  the SSID (32) / WPA2 passphrase (63) fields cap input at the firmware buffer
+  sizes. A failed device-list load now shows a "could not reach the server"
+  hint instead of silently showing "no dongle linked".
+
+### Added
+- Mobile dongle WiFi upload setup (AUT-936): Settings → Dongle WiFi upload
+  enables the AutoBrain-Tripper's WiFi auto-upload, links the dongle to the
+  account (one-time API key shown on create), picks a vehicle, and pushes the
+  WiFi credentials over BLE to the dongle. Pairing requires the Bluetooth
+  permission (declared for iOS + Android 12+). Backend + firmware landed in
+  AUT-918.
+
+## [0.3.91] - 2026-08-16
+
+### Added
+- Dongle WiFi trip auto-upload (AUT-918): per-device API key header auth,
+  idempotent POST /devices/{id}/trips upload surface, and the diy_dongle
+  logbook source. Offline-first firmware queue + BLE credential provisioning
+  ship in autobrain-obd2-diy; mobile settings/BLE push is AUT-936.
+
+## [0.3.90] - 2026-08-16
+
+### Fixed
+- Android licence/checkout: external payment and billing links now resolve on
+  Android 11+ (manifest declares https/http VIEW intents) and fail with an
+  actionable error that copies the link, instead of a silent "Could not open
+  the link" (AUT-926).
+
+## [0.3.89] - 2026-08-16
+
+### Fixed
+- Build edit PATCH now clears the caption when the client sends an explicit
+  `null` (previously an explicit `null` was treated as "leave unchanged" and
+  the caption stayed put) (AUT-903).
+- Admin build takedown now deletes the build's photo rows instead of leaving
+  them orphaned in the uploader's pool pointing at purged MinIO objects
+  (AUT-889).
+- Community Garage takedowns now propagate across the federation (AUT-902): deleting a
+  locally-hosted build or Issues Blog post (by the author or an admin) tells the hub to
+  drop the routed post and fan a `remove` event out, so the deleted post no longer
+  lingers in the community hub on other servers. Servers also apply incoming `remove`
+  events to their federated copies (builds and issue posts). The hub operator's
+  "Remove post" action in the hub admin GUI does the same (hub repo, AUT-902).
+- Community Garage admins can now remove any build post directly from the feed
+  (community pages) — previously the delete button 404'd on posts they didn't author,
+  and federated copies had no delete action at all (AUT-902).
+- Security hardening: servers now ignore hub-relayed `remove` events for their own
+  locally-hosted builds and issue posts — a takedown can only ever reach a federated
+  copy, never the origin's local post. The federation hub also rejects `remove`
+  produced through the generic event relay, closing a bypass of the origin check
+  (AUT-907).
+- Federated build copies that an admin removes from the feed now stay removed
+  instead of resurrecting on the next federation sync: the removal is recorded as a
+  tombstone and the inbox pull skips it, so a deleted copy does not reappear ~1 minute
+  later (AUT-910).
+- Admins can no longer delete Issues Blog posts hosted on another server — the
+  admin delete endpoint now returns 403 for federated (origin="remote") posts;
+  moderating an abusive remote post hides it locally via the existing hide action
+  instead of deleting another server's copy (AUT-935).
+
+### Added
+- Report buttons on build posts and build comments — reports join the admin
+  "To review" hub alongside issue reports; admins can delete reported builds
+  and build comments (AUT-883).
+- Dedicated "My Issues" tab next to Issues Blog showing your own issue blog
+  posts (AUT-883).
+- Build posts on the Community Garage hub feed can be reported ("Report post"
+  in the build-detail menu). Reports are recorded locally and sent to the
+  federation hub, where the operator sees them in a new Reported posts queue
+  with the full post content, reason and reporter (AUT-896).
+- Federation hub operator console: the Posts view now shows each post
+  human-readably (title, author, make/model, caption, mod/photo counts) with
+  text wrapping instead of raw JSON, and a Reported posts moderation list with
+  Remove/Dismiss actions (AUT-896).
+
+## [0.3.88] - 2026-08-16
+
+### Fixed
+- Community Garage edit-build screen: tapping the share-scope checkboxes
+  (Photos / Vehicle specs / Mod list / Odometer / Notes) now toggles them. They
+  previously appeared to do nothing because the picker mutated shared state
+  without re-rendering (AUT-893).
+
+## [0.3.87] - 2026-08-15
+
+### Security
+- Backend caps stored GPS samples per trip at 5000 (mirrors the client's 2400
+  cap with headroom), bounding per-trip payload size on logbook create/update
+  (AUT-852).
+
+## [0.3.86] - 2026-08-15
+
+### Added
+- Issues Blog "My Issues" filter shows only your own posts (AUT-832).
+- Report buttons on issue replies — reports go to a new admin "To review" hub
+  alongside post reports (AUT-832).
+- Admin moderation hub lists every flagged post/comment with the reporting
+  reason and author; admins can delete the entry or ban/unban the author from
+  posting in Community Garage (AUT-832).
+
+## [0.3.85] - 2026-08-15
+
+### Security
+- market-data `POST /search` now checks the X-API-Key in constant time
+  (`hmac.compare_digest`) and enforces per-IP and per-key rate limits, matching
+  the rego-lookup-api and backend auth conventions (AUT-782).
+
+## [0.3.84] - 2026-08-15
+
+### Fixed
+- Community Garage photo upload no longer crashes for photos whose MIME can't be
+  detected (e.g. HEIC from the iOS camera roll): `image_picker` returns an empty
+  string for `mimeType`, which used to blow up `MediaType.parse("")` and surface
+  as "Could not save: … Invalid media type". The upload now sanitizes the content
+  type (filename-derived MIME fallback, else `application/octet-stream`) and the
+  photo pickers treat an empty MIME as missing, defaulting to `image/jpeg`
+  (AUT-796, unblocks AUT-793).
+
+## [0.3.83] - 2026-08-15
+
+### Added
+- Android Auto / car-kit trips now record their GPS route: position fixes are
+  captured while a drive is active and saved to the logbook trip, so a drive
+  logs a drawn path on the trip map (AUT-427).
+- Logbook trip view now has an "Open in Google Maps" button that opens the
+  trip's route drawn on Google Maps (AUT-427).
+
+### Removed
+- Generic ELM327 OBD2 adapter support removed (AUT-427): the app now supports
+  only the custom-built OBD2 adapter. Bluetooth adapter connect/live-PID/VIN/
+  DTC-from-adapter UI and the ELM327 protocol + BT-SPP transport layers were
+  stripped. Trip start/stop comes from the phone-side car-kit / Android Auto
+  path (AUT-367) with GPS route recording. The fault-code library + manual
+  VIN entry remain.
+
+## [0.3.82] - 2026-08-15
+
+### Security
+- `cryptography` bumped `44.0.1` → `50.0.0` to clear 7 known CVEs
+  (PYSEC-2026-35/2141/3552/3553/3554, GHSA-537c-gmf6-5ccf) covering JWT
+  signing, federation Ed25519 keys, and TLS/OpenSSL. CI now runs pip-audit on
+  pinned backend + AI deps (AUT-781).
+- Backend/AI: remediated transitive CVEs in the resolved dependency tree —
+  bumped `fastapi` to 0.133.0 with `starlette` 1.3.1 (clears the starlette
+  PYSEC-2026-161/248/249/1942/1941/2281/2280 set) and replaced the unmaintained
+  `python-jose` (whose transitive `ecdsa` 0.19.2 carries PYSEC-2026-1325, with
+  no patched release published) with `PyJWT[crypto]` (AUT-794).
+- CI: added a weekly full-resolution dependency scan
+  (`.github/workflows/security-scan.yml`) that audits the fully-resolved
+  backend + AI tree — the PR-time `--no-deps` pip-audit gate cannot see
+  transitive CVEs (AUT-794).
+
+## [0.3.81] - 2026-08-15
+
+### Fixed
+- Community Garage photo uploads now accept iPhone/Android camera photos in
+  HEIC/HEIF format: the backend decodes them (via pillow-heif) and stores the
+  same compressed webp every other photo gets, so "photos still fail to upload"
+  for default-format phone photos is resolved. Unsupported file types now show
+  a clear "That photo can't be processed" message instead of a generic one
+  (AUT-764).
+
+## [0.3.80] - 2026-08-15
+
+### Added
+- Issues Blog posts now share across the federation like build posts do: a new
+  help post is pushed to the hub and appears on other registered servers with
+  its photos, and replies + resolved answers sync back (AUT-756).
+
+### Fixed
+- Unsharing a Community Garage build no longer returns HTTP 500 even when the
+  build has a share scope (AUT-762). The AUT-703 fix (0.3.78) covered photos,
+  comments and likes, but the per-build `social_share_scopes` row was still
+  deleted through the ORM, which does not order child deletes before the parent
+  delete (no `relationship()`/cascade), so Postgres rejected it with a
+  `social_share_scopes_build_id_fkey` FK violation. The scope row is now
+  bulk-deleted with the other child rows before the build. Regression test in
+  `tests_social/test_social.py`.
+- Photo uploads on the web app no longer fail silently ("nothing happens after
+  I select the file"): the frontend CSP now allows same-origin `blob:` URLs
+  that Flutter's image picker uses to preview/read picked images, and the
+  compose screens surface a "Could not read that photo" message instead of
+  dropping the selection silently (AUT-756).
+
+## [0.3.79] - 2026-08-15
+
+### Fixed
+- The social federation server key no longer regenerates on every registration attempt (AUT-758). The Ed25519 keypair is now generated once and persisted in `social_server_config.hub_private_key`, so retrying a join reuses the same identity instead of rotating the key mid-join and failing. Regression test in `tests_social/test_social.py`.
+
+## [0.3.78] - 2026-08-15
+
+### Fixed
+- Unsharing (deleting) a Community Garage build that had photos no longer returns HTTP 500 (AUT-703). The build delete ran the photo deletes through the ORM, which did not order the child deletes before the parent (no `relationship()`/cascade between `SocialBuild` and `SocialPhoto`), so Postgres rejected the delete with a `social_photos_build_id_fkey` FK violation. The photos are now bulk-released back to your unassigned uploads in the same way as dropping photos in Edit build, then the build is deleted. Regression test in `tests_social/test_social.py`.
+
+## [0.3.77] - 2026-08-15
+
+### Fixed
+- Community Garage federation: the backend no longer claims `hub_status=registered` right after `POST /admin/social/register`. The hub's approval workflow (AUT-525) returns `status: pending` for new registrations, and the client now stores that state — a pending server stays local-only instead of silently failing every signed hub request with 401. Once the hub operator approves the server, the feed's federation sync polls the hub's public status endpoint and self-heals into `registered` (no manual re-register). The admin UI shows the pending state with a "Registration pending hub-operator approval" hint and a Refresh action. Regression tests in `tests_social/test_social.py` (AUT-731).
+
+## [0.3.76] - 2026-08-15
+
+### Added
+- Issues Blog replies can now carry one photo each (AUT-736). The reply composer has an attach button (one photo, max), the photo uploads through the existing media pipeline on send, reply photos render inline on the post detail (tap to view full size), and they are cleaned up when the post is deleted.
+
+## [0.3.75] - 2026-08-15
+
+### Fixed
+- License screen now distinguishes **License pending** (orange) from **Subscription active** (green): if a checkout was started but not paid (`incomplete` / `incomplete_expired` / `unpaid`) — or the account was granted but never actually paid for — the status shows "License pending" instead of implying the licence is active. `GET /auth/me` now reports a derived `license_status` (`active` / `pending` / `free`) so web + mobile agree, and never reports `active` without a paid entitlement.
+- Users stuck with an unfinished/failed checkout (a pending Stripe subscription) can now retry paying — only sponsored accounts with no subscription record are blocked from buying a licence.
+
+## [0.3.74] - 2026-08-15
+
+### Fixed
+- Hourly admin backup no longer fails on a transient DB blip during a deploy (AUT-696). `serialize_all` now retries (3 attempts, short backoff, session rollback) on transient `OperationalError`/`InterfaceError` (closed connection, DB restart mid-backup) before reporting failure to `autobrain-backup`, so a mid-deploy churn can't trip a backup alert. Regression test in `tests/test_backup_completeness.py`.
+
+## [0.3.73] - 2026-08-14
+
+### Added
+- Issues Blog now lets you attach up to 4 photos to a post (AUT-709). Photos upload through the existing media pipeline, are rendered on the post detail + browse list, and are cleaned up when the post is deleted. A photo attached to an issue can no longer be claimed by a build (and vice-versa).
+
+## [0.3.72] - 2026-08-14
+
+### Fixed
+- Alembic migration chain on `main` had two heads (`q1r2s3t4u5v6` from the Community Garage photo-position change and `u1v2w3x4y5z6` from the Issues Blog), which broke `alembic upgrade head` at bootstrap and forced the `create_all` fallback on every deploy. Added merge revision `m3rge02` re-unifying both branches (no-op upgrade body, same pattern as the earlier `m3rge01` merge) so `alembic heads` reports a single head and fresh/stamped databases migrate cleanly. Already-stamped databases (demo/default/hosted, AUT-682) apply it as a clean no-op. No schema or data changes.
+
+## [0.3.71] - 2026-08-14
+
+### Added
+- Demo issues-blog content (AUT-712): the demo instance's Community Garage Issues Blog is seeded with 16 posts, each with 1–3 replies (~30 total), on next boot with `DEMO_RESET=true`. Answered/resolved posts pin their answer. Deterministic content (fixed tag vocabulary, `origin="demo"`, fictional replier names, staggered `created_at`) — no AI in the seed path. `reset_demo` now clears the demo user's posts/replies/flags before deleting the user (FK-safe on Postgres).
+
 
 ## [0.3.70] - 2026-08-14
 
@@ -242,7 +515,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 - My Builds tab in the Community Garage (AUT-501): view and edit your own posts. Backed by `GET /social/my-posts` + `PATCH /social/posts/{id}`.
-
 
 
 ## [0.3.40] - 2026-08-13

@@ -71,13 +71,18 @@ class _SocialComposeScreenState extends State<SocialComposeScreen> {
     );
     if (files.isEmpty) return;
     final picked = <({String name, String mime, Uint8List bytes})>[];
-    for (final f in files) {
-      if (picked.length + _picked.length >= 15) break;
-      picked.add((
-        name: f.name,
-        mime: f.mimeType ?? 'image/jpeg',
-        bytes: await f.readAsBytes(),
-      ));
+    try {
+      for (final f in files) {
+        if (picked.length + _picked.length >= 15) break;
+        picked.add((
+          name: f.name,
+          mime: (f.mimeType?.trim().isNotEmpty ?? false) ? f.mimeType! : 'image/jpeg',
+          bytes: await f.readAsBytes(),
+        ));
+      }
+    } catch (_) {
+      _toast('Could not read that photo. Try a different file.');
+      return;
     }
     if (mounted) setState(() => _picked.addAll(picked));
   }
@@ -175,7 +180,7 @@ class _SocialComposeScreenState extends State<SocialComposeScreen> {
                     const SizedBox(height: 12),
                     _photoPicker(),
                     const SizedBox(height: 16),
-                    ShareScopePicker(scope: _scope),
+                    ShareScopePicker(scope: _scope, onChanged: () => setState(() {})),
                   ],
                 ),
     );

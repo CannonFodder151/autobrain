@@ -97,6 +97,27 @@ def test_plan_for_user(stripe_prices) -> None:
     assert svc.has_paid_subscription(admin_granted) is False
 
 
+def test_license_status(stripe_prices) -> None:
+    active = _user()
+    _subscribe(active, "active", "price_enth_m")
+    assert svc.license_status(active) == "active"
+
+    pending_checkout = _user()
+    _subscribe(pending_checkout, "incomplete", "price_enth_m")
+    assert svc.license_status(pending_checkout) == "pending"
+
+    failed_payment = _user()
+    _subscribe(failed_payment, "unpaid", "price_enth_m")
+    assert svc.license_status(failed_payment) == "pending"
+
+    # Granted-but-unpaid accounts are pending, never "active"/registered.
+    granted = _user(free_account=False)
+    assert svc.license_status(granted) == "pending"
+
+    free = _user(free_account=True)
+    assert svc.license_status(free) == "free"
+
+
 @pytest.mark.asyncio
 async def test_checkout_unknown_plan(stripe_prices) -> None:
     with pytest.raises(ValueError):
@@ -284,6 +305,27 @@ async def test_checkout_explicit_promo_code(sale, fake_stripe) -> None:
 async def test_checkout_unknown_promo_rejected(sale, fake_stripe) -> None:
     with pytest.raises(ValueError):
         await _checkout(fake_stripe, promo="NOPE")
+
+
+@pytest.mark.asyncio
+async def test_checkout_sponsored_account_blocked(stripe_prices) -> None:
+    sponsored = _user(free_account=False)
+    with pytest.raises(ValueError):
+        await svc.create_checkout_session(None, sponsored, "enthusiast", "monthly")
+
+
+@pytest.mark.asyncio
+async def test_checkout_retry_allowed_for_pending_subscription(stripe_prices, fake_stripe) -> None:
+    # A user whose checkout is stuck in a pending state (incomplete/unpaid) is
+    # NOT granted access, so they must be able to retry paying.
+    pending = _user(
+        free_account=False,
+        stripe_customer_id="cus_1",
+        stripe_subscription_id="sub_1",
+        stripe_subscription_status="incomplete",
+    )
+    url = await svc.create_checkout_session(None, pending, "enthusiast", "monthly")
+    assert url == fake_stripe.session_url
 
 
 @pytest.mark.asyncio

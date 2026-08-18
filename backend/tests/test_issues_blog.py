@@ -21,19 +21,23 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import event, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from app.api import deps
+from app.api.v1 import admin as admin_api
 from app.api.v1 import issues as issues_api
 from app.api.v1 import social as social_api
 from app.db.session import Base, get_db
+from app.models.user import User
 from app.social import models as sm
 from app.social.rate_limit import _user_window, _window
 from app.services.search import ENTITY_TYPES, semantic_search
 
 STUB_USER = types.SimpleNamespace(id="u1", display_name="Alice", free_account=False, role="user")
 FREE_USER = types.SimpleNamespace(id="free-1", display_name="Freeloader", free_account=True, role="user")
+ADMIN_USER = types.SimpleNamespace(id="admin-1", display_name="Admin", free_account=False, role="admin", social_banned=False)
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -52,10 +56,11 @@ async def db_env():
 
 
 @pytest_asyncio.fixture
-async def env(db_env):
+async def env(db_env, monkeypatch):
     maker, _ = db_env
     app = FastAPI()
     app.include_router(issues_api.router)
+    app.include_router(admin_api.admin_ops)
 
     async def _override_get_db():
         async with maker() as session:
@@ -64,13 +69,20 @@ async def env(db_env):
     app.dependency_overrides[get_db] = _override_get_db
     app.dependency_overrides[deps.require_premium] = lambda: STUB_USER
     app.dependency_overrides[deps.require_premium_write] = lambda: STUB_USER
+    app.dependency_overrides[deps.require_admin] = lambda: ADMIN_USER
     app.dependency_overrides[social_api.require_social_feature] = lambda: None
+
+    async def _fake_signed_url(key: str) -> str:
+        return f"https://cdn.test/{key}"
+
+    monkeypatch.setattr(issues_api, "signed_url", _fake_signed_url)
     _window._hits.clear()
     _user_window._hits.clear()
 
     from sqlalchemy import delete
 
     async with maker() as s:
+        await s.execute(delete(sm.SocialPhoto))
         await s.execute(delete(sm.SocialIssueFlag))
         await s.execute(delete(sm.SocialIssueComment))
         await s.execute(delete(sm.SocialIssuePost))
@@ -105,6 +117,112 @@ async def _new_comment(maker, post_id, body="Try a new battery", author_user_id=
         s.add(c)
         await s.commit()
         return c.id
+
+
+@pytest.mark.asyncio
+async def test_create_with_photos_attaches_and_serializes():
+    """AUT-709: create with up to 4 pre-uploaded photos attaches them to the
+    post (photos are public URLs; photo_ids only to the author, F1).
+
+    Runs on a self-contained loop/engine: the shared pytest-asyncio session
+    loop closes the httpx client between requests in this multi-request flow
+    (AUT-709 QA note 1), so the flow runs in its own asyncio.run() and is
+    deterministic on any machine. signed_url is stubbed (no MinIO needed)."""
+
+    async def _flow():
+        engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool)
+        maker = async_sessionmaker(engine, expire_on_commit=False)
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        async with maker() as s:
+            s.add(sm.SocialServerConfig(
+                id=1, feature_enabled=True, federation_enabled=False, server_name="Server A",
+            ))
+            for i in range(3):
+                s.add(sm.SocialPhoto(
+                    id=f"ph{i}", uploader_user_id="u1", file_key=f"social/u1/p{i}.webp",
+                    width=640, height=480, position=i,
+                ))
+            await s.commit()
+        app = FastAPI()
+        app.include_router(issues_api.router)
+
+        async def _override_get_db():
+            async with maker() as session:
+                yield session
+
+        async def _fake_signed_url(key: str) -> str:
+            return f"https://cdn.test/{key}"
+
+        app.dependency_overrides[get_db] = _override_get_db
+        app.dependency_overrides[deps.require_premium] = lambda: STUB_USER
+        app.dependency_overrides[deps.require_premium_write] = lambda: STUB_USER
+        app.dependency_overrides[social_api.require_social_feature] = lambda: None
+        issues_api.signed_url = _fake_signed_url
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            r = await c.post("/social/issues", json={
+                "title": "Rattling noise with photo",
+                "body": "Happens when cold.",
+                "photo_ids": ["ph0", "ph1", "ph2"],
+            })
+            assert r.status_code == 201, r.text
+            data = r.json()
+            assert data["photo_ids"] == ["ph0", "ph1", "ph2"]
+            assert data["photos"] == [
+                "https://cdn.test/social/u1/p0.webp",
+                "https://cdn.test/social/u1/p1.webp",
+                "https://cdn.test/social/u1/p2.webp",
+            ]
+            post_id = data["id"]
+
+            detail = (await c.get(f"/social/issues/{post_id}")).json()
+            assert len(detail["photos"]) == 3
+            assert detail["photo_ids"] == ["ph0", "ph1", "ph2"]
+
+            # browse list also carries photos
+            items = (await c.get("/social/issues")).json()["items"]
+            mine = next(i for i in items if i["id"] == post_id)
+            assert mine["photos"] == detail["photos"]
+
+            # delete cascades the photo links
+            r = await c.request("DELETE", f"/social/issues/{post_id}")
+            assert r.status_code == 204
+
+        async with maker() as s:
+            remaining = (await s.scalar(
+                select(sm.SocialPhoto).where(sm.SocialPhoto.issue_id == post_id)
+            ))
+        assert remaining is None
+        await engine.dispose()
+
+    await _flow()
+
+
+@pytest.mark.asyncio
+async def test_create_rejects_unknown_or_foreign_photos(env):
+    """AUT-709: photos must belong to the uploader and be unclaimed; unknown
+    or already-attached ids reject the whole create (422)."""
+    app, maker = env
+    async with maker() as s:
+        s.add(sm.SocialPhoto(id="mine", uploader_user_id="u1", file_key="k1"))
+        s.add(sm.SocialPhoto(id="someone-elses", uploader_user_id="u2", file_key="k2"))
+        await s.commit()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.post("/social/issues", json={
+            "title": "Bad photos", "body": "Body", "photo_ids": ["nope", "mine"],
+        })
+        assert r.status_code == 422
+        r = await c.post("/social/issues", json={
+            "title": "Bad photos 2", "body": "Body", "photo_ids": ["someone-elses"],
+        })
+        assert r.status_code == 422
+        # 5 photos rejected by pydantic
+        r = await c.post("/social/issues", json={
+            "title": "Too many", "body": "Body",
+            "photo_ids": ["a", "b", "c", "d", "e"],
+        })
+        assert r.status_code == 422
 
 
 @pytest.mark.asyncio
@@ -224,6 +342,108 @@ async def test_comment_body_capped_and_plaintext(env):
         r = await c.post(f"/social/issues/{pid}/comments", json={"body": "ok\x1f\nfine"})
         assert r.status_code == 201
         assert "\x1f" not in r.json()["body"]
+
+
+@pytest.mark.asyncio
+async def test_comment_photo_attach_serialize_reject_and_cascade(env):
+    """AUT-736: a reply can carry one photo. The photo must belong to the
+    uploader and be unclaimed; the detail view returns it as `photo`; deleting
+    the post cascades reply photos."""
+    app, maker = env
+    pid = await _new_issue(maker, author_user_id="u1")
+    async with maker() as s:
+        s.add(sm.SocialPhoto(id="mine", uploader_user_id="u1", file_key="social/u1/photo.webp"))
+        s.add(sm.SocialPhoto(id="theirs", uploader_user_id="u2", file_key="social/u2/other.webp"))
+        await s.commit()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        # foreign photo -> 422
+        r = await c.post(f"/social/issues/{pid}/comments",
+                         json={"body": "Nice car", "photo_id": "theirs"})
+        assert r.status_code == 422
+        # unknown photo -> 422
+        r = await c.post(f"/social/issues/{pid}/comments",
+                         json={"body": "Nice car", "photo_id": "nope"})
+        assert r.status_code == 422
+        # valid attach -> 201 with the photo url
+        r = await c.post(f"/social/issues/{pid}/comments",
+                         json={"body": "Swap the battery", "photo_id": "mine"})
+        assert r.status_code == 201, r.text
+        cid = r.json()["id"]
+        assert r.json()["photo"] == "https://cdn.test/social/u1/photo.webp"
+        # a claimed photo can't be reused on another comment
+        pid2 = await _new_issue(maker, author_user_id="u1")
+        r = await c.post(f"/social/issues/{pid2}/comments",
+                         json={"body": "Reuse", "photo_id": "mine"})
+        assert r.status_code == 422
+
+        detail = (await c.get(f"/social/issues/{pid}")).json()
+        comment = next(cm for cm in detail["comments"] if cm["id"] == cid)
+        assert comment["photo"] == "https://cdn.test/social/u1/photo.webp"
+
+        # delete cascades reply photos
+        r = await c.request("DELETE", f"/social/issues/{pid}")
+        assert r.status_code == 204
+    async with maker() as s:
+        leftover = (await s.scalar(
+            select(sm.SocialPhoto).where(sm.SocialPhoto.id == "mine")
+        ))
+    assert leftover is None
+
+
+@pytest.mark.asyncio
+async def test_reply_photo_delete_cascade_fk_enforced(monkeypatch):
+    """AUT-736 F1 regression: with foreign keys enforced (as on Postgres),
+    deleting a post that carries a photo reply must not 500. Pre-fix
+    delete_issue removed comments before reply photos, tripping the NO ACTION
+    comment_id FK on FK-enforcing backends."""
+    engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool)
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def _fk_on(dbapi_conn, _record):
+        cur = dbapi_conn.cursor()
+        cur.execute("PRAGMA foreign_keys=ON")
+        cur.close()
+
+    maker = async_sessionmaker(engine, expire_on_commit=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    async with maker() as s:
+        s.add(User(id="u1", email="a@test.local", display_name="Alice",
+                   hashed_password="x", role="user"))
+        s.add(sm.SocialServerConfig(
+            id=1, feature_enabled=True, federation_enabled=False, server_name="Server A",
+        ))
+        await s.commit()
+
+    app = FastAPI()
+    app.include_router(issues_api.router)
+
+    async def _override_get_db():
+        async with maker() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = _override_get_db
+    app.dependency_overrides[deps.require_premium] = lambda: STUB_USER
+    app.dependency_overrides[deps.require_premium_write] = lambda: STUB_USER
+    app.dependency_overrides[social_api.require_social_feature] = lambda: None
+    monkeypatch.setattr(issues_api, "signed_url", lambda key: f"https://cdn.test/{key}")
+
+    pid = await _new_issue(maker, author_user_id="u1")
+    cid = await _new_comment(maker, pid, author_user_id="u1")
+    async with maker() as s:
+        s.add(sm.SocialPhoto(id="postpic", uploader_user_id="u1",
+                             file_key="social/u1/p.webp", issue_id=pid))
+        s.add(sm.SocialPhoto(id="rep", uploader_user_id="u1",
+                             file_key="social/u1/r.webp", comment_id=cid))
+        await s.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.request("DELETE", f"/social/issues/{pid}")
+        assert r.status_code == 204, r.text
+
+    async with maker() as s:
+        leftover = list((await s.scalars(select(sm.SocialPhoto))).all())
+    assert leftover == []
 
 
 @pytest.mark.asyncio
@@ -348,3 +568,228 @@ async def test_search_route_hides_issues_from_free_accounts(env):
         r = await c.get("/search", params={"q": "engine stalling"})
         assert r.status_code == 200
         assert any(item["type"] == "issue" for item in r.json())
+
+
+@pytest.mark.asyncio
+async def test_mine_filter_lists_only_own_posts(env):
+    """AUT-832: ?mine=true returns only the caller's posts (My Issues view)."""
+    app, maker = env
+    mine = await _new_issue(maker, title="My starter problem", author_user_id="u1")
+    other = await _new_issue(maker, title="Their tyre issue", author_user_id="u2")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.get("/social/issues")
+        assert r.status_code == 200
+        ids = [i["id"] for i in r.json()["items"]]
+        assert mine in ids and other in ids
+        r = await c.get("/social/issues", params={"mine": "true"})
+        ids = [i["id"] for i in r.json()["items"]]
+        assert mine in ids and other not in ids
+        # mine still honours tag/status/q filters
+        r = await c.get("/social/issues", params={"mine": "true", "q": "tyre"})
+        assert r.json()["items"] == []
+
+
+@pytest.mark.asyncio
+async def test_comment_flag_dedupe_and_review_queue(env):
+    """AUT-832: comments are flaggable, deduped per user, and surface in the
+    admin review hub with post+author context."""
+    app, maker = env
+    pid = await _new_issue(maker)
+    cid = await _new_comment(maker, pid)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.post(f"/social/issues/{pid}/comments/{cid}/flag", json={"reason": "Abusive"})
+        assert r.status_code == 201
+        # same user cannot re-flag the same comment
+        r = await c.post(f"/social/issues/{pid}/comments/{cid}/flag", json={"reason": "again"})
+        assert r.status_code == 409
+        # flag on a comment from another post 404s (no probing)
+        other = await _new_issue(maker)
+        r = await c.post(f"/social/issues/{other}/comments/{cid}/flag", json={"reason": "x"})
+        assert r.status_code == 404
+        # admin review queue shows it
+        r = await c.get("/admin/issues/review")
+        assert r.status_code == 200
+        items = r.json()["items"]
+        assert any(i["kind"] == "comment" and i["comment_id"] == cid and i["reason"] == "Abusive"
+                   for i in items)
+
+
+@pytest.mark.asyncio
+async def test_admin_review_queue_post_flags_and_delete(env):
+    """AUT-832: flagged posts appear in the review hub; admin can delete the
+    post or an individual comment."""
+    app, maker = env
+    pid = await _new_issue(maker, title="Dangerous advice")
+    cid = await _new_comment(maker, pid, body="Bad advice comment")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        assert (await c.post(f"/social/issues/{pid}/flag", json={"reason": "Misleading"})).status_code == 201
+        r = await c.get("/admin/issues/review")
+        assert any(i["kind"] == "post" and i["post_id"] == pid for i in r.json()["items"])
+        assert (await c.get("/admin/issues/flagged")).status_code == 200
+        # delete the comment -> gone from detail
+        r = await c.request("DELETE", f"/admin/issues/comments/{cid}")
+        assert r.status_code == 204
+        detail = (await c.get(f"/social/issues/{pid}")).json()
+        assert all(cm["id"] != cid for cm in detail["comments"])
+        # delete the post -> gone from browse and review
+        r = await c.request("DELETE", f"/admin/issues/posts/{pid}")
+        assert r.status_code == 204
+        assert (await c.get(f"/social/issues/{pid}")).status_code == 404
+        assert all(i["post_id"] != pid for i in (await c.get("/admin/issues/review")).json()["items"])
+
+
+@pytest.mark.asyncio
+async def test_social_ban_hides_posts_and_blocks_writes(env, monkeypatch):
+    """AUT-832: admin ban hides the user's posts and blocks their social
+    writes; unban restores. Read access is preserved."""
+    app, maker = env
+    pid = await _new_issue(maker, title="Mine pre-ban", author_user_id="u1")
+    async with maker() as s:
+        s.add(User(id="u1", email="alice@test.dev", display_name="Alice",
+                   hashed_password="x", role="user", max_vehicles=1))
+        await s.commit()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.post("/admin/users/u1/social-ban")
+        assert r.status_code == 200 and r.json()["social_banned"] is True
+        # post hidden from browse
+        assert all(i["id"] != pid for i in (await c.get("/social/issues")).json()["items"])
+        assert (await c.get(f"/social/issues/{pid}")).status_code == 404
+        # the write gate rejects a social_banned user (unit-level: the routes
+        # override require_premium_write in this harness, so hit the gate itself)
+        banned = types.SimpleNamespace(free_account=False, role="user", social_banned=True)
+        from httpx import AsyncClient as _AC
+        try:
+            await deps.require_premium_write(
+                banned, _read_only=types.SimpleNamespace(role="user"))
+            raise AssertionError("ban gate should have rejected")
+        except Exception as exc:
+            assert getattr(exc, "status_code", None) == 403, exc
+        # unban restores write + visibility
+        r = await c.post("/admin/users/u1/social-unban")
+        assert r.status_code == 200 and r.json()["social_banned"] is False
+        assert (await c.get("/social/issues")).json()["items"]
+
+
+@pytest.mark.asyncio
+async def test_unban_keeps_admin_hidden_posts_hidden(env):
+    """AUT-832 F1: unban restores only what the ban hid; a post the admin hid
+    separately stays hidden (regression: was clobbered to visible)."""
+    app, maker = env
+    await _new_issue(maker, title="Admin-hid", author_user_id="u-hid")
+    pid2 = await _new_issue(maker, title="Ban-hid", author_user_id="u-hid")
+    async with maker() as s:
+        s.add(User(id="u-hid", email="hid@test.dev", display_name="Hidden",
+                   hashed_password="x", role="user", max_vehicles=1))
+        await s.commit()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        posts = (await c.get("/social/issues")).json()["items"]
+        admin_hid = next(p["id"] for p in posts if p["title"] == "Admin-hid")
+        # admin hides a post directly (separate moderation action)
+        r = await c.request("PATCH", f"/admin/issues/{admin_hid}", json={"status_hidden": True})
+        assert r.status_code == 200
+        # ban then unban
+        assert (await c.post("/admin/users/u-hid/social-ban")).status_code == 200
+        assert (await c.post("/admin/users/u-hid/social-unban")).status_code == 200
+        # both hidden posts gone from browse; the ban-hid one restored, admin-hid stays hidden
+        assert (await c.get(f"/social/issues/{pid2}")).status_code == 200
+        assert (await c.get(f"/social/issues/{admin_hid}")).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_admin_deletes_purge_media_keys(env, monkeypatch):
+    """AUT-844 F4: admin comment/post deletes await _best_effort_delete_media,
+    so MinIO delete_object runs for every collected photo file_key (regression:
+    the coroutine was created and discarded; objects were never removed)."""
+    from app.core import storage
+
+    called: list[str] = []
+    async def _fake_delete_object(key: str) -> None:
+        called.append(key)
+
+    monkeypatch.setattr(storage, "delete_object", _fake_delete_object)
+    app, maker = env
+    pid = await _new_issue(maker, title="Media purge")
+    cid = await _new_comment(maker, pid, body="comment with photo")
+    async with maker() as s:
+        s.add(sm.SocialPhoto(id="postpic", uploader_user_id="u1",
+                             file_key="social/u1/post.webp", issue_id=pid))
+        s.add(sm.SocialPhoto(id="cmpic", uploader_user_id="u1",
+                             file_key="social/u1/comment.webp", comment_id=cid))
+        await s.commit()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        assert (await c.request("DELETE", f"/admin/issues/comments/{cid}")).status_code == 204
+        assert called == ["social/u1/comment.webp"]
+        called.clear()
+        assert (await c.request("DELETE", f"/admin/issues/posts/{pid}")).status_code == 204
+        assert called == ["social/u1/post.webp"]
+
+
+@pytest.mark.asyncio
+async def test_admin_cannot_delete_remote_post_only_local(env):
+    """AUT-935: admins may only delete issue blog posts hosted on their own
+    server. A federated (origin="remote") copy returns 403 and stays put; the
+    admin can still hide it locally via PATCH, and a local post still deletes."""
+    app, maker = env
+    local = await _new_issue(maker, origin="local", author_user_id="u1")
+    remote = await _new_issue(
+        maker, origin="remote", author_user_id=None,
+        author_display_name="Bob", server_name="Server B",
+    )
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.request("DELETE", f"/admin/issues/posts/{remote}")
+        assert r.status_code == 403, r.text
+        # remote copy survives
+        assert (await c.get(f"/social/issues/{remote}")).status_code == 200
+        # local moderation of the remote copy is still available: hide it
+        r = await c.request("PATCH", f"/admin/issues/{remote}", json={"status_hidden": True})
+        assert r.status_code == 200
+        assert (await c.get(f"/social/issues/{remote}")).status_code == 404
+        # a locally-hosted post still deletes as before
+        r = await c.request("DELETE", f"/admin/issues/posts/{local}")
+        assert r.status_code == 204
+        assert (await c.get(f"/social/issues/{local}")).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_comment_flag_then_post_flag_not_blocked(env):
+    """AUT-832 F2: flagging a comment on a post does not 409 the post flag
+    (regression: post-flag dedupe ignored comment_id)."""
+    app, maker = env
+    pid = await _new_issue(maker, title="Flag both")
+    cid = await _new_comment(maker, pid, body="comment")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        assert (await c.post(
+            f"/social/issues/{pid}/comments/{cid}/flag",
+            json={"reason": "bad comment"})).status_code == 201
+        assert (await c.post(
+            f"/social/issues/{pid}/flag",
+            json={"reason": "bad post"})).status_code == 201
+        # and the reverse order still works (post then comment)
+        pid2 = await _new_issue(maker, title="Flag both 2")
+        cid2 = await _new_comment(maker, pid2, body="comment2")
+        assert (await c.post(
+            f"/social/issues/{pid2}/flag",
+            json={"reason": "bad post"})).status_code == 201
+        assert (await c.post(
+            f"/social/issues/{pid2}/comments/{cid2}/flag",
+            json={"reason": "bad comment"})).status_code == 201
+
+
+@pytest.mark.asyncio
+async def test_admin_delete_answer_comment_unresolves_post(env):
+    """AUT-832 F3: deleting the pinned answer clears resolved_comment_id and
+    reopens the post (regression: dangling resolved reference)."""
+    app, maker = env
+    pid = await _new_issue(maker, author_user_id="u1", title="Resolved post")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        r = await c.post(f"/social/issues/{pid}/comments", json={"body": "Try the relay"})
+        assert r.status_code == 201
+        cid = r.json()["id"]
+        assert (await c.post(f"/social/issues/{pid}/comments/{cid}/answer")).status_code == 200
+        detail = (await c.get(f"/social/issues/{pid}")).json()
+        assert detail["status"] == "resolved" and detail["resolved_comment_id"] == cid
+        # admin deletes the answer comment
+        assert (await c.request("DELETE", f"/admin/issues/comments/{cid}")).status_code == 204
+        detail = (await c.get(f"/social/issues/{pid}")).json()
+        assert detail["status"] == "open"
+        assert detail["resolved_comment_id"] is None

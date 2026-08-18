@@ -1,0 +1,57 @@
+name: Security — full-resolution dependency scan
+
+on:
+  schedule:
+    # Weekly, Monday 06:00 UTC. A full-resolution (transitive) audit catches
+    # CVEs in the resolved tree that the PR-time `--no-deps` pip-audit gate in
+    # dockerhub-publish.yml cannot see (AUT-794). Covers backend, ai and the
+    # market-data service (AUT-1019); rego-lookup-api has its own weekly scan
+    # (separate repo). Runs on a GitHub-hosted runner: the self-hosted runner's
+    # pip index is a stale mirror that cannot resolve uvicorn==0.34.0 (AUT-1019).
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+jobs:
+  audit:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        run: |
+          set -euo pipefail
+          if [ -d .git ]; then
+            git fetch origin
+          else
+            git init && git remote add origin "https://github.com/${{ github.repository }}.git" || true
+            git fetch origin
+          fi
+          git checkout -f main
+          git reset --hard origin/main
+
+      - name: Install pip-audit
+        run: pip install --quiet pip-audit
+
+      - name: Fail on known vulns in the resolved tree
+        id: audit
+        run: |
+          set -euo pipefail
+          # Each service resolves its own tree: backend (fastapi 0.133.x) and
+          # ai/market-data (fastapi 0.115.x) pin different major versions and
+          # cannot coexist in one env (AUT-1019).
+          for req in backend/requirements.txt ai/requirements.txt market-data/requirements.txt; do
+            pip-audit -r "$req"
+          done
+          echo "result=clean" >> "$GITHUB_OUTPUT"
+
+      - name: Report to Discord #status
+        if: always()
+        env:
+          RESULT: ${{ steps.audit.outputs.result }}
+          COLOR: ${{ steps.audit.outputs.result == 'clean' && '0x57F287' || '0xED4245' }}
+          TITLE: ${{ steps.audit.outputs.result == 'clean' && 'Dependency scan clean' || 'Dependency scan found known CVEs' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
+            -H "Content-Type: application/json" \
+            -d "$(jq -nc --arg c status --arg t "$TITLE" --arg col "$COLOR" --arg u "$RUN_URL" \
+              '{channel:$c,title:$t,description:"Weekly full-resolution pip-audit of backend + ai + market-data requirements.",color:$col,author:"Security Scan",fields:[{name:"Scan",value:"full-resolution (transitive)",inline:true},{name:"Run",value:$u,inline:true}]}')"

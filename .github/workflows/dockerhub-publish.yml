@@ -6,6 +6,13 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Only one publish pipeline per branch at a time. A newer push cancels any
+# in-flight run so stale auto-bump-triggered publishes never starve the
+# latest commit (AUT-967).
+concurrency:
+  group: dockerhub-publish-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   changelog-gate:
     runs-on: ubuntu-latest
@@ -51,6 +58,18 @@ jobs:
           fi
           echo "changelog gate OK — CHANGELOG.md iterated with app/docker changes"
 
+  pip-audit-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pip-audit
+        run: pip install --quiet pip-audit
+      - name: Fail on known-vuln pinned deps (AUT-781)
+        run: |
+          set -euo pipefail
+          pip-audit --disable-pip --no-deps \
+            -r backend/requirements.txt -r ai/requirements.txt
+
   auto-bump:
     needs: changelog-gate
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
@@ -58,9 +77,17 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - name: Checkout repository
+        run: |
+          set -euo pipefail
+          if [ -d .git ]; then
+            git fetch origin
+          else
+            git init && git remote add origin "https://github.com/${{ github.repository }}.git" || true
+            git fetch origin
+          fi
+          git checkout -f main
+          git reset --hard origin/main
       - name: Cut a release if [Unreleased] has content (AUT-240)
         run: |
           set -euo pipefail
@@ -81,7 +108,90 @@ jobs:
           exit 1
 
   publish:
+    # amd64 only on the x64 dev-box runner (AUT-987). The arm64 runner is
+    # offline; multi-arch builds are handled by build-hosted.yml (AUT-967).
     needs: auto-bump
+    if: github.event_name != 'pull_request'
+    runs-on: [self-hosted, linux, x64]
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        run: |
+          set -euo pipefail
+          git fetch origin
+          git checkout -f main
+          git reset --hard origin/main
+
+      - name: Skip publish when the push only cut a version (AUT-240)
+        id: version_only
+        run: |
+          BEFORE="${{ github.event.before }}"
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          CHANGED="$(git diff --name-only "$BEFORE" "$GITHUB_SHA" || true)"
+          NONVERSION="$(printf '%s\n' "$CHANGED" | grep -vE '^(CHANGELOG\.md|backend/app/core/config\.py|ai/app/main\.py|frontend/pubspec\.yaml|scripts/bump-version\.sh|scripts/auto-bump\.sh)$' || true)"
+          if [ -n "$CHANGED" ] && [ -z "$NONVERSION" ]; then
+            echo "version-only push (auto-bump) — skipping image publish"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: docker/setup-buildx-action@v3
+        if: steps.version_only.outputs.skip != 'true'
+
+      - uses: docker/login-action@v3
+        if: steps.version_only.outputs.skip != 'true'
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push images (linux/amd64)
+        if: steps.version_only.outputs.skip != 'true'
+        env:
+          API_BASE_URL: https://hosted.autobrainservice.app/api/v1
+          WS_BASE_URL: wss://hosted.autobrainservice.app/ws
+        run: |
+          set -euo pipefail
+          VERSION="$(grep -E 'APP_VERSION: str' backend/app/core/config.py | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/')"
+          echo "==> building images tagged with version $VERSION (linux/amd64)"
+          for svc in backend worker ai frontend market-data; do
+            case "$svc" in
+              backend)  ctx=.;        df=docker/backend/Dockerfile;   args="";;
+              worker)   ctx=.;        df=docker/worker/Dockerfile;     args="";;
+              ai)       ctx=./ai;     df=docker/ai/Dockerfile;         args="";;
+              frontend) ctx=.;        df=docker/frontend/Dockerfile;   args="--build-arg API_BASE_URL=${API_BASE_URL} --build-arg WS_BASE_URL=${WS_BASE_URL}";;
+              market-data) ctx=./market-data; df=market-data/Dockerfile; args="";;
+            esac
+            for tag in latest hosted "$VERSION"; do
+              echo "==> building autobrain-${svc}:${tag}-amd64"
+              docker buildx build --platform linux/amd64 --push \
+                -t "cannonfodder151/autobrain-${svc}:${tag}-amd64" \
+                ${args} -f "${df}" "${ctx}"
+            done
+          done
+
+      - name: Build and push default-tier frontend image (linux/amd64)
+        if: steps.version_only.outputs.skip != 'true'
+        env:
+          API_BASE_URL: https://default.autobrainservice.app/api/v1
+          WS_BASE_URL: wss://default.autobrainservice.app/ws
+        run: |
+          set -euo pipefail
+          echo "==> building autobrain-frontend:default-amd64"
+          docker buildx build --platform linux/amd64 --push \
+            -t "cannonfodder151/autobrain-frontend:default-amd64" \
+            --build-arg API_BASE_URL=${API_BASE_URL} --build-arg WS_BASE_URL=${WS_BASE_URL} \
+            -f docker/frontend/Dockerfile .
+
+  publish-manifest:
+    # Tag the amd64 images as the default platform manifest (AUT-967).
+    # Multi-arch manifests (amd64+arm64) are built by build-hosted.yml when
+    # the arm64 runner is available.
+    needs: publish
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
@@ -109,71 +219,57 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: docker/setup-qemu-action@v3
-        if: steps.version_only.outputs.skip != 'true'
-
-      - uses: docker/setup-buildx-action@v3
-        if: steps.version_only.outputs.skip != 'true'
-
       - uses: docker/login-action@v3
         if: steps.version_only.outputs.skip != 'true'
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push images
+      - name: Assemble amd64 manifest tags
         if: steps.version_only.outputs.skip != 'true'
-        env:
-          API_BASE_URL: https://hosted.autobrainservice.app/api/v1
-          WS_BASE_URL: wss://hosted.autobrainservice.app/ws
         run: |
           set -euo pipefail
           VERSION="$(grep -E 'APP_VERSION: str' backend/app/core/config.py | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/')"
-          echo "==> building images tagged with version $VERSION"
+          echo "==> tagging amd64 images as default platform manifests (version $VERSION)"
           for svc in backend worker ai frontend market-data; do
-            case "$svc" in
-              backend)  ctx=.;        df=docker/backend/Dockerfile;   args="";;
-              worker)   ctx=.;        df=docker/worker/Dockerfile;     args="";;
-              ai)       ctx=./ai;     df=docker/ai/Dockerfile;         args="";;
-              frontend) ctx=.;        df=docker/frontend/Dockerfile;   args="--build-arg API_BASE_URL=${API_BASE_URL} --build-arg WS_BASE_URL=${WS_BASE_URL}";;
-              market-data) ctx=./market-data; df=market-data/Dockerfile; args="";;
-            esac
             for tag in latest hosted "$VERSION"; do
-              echo "==> building autobrain-${svc}:${tag}"
-              docker buildx build --platform linux/amd64,linux/arm64 --push \
+              echo "==> manifest autobrain-${svc}:${tag}"
+              docker buildx imagetools create \
                 -t "cannonfodder151/autobrain-${svc}:${tag}" \
-                ${args} -f "${df}" "${ctx}"
+                "cannonfodder151/autobrain-${svc}:${tag}-amd64"
             done
           done
-
-      - name: Build and push default-tier frontend image
-        if: steps.version_only.outputs.skip != 'true'
-        env:
-          API_BASE_URL: https://default.autobrainservice.app/api/v1
-          WS_BASE_URL: wss://default.autobrainservice.app/ws
-        run: |
-          set -euo pipefail
-          echo "==> building autobrain-frontend:default"
-          docker buildx build --platform linux/amd64,linux/arm64 --push \
+          echo "==> manifest autobrain-frontend:default"
+          docker buildx imagetools create \
             -t "cannonfodder151/autobrain-frontend:default" \
-            --build-arg API_BASE_URL=${API_BASE_URL} --build-arg WS_BASE_URL=${WS_BASE_URL} \
-            -f docker/frontend/Dockerfile .
+            "cannonfodder151/autobrain-frontend:default-amd64"
 
   sync-changelog:
-    needs: publish
+    needs: publish-manifest
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-        with:
-          path: app
-      - uses: actions/checkout@v4
-        with:
-          repository: CannonFodder151/autobrainservice-website
-          token: ${{ secrets.WEBSITE_SYNC_TOKEN }}
-          path: website
+      - name: Checkout autobrain repo
+        run: |
+          set -euo pipefail
+          if [ -d app/.git ]; then
+            cd app && git fetch origin && git checkout -f main && git reset --hard origin/main
+          else
+            rm -rf app
+            git clone --branch main "https://github.com/${{ github.repository }}.git" app
+          fi
+      - name: Checkout website repository
+        run: |
+          set -euo pipefail
+          if [ -d website/.git ]; then
+            cd website && git fetch origin && git checkout -f main && git reset --hard origin/main
+          else
+            git clone --depth=1 "https://x-access-token:${WEBSITE_SYNC_TOKEN}@github.com/CannonFodder151/autobrainservice-website.git" website
+          fi
+        env:
+          WEBSITE_SYNC_TOKEN: ${{ secrets.WEBSITE_SYNC_TOKEN }}
       - name: Sync CHANGELOG.md to the marketing site
         working-directory: website
         run: |

@@ -176,6 +176,8 @@ class SocialIssuePost {
     this.origin,
     this.resolvedCommentId,
     this.snapshot = const SocialSnapshot(),
+    this.photos = const [],
+    this.photoIds = const [],
     this.createdAt,
     this.comments = const [],
   });
@@ -192,6 +194,8 @@ class SocialIssuePost {
   final SocialSnapshot snapshot;
   final int commentCount;
   final bool isMine;
+  final List<String> photos;
+  final List<String> photoIds;
   final DateTime? createdAt;
   final List<SocialIssueComment> comments;
 
@@ -217,6 +221,8 @@ class SocialIssuePost {
             }),
       commentCount: json['comment_count'] as int? ?? 0,
       isMine: json['is_mine'] == true,
+      photos: ((json['photos'] as List?) ?? const []).cast<String>(),
+      photoIds: ((json['photo_ids'] as List?) ?? const []).cast<String>(),
       createdAt:
           DateTime.tryParse(json['created_at'] as String? ?? '')?.toLocal(),
       comments: ((json['comments'] as List?) ?? const [])
@@ -245,6 +251,8 @@ class SocialIssuePost {
         snapshot: snapshot,
         commentCount: commentCount ?? this.commentCount,
         isMine: isMine,
+        photos: photos,
+        photoIds: photoIds,
         createdAt: createdAt,
         comments: comments ?? this.comments,
       );
@@ -256,6 +264,7 @@ class SocialIssueComment {
     required this.authorDisplayName,
     required this.body,
     this.serverName,
+    this.photo,
     this.isAnswer = false,
     this.isMine = false,
     this.createdAt,
@@ -265,6 +274,7 @@ class SocialIssueComment {
   final String authorDisplayName;
   final String body;
   final String? serverName;
+  final String? photo;
   final bool isAnswer;
   final bool isMine;
   final DateTime? createdAt;
@@ -275,6 +285,7 @@ class SocialIssueComment {
         authorDisplayName: json['author_display_name'] as String? ?? 'Unknown',
         serverName: json['server_name'] as String?,
         body: json['body'] as String? ?? '',
+        photo: json['photo'] as String?,
         isAnswer: json['is_answer'] == true,
         isMine: json['is_mine'] == true,
         createdAt:

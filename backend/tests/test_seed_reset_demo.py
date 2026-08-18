@@ -36,11 +36,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.core.config import settings  # noqa: E402
 from app.core.security import hash_password  # noqa: E402
-from app.db.seed import _upload_demo_image, reset_demo, seed_demo  # noqa: E402
+from app.db.seed import reset_demo, seed_demo  # noqa: E402
 from app.db.session import Base  # noqa: E402
 from app.models.share import VehicleShare  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.models.vehicle import Vehicle  # noqa: E402
+from app.social.models import SocialIssueComment, SocialIssuePost  # noqa: E402
 
 # Settings is a process-wide singleton cached on first app import; another test
 # module may have imported it before our env vars above ran, so pin the demo
@@ -118,3 +119,46 @@ async def test_reset_demo_clears_shares(monkeypatch) -> None:
             select(User).where(User.email == "demo@test.local")
         )
         assert demo_after is not None, "reset_demo failed to re-seed the demo user"
+
+
+@pytest.mark.asyncio
+async def test_demo_seeds_issues_blog_and_reset_cleans_it(monkeypatch) -> None:
+    """Demo seed ships >=15 issue-blog posts with replies (AUT-712).
+
+    Answered/resolved posts must pin an answer comment. reset_demo must clear
+    the demo user's posts (and their replies/flags) before deleting the user —
+    enforced FKs would otherwise crash the reset on Postgres.
+    """
+    monkeypatch.setattr(
+        "app.db.seed._upload_demo_image",
+        lambda *a, **k: "https://minio.local/x.png",
+    )
+    await _reset_schema()
+    await seed_demo()
+
+    async with SessionLocal() as db:
+        demo = await db.scalar(select(User).where(User.email == "demo@test.local"))
+        posts = list((await db.scalars(
+            select(SocialIssuePost).where(SocialIssuePost.author_user_id == demo.id)
+        )).all())
+        assert len(posts) >= 15, f"expected >=15 demo posts, got {len(posts)}"
+        for post in posts:
+            assert post.tags, "demo post should carry deterministic tags"
+            comments = list((await db.scalars(
+                select(SocialIssueComment).where(SocialIssueComment.post_id == post.id)
+            )).all())
+            assert comments, f"post has no replies: {post.title}"
+            if post.status in ("answered", "resolved"):
+                assert post.resolved_comment_id, f"{post.status} post lacks pinned answer"
+
+    await reset_demo()
+
+    async with SessionLocal() as db:
+        # reset_demo wipes then re-seeds: the demo user + issue blog must exist
+        # again (reset completes without an FK crash on the issue-blog rows).
+        demo_after = await db.scalar(select(User).where(User.email == "demo@test.local"))
+        assert demo_after is not None, "reset_demo failed to re-seed the demo user"
+        reposted = list((await db.scalars(
+            select(SocialIssuePost).where(SocialIssuePost.author_user_id == demo_after.id)
+        )).all())
+        assert len(reposted) >= 15, "reset_demo failed to re-seed the issue blog"

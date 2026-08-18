@@ -1,9 +1,13 @@
 /// Issue detail — blog-post layout (title, meta, body, vehicle context, tags)
 /// + chronological comment thread. Mark-answer affordance for eligible authors,
 /// report action, resolved banner pointing at the pinned answer (AUT-627).
+/// Replies may attach one photo each (AUT-736).
 library;
 
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/api_client.dart';
@@ -29,6 +33,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
   bool _disabled = false;
   final _commentController = TextEditingController();
   bool _commenting = false;
+  ({String name, String mime, Uint8List bytes})? _pickedPhoto;
 
   @override
   void initState() {
@@ -40,6 +45,23 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
   void dispose() {
     _commentController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickPhoto() async {
+    if (_commenting) return;
+    final file = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 2048,
+      imageQuality: 82,
+    );
+    if (file == null || !mounted) return;
+    final bytes = await file.readAsBytes();
+    if (!mounted) return;
+    setState(() => _pickedPhoto = (
+      name: file.name,
+      mime: (file.mimeType?.trim().isNotEmpty ?? false) ? file.mimeType! : 'image/jpeg',
+      bytes: bytes,
+    ));
   }
 
   Future<void> _load() async {
@@ -72,12 +94,19 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
 
   Future<void> _addComment() async {
     final body = _commentController.text.trim();
-    if (body.isEmpty) return;
+    if (body.isEmpty && _pickedPhoto == null) return;
     setState(() => _commenting = true);
     _commentController.clear();
+    final photo = _pickedPhoto;
+    _pickedPhoto = null;
     try {
-      final comment = await SocialApi(context.read<AuthState>().api)
-          .addIssueComment(widget.postId, body);
+      final api = SocialApi(context.read<AuthState>().api);
+      String? photoId;
+      if (photo != null) {
+        final uploaded = await api.uploadPhoto(photo.bytes, photo.name, photo.mime);
+        photoId = uploaded.id;
+      }
+      final comment = await api.addIssueComment(widget.postId, body, photoId: photoId);
       if (mounted) {
         setState(() {
           final post = _post!;
@@ -88,6 +117,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
         });
       }
     } catch (e) {
+      if (photo != null) setState(() => _pickedPhoto = photo);
       _toast('Could not post comment: $e');
     }
     setState(() => _commenting = false);
@@ -125,6 +155,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                         authorDisplayName: c.authorDisplayName,
                         serverName: c.serverName,
                         body: c.body,
+                        photo: c.photo,
                         isAnswer: true,
                         isMine: c.isMine,
                         createdAt: c.createdAt,
@@ -171,6 +202,44 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
     try {
       await SocialApi(context.read<AuthState>().api)
           .flagIssue(widget.postId, reason);
+      _toast('Thanks — your report has been submitted for review.');
+    } on ApiException catch (e) {
+      _toast(e.message);
+    } catch (e) {
+      _toast('Could not submit report: $e');
+    }
+  }
+
+  Future<void> _reportComment(SocialIssueComment comment) async {
+    final controller = TextEditingController();
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Report this reply'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 3,
+          maxLength: 200,
+          decoration: const InputDecoration(
+            labelText: 'Reason',
+            hintText: 'e.g. spam, abuse, wrong category',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('Report'),
+          ),
+        ],
+      ),
+    );
+    if (reason == null || reason.isEmpty || !mounted) return;
+    try {
+      await SocialApi(context.read<AuthState>().api)
+          .flagIssueComment(_post!.id, comment.id, reason);
       _toast('Thanks — your report has been submitted for review.');
     } on ApiException catch (e) {
       _toast(e.message);
@@ -295,6 +364,10 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
         ],
         const SizedBox(height: 12),
         Text(post.body, style: const TextStyle(fontSize: 15, height: 1.45)),
+        if (post.photos.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          _photoGallery(post.photos),
+        ],
         if (post.tags.isNotEmpty) ...[
           const SizedBox(height: 14),
           Wrap(
@@ -314,10 +387,48 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
             style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
         if (auth.premium) ...[
+          if (_pickedPhoto != null) ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.memory(_pickedPhoto!.bytes,
+                        width: 84, height: 84, fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const SizedBox(
+                            width: 84, height: 84, child: Icon(Icons.image))),
+                  ),
+                  Positioned(
+                    top: 2,
+                    right: 2,
+                    child: InkWell(
+                      onTap: () => setState(() => _pickedPhoto = null),
+                      child: const CircleAvatar(
+                        radius: 10,
+                        backgroundColor: Colors.black54,
+                        child: Icon(Icons.close, size: 14, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
           TextField(
             controller: _commentController,
             decoration: InputDecoration(
               hintText: 'Share your experience or advice…',
+              prefixIcon: IconButton(
+                tooltip: _pickedPhoto != null
+                    ? 'One photo per reply (attached)'
+                    : 'Attach a photo',
+                icon: Icon(_pickedPhoto != null
+                    ? Icons.photo
+                    : Icons.add_photo_alternate_outlined),
+                onPressed: _pickedPhoto != null ? null : _pickPhoto,
+              ),
               suffixIcon: _commenting
                   ? const Padding(
                       padding: EdgeInsets.all(12),
@@ -339,6 +450,21 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
           for (final c in post.comments) _commentTile(post, c, auth),
         const SizedBox(height: 24),
       ],
+    );
+  }
+
+  Widget _photoGallery(List<String> photos) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: AspectRatio(
+        aspectRatio: 4 / 3,
+        child: PageView.builder(
+          itemCount: photos.length,
+          itemBuilder: (_, i) => Image.network(photos[i],
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+        ),
+      ),
     );
   }
 
@@ -364,6 +490,26 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _viewPhoto(String url) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: const EdgeInsets.all(12),
+        child: InteractiveViewer(
+          maxScale: 5,
+          child: Image.network(url,
+              fit: BoxFit.contain,
+              loadingBuilder: (_, child, progress) => progress == null
+                  ? child
+                  : const Center(child: CircularProgressIndicator()),
+              errorBuilder: (_, __, ___) => const Center(
+                  child: Icon(Icons.broken_image, color: Colors.white54))),
+        ),
       ),
     );
   }
@@ -394,6 +540,14 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                     ' · ${socialRelativeTime(c.createdAt)}',
                     style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
               ),
+              if (auth.premium)
+                IconButton(
+                  tooltip: 'Report this reply',
+                  icon: const Icon(Icons.flag_outlined, size: 16),
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  onPressed: () => _reportComment(c),
+                ),
               if (isAnswer)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -409,6 +563,18 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
           ),
           const SizedBox(height: 4),
           Text(c.body, style: const TextStyle(fontSize: 14, height: 1.4)),
+          if (c.photo != null) ...[
+            const SizedBox(height: 8),
+            GestureDetector(
+              onTap: () => _viewPhoto(c.photo!),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.network(c.photo!,
+                    width: 120, height: 90, fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+              ),
+            ),
+          ],
           if (canMark)
             Align(
               alignment: Alignment.centerRight,

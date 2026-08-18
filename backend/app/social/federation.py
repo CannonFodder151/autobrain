@@ -61,6 +61,18 @@ def generate_keypair() -> tuple[str, str]:
     return private_hex, public_hex
 
 
+def public_key_from_private(private_key_hex: str) -> str:
+    """Derive the public key hex from a stored private key (AUT-758)."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    priv = Ed25519PrivateKey.from_private_bytes(bytes.fromhex(private_key_hex))
+    return priv.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    ).hex()
+
+
 def _hub_url(cfg: SocialServerConfig) -> str:
     url = cfg.server_hub_url or settings.SOCIAL_FEDERATION_HUB_URL
     if not url:
@@ -109,13 +121,31 @@ async def _get(cfg: SocialServerConfig, path: str, params: dict | None = None) -
     return resp.json()
 
 
+async def get_server_status(cfg: SocialServerConfig) -> dict:
+    """Public hub status for this server (AUT-731): lets the client detect when
+    the hub operator has approved a `pending` registration (AUT-525) without
+    re-registering. No auth needed — the hub exposes GET /v1/server/{id}."""
+    if not cfg.hub_server_id:
+        raise FederationUnavailable("server not registered with the hub")
+    url = _hub_url(cfg) + f"/v1/server/{cfg.hub_server_id}"
+    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        try:
+            resp = await client.get(url)
+        except httpx.HTTPError as exc:
+            raise FederationUnavailable(str(exc)) from exc
+    if resp.status_code >= 300:
+        raise FederationUnavailable(f"hub {url} -> {resp.status_code}")
+    return resp.json()
+
+
 async def register(
     cfg: SocialServerConfig,
     server_name: str,
     server_email: str,
     public_key_hex: str,
 ) -> dict:
-    """Register this server with the hub. Returns {server_id, api_key}."""
+    """Register this server with the hub. Returns {server_id, api_key,
+    status, license_status, checkout_url}."""
     path = "/v1/register"
     payload = {
         "server_name": server_name,
@@ -151,6 +181,43 @@ async def push_event(cfg: SocialServerConfig, build_id: str, event_type: str, pa
     await _post(cfg, "/v1/events", {
         "event_type": event_type,
         "payload": {"build_id": build_id, **payload},
+    })
+
+
+async def push_report(
+    cfg: SocialServerConfig,
+    build_id: str,
+    reason: str,
+    reporter_display_name: str,
+    server_name: str | None,
+) -> None:
+    """Push a moderation report for a build to the hub (AUT-896).
+
+    Report events are hub-local: the hub stores them for the operator's
+    moderation queue and never fans them out to other servers.
+    """
+    await _post(cfg, "/v1/events", {
+        "event_type": "report",
+        "payload": {
+            "build_id": build_id,
+            "reason": reason,
+            "reporter_display_name": reporter_display_name,
+            "server_name": server_name,
+        },
+    })
+
+
+async def push_removed(cfg: SocialServerConfig, build_id: str, post_type: str) -> None:
+    """Takedown (AUT-902): tell the hub a locally-hosted post was removed.
+
+    The hub drops every routed `post` event for `build_id` (so no peer's inbox
+    returns it again) and fans a `remove` event out so peers delete the local
+    copies already sitting in their community feeds. Only the origin server may
+    call this, so it is safe on author + admin deletes of local posts.
+    """
+    await _post(cfg, "/v1/remove", {
+        "build_id": build_id,
+        "post_type": post_type,
     })
 
 

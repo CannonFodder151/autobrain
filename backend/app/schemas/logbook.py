@@ -31,7 +31,7 @@ class LogEntryCreate(BaseModel):
     @classmethod
     def _clean(cls, v: list[GpsSample] | None) -> list[GpsSample] | None:
         return clean_samples(v)
-    source: str = Field(default="manual", pattern="^(manual|obd_auto|car_auto)$")
+    source: str = Field(default="manual", pattern="^(manual|obd_auto|car_auto|diy_dongle)$")
 
 
 class LogEntryUpdate(BaseModel):
@@ -48,7 +48,7 @@ class LogEntryUpdate(BaseModel):
     end_lng: float | None = None
     purpose: str | None = Field(default=None, pattern="^(work|private)$")
     reason: str | None = None
-    source: str | None = Field(default=None, pattern="^(manual|obd_auto|car_auto)$")
+    source: str | None = Field(default=None, pattern="^(manual|obd_auto|car_auto|diy_dongle)$")
     status: str | None = Field(default=None, pattern="^(in_progress|completed)$")
     gps_samples: list[GpsSample] | None = None
 

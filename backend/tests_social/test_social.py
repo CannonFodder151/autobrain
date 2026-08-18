@@ -28,7 +28,7 @@ from app.models.mod import Modification
 from app.models.user import User
 from app.models.vehicle import Vehicle
 from app.social.media import compress_to_webp
-from app.social.models import SocialBuild, SocialServerConfig
+from app.social.models import SocialBuild, SocialIssuePost, SocialServerConfig, SocialShareScope
 from app.social.snapshot import build_snapshot, dumps, loads
 
 _engine = create_async_engine(os.environ["DATABASE_URL"])
@@ -170,6 +170,148 @@ def test_federation_register_sends_hosted_registration_key(monkeypatch) -> None:
     payload = json.loads(captured["body"])
     assert payload["hosted"] is False
     assert payload["registration_key"] == ""
+
+
+@pytest.mark.asyncio
+async def test_register_pending_reflected(monkeypatch) -> None:
+    """AUT-731: the hub's approval workflow (AUT-525) returns `status: pending`
+    for new registrations. The client must reflect that instead of claiming
+    `registered`, so federation isn't silently dead until the operator approves."""
+    import httpx
+
+    from app.social import federation
+
+    async def _handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={
+            "server_id": "deadbeef", "api_key": "k",
+            "status": "pending", "license_status": "pending_checkout",
+        })
+
+    _orig_client = httpx.AsyncClient
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kw: _orig_client(transport=httpx.MockTransport(_handler)))
+    monkeypatch.setattr(federation, "_hub_url", lambda cfg: "https://hub.example.invalid")
+
+    from app.social.models import SocialServerConfig
+
+    async with _SessionLocal() as db:
+        admin = await _new_user(db, "reg-pending@example.com", "RegAdmin", role="admin")
+        admin_token = create_access_token(admin.id)
+        cfg = SocialServerConfig(id=1, feature_enabled=True, federation_enabled=True,
+                                 server_name="Reg", server_email="reg@example.com",
+                                 hub_status="unregistered")
+        await db.merge(cfg)
+        await db.commit()
+    async with await _client(admin_token) as c:
+        got = await c.get("/api/v1/admin/social")
+        assert got.json()["hub_status"] == "unregistered"
+        reg = await c.post("/api/v1/admin/social/register")
+        assert reg.status_code == 200, reg.text
+        assert reg.json()["hub_status"] == "pending"
+        assert reg.json()["hub_server_id"] == "deadbeef"
+    async with _SessionLocal() as db:
+        cfg = await db.get(SocialServerConfig, 1)
+        assert cfg.hub_status == "pending"
+
+
+@pytest.mark.asyncio
+async def test_register_reuses_stored_server_key(monkeypatch) -> None:
+    """AUT-758: the server keypair is generated once and persisted; re-registering
+    (e.g. after a failed join) must reuse the stored key, not rotate it."""
+    import json
+
+    import httpx
+
+    from app.social import federation
+    from app.social.federation import _sign, public_key_from_private
+
+    seen_keys: list[dict] = []
+
+    async def _handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        seen_keys.append({"public_key": payload["public_key"]})
+        return httpx.Response(200, json={
+            "server_id": "deadbeef", "api_key": "k",
+            "status": "approved", "license_status": "active",
+        })
+
+    _orig_client = httpx.AsyncClient
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kw: _orig_client(transport=httpx.MockTransport(_handler)))
+    monkeypatch.setattr(federation, "_hub_url", lambda cfg: "https://hub.example.invalid")
+
+    from app.social.models import SocialServerConfig
+
+    async with _SessionLocal() as db:
+        admin = await _new_user(db, "reuse-key@example.com", "ReuseAdmin", role="admin")
+        admin_token = create_access_token(admin.id)
+        cfg = SocialServerConfig(id=1, feature_enabled=True, federation_enabled=True,
+                                 server_name="Reuse", server_email="reuse@example.com",
+                                 hub_status="unregistered")
+        await db.merge(cfg)
+        await db.commit()
+    async with await _client(admin_token) as c:
+        for _ in range(2):
+            got = await c.post("/api/v1/admin/social/register")
+            assert got.status_code == 200, got.text
+    async with _SessionLocal() as db:
+        cfg = await db.get(SocialServerConfig, 1)
+        assert cfg.hub_private_key is not None
+        # hub saw the same public key on both attempts → key did not rotate
+        assert len(seen_keys) == 2
+        assert seen_keys[0]["public_key"] == seen_keys[1]["public_key"]
+        # stored private key matches the public key the hub registered
+        assert public_key_from_private(cfg.hub_private_key) == seen_keys[0]["public_key"]
+        # persisted key actually signs requests (no re-derive regression)
+        assert _sign(cfg.hub_private_key, b"canonical")
+
+
+@pytest.mark.asyncio
+async def test_pending_registration_self_heals_on_approval(monkeypatch) -> None:
+    """AUT-731: a `pending` registration flips to `registered` (and starts
+    federating) once the hub operator approves it — checked against the hub's
+    public status endpoint on feed load, no manual re-register needed."""
+    async def _no_inbox(_cfg):
+        return []
+
+    async def _no_events(_cfg, after):
+        return {"events": [], "next_cursor": 0}
+
+    async def _status_pending(_cfg):
+        return {"server_id": "deadbeef", "status": "pending", "license_status": "pending_checkout"}
+
+    monkeypatch.setattr("app.social.federation.pull_inbox", _no_inbox)
+    monkeypatch.setattr("app.social.federation.pull_events", _no_events)
+    monkeypatch.setattr("app.social.federation.get_server_status", _status_pending)
+    async with _SessionLocal() as db:
+        cfg = SocialServerConfig(id=1, feature_enabled=True, federation_enabled=True,
+                                 hub_status="pending", hub_server_id="deadbeef",
+                                 last_inbox_sync=None, last_event_sync=None)
+        await db.merge(cfg)
+        await db.commit()
+        user = await _new_user(db, "pending@example.com", "Pending")
+        token = create_access_token(user.id)
+    async with await _client(token) as c:
+        feed = await c.get("/api/v1/social/feed")
+        assert feed.status_code == 200
+    async with _SessionLocal() as db:
+        cfg = await db.get(SocialServerConfig, 1)
+        assert cfg.hub_status == "pending"  # still pending → not federating
+
+    # hub operator approves → next feed flips it to registered and syncs
+    async def _status_approved(_cfg):
+        return {"server_id": "deadbeef", "status": "approved", "license_status": "active"}
+
+    monkeypatch.setattr("app.social.federation.get_server_status", _status_approved)
+    async with _SessionLocal() as db:
+        cfg = await db.get(SocialServerConfig, 1)
+        cfg.last_inbox_sync = None  # force a fresh sync
+        await db.commit()
+    async with await _client(token) as c:
+        feed = await c.get("/api/v1/social/feed")
+        assert feed.status_code == 200
+    async with _SessionLocal() as db:
+        cfg = await db.get(SocialServerConfig, 1)
+        assert cfg.hub_status == "registered"
+        assert cfg.last_inbox_sync is not None
 
 
 def test_compress_to_webp() -> None:
@@ -418,9 +560,9 @@ async def test_edit_build_title_photos_scope(monkeypatch) -> None:
         detail = (await c.get(f"/api/v1/social/posts/{post_id}")).json()
         assert p3["id"] not in detail["photo_ids"]
 
-        # F3: caption None = unchanged; explicit "" clears
+        # F3: explicit null or "" clears the caption (AUT-903)
         keep = await c.patch(f"/api/v1/social/posts/{post_id}", json={"caption": None})
-        assert keep.json()["caption"] == "Paint done"
+        assert keep.json()["caption"] is None
         cleared = await c.patch(f"/api/v1/social/posts/{post_id}", json={"caption": ""})
         assert cleared.json()["caption"] is None
 
@@ -688,3 +830,376 @@ async def test_upload_and_create_with_photo(monkeypatch) -> None:
         assert resp.status_code == 201, resp.text
         photo_id = resp.json()["id"]
         assert photo_id
+
+
+@pytest.mark.asyncio
+async def test_delete_build_with_photos_returns_to_pool(monkeypatch) -> None:
+    """AUT-703: DELETE /social/posts/{id} on a build with photos must not 500 —
+    photos return to the user's unassigned pool so they can be re-attached."""
+    async def _fake_upload(user_id, data, content_type=None):
+        return (f"social/{user_id}/a.webp", "http://assets/a.webp", 640, 480)
+
+    monkeypatch.setattr("app.api.v1.social.upload_photo", _fake_upload)
+    await _enable_feature(True)
+    async with _SessionLocal() as db:
+        owner = await _new_user(db, "del@example.com", "Del")
+        vehicle = await _new_vehicle(db, owner.id)
+        token = create_access_token(owner.id)
+        vehicle_id = vehicle.id
+    async with await _client(token) as c:
+        p1 = (await c.post("/api/v1/social/uploads",
+                           files={"file": ("a.webp", b"aaaa", "image/webp")})).json()
+        p2 = (await c.post("/api/v1/social/uploads",
+                           files={"file": ("b.webp", b"bbbb", "image/webp")})).json()
+        created = await c.post("/api/v1/social/posts", json={
+            "vehicle_id": vehicle_id,
+            "title": "Delete me",
+            "photo_ids": [p1["id"], p2["id"]],
+        })
+        assert created.status_code == 201, created.text
+        post_id = created.json()["id"]
+
+        gone = await c.delete(f"/api/v1/social/posts/{post_id}")
+        assert gone.status_code == 204, gone.text
+        assert (await c.get(f"/api/v1/social/posts/{post_id}")).status_code == 404
+
+    # empty gone too — the build AND its per-build share-scope row are deleted
+    # (AUT-762: the scope was still ORM-deleted, so its FK 500'd the DELETE)
+    async with _SessionLocal() as db:
+        gone2 = await db.scalar(select(SocialBuild).where(SocialBuild.id == post_id))
+        assert gone2 is None
+        scope = await db.scalar(select(SocialShareScope).where(SocialShareScope.build_id == post_id))
+        assert scope is None
+
+    # photos are back in the unassigned pool → reusable on a fresh build
+    async with await _client(token) as c:
+        reused = await c.post("/api/v1/social/posts", json={
+            "vehicle_id": vehicle_id,
+            "title": "Reused",
+            "photo_ids": [p1["id"], p2["id"]],
+        })
+        assert reused.status_code == 201, reused.text
+        assert reused.json()["photo_ids"] == [p1["id"], p2["id"]]
+
+
+# --- takedown / moderation (AUT-902) ------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_admin_deleted_remote_copy_stays_removed_across_sync(monkeypatch) -> None:
+    """AUT-910: an admin-removed federated copy must NOT resurrect on the next
+    federation sync. A tombstone records the remote_build_id so the inbox pull
+    skips it; the tombstone is pruned once the hub stops routing the build."""
+    inbox = [{
+        "remote_build_id": "hub-keep",
+        "server_id": "server-b",
+        "author_display_name": "Bob",
+        "server_name": "Bob's Garage",
+        "title": "Tombstone Clubman",
+        "caption": "From another server",
+        "snapshot": {"title": "Tombstone Clubman", "mods": []},
+    }]
+
+    async def _fake_pull(_cfg):
+        return inbox
+
+    async def _no_events(_cfg, after):
+        return {"events": [], "next_cursor": 0}
+
+    monkeypatch.setattr("app.social.federation.pull_inbox", _fake_pull)
+    monkeypatch.setattr("app.social.federation.pull_events", _no_events)
+    async with _SessionLocal() as db:
+        cfg = SocialServerConfig(id=1, feature_enabled=True, federation_enabled=True,
+                                 hub_status="registered", hub_server_id="me",
+                                 hub_api_key="k", hub_private_key="ab" * 32,
+                                 last_inbox_sync=None, last_event_sync=None)
+        await db.merge(cfg)
+        admin = await _new_user(db, "tomb@example.com", "Tomb", role="admin")
+        token = create_access_token(admin.id)
+
+    def _tombstone_copies(items):
+        return [i for i in items if i["title"] == "Tombstone Clubman"]
+
+    async with await _client(token) as c:
+        feed = await c.get("/api/v1/social/feed")
+        assert feed.status_code == 200, feed.text
+        assert len(_tombstone_copies(feed.json()["items"])) == 1
+        copy_id = _tombstone_copies(feed.json()["items"])[0]["id"]
+        resp = await c.delete(f"/api/v1/social/posts/{copy_id}")
+        assert resp.status_code == 204, resp.text
+        assert _tombstone_copies((await c.get("/api/v1/social/feed")).json()["items"]) == []
+        # Force another sync: skip the TTL gate by clearing the last sync time.
+        async with _SessionLocal() as db:
+            cfg = await db.get(SocialServerConfig, 1)
+            cfg.last_inbox_sync = None
+            await db.commit()
+        feed = await c.get("/api/v1/social/feed")
+        assert feed.status_code == 200, feed.text
+        assert _tombstone_copies(feed.json()["items"]) == [], \
+            "admin-deleted federated copy resurrected on re-sync"
+
+
+@pytest.mark.asyncio
+async def test_author_deleted_build_stays_removed_across_sync(monkeypatch) -> None:
+    """AUT-997: after an author deletes their own published build, the deleted
+    post must NOT resurrect in the community garage feed. The hub keeps routing
+    a removed build's post event, so the next federation sync would re-add the
+    deleted local build (tombstone gap for local-origin builds)."""
+    async def _no_inbox(_cfg):
+        return []
+
+    async def _no_events(_cfg, after):
+        return {"events": [], "next_cursor": 0}
+
+    async def _noop(_cfg, *_a, **_k):
+        return None
+
+    monkeypatch.setattr("app.social.federation.pull_inbox", _no_inbox)
+    monkeypatch.setattr("app.social.federation.pull_events", _no_events)
+    monkeypatch.setattr("app.social.federation.push_outbox", _noop)
+    monkeypatch.setattr("app.social.federation.push_removed", _noop)
+    await _enable_feature(True)
+    async with _SessionLocal() as db:
+        cfg = SocialServerConfig(id=1, feature_enabled=True, federation_enabled=True,
+                                 hub_status="registered", hub_server_id="me",
+                                 hub_api_key="k", hub_private_key="ab" * 32,
+                                 server_name="Me", server_email="me@example.com",
+                                 last_inbox_sync=None, last_event_sync=None)
+        await db.merge(cfg)
+        author = await _new_user(db, "author-del@example.com", "Author")
+        token = create_access_token(author.id)
+        vehicle = await _new_vehicle(db, author.id)
+        vehicle_id = vehicle.id
+
+    def _gone(items):
+        return [i for i in items if i["title"] == "Gone build"]
+
+    async with await _client(token) as c:
+        created = await c.post("/api/v1/social/posts",
+                               json={"vehicle_id": vehicle_id, "title": "Gone build"})
+        assert created.status_code == 201, created.text
+        post_id = created.json()["id"]
+        assert len(_gone((await c.get("/api/v1/social/feed")).json()["items"])) == 1
+
+        gone = await c.delete(f"/api/v1/social/posts/{post_id}")
+        assert gone.status_code == 204, gone.text
+        assert _gone((await c.get("/api/v1/social/feed")).json()["items"]) == []
+
+        # Hub has not processed the remove yet and still routes the build back
+        # to us: the fake inbox returns it keyed by its local id.
+        inbox = [{
+            "build_id": post_id,
+            "server_id": "me",
+            "author_display_name": "Author",
+            "server_name": "Me",
+            "title": "Gone build",
+            "snapshot": {},
+        }]
+        async def _routed_inbox(_cfg):
+            return inbox
+
+        monkeypatch.setattr("app.social.federation.pull_inbox", _routed_inbox)
+        async with _SessionLocal() as db:
+            cfg = await db.get(SocialServerConfig, 1)
+            cfg.last_inbox_sync = None
+            await db.commit()
+        feed = await c.get("/api/v1/social/feed")
+        assert feed.status_code == 200, feed.text
+        assert _gone(feed.json()["items"]) == [], \
+            "author-deleted build resurrected in the feed on re-sync"
+
+
+@pytest.mark.asyncio
+async def test_admin_deleted_local_build_stays_removed_across_sync(monkeypatch) -> None:
+    """AUT-997: an admin takedown of a locally-hosted build must stay removed
+    from the feed too — same tombstone path as the author delete."""
+    async def _no_events(_cfg, after):
+        return {"events": [], "next_cursor": 0}
+
+    async def _noop(_cfg, *_a, **_k):
+        return None
+
+    monkeypatch.setattr("app.social.federation.pull_events", _no_events)
+    monkeypatch.setattr("app.social.federation.push_removed", _noop)
+    await _enable_feature(True)
+    async with _SessionLocal() as db:
+        cfg = SocialServerConfig(id=1, feature_enabled=True, federation_enabled=True,
+                                 hub_status="registered", hub_server_id="me",
+                                 hub_api_key="k", hub_private_key="ab" * 32,
+                                 last_inbox_sync=None, last_event_sync=None)
+        await db.merge(cfg)
+        admin = await _new_user(db, "admin-del@example.com", "AdminDel", role="admin")
+        token = create_access_token(admin.id)
+        db.add(SocialBuild(id="local-build-to-remove", author_display_name="A",
+                           title="Admin removals", origin="local", snapshot_json="{}",
+                           status="published"))
+        await db.commit()
+
+    def _gone(items):
+        return [i for i in items if i["title"] == "Admin removals"]
+
+    async with await _client(token) as c:
+        assert len(_gone((await c.get("/api/v1/social/feed")).json()["items"])) == 1
+        resp = await c.delete("/api/v1/admin/social/posts/local-build-to-remove")
+        assert resp.status_code == 204, resp.text
+        assert _gone((await c.get("/api/v1/social/feed")).json()["items"]) == []
+
+        async def _routed_inbox(_cfg):
+            return [{
+                "build_id": "local-build-to-remove",
+                "server_id": "me",
+                "author_display_name": "A",
+                "server_name": "Me",
+                "title": "Admin removals",
+                "snapshot": {},
+            }]
+
+        monkeypatch.setattr("app.social.federation.pull_inbox", _routed_inbox)
+        async with _SessionLocal() as db:
+            cfg = await db.get(SocialServerConfig, 1)
+            cfg.last_inbox_sync = None
+            await db.commit()
+        feed = await c.get("/api/v1/social/feed")
+        assert feed.status_code == 200, feed.text
+        assert _gone(feed.json()["items"]) == [], \
+            "admin-deleted local build resurrected in the feed on re-sync"
+
+
+@pytest.mark.asyncio
+async def test_remove_event_deletes_federated_copies(monkeypatch) -> None:
+    """AUT-902: a hub `remove` event deletes the local copy of a federated
+    build AND issue post — removed posts must not linger in the community hub."""
+    async def _no_inbox(_cfg):
+        return []
+
+    async def _remove_events(_cfg, after):
+        return {"events": [
+            {"id": 1, "event_type": "remove",
+             "payload": {"build_id": "hub-del-build", "post_type": "build"}},
+            {"id": 2, "event_type": "remove",
+             "payload": {"build_id": "hub-del-issue", "post_type": "issue"}},
+        ], "next_cursor": 2}
+
+    monkeypatch.setattr("app.social.federation.pull_inbox", _no_inbox)
+    monkeypatch.setattr("app.social.federation.pull_events", _remove_events)
+    async with _SessionLocal() as db:
+        cfg = SocialServerConfig(id=1, feature_enabled=True, federation_enabled=True,
+                                 hub_status="registered", hub_server_id="me",
+                                 hub_api_key="k", hub_private_key="ab" * 32,
+                                 last_inbox_sync=None, last_event_sync=None)
+        await db.merge(cfg)
+        db.add(SocialBuild(id="local-build-1", author_display_name="A",
+                           title="Remote copy", origin="remote",
+                           remote_build_id="hub-del-build", snapshot_json="{}",
+                           status="published"))
+        db.add(SocialIssuePost(id="local-issue-1", author_display_name="B",
+                               title="Remote issue", body="x", origin="remote",
+                               remote_post_id="hub-del-issue"))
+        await db.commit()
+        user = await _new_user(db, "rm@example.com", "Rm")
+        token = create_access_token(user.id)
+    async with await _client(token) as c:
+        feed = await c.get("/api/v1/social/feed")
+        assert feed.status_code == 200, feed.text
+    async with _SessionLocal() as db:
+        assert await db.get(SocialBuild, "local-build-1") is None
+        assert await db.get(SocialIssuePost, "local-issue-1") is None
+
+
+@pytest.mark.asyncio
+async def test_remove_event_never_purges_local_build(monkeypatch) -> None:
+    """AUT-907: a hub-relayed `remove` must never take down a locally-hosted
+    build or issue post — only the origin server's own delete path may (local
+    deletes push via the hub's origin-verified /v1/remove)."""
+    async def _no_inbox(_cfg):
+        return []
+
+    async def _remove_events(_cfg, after):
+        return {"events": [
+            {"id": 7, "event_type": "remove",
+             "payload": {"build_id": "mine-own-build", "post_type": "build"}},
+            {"id": 8, "event_type": "remove",
+             "payload": {"build_id": "mine-own-issue", "post_type": "issue"}},
+        ], "next_cursor": 8}
+
+    monkeypatch.setattr("app.social.federation.pull_inbox", _no_inbox)
+    monkeypatch.setattr("app.social.federation.pull_events", _remove_events)
+    async with _SessionLocal() as db:
+        cfg = SocialServerConfig(id=1, feature_enabled=True, federation_enabled=True,
+                                 hub_status="registered", hub_server_id="me",
+                                 hub_api_key="k", hub_private_key="ab" * 32,
+                                 last_inbox_sync=None, last_event_sync=None)
+        await db.merge(cfg)
+        db.add(SocialBuild(id="mine-own-build-1", author_display_name="A",
+                           title="Local build", origin="local",
+                           remote_build_id="mine-own-build", snapshot_json="{}",
+                           status="published"))
+        db.add(SocialIssuePost(id="mine-own-issue-1", author_display_name="B",
+                               title="Local issue", body="x", origin="local",
+                               remote_post_id="mine-own-issue"))
+        await db.commit()
+        user = await _new_user(db, "keep@example.com", "Keep")
+        token = create_access_token(user.id)
+    async with await _client(token) as c:
+        feed = await c.get("/api/v1/social/feed")
+        assert feed.status_code == 200, feed.text
+    async with _SessionLocal() as db:
+        assert await db.get(SocialBuild, "mine-own-build-1") is not None
+        assert await db.get(SocialIssuePost, "mine-own-issue-1") is not None
+
+
+@pytest.mark.asyncio
+async def test_admin_can_delete_any_build_from_feed() -> None:
+    """AUT-902: admins may remove any build on their server straight from the
+    community pages; non-owner non-admins still get a 404 (PW-8)."""
+    await _enable_feature(True)
+    async with _SessionLocal() as db:
+        owner = await _new_user(db, "own@example.com", "Owner")
+        vehicle = await _new_vehicle(db, owner.id)
+        admin = await _new_user(db, "boss@example.com", "Boss", role="admin")
+        other = await _new_user(db, "other@example.com", "Other")
+        owner_token = create_access_token(owner.id)
+        admin_token = create_access_token(admin.id)
+        other_token = create_access_token(other.id)
+        vehicle_id = vehicle.id
+    async with await _client(owner_token) as c:
+        created = await c.post("/api/v1/social/posts",
+                               json={"vehicle_id": vehicle_id, "title": "Admin target"})
+        assert created.status_code == 201, created.text
+        post_id = created.json()["id"]
+    async with await _client(other_token) as c:
+        resp = await c.delete(f"/api/v1/social/posts/{post_id}")
+        assert resp.status_code == 404, resp.text
+    async with await _client(admin_token) as c:
+        resp = await c.delete(f"/api/v1/social/posts/{post_id}")
+        assert resp.status_code == 204, resp.text
+        assert (await c.get(f"/api/v1/social/posts/{post_id}")).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_local_build_pushes_takedown(monkeypatch) -> None:
+    """AUT-902: deleting a locally-hosted build pushes a `remove` to the hub so
+    federated copies disappear everywhere, not just on this server."""
+    calls = []
+
+    async def _fake_removed(_cfg, build_id, post_type):
+        calls.append((build_id, post_type))
+
+    monkeypatch.setattr("app.social.federation.push_removed", _fake_removed)
+    async with _SessionLocal() as db:
+        cfg = SocialServerConfig(id=1, feature_enabled=True, federation_enabled=True,
+                                 hub_status="registered", hub_server_id="me",
+                                 hub_api_key="k", hub_private_key="ab" * 32)
+        await db.merge(cfg)
+        user = await _new_user(db, "push@example.com", "Push")
+        vehicle = await _new_vehicle(db, user.id)
+        token = create_access_token(user.id)
+        vehicle_id = vehicle.id
+    async with await _client(token) as c:
+        created = await c.post("/api/v1/social/posts",
+                               json={"vehicle_id": vehicle_id, "title": "Takedown me"})
+        assert created.status_code == 201, created.text
+        post_id = created.json()["id"]
+        gone = await c.delete(f"/api/v1/social/posts/{post_id}")
+        assert gone.status_code == 204, gone.text
+    assert calls and calls[-1] == (post_id, "build")

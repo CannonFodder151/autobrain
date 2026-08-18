@@ -189,6 +189,26 @@ def test_upload_downscales_over_2048px():
     assert max(img.size) <= 2048
 
 
+def test_upload_accepts_heic_photos():
+    """iPhone default camera format must decode (AUT-764) — Pillow alone
+    cannot, so the HEIF opener is registered; output is webp like every photo."""
+    import io
+
+    import pillow_heif as _pillow_heif
+
+    src = Image.new("RGB", (1600, 900), (40, 90, 180))
+    buf = io.BytesIO()
+    src.save(buf, format="HEIF")
+    heic = buf.getvalue()
+
+    assert _pillow_heif.is_supported(heic)
+
+    webp = media_mod.compress_to_webp(heic, "image/heic")
+    img = Image.open(io.BytesIO(webp))
+    assert img.format == "WEBP"
+    assert img.size == (1600, 900)
+
+
 def test_upload_rejects_decompression_bomb():
     import struct
     import zlib
