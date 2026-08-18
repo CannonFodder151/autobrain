@@ -27,7 +27,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.99] - 2026-08-18
 
 ### Added
 - Knowledge graph tooling (AUT-1013): added graphify skill/agent for codebase
