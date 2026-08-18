@@ -11,7 +11,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.102] - 2026-08-18
 
 ### Changed
 - Web favicon (AUT-1125): updated home-screen web app icons (`Icon-192.png` /
