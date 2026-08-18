@@ -179,6 +179,7 @@ services:
     environment:
       <<: [*db-env, *core-env, *router-env]
       PYTHONPATH: /app
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in the hosted stack env (Portainer)}
     depends_on:
       postgres:
         condition: service_healthy
@@ -192,6 +193,7 @@ services:
     environment:
       <<: [*db-env, *core-env]
       PYTHONPATH: /app
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in the hosted stack env (Portainer)}
     depends_on:
       postgres:
         condition: service_healthy

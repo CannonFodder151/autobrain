@@ -9,26 +9,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ## [Unreleased]
+
+### Fixed
+- Hosted worker/beat SECRET_KEY (AUT-996): added `SECRET_KEY` env var to the
+  hosted `worker` and `beat` services in `docker-compose.hosted.yml`. Without
+  this, Celery worker and beat processes could not sign/verify JWT tokens,
+  causing task authentication failures on the hosted stack.
 
 ### Changed
 - App launcher icon (AUT-1106): updated mobile app icon for Android and iOS with fresh branding.
@@ -45,6 +32,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 - License screen (AUT-1004): when IAP is enabled but products aren't available for the current platform (e.g., store not yet published Play Console / App Store), the screen now falls back to Stripe checkout instead of showing a blank screen. Previously, if the server had IAP enabled but the store hadn't published products, the plans list was empty and users couldn't select upgrades. Now the screen shows Stripe-based upgrade plans as a fallback.
+
 
 ## [0.3.97] - 2026-08-17
 
@@ -531,7 +519,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 - My Builds tab in the Community Garage (AUT-501): view and edit your own posts. Backed by `GET /social/my-posts` + `PATCH /social/posts/{id}`.
-
 
 
 ## [0.3.40] - 2026-08-13
