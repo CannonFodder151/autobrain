@@ -29,6 +29,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- Knowledge graph tooling (AUT-1013): added graphify skill/agent for codebase
+  analysis, queryable knowledge graph at `graphify-out/`, AST extraction, and
+  cross-file relationship mapping. Supports `/graphify` command for efficient
+  codebase navigation.
+
 ## [0.3.98] - 2026-08-18
 
 ### Fixed
