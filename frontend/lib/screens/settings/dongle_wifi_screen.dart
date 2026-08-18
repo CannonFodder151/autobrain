@@ -43,6 +43,7 @@ class _DongleWifiScreenState extends State<DongleWifiScreen> {
   bool _busy = false;
   String? _status;
   String? _loadError;
+  String? _confirmedDeviceId;
 
   bool get _enabled => _config.enabled;
 
@@ -310,10 +311,23 @@ class _DongleWifiScreenState extends State<DongleWifiScreen> {
         apiKey: cfg.apiKey,
       );
       _busy = true;
-      _status = 'Provisioning the dongle over Bluetooth…';
+      _status = 'Looking for the dongle…';
     });
     try {
-      final ack = await DongleBle.provision(payload);
+      final candidates = await DongleBle.scan();
+      if (!mounted) return;
+      final choice = await _confirmDongle(candidates);
+      if (choice == null) {
+        if (!mounted) return;
+        setState(() => _status = 'Provisioning cancelled.');
+        return;
+      }
+      setState(() {
+        _confirmedDeviceId = choice.deviceId;
+        _status = 'Provisioning ${choice.name}…';
+      });
+      final ack =
+          await DongleBle.provision(payload, deviceId: _confirmedDeviceId!);
       if (!mounted) return;
       setState(() {
         _status = ack.trim() == 'ok'
@@ -325,6 +339,45 @@ class _DongleWifiScreenState extends State<DongleWifiScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// Security gate (AUT-966): never write provisioning credentials until the
+  /// user picks the exact dongle from every discovered match. Returns the
+  /// confirmed peripheral, or null when the user cancels. Each option shows
+  /// the advertised name + MAC/remoteId.
+  Future<DonglePeripheral?> _confirmDongle(
+      List<DonglePeripheral> candidates) {
+    return showDialog<DonglePeripheral>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirm dongle'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Pick the dongle to receive your WiFi credentials '
+                  'and API key. Only the device you pick is provisioned.'),
+              const SizedBox(height: 12),
+              for (final d in candidates)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.settings_input_antenna),
+                  title: Text(d.name),
+                  subtitle: Text(d.deviceId),
+                  onTap: () => Navigator.of(ctx).pop(d),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
   }
 
   String? get _lastSeenLabel {

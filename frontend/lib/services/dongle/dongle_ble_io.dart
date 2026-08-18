@@ -46,13 +46,16 @@ class BleImpl {
           defaultTargetPlatform == TargetPlatform.iOS);
 
   /// Provision the dongle over BLE and return the firmware ack ("ok" or
-  /// "err:…"). Throws [DongleBleException] with a user-facing message.
-  static Future<String> provision(String payload) async {
+  /// "err:…"). Writes ONLY to the peripheral whose remoteId matches
+  /// [deviceId] — the identity the user explicitly confirmed (AUT-966); the
+  /// app never auto-picks a device from the scan. Throws [DongleBleException]
+  /// with a user-facing message.
+  static Future<String> provision(String payload, {required String deviceId}) async {
     if (!supported) {
       throw DongleBleException(
           'BLE provisioning is only available in the mobile app.');
     }
-    final device = await _findDongle();
+    final device = await _findDongle(deviceId);
     BluetoothCharacteristic? char;
     String? token;
     try {
@@ -118,8 +121,45 @@ class BleImpl {
     }
   }
 
-  /// Scans for the dongle and returns it, or throws a user-facing error.
-  static Future<BluetoothDevice> _findDongle() async {
+  /// Scans for every matching dongle and returns its identity (name +
+  /// remoteId) for the user to confirm before any write (AUT-966). Throws a
+  /// user-facing error when none are found.
+  static Future<List<DonglePeripheral>> scan() async {
+    final seen = await _scanResults();
+    final dongles = <String, ScanResult>{};
+    for (final r in seen) {
+      if (_isDongle(r)) {
+        dongles[r.device.remoteId.str] = r;
+      }
+    }
+    if (dongles.isEmpty) {
+      throw DongleBleException(
+          'No $_peripheralHint dongle found. Make sure it is powered on and '
+          'in range, then try again.');
+    }
+    return [
+      for (final r in dongles.values)
+        DonglePeripheral(
+          deviceId: r.device.remoteId.str,
+          name: _displayName(r),
+        ),
+    ];
+  }
+
+  /// Finds the ONE peripheral whose remoteId equals the user-confirmed
+  /// [deviceId], or throws. BLE advertisement data is attacker-spoofable, so
+  /// identity is keyed on the confirmed remoteId, never the first match.
+  static Future<BluetoothDevice> _findDongle(String deviceId) async {
+    final seen = await _scanResults();
+    for (final r in seen) {
+      if (r.device.remoteId.str == deviceId) return r.device;
+    }
+    throw DongleBleException(
+        'The confirmed $_peripheralHint dongle is no longer in range. '
+        'Power it on and try again.');
+  }
+
+  static Future<List<ScanResult>> _scanResults() async {
     final seen = <ScanResult>[];
     final sub = FlutterBluePlus.scanResults.listen((rs) {
       seen
@@ -139,23 +179,23 @@ class BleImpl {
     } finally {
       await sub.cancel();
     }
-    final dongles = <String, BluetoothDevice>{};
-    for (final r in seen) {
-      final name = (r.advertisementData.advName.isNotEmpty
-              ? r.advertisementData.advName
-              : r.device.platformName)
-          .toLowerCase();
-      final hasService = r.advertisementData.serviceUuids
-          .any((u) => u.toString().toUpperCase() == _serviceUuid);
-      if (hasService || name.contains('autobrain')) {
-        dongles[r.device.remoteId.str] = r.device;
-      }
-    }
-    if (dongles.isEmpty) {
-      throw DongleBleException(
-          'No $_peripheralHint dongle found. Make sure it is powered on and '
-          'in range, then try again.');
-    }
-    return dongles.values.first;
+    return seen;
+  }
+
+  static bool _isDongle(ScanResult r) {
+    final name = _advName(r).toLowerCase();
+    final hasService = r.advertisementData.serviceUuids
+        .any((u) => u.toString().toUpperCase() == _serviceUuid);
+    return hasService || name.contains('autobrain');
+  }
+
+  static String _displayName(ScanResult r) {
+    final name = _advName(r);
+    return name.isEmpty ? _peripheralHint : name;
+  }
+
+  static String _advName(ScanResult r) {
+    final adv = r.advertisementData.advName;
+    return adv.isNotEmpty ? adv : r.device.platformName;
   }
 }
