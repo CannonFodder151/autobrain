@@ -1,3 +1,5 @@
+import 'dart:ui' show TargetPlatform;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -8,6 +10,7 @@ import '../../core/auth_state.dart';
 /// Stripe subscription management: current plan + upgrade/downgrade/cancel.
 /// Prices come from GET /billing/pricing (with the early-adopter sale); the
 /// values below are a fallback for hosts that do not expose /billing/pricing.
+/// For store builds, IAP plans are shown when enabled and products are available.
 class LicenseScreen extends StatefulWidget {
   const LicenseScreen({super.key});
 
@@ -28,14 +31,13 @@ class _LicenseScreenState extends State<LicenseScreen> {
   Map<String, dynamic> _sale = const {};
   String _currency = 'aud';
   bool _saleActive = false;
+  bool _iapMode = false;
   bool _loading = true;
   bool _yearly = false;
   bool _busy = false;
   String? _error;
 
   String? get _subStatus => _profile?['subscription_status'] as String?;
-  /// Server-reported licence lifecycle state (active / pending / free). Falls
-  /// back to the raw Stripe status for hosts on older backends.
   String? get _licenseStatus {
     final s = _profile?['license_status'] as String?;
     if (s != null) return s;
@@ -71,27 +73,55 @@ class _LicenseScreenState extends State<LicenseScreen> {
     });
     try {
       final me = await api.get('/auth/me') as Map<String, dynamic>;
-      setState(() => _profile = me);
-    } catch (_) {
-      setState(() => _error = 'Could not load your license status.');
-    }
-    // Pricing is public; ignore failures so a host without it still renders.
-    try {
-      final data = await api.get('/billing/pricing') as Map<String, dynamic>;
       setState(() {
-        _currency = (data['currency'] as String?) ?? 'aud';
-        _sale = (data['sale'] as Map<String, dynamic>?) ?? const {};
-        _saleActive = _sale['active'] == true;
-        _plans = ((data['plans'] as List?) ?? [])
-            .map((p) => Map<String, dynamic>.from(p as Map))
-            .toList();
-        if (_plans.isEmpty) _plans = _fallbackPlans;
+        _profile = me;
+        if (_error != null) _error = null;
       });
     } catch (_) {
-      // keep fallback plans
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      // Keep _error set to show auth failure, but allow plans to load
     }
+    bool iapAvailable = false;
+    try {
+      final catalog = await api.get('/billing/iap/catalog') as Map<String, dynamic>;
+      final enabled = catalog['enabled'] == true;
+      if (enabled) {
+        final products = (catalog['products'] as List?) ?? [];
+        if (products.isNotEmpty) {
+          final currentPlatform = Theme.of(context).platform == TargetPlatform.iOS ? 'ios' : 'android';
+          final iapPlans = products
+              .where((p) => (p as Map)['platform'] == currentPlatform)
+              .toList()
+              .cast<Map<String, dynamic>>();
+          if (iapPlans.isNotEmpty) {
+            setState(() {
+              _iapMode = true;
+              _plans = iapPlans;
+            });
+            iapAvailable = true;
+          }
+        }
+      }
+    } catch (_) {
+      // IAP endpoint not available, fall back to Stripe pricing
+    }
+    if (!iapAvailable) {
+      try {
+        final data = await api.get('/billing/pricing') as Map<String, dynamic>;
+        setState(() {
+          _iapMode = false;
+          _currency = (data['currency'] as String?) ?? 'aud';
+          _sale = (data['sale'] as Map<String, dynamic>?) ?? const {};
+          _saleActive = _sale['active'] == true;
+          _plans = ((data['plans'] as List?) ?? [])
+              .map((p) => Map<String, dynamic>.from(p as Map))
+              .toList();
+          if (_plans.isEmpty) _plans = _fallbackPlans;
+        });
+      } catch (_) {
+        // keep fallback plans
+      }
+    }
+    if (mounted) setState(() => _loading = false);
   }
 
   Future<void> _checkout(String plan) async {
@@ -122,8 +152,7 @@ class _LicenseScreenState extends State<LicenseScreen> {
       _error = null;
     });
     try {
-      final data =
-          await api.post('/billing/portal') as Map<String, dynamic>;
+      final data = await api.post('/billing/portal') as Map<String, dynamic>;
       await _openUrl(data['url'] as String);
     } catch (e) {
       setState(() => _error = 'Could not open billing: $e');
@@ -133,8 +162,7 @@ class _LicenseScreenState extends State<LicenseScreen> {
   }
 
   Future<void> _openUrl(String url) async {
-    final ok =
-        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    final ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
     if (!ok && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not open the link.')),
@@ -155,58 +183,113 @@ class _LicenseScreenState extends State<LicenseScreen> {
       appBar: AppBar(title: const Text('License')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _load,
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  _statusCard(context),
-                  if (_saleActive) ...[
-                    const SizedBox(height: 16),
-                    _saleBanner(context),
-                  ],
-                  const SizedBox(height: 20),
-                  Text('Plans',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 4),
-                  Text('Upgrade any time — billed monthly or yearly by Stripe. '
-                      'Cancel from your billing portal; your account stays '
-                      'upgraded until the end of the period.',
-                      style: Theme.of(context).textTheme.bodySmall),
-                  const SizedBox(height: 12),
-                  Row(
+          : _error != null
+              ? _buildErrorState()
+              : RefreshIndicator(
+                  onRefresh: _load,
+                  child: ListView(
+                    padding: const EdgeInsets.all(16),
                     children: [
-                      const Text('Billing period'),
-                      const Spacer(),
-                      SegmentedButton<bool>(
-                        segments: const [
-                          ButtonSegment(value: false, label: Text('Monthly')),
-                          ButtonSegment(value: true, label: Text('Yearly')),
-                        ],
-                        selected: {_yearly},
-                        onSelectionChanged: (s) =>
-                            setState(() => _yearly = s.first),
-                      ),
+                      _statusCard(context),
+                      if (_iapMode) ...[
+                        const SizedBox(height: 16),
+                        _iapBanner(context),
+                      ] else if (_saleActive) ...[
+                        const SizedBox(height: 16),
+                        _saleBanner(context),
+                      ],
+                      const SizedBox(height: 20),
+                      Text(_iapMode ? 'Plans' : 'Upgrade Plans',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 4),
+                      Text(_iapMode
+                          ? 'Buy from the App Store or Play Store. '
+                              'Your subscription stays upgraded until the end of the period.'
+                          : 'Upgrade any time — billed monthly or yearly by Stripe. '
+                              'Cancel from your billing portal; your account stays '
+                              'upgraded until the end of the period.',
+                          style: Theme.of(context).textTheme.bodySmall),
+                      const SizedBox(height: 12),
+                      if (!_iapMode) ...[
+                        Row(
+                          children: [
+                            const Text('Billing period'),
+                            const Spacer(),
+                            SegmentedButton<bool>(
+                              segments: const [
+                                ButtonSegment(value: false, label: Text('Monthly')),
+                                ButtonSegment(value: true, label: Text('Yearly')),
+                              ],
+                              selected: {_yearly},
+                              onSelectionChanged: (s) => setState(() => _yearly = s.first),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        _promoField(context),
+                        const SizedBox(height: 8),
+                      ],
+                      for (final plan in _plans) ...[
+                        _planCard(context, plan),
+                        const SizedBox(height: 16),
+                      ],
+                      if (_error != null) ...[
+                        const SizedBox(height: 8),
+                        Text(_error!,
+                            style: TextStyle(color: Colors.red.shade600)),
+                      ],
                     ],
                   ),
-                  const SizedBox(height: 16),
-                  _promoField(context),
-                  const SizedBox(height: 8),
-                  for (final plan in _plans) ...[
-                    _planCard(context, plan),
-                    const SizedBox(height: 16),
-                  ],
-                  if (_error != null) ...[
-                    const SizedBox(height: 8),
-                    Text(_error!,
-                        style: TextStyle(color: Colors.red.shade600)),
-                  ],
-                ],
-              ),
+                ),
+    );
+  }
+
+  Widget _buildErrorState() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        _statusCard(context),
+        const SizedBox(height: 20),
+        Center(
+          child: Column(
+            children: [
+              const Icon(Icons.error_outline, size: 48, color: Colors.grey),
+              const SizedBox(height: 16),
+              Text(_error ?? 'Error loading plans'),
+              const SizedBox(height: 16),
+              FilledButton(onPressed: _load, child: const Text('Retry')),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _iapBanner(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: scheme.primary.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: scheme.primary),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.storefront, color: scheme.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Upgrade through the App Store or Play Store. '
+              'Manage your subscription in your device settings.',
+              style: Theme.of(context).textTheme.bodyMedium,
             ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -268,12 +351,26 @@ class _LicenseScreenState extends State<LicenseScreen> {
 
   Widget _planCard(BuildContext context, Map<String, dynamic> plan) {
     final scheme = Theme.of(context).colorScheme;
-    final key = plan['key'] as String;
-    final name = plan['name'] as String;
-    final monthly = plan['monthly'] as int? ?? 900;
-    final yearly = plan['yearly'] as int? ?? 8400;
-    final saleMonthly = plan['sale_monthly'] as int?;
-    final isGarage = key == 'garage';
+    String key, name;
+    int monthly, yearly;
+    int? saleMonthly;
+    final isGarage;
+
+    if (_iapMode) {
+      key = plan['plan'] as String? ?? 'enthusiast';
+      name = key == 'garage' ? 'Garage' : 'Enthusiast';
+      isGarage = key == 'garage';
+      monthly = 1900;
+      yearly = 16800;
+      saleMonthly = null;
+    } else {
+      key = plan['key'] as String;
+      name = plan['name'] as String;
+      monthly = plan['monthly'] as int? ?? 900;
+      yearly = plan['yearly'] as int? ?? 8400;
+      saleMonthly = plan['sale_monthly'] as int?;
+      isGarage = key == 'garage';
+    }
     final vehicles = isGarage ? 5 : 1;
 
     final String price;
@@ -372,7 +469,7 @@ class _LicenseScreenState extends State<LicenseScreen> {
               width: double.infinity,
               child: FilledButton(
                 onPressed: _busy ? null : () => _checkout(key),
-                child: Text('Upgrade to $name'),
+                child: Text(_iapMode ? 'Buy from Store' : 'Upgrade to $name'),
               ),
             ),
           ],
@@ -407,7 +504,7 @@ class _LicenseScreenState extends State<LicenseScreen> {
       color = Colors.green;
       title = 'Subscription active';
       subtitle = 'You have full access to AutoBrain. '
-          'Managed by Stripe.';
+          '${_iapMode ? 'Managed by App Store / Play Store.' : 'Managed by Stripe.}';
     } else if (_hasPending) {
       icon = Icons.hourglass_top;
       color = Colors.orange;
