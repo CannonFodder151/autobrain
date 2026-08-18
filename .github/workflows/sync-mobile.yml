@@ -18,6 +18,14 @@ on:
       - 'scripts/sync-mobile.sh'
   workflow_dispatch:
 
+# Concurrent sync runs (merge push + auto-bump push) raced the push to
+# autobrain-mobile and exhausted the retry loop (AUT-1099). Serialize: only
+# one sync per ref at a time, newest wins. Safe to cancel — every run syncs
+# main's latest lineage, so the survivor always produces the valid tree.
+concurrency:
+  group: sync-mobile-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -75,7 +83,10 @@ jobs:
           git commit -m "chore: sync frontend lineage + version to $version from autobrain (auto)"
           # Concurrent sync runs (merge push + auto-bump push) can race the
           # push; rebase onto the latest remote main and retry instead of
-          # reddening the whole run (AUT-633).
+          # reddening the whole run (AUT-633). A rebase that conflicts (e.g.
+          # two syncs bumping from the same version leave unmerged files in
+          # pubspec.yaml/CHANGELOG.md) must be aborted before the next attempt
+          # or every retry fails instantly (AUT-1099).
           for attempt in 1 2 3; do
             if git pull --rebase origin main; then
               if git push origin main; then
@@ -83,6 +94,9 @@ jobs:
                 echo "version=$version" >> "$GITHUB_OUTPUT"
                 exit 0
               fi
+            else
+              echo "pull/rebase conflicted (attempt $attempt/3) — aborting and retrying"
+              git rebase --abort 2>/dev/null || true
             fi
             echo "push rejected (attempt $attempt/3) — retrying after rebase"
           done
