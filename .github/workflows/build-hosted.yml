@@ -16,6 +16,12 @@ on:
         required: true
         default: wss://hosted.autobrainservice.app/ws
 
+# Only one pipeline per ref at a time. A newer dispatch cancels any in-flight
+# run so two auto-bumps never race on the same push (non-fast-forward on main).
+concurrency:
+  group: build-hosted-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   auto-bump:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
@@ -32,6 +38,11 @@ jobs:
           git config user.name "AutoBrain Release Bot"
           git config user.email "release@autobrainservice.app"
           ./scripts/auto-bump.sh
+          for i in 1 2 3; do
+            git push origin main && break
+            echo "==> push raced with main updates — rebasing and retrying (attempt $i/3)"
+            git pull --rebase origin main
+          done
           git push origin main
           echo "==> auto-bump done"
 
