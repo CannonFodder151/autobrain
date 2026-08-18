@@ -1,6 +1,8 @@
 # AutoBrain HOSTED stack — Portainer stack "autobrain-hosted" (EP5, Oracle Cloud 152.69.188.133)
 # Restored to match the actual running services (AUT-101). Project name: autobrain-hosted.
-# App images from Docker Hub (what the host actually runs). Secrets interpolated from Portainer stack env.
+# App images from ghcr.io (multi-arch: the Oracle host is arm64 and Docker Hub :hosted tags are
+# amd64-only since AUT-967; ghcr :hosted carries amd64+arm64, AUT-1114). Secrets interpolated
+# from the Portainer stack env.
 # Env must stay applied via the stack so redeploys never revert SMTP2GO/SMTP_* (see AUT-97/AUT-101).
 
 x-core-env: &core-env
@@ -83,7 +85,7 @@ services:
       "
 
   backend:
-    image: cannonfodder151/autobrain-backend:hosted
+    image: ghcr.io/cannonfodder151/autobrain-backend:hosted
     restart: unless-stopped
     command: sh -c "python -m app.db.bootstrap && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
@@ -156,7 +158,7 @@ services:
         ipv4_address: 172.18.0.15
 
   ai:
-    image: cannonfodder151/autobrain-ai:hosted
+    image: ghcr.io/cannonfodder151/autobrain-ai:hosted
     restart: unless-stopped
     command: uvicorn app.main:app --host 0.0.0.0 --port 8001
     environment:
@@ -166,7 +168,7 @@ services:
       - "8001"
 
   market-data:
-    image: cannonfodder151/autobrain-market-data:hosted
+    image: ghcr.io/cannonfodder151/autobrain-market-data:hosted
     restart: unless-stopped
     environment:
       API_KEY: ${MARKET_DATA_API_KEY:-}
@@ -202,7 +204,7 @@ services:
         condition: service_healthy
 
   frontend:
-    image: cannonfodder151/autobrain-frontend:hosted
+    image: ghcr.io/cannonfodder151/autobrain-frontend:hosted
     restart: unless-stopped
     # AUT-473: localhost-bound. External clients reach the app via Cloudflare ->
     # npm (:443), which proxies to the frontend over the docker network. Never
