@@ -10,7 +10,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.101] - 2026-08-18
 
 ### Fixed
 - Hosted publish (AUT-1114): fixed Dart string-interpolation syntax error in
