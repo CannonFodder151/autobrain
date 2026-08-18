@@ -1,7 +1,7 @@
 name: autobrain
 description: AI-powered car enthusiast companion.
 publish_to: 'none'
-version: 0.3.97+96
+version: 0.3.99+98
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -48,7 +48,7 @@ flutter:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/logo.png"
+  image_path: "assets/app_icon.png"
   adaptive_icon_background: "#0B6B6A"
-  adaptive_icon_foreground: "assets/logo.png"
+  adaptive_icon_foreground: "assets/app_icon.png"
 

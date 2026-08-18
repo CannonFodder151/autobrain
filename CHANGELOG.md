@@ -9,23 +9,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ## [Unreleased]
 
 ### Fixed
@@ -33,6 +16,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   hosted `worker` and `beat` services in `docker-compose.hosted.yml`. Without
   this, Celery worker and beat processes could not sign/verify JWT tokens,
   causing task authentication failures on the hosted stack.
+
+### Changed
+- App launcher icon (AUT-1106): updated mobile app icon for Android and iOS with fresh branding.
+
+## [0.3.99] - 2026-08-18
+
+### Added
+- Knowledge graph tooling (AUT-1013): added graphify skill/agent for codebase
+  analysis, queryable knowledge graph at `graphify-out/`, AST extraction, and
+  cross-file relationship mapping. Supports `/graphify` command for efficient
+  codebase navigation.
+
+## [0.3.98] - 2026-08-18
+
+### Fixed
+- License screen (AUT-1004): when IAP is enabled but products aren't available for the current platform (e.g., store not yet published Play Console / App Store), the screen now falls back to Stripe checkout instead of showing a blank screen. Previously, if the server had IAP enabled but the store hadn't published products, the plans list was empty and users couldn't select upgrades. Now the screen shows Stripe-based upgrade plans as a fallback.
+
 
 ## [0.3.97] - 2026-08-17
 
@@ -307,80 +307,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   compose screens surface a "Could not read that photo" message instead of
   dropping the selection silently (AUT-756).
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-## [Unreleased]
-
 ## [0.3.79] - 2026-08-15
 
 ### Fixed
@@ -593,7 +519,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 - My Builds tab in the Community Garage (AUT-501): view and edit your own posts. Backed by `GET /social/my-posts` + `PATCH /social/posts/{id}`.
-
 
 
 ## [0.3.40] - 2026-08-13
