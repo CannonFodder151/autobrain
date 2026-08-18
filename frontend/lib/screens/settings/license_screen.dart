@@ -504,7 +504,7 @@ class _LicenseScreenState extends State<LicenseScreen> {
       color = Colors.green;
       title = 'Subscription active';
       subtitle = 'You have full access to AutoBrain. '
-          '${_iapMode ? 'Managed by App Store / Play Store.' : 'Managed by Stripe.}';
+          '${_iapMode ? 'Managed by App Store / Play Store.' : 'Managed by Stripe.'}';
     } else if (_hasPending) {
       icon = Icons.hourglass_top;
       color = Colors.orange;

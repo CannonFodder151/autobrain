@@ -12,6 +12,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- Hosted publish (AUT-1114): fixed Dart string-interpolation syntax error in
+  the license screen subtitle (`'Managed by Stripe.}')` — unterminated string
+  literal broke `flutter build web`, failing the image publish + manifest
+  rotation so the `hosted` tag never advanced to 0.3.100.
+
 ## [0.3.100] - 2026-08-18
 
 ### Fixed
