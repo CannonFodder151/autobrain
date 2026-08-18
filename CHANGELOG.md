@@ -30,6 +30,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+- App launcher icon (AUT-1106): updated mobile app icon for Android and iOS with fresh branding.
+
 ## [0.3.99] - 2026-08-18
 
 ### Added
