@@ -183,7 +183,7 @@ jobs:
     # the arm64 runner is available.
     needs: publish
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
