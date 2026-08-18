@@ -77,9 +77,17 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - name: Checkout repository
+        run: |
+          set -euo pipefail
+          if [ -d .git ]; then
+            git fetch origin
+          else
+            git init && git remote add origin "https://github.com/${{ github.repository }}.git" || true
+            git fetch origin
+          fi
+          git checkout -f main
+          git reset --hard origin/main
       - name: Cut a release if [Unreleased] has content (AUT-240)
         run: |
           set -euo pipefail
@@ -108,10 +116,12 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 0
+      - name: Checkout repository
+        run: |
+          set -euo pipefail
+          git fetch origin
+          git checkout -f main
+          git reset --hard origin/main
 
       - name: Skip publish when the push only cut a version (AUT-240)
         id: version_only
@@ -241,14 +251,25 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-        with:
-          path: app
-      - uses: actions/checkout@v4
-        with:
-          repository: CannonFodder151/autobrainservice-website
-          token: ${{ secrets.WEBSITE_SYNC_TOKEN }}
-          path: website
+      - name: Checkout autobrain repo
+        run: |
+          set -euo pipefail
+          if [ -d app/.git ]; then
+            cd app && git fetch origin && git checkout -f main && git reset --hard origin/main
+          else
+            rm -rf app
+            git clone --branch main "https://github.com/${{ github.repository }}.git" app
+          fi
+      - name: Checkout website repository
+        run: |
+          set -euo pipefail
+          if [ -d website/.git ]; then
+            cd website && git fetch origin && git checkout -f main && git reset --hard origin/main
+          else
+            git clone --depth=1 "https://x-access-token:${WEBSITE_SYNC_TOKEN}@github.com/CannonFodder151/autobrainservice-website.git" website
+          fi
+        env:
+          WEBSITE_SYNC_TOKEN: ${{ secrets.WEBSITE_SYNC_TOKEN }}
       - name: Sync CHANGELOG.md to the marketing site
         working-directory: website
         run: |
