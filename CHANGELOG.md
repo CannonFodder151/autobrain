@@ -13,7 +13,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.104] - 2026-08-18
 
 ### Changed
 - Hosted app images (AUT-1114): `docker-compose.hosted.yml` now pulls `backend`, `ai`, `market-data` and `frontend` images from `ghcr.io/cannonfodder151/*:hosted` (multi-arch, incl. arm64) instead of Docker Hub, which only carries amd64 `:hosted` tags (AUT-967). The Oracle host is arm64, so Docker Hub image pulls could run the wrong architecture.
