@@ -41,7 +41,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [0.3.98] - 2026-08-18
 
 ### Fixed
-- License screen (AUT-1004): store build shows IAP plans only when the Play Store / App Store actually serves the advertised products. Previously, if the server had IAP products configured but the store hadn't yet published them, the plans list was empty and the License screen appeared blank — users couldn't select upgrades. Now the screen shows a "not configured" message until products are available.
+- License screen (AUT-1004): when IAP is enabled but products aren't available for the current platform (e.g., store not yet published Play Console / App Store), the screen now falls back to Stripe checkout instead of showing a blank screen. Previously, if the server had IAP enabled but the store hadn't published products, the plans list was empty and users couldn't select upgrades. Now the screen shows Stripe-based upgrade plans as a fallback.
 
 ## [0.3.97] - 2026-08-17
 
