@@ -12,7 +12,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.103] - 2026-08-18
 
 ### Fixed
 - Dongle identity confirmation before BLE provisioning write (AUT-966): the app now lists every discovered dongle by name + MAC/remoteId and requires explicit user confirmation before it writes the WiFi SSID/PSK + one-time device API key. It writes only to the confirmed device — never the first BLE scan match, which a spoofed advertisement could previously hijack.
