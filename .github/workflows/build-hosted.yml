@@ -29,29 +29,32 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout repository
-        run: |
-          set -euo pipefail
-          if [ -d .git ]; then
-            git fetch origin
-          else
-            git init && git remote add origin "https://github.com/${{ github.repository }}.git" || true
-            git fetch origin
-          fi
-          git checkout -f main
-          git reset --hard origin/main
+      # Use actions/checkout so the GITHUB_TOKEN is persisted by the
+      # credential helper (the manual git init did not authenticate pushes,
+      # crashing the auto-bump and blocking multi-arch arm64 image builds —
+      # AUT-1114).
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
       - name: Cut a release if [Unreleased] has content (AUT-240)
         run: |
           set -euo pipefail
           git config user.name "AutoBrain Release Bot"
           git config user.email "release@autobrainservice.app"
           ./scripts/auto-bump.sh
-          for i in 1 2 3; do
-            git push origin main && break
-            echo "==> push raced with main updates — rebasing and retrying (attempt $i/3)"
-            git pull --rebase origin main
-          done
-          git push origin main
+          # Only push when auto-bump actually committed a release cut; an
+          # empty push fails on the credential helper and blocks the build
+          # (AUT-1114).
+          if ! git diff --quiet origin/main --; then
+            for i in 1 2 3; do
+              git push origin main && break
+              echo "==> push raced with main updates — rebasing and retrying (attempt $i/3)"
+              git pull --rebase origin main
+            done
+          else
+            echo "==> nothing to bump — no push needed"
+          fi
           echo "==> auto-bump done"
 
   build:
