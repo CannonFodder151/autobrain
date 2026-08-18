@@ -78,16 +78,11 @@ jobs:
       contents: write
     steps:
       - name: Checkout repository
-        run: |
-          set -euo pipefail
-          if [ -d .git ]; then
-            git fetch origin
-          else
-            git init && git remote add origin "https://github.com/${{ github.repository }}.git" || true
-            git fetch origin
-          fi
-          git checkout -f main
-          git reset --hard origin/main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
+          fetch-depth: 0
       - name: Cut a release if [Unreleased] has content (AUT-240)
         run: |
           set -euo pipefail
