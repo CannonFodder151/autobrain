@@ -12,6 +12,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Fixed
+- CI auto-bump push auth (AUT-1114 regression from #204): the auto-bump job in `dockerhub-publish.yml` runs on GitHub-hosted `ubuntu-latest`, where the manual `git fetch` checkout bypass introduced by #204 lacks git credentials — `git push origin main` fails with `could not read Username`. Restored `actions/checkout@v4` there; the self-hosted `publish` job keeps the manual checkout (429-safe, credential-helper auth) and is fetch-only so it needs no push credentials. Without this the release/version-bump + image publish pipeline was blocked on every [Unreleased] change, stalling the hosted redeploy.
 - Hosted worker/beat SECRET_KEY (AUT-996): added `SECRET_KEY` env var to the
   hosted `worker` and `beat` services in `docker-compose.hosted.yml`. Without
   this, Celery worker and beat processes could not sign/verify JWT tokens,
