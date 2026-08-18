@@ -13,6 +13,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+- Web favicon (AUT-1125): updated home-screen web app icons (`Icon-192.png` /
+  `Icon-512.png`) and wired them into `frontend/web/index.html` so the hosted
+  app shows the new AutoBrain branding as an installable Progressive Web App.
+
 ## [0.3.101] - 2026-08-18
 
 ### Fixed
