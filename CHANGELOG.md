@@ -15,7 +15,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.106] - 2026-08-19
 
 ### Fixed
 - Google Play IAP (AUT-1152): enthusiast subscription product IDs shortened to
