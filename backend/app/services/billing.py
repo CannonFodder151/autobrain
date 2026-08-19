@@ -62,9 +62,11 @@ PENDING_STATUSES = frozenset({"incomplete", "incomplete_expired", "unpaid"})
 # Store-native IAP product ids (AUT-610/617). The store teams configure these
 # exact ids in App Store Connect / Play Console; both stores use the same ids.
 # Each maps to the plan + billing interval it grants.
+# Note: enthusiast FQN ids (com.autobrainservice.app.enthusiast.{monthly,yearly})
+# exceed Google Play's 40-char product ID limit; using short ids instead.
 IAP_PRODUCTS: dict[str, tuple[str, str]] = {
-    "com.autobrainservice.app.enthusiast.monthly": ("enthusiast", "monthly"),
-    "com.autobrainservice.app.enthusiast.yearly": ("enthusiast", "yearly"),
+    "enthusiast_monthly": ("enthusiast", "monthly"),
+    "enthusiast_yearly": ("enthusiast", "yearly"),
     "com.autobrainservice.app.garage.monthly": ("garage", "monthly"),
     "com.autobrainservice.app.garage.yearly": ("garage", "yearly"),
 }
