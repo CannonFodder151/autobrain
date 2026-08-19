@@ -20,8 +20,8 @@ class LicenseScreen extends StatefulWidget {
 
 class _LicenseScreenState extends State<LicenseScreen> {
   static const _fallbackPlans = [
-    {'key': 'enthusiast', 'name': 'Enthusiast', 'monthly': 900, 'yearly': 8400},
-    {'key': 'garage', 'name': 'Garage', 'monthly': 1900, 'yearly': 16800},
+    {'key': 'enthusiast', 'name': 'Enthusiast', 'monthly': 590, 'yearly': 5900},
+    {'key': 'garage', 'name': 'Garage', 'monthly': 1190, 'yearly': 11900},
   ];
 
   final _promoController = TextEditingController();
@@ -360,14 +360,14 @@ class _LicenseScreenState extends State<LicenseScreen> {
       key = plan['plan'] as String? ?? 'enthusiast';
       name = key == 'garage' ? 'Garage' : 'Enthusiast';
       isGarage = key == 'garage';
-      monthly = 1900;
-      yearly = 16800;
+      monthly = 1190;
+      yearly = 11900;
       saleMonthly = null;
     } else {
       key = plan['key'] as String;
       name = plan['name'] as String;
-      monthly = plan['monthly'] as int? ?? 900;
-      yearly = plan['yearly'] as int? ?? 8400;
+      monthly = plan['monthly'] as int? ?? 590;
+      yearly = plan['yearly'] as int? ?? 5900;
       saleMonthly = plan['sale_monthly'] as int?;
       isGarage = key == 'garage';
     }

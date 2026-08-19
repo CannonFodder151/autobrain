@@ -2,14 +2,15 @@
 """Idempotent Stripe provisioning for AutoBrain paid tiers (AUT-111).
 
 Creates or verifies, in the account owning STRIPE_SECRET_KEY:
-  * Enthusiast prices  A$9/mo, A$84/yr
-  * Garage prices      A$19/mo, A$168/yr
+  * Enthusiast prices  A$5.90/mo, A$59/yr
+  * Garage prices      A$11.90/mo, A$119/yr
   * Early-adopter sale (AUT-93, plan c36be7d): coupon EARLY40 = 40% off the
     first 3 months, capped at 100 redemptions, redeemable for 6 months from
     launch, plus its promotion code.
 
-All prices are in AUD (AUT-523); the script archives any wrong-currency price
-found under the same lookup key and creates an AUD replacement.
+All prices are in AUD (AUT-523); the script archives any stale price found
+under the same lookup key (wrong currency or a superseded amount, e.g. the
+pre-AUT-1164 A$9/A$84/A$19/A$168 prices) and creates the replacement.
 
 Run in Stripe test mode first (sk_test_...), then again with the live key.
 Prints the env values to wire into the hosted stack; do not run against an
@@ -31,12 +32,12 @@ CURRENCY = "aud"
 PLANS = {
     "enthusiast": {
         "name": "Enthusiast",
-        "amounts": {"monthly": 900, "yearly": 8400},
+        "amounts": {"monthly": 590, "yearly": 5900},
         "lookup": {"monthly": "autobrain-enthusiast-monthly", "yearly": "autobrain-enthusiast-yearly"},
     },
     "garage": {
         "name": "Garage",
-        "amounts": {"monthly": 1900, "yearly": 16800},
+        "amounts": {"monthly": 1190, "yearly": 11900},
         "lookup": {"monthly": "autobrain-garage-monthly", "yearly": "autobrain-garage-yearly"},
     },
 }
@@ -56,15 +57,15 @@ def upsert_price(plan_key: str, billing: str) -> dict:
     existing = stripe.Price.list(lookup_keys=[lookup], limit=1).data
     if existing:
         price = existing[0]
-        if price.unit_amount != amount:
-            sys.exit(f"{plan_key}/{billing}: existing price {price.unit_amount} != {amount}")
-        if price.currency == CURRENCY:
+        if price.unit_amount == amount and price.currency == CURRENCY:
             print(f"  verified {plan['name']} {billing}: {price.id}")
             return price
-        # Price objects are immutable; a wrong-currency price (e.g. the pre-AUT-523
-        # USD prices) must be archived before its lookup key can be reused. An
-        # archived price still owns its lookup key, so the replacement must
-        # atomically transfer the key (transfer_lookup_key=True).
+        # Price objects are immutable; a stale price (wrong currency, e.g. the
+        # pre-AUT-523 USD prices, or a superseded amount, e.g. the pre-AUT-1164
+        # A$9/A$84/A$19/A$168 prices) must be archived before its lookup key
+        # can be reused. An archived price still owns its lookup key, so the
+        # replacement must atomically transfer the key
+        # (transfer_lookup_key=True).
         active_subs = [
             s
             for s in stripe.Subscription.list(price=price.id, status="all").data
@@ -76,8 +77,8 @@ def upsert_price(plan_key: str, billing: str) -> dict:
                 "subscription(s) still reference it; migrate or cancel them first"
             )
         print(
-            f"  archiving wrong-currency {plan['name']} {billing} "
-            f"({price.id}, {price.currency})"
+            f"  archiving stale {plan['name']} {billing} "
+            f"({price.id}, {price.currency} {price.unit_amount})"
         )
         stripe.Price.modify(price.id, active=False)
     product = stripe.Product.retrieve(plan_key)

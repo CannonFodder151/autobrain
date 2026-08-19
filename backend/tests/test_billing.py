@@ -262,17 +262,14 @@ async def _checkout(fake: _FakeStripe, plan="enthusiast", billing="monthly", pro
 def test_pricing_matches_approved_plan(sale) -> None:
     data = svc.pricing()
     assert data["currency"] == "aud"
-    assert data["sale"]["active"] is True
-    assert data["sale"]["code"] == "EARLY40"
-    assert data["sale"]["percent_off"] == 40
-    assert data["sale"]["cap"] == 100
+    assert data["sale"]["active"] is False
     by_key = {p["key"]: p for p in data["plans"]}
-    assert by_key["enthusiast"]["monthly"] == 900
-    assert by_key["enthusiast"]["yearly"] == 8400
-    assert by_key["enthusiast"]["sale_monthly"] == 540
-    assert by_key["garage"]["monthly"] == 1900
-    assert by_key["garage"]["yearly"] == 16800
-    assert by_key["garage"]["sale_monthly"] == 1140
+    assert by_key["enthusiast"]["monthly"] == 590
+    assert by_key["enthusiast"]["yearly"] == 5900
+    assert "sale_monthly" not in by_key["enthusiast"]
+    assert by_key["garage"]["monthly"] == 1190
+    assert by_key["garage"]["yearly"] == 11900
+    assert "sale_monthly" not in by_key["garage"]
 
 
 def test_pricing_no_sale_when_unconfigured(stripe_prices) -> None:
@@ -282,10 +279,10 @@ def test_pricing_no_sale_when_unconfigured(stripe_prices) -> None:
 
 
 @pytest.mark.asyncio
-async def test_checkout_auto_applies_sale_on_monthly(sale, fake_stripe) -> None:
+async def test_checkout_no_longer_auto_applies_sale_on_monthly(sale, fake_stripe) -> None:
     params = await _checkout(fake_stripe)
-    assert params["discounts"] == [{"promotion_code": "promo_early40"}]
-    assert "allow_promotion_codes" not in params
+    assert "discounts" not in params
+    assert params["allow_promotion_codes"] is True
 
 
 @pytest.mark.asyncio
