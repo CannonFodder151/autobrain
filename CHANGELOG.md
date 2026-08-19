@@ -19,6 +19,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- Email suppression (AUT-1167): backend now filters out reserved/throwaway
+  recipients before sending — `EMAIL_SUPPRESS_DOMAINS` (RFC 2606 test domains
+  like `example.com`, `testmail.com`) and `EMAIL_SUPPRESS_PATTERNS` (smoke,
+  deploy, and QA test addresses). Prevents SMTP2GO reputation damage from
+  automated test sends to dead addresses; suppressed messages are logged and
+  skipped without failing the API call.
+
 ## [0.3.107] - 2026-08-19
 
 ### Changed
