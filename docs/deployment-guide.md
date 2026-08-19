@@ -113,9 +113,25 @@ Services:
 
 ## Deploy (hosted)
 
+**Always use the GitHub Actions runner on the Oracle VM** — do NOT build
+hosted images on a local machine. The `build-hosted.yml` workflow dispatch
+builds multi-arch images on the self-hosted runners (x64 + ARM64 on the
+Oracle VM) and pushes them to ghcr.io with the `:hosted` tag. The ARM64
+images are built natively on the VM, avoiding cross-architecture pulls.
+
+1. Trigger `build-hosted.yml` via workflow_dispatch on GitHub:
+   - tag: `hosted`
+   - api_base_url: `https://hosted.autobrainservice.app/api/v1`
+   - ws_base_url: `wss://hosted.autobrainservice.app/ws`
+2. Wait for the workflow to complete (auto-bump → build amd64/arm64 → manifest).
+3. Update the Portainer stack (AutoBrain-Hosted, EP5) via the API to pull the
+   new images (`pullImage:true`). This pulls the freshly built `:hosted` images
+   from ghcr.io and recreates changed services (AUT-372). The frontend has a
+   static IP, so npm keeps working.
+
 ```bash
-./scripts/publish-images.sh hosted
-# Then update the Portainer stack (AutoBrain-Hosted) to pull new images.
+# Or, for local Docker Hub images (demo/default tiers only):
+./scripts/publish-images.sh latest
 ```
 
 Portainer stack updates pull images and recreate changed services (AUT-372).
