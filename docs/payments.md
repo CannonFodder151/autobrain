@@ -9,18 +9,17 @@ Two paid tiers plus a free tier. Prices in AUD (AUT-523); source of truth is `sc
 | Plan | Monthly | Yearly | Max vehicles |
 |---|---|---|---|
 | Free | $0 | — | 1 |
-| Enthusiast | $9 | $84 | 1 |
-| Garage | $19 | $168 | 5 |
+| Enthusiast | $5.90 | $59 | 1 |
+| Garage | $11.90 | $119 | 5 |
 
 - Free tier: 1 vehicle, AI features and rego lookup disabled (server-side 403), exports still available.
 - Paid access via active subscription promotes the account; lapse/cancel demotes back to free.
 - Stripe lookup keys: `autobrain-enthusiast-monthly`, `autobrain-enthusiast-yearly`, `autobrain-garage-monthly`, `autobrain-garage-yearly`.
 
-## Early-adopter sale (EARLY40)
+## Early-adopter sale (EARLY40) — sunset
 
 - Coupon `autobrain_early_adopter_40`: 40% off the first 3 months, capped at 100 redemptions, redeemable within a 6-month window from launch.
-- Promotion code **EARLY40**. Auto-applied to **monthly** checkouts while the window is open; yearly gets no discount; unknown codes rejected.
-- Sale-priced monthly: Enthusiast $5.40, Garage $11.40.
+- Promotion code **EARLY40**. Sunset in AUT-1164: no longer auto-applied to monthly checkouts and no longer surfaced in `/billing/pricing`; the coupon stays in Stripe and is only honoured if a customer enters the code explicitly at checkout.
 
 ## Billing flow
 

@@ -12,7 +12,7 @@ IAP entitlement exactly like a Stripe subscription.
 """
 
 import logging
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 
 import stripe
 from sqlalchemy import select
@@ -38,14 +38,13 @@ PLANS: dict[str, dict] = {
 # Stripe round-trip.
 CURRENCY = "aud"
 PLAN_AMOUNTS: dict[str, dict[str, int]] = {
-    "enthusiast": {"monthly": 900, "yearly": 8400},
-    "garage": {"monthly": 1900, "yearly": 16800},
+    "enthusiast": {"monthly": 590, "yearly": 5900},
+    "garage": {"monthly": 1190, "yearly": 11900},
 }
 
 # Early-adopter sale (AUT-93): 40% off the first 3 months, capped at 100
-# subscribers for 6 months after launch. Stripe enforces the cap + window via
-# the coupon's max_redemptions/redeem_by; the app auto-applies it to monthly
-# checkouts so the discounted price ($5.40 / $11.40) shows without a code.
+# subscribers for 6 months after launch. Sunset in AUT-1164 — no longer
+# auto-applied; the coupon stays in Stripe for explicit code entry only.
 SALE_PERCENT_OFF = 40
 SALE_DURATION_MONTHS = 3
 SALE_CAP = 100
@@ -106,12 +105,10 @@ def plan_for_price(price_id: str) -> str | None:
 
 
 def sale_active() -> bool:
-    """True while the early-adopter sale window is open and wired up."""
-    if not settings.STRIPE_PROMO_EARLY_ADOPTER:
-        return False
-    if not settings.STRIPE_SALE_ENDS_AT:
-        return True
-    return date.today() <= date.fromisoformat(settings.STRIPE_SALE_ENDS_AT)
+    """EARLY40 is sunset (AUT-1164) — always inactive in the app so pricing
+    stops advertising it and checkouts never auto-apply it. The Stripe coupon
+    itself stays untouched and remains redeemable if entered explicitly."""
+    return False
 
 
 def pricing() -> dict:
@@ -149,20 +146,20 @@ def _discounted(amount_cents: int, percent_off: int) -> int:
 def _promo_discounts(promo_code: str | None, billing: str) -> list[dict] | None:
     """Stripe `discounts` to attach to the checkout session, or None.
 
-    Auto-applies the early-adopter promotion code to monthly checkouts while
-    the sale is active. An explicit promo code must match the configured sale
-    code (the only promo AutoBrain issues); anything else is rejected locally
-    rather than guessed at — Stripe's promotion codes are validated at checkout
-    when allow_promotion_codes is set.
+    Applies the early-adopter promotion code only when the customer explicitly
+    enters it (AUT-1164: the sale is sunset — no auto-apply on monthly
+    checkouts, and the coupon no longer surfaces in /billing/pricing). An
+    entered code must match the configured sale code (the only promo AutoBrain
+    issues); anything else is rejected locally rather than guessed at —
+    Stripe's promotion codes are validated at checkout when
+    allow_promotion_codes is set.
     """
-    promo_id = settings.STRIPE_PROMO_EARLY_ADOPTER
     code = settings.STRIPE_PROMO_EARLY_ADOPTER_CODE.upper()
     entered = (promo_code or "").strip().upper()
     if entered and entered != code:
         raise ValueError("Unknown promo code")
-    if not promo_id:
-        return None
-    if entered == code or (billing == "monthly" and sale_active()):
+    promo_id = settings.STRIPE_PROMO_EARLY_ADOPTER
+    if entered == code and promo_id:
         return [{"promotion_code": promo_id}]
     return None
 

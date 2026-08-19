@@ -18,6 +18,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+- New AUD pricing (AUT-1161/AUT-1164): Enthusiast A$5.90/mo or A$59/yr,
+  Garage A$11.90/mo or A$119/yr (was A$9/A$84 and A$19/A$168). Backend
+  `PLAN_AMOUNTS`, `scripts/stripe-setup.py`, License screen fallback prices and
+  docs updated; old AUD Stripe prices archived and new ones created under the
+  same lookup keys.
+- EARLY40 early-adopter sale sunset (AUT-1164): no longer auto-applied to
+  monthly checkouts and no longer surfaced in `/billing/pricing`; the coupon
+  stays in Stripe and remains redeemable only if a customer enters the code
+  explicitly at checkout.
+
 ## [0.3.106] - 2026-08-19
 
 ### Fixed

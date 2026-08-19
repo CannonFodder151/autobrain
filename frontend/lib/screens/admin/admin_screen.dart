@@ -408,7 +408,7 @@ class _AdminScreenState extends State<AdminScreen> {
                                     PopupMenuItem(
                                         value: 'reup',
                                         child: Text(free
-                                            ? r'Re-upgrade ($19/mo benefits)'
+                                            ? r'Re-upgrade ($11.90/mo benefits)'
                                             : 'Remove re-upgrade')),
                                   ],
                                   PopupMenuItem(
