@@ -5,6 +5,7 @@ swallowed so the API still succeeds even if mail is down.
 """
 
 import asyncio
+import re
 import smtplib
 import ssl
 from email.mime.multipart import MIMEMultipart
@@ -15,6 +16,31 @@ from app.core.config import settings
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
+
+# Compiled suppression cache — lives for the process lifetime (Settings is lru_cached).
+_suppress_domain_set: set[str] | None = None
+_suppress_pattern_re: re.Pattern | None = None
+
+
+def _load_suppressions() -> None:
+    global _suppress_domain_set, _suppress_pattern_re
+    if _suppress_domain_set is not None:
+        return
+    raw = getattr(settings, "EMAIL_SUPPRESS_DOMAINS", "") or ""
+    _suppress_domain_set = {d.strip().lower() for d in raw.split(",") if d.strip()}
+    pat = getattr(settings, "EMAIL_SUPPRESS_PATTERNS", "") or ""
+    _suppress_pattern_re = re.compile(pat, re.IGNORECASE) if pat else None
+
+
+def _is_suppressed(to_email: str) -> bool:
+    """Return True if the recipient is on the suppression list (AUT-1167)."""
+    _load_suppressions()
+    local, _, domain = to_email.rpartition("@")
+    if domain.lower() in _suppress_domain_set:
+        return True
+    if _suppress_pattern_re and _suppress_pattern_re.match(local):
+        return True
+    return False
 
 
 def _enabled() -> bool:
@@ -45,6 +71,9 @@ def _send_sync(to_email: str, subject: str, html: str, text: str) -> None:
 
 
 async def send_email(to_email: str, subject: str, html: str, text: str) -> bool:
+    if _is_suppressed(to_email):
+        logger.info("email_suppressed", to=to_email, subject=subject)
+        return False
     if not _enabled():
         logger.info("smtp_disabled_email_skipped", to=to_email, subject=subject)
         return False

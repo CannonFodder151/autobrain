@@ -101,6 +101,16 @@ class Settings(BaseSettings):
     SMTP_USE_TLS: bool = True  # STARTTLS (TLS on connect when False → SSL)
     SMTP_FROM_EMAIL: str = "noreply@example.com"
     SMTP_FROM_NAME: str = "AutoBrain"
+    # Recipient suppression (AUT-1167): never deliver real email to reserved/
+    # throwaway test domains or addresses matching these regex patterns. Guards
+    # SMTP2GO reputation from smoke/deploy/QA test sends to dead addresses.
+    EMAIL_SUPPRESS_DOMAINS: str = "example.com,example.org,example.net,test,invalid,testmail.com"
+    EMAIL_SUPPRESS_PATTERNS: str = (
+        r"^(?:smoke(?:hst\d*|[-_.]?(?:aut)?\d)|"
+        r"deploy[-_.]?(?:test[-_.-])?(?:aut|test)\d|"
+        r"aut\d+[-_.](?:check|host|test)|"
+        r"qa[-_.](?:verify|license))"
+    )
     # Public base URL used to build password-reset links (no trailing slash)
     APP_BASE_URL: str = "http://localhost:8000"
 
