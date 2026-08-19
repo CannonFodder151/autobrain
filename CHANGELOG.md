@@ -17,6 +17,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- Google Play IAP (AUT-1152): enthusiast subscription product IDs shortened to
+  `enthusiast_monthly` / `enthusiast_yearly` — the previous fully-qualified IDs
+  exceeded Google Play's 40-character product ID limit and could never resolve.
+  Garage products keep their fully-qualified IDs. Products created + activated
+  in Play Console with regional pricing mirrored from the existing plans.
+
 ## [0.3.105] - 2026-08-19
 
 ### Changed
