@@ -17,7 +17,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.108] - 2026-08-19
 
 ### Fixed
 - Email suppression (AUT-1167): backend now filters out reserved/throwaway
