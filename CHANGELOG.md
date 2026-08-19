@@ -16,7 +16,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.107] - 2026-08-19
 
 ### Changed
 - New AUD pricing (AUT-1161/AUT-1164): Enthusiast A$5.90/mo or A$59/yr,
