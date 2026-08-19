@@ -21,6 +21,13 @@ Two paid tiers plus a free tier. Prices in AUD (AUT-523); source of truth is `sc
 - Coupon `autobrain_early_adopter_40`: 40% off the first 3 months, capped at 100 redemptions, redeemable within a 6-month window from launch.
 - Promotion code **EARLY40**. Sunset in AUT-1164: no longer auto-applied to monthly checkouts and no longer surfaced in `/billing/pricing`; the coupon stays in Stripe and is only honoured if a customer enters the code explicitly at checkout.
 
+## 7-day free trial
+
+- Offered on **monthly** billing for Enthusiast and Garage only (yearly has no trial); web purchases get `subscription_data.trial_period_days: 7` on the Stripe Checkout Session. Trial is mutually exclusive with promo/EARLY40.
+- One trial per user: `has_had_trial` flag on the User model; repeat trials are blocked at checkout start and the flag is set once `checkout.session.completed` fires. Applicable to sample licence enforcement in `billing.py` and `api/v1/billing.py`.
+- `/billing/pricing` exposes `trial_days: 7` for monthly plans; `/auth/me` exposes `trial_days` + `trial_available: bool` while the user hasn't used a trial.
+- During `trialing`, Stripe subscription status grants full paid plan access (`ACTIVE_STATUSES` includes `trialing`).
+
 ## Billing flow
 
 - Checkout: `POST /billing/checkout` → Stripe Checkout session (subscription mode); find-or-create customer by email.
