@@ -255,6 +255,8 @@ async def me(
             "subscription_status": subscription_status,
             "license_status": billing_svc.license_status(current),
             "iap_status": iap_state,
+            "trial_days": billing_svc.TRIAL_PERIOD_DAYS if not current.has_had_trial else 0,
+            "trial_available": not current.has_had_trial,
         }
     )
 

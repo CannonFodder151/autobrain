@@ -146,3 +146,5 @@ class UserWithVehicleCount(UserOut):
     subscription_status: str | None = None
     license_status: str | None = None  # active / pending / free (License screen)
     iap_status: str | None = None  # active / expired / revoked / null (store IAP)
+    trial_days: int = 0  # 7-day trial length (0 = not offered / already used)
+    trial_available: bool = False  # account has not used its free trial yet

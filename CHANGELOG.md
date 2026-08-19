@@ -8,10 +8,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > user-facing change ships with an entry here under `[Unreleased]` — see
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
-
-
-
 ## [Unreleased]
+
+### Added
+- 7-day free trial (AUT-1195/1196): new accounts get one 7-day trial on any
+  monthly plan (Enthusiast/Garage) via Stripe Checkout. Trial replaces the
+  early-adopter sale on monthly; yearly plans and promo-code checkouts carry
+  no trial. One trial per account — a completed checkout sets `has_had_trial`
+  and repeat trials are rejected. `/billing/pricing` exposes `trial_days`
+  (monthly=7, yearly=0); `/auth/me` exposes `trial_days` + `trial_available`.
 
 ## [0.3.116] - 2026-08-21
 
@@ -86,95 +91,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   on the website the hosted IAP catalogue matched "android" products (the
   web platform is never iOS), replacing the Stripe plan cards with
   store-only buttons and breaking upgrades.
-
-## [0.3.108] - 2026-08-19
-
-### Fixed
-- Email suppression (AUT-1167): backend now filters out reserved/throwaway
-  recipients before sending — `EMAIL_SUPPRESS_DOMAINS` (RFC 2606 test domains
-  like `example.com`, `testmail.com`) and `EMAIL_SUPPRESS_PATTERNS` (smoke,
-  deploy, and QA test addresses). Prevents SMTP2GO reputation damage from
-  automated test sends to dead addresses; suppressed messages are logged and
-  skipped without failing the API call.
-
-## [0.3.107] - 2026-08-19
-
-### Changed
-- New AUD pricing (AUT-1161/AUT-1164): Enthusiast A$5.90/mo or A$59/yr,
-  Garage A$11.90/mo or A$119/yr (was A$9/A$84 and A$19/A$168). Backend
-  `PLAN_AMOUNTS`, `scripts/stripe-setup.py`, License screen fallback prices and
-  docs updated; old AUD Stripe prices archived and new ones created under the
-  same lookup keys.
-- EARLY40 early-adopter sale sunset (AUT-1164): no longer auto-applied to
-  monthly checkouts and no longer surfaced in `/billing/pricing`; the coupon
-  stays in Stripe and remains redeemable only if a customer enters the code
-  explicitly at checkout.
-
-## [0.3.106] - 2026-08-19
-
-### Fixed
-- Google Play IAP (AUT-1152): enthusiast subscription product IDs shortened to
-  `enthusiast_monthly` / `enthusiast_yearly` — the previous fully-qualified IDs
-  exceeded Google Play's 40-character product ID limit and could never resolve.
-  Garage products keep their fully-qualified IDs. Products created + activated
-  in Play Console with regional pricing mirrored from the existing plans.
-
-## [0.3.105] - 2026-08-19
-
-### Changed
-- App logo asset (AUT-1153): updated `frontend/assets/logo.png` with refreshed AutoBrain branding.
-
-## [0.3.104] - 2026-08-18
-
-### Changed
-- Hosted app images (AUT-1114): `docker-compose.hosted.yml` now pulls `backend`, `ai`, `market-data` and `frontend` images from `ghcr.io/cannonfodder151/*:hosted` (multi-arch, incl. arm64) instead of Docker Hub, which only carries amd64 `:hosted` tags (AUT-967). The Oracle host is arm64, so Docker Hub image pulls could run the wrong architecture.
-
-## [0.3.103] - 2026-08-18
-
-### Fixed
-- Dongle identity confirmation before BLE provisioning write (AUT-966): the app now lists every discovered dongle by name + MAC/remoteId and requires explicit user confirmation before it writes the WiFi SSID/PSK + one-time device API key. It writes only to the confirmed device — never the first BLE scan match, which a spoofed advertisement could previously hijack.
-
-## [0.3.102] - 2026-08-18
-
-### Changed
-- Web favicon (AUT-1125): updated home-screen web app icons (`Icon-192.png` /
-  `Icon-512.png`) and wired them into `frontend/web/index.html` so the hosted
-  app shows the new AutoBrain branding as an installable Progressive Web App.
-
-## [0.3.101] - 2026-08-18
-
-### Fixed
-- Hosted publish (AUT-1114): fixed Dart string-interpolation syntax error in
-  the license screen subtitle (`'Managed by Stripe.}')` — unterminated string
-  literal broke `flutter build web`, failing the image publish + manifest
-  rotation so the `hosted` tag never advanced to 0.3.100.
-
-## [0.3.100] - 2026-08-18
-
-### Fixed
-- Hosted worker/beat SECRET_KEY (AUT-996): added `SECRET_KEY` env var to the
-  hosted `worker` and `beat` services in `docker-compose.hosted.yml`. Without
-  this, Celery worker and beat processes could not sign/verify JWT tokens,
-  causing task authentication failures on the hosted stack.
-
-### Changed
-- Hub registration keys wired into hosted compose (AUT-528): `docker-compose.hosted.yml` now passes `HUB_HOSTED_REGISTRATION_KEY` to the hub service (was missing — hub fails closed without it) and `SOCIAL_FEDERATION_HOSTED_REGISTRATION_KEY` to the backend so hosted servers present the registration key when registering with the hub. The repo compose reference now matches the live EP5 stack, which already had both vars set and the key rotated.
-
-- App launcher icon (AUT-1106): updated mobile app icon for Android and iOS with fresh branding.
-
-## [0.3.99] - 2026-08-18
-
-### Added
-- Knowledge graph tooling (AUT-1013): added graphify skill/agent for codebase
-  analysis, queryable knowledge graph at `graphify-out/`, AST extraction, and
-  cross-file relationship mapping. Supports `/graphify` command for efficient
-  codebase navigation.
-
-## [0.3.98] - 2026-08-18
-
-### Fixed
-- License screen (AUT-1004): when IAP is enabled but products aren't available for the current platform (e.g., store not yet published Play Console / App Store), the screen now falls back to Stripe checkout instead of showing a blank screen. Previously, if the server had IAP enabled but the store hadn't published products, the plans list was empty and users couldn't select upgrades. Now the screen shows Stripe-based upgrade plans as a fallback.
-
 
 ## [0.3.97] - 2026-08-17
 

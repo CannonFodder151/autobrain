@@ -43,6 +43,9 @@ class User(Base):
     stripe_subscription_id: Mapped[str | None] = mapped_column(String(64))
     stripe_subscription_status: Mapped[str | None] = mapped_column(String(32))
     stripe_price_id: Mapped[str | None] = mapped_column(String(64))
+    # One-time 7-day free trial (AUT-1195/1196). Set True on the first
+    # checkout.session.completed; repeat trial checkouts are rejected.
+    has_had_trial: Mapped[bool] = mapped_column(default=False)
     # Store-native IAP (AUT-610/617): Apple App Store / Google Play licences for
     # the store builds of the mobile app. Recorded server-side and durable so
     # the licence survives reinstall/re-login. iap_status is the last-known
