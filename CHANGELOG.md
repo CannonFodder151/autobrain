@@ -18,7 +18,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.109] - 2026-08-20
 
 ### Fixed
 - Licence upgrades broken on website (AUT-1224): the web build now always
