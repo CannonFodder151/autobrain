@@ -20,7 +20,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.111] - 2026-08-20
 
 ### Fixed
 - Community Garage social API calls are no longer fire-and-forget (AUT-1238):
