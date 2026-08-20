@@ -21,6 +21,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- Mobile error handling (AUT-1237): every bare `catch` block across the admin,
+  settings, OBD, community-garage issue detail, and social post detail screens
+  now logs via `debugPrint` (error type + message) and, for `ApiException`,
+  shows the human-readable `message` field in the SnackBar instead of the raw
+  exception string. Error context preserved in production-style debug logs.
+
 ## [0.3.109] - 2026-08-20
 
 ### Fixed

@@ -17,6 +17,8 @@ import '../social_api.dart';
 import '../widgets/issue_card.dart';
 import '../widgets/premium_gate.dart';
 
+String _errorText(Object e) => e is ApiException ? e.message : '$e';
+
 class IssueDetailScreen extends StatefulWidget {
   const IssueDetailScreen({super.key, required this.postId, this.initial});
 
@@ -78,6 +80,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
         _loading = false;
       });
     } on ApiException catch (e) {
+      debugPrint('IssueDetailScreen._load ApiException: ${e.statusCode}: ${e.message}');
       if (e.message.contains('Disabled by your admin')) {
         setState(() {
           _disabled = true;
@@ -87,7 +90,8 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
       }
       setState(() => _loading = false);
       _toast(e.message);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('IssueDetailScreen._load failed: ${e.runtimeType}: $e');
       setState(() => _loading = false);
     }
   }
@@ -118,7 +122,8 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
       }
     } catch (e) {
       if (photo != null) setState(() => _pickedPhoto = photo);
-      _toast('Could not post comment: $e');
+      debugPrint('IssueDetailScreen._addComment failed: ${e.runtimeType}: $e');
+      _toast('Could not post comment: ${_errorText(e)}');
     }
     setState(() => _commenting = false);
   }
@@ -168,7 +173,8 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
         _toast('Marked as answered and resolved.');
       }
     } catch (e) {
-      _toast('Could not mark answer: $e');
+      debugPrint('IssueDetailScreen._markAnswer failed: ${e.runtimeType}: $e');
+      _toast('Could not mark answer: ${_errorText(e)}');
     }
   }
 
@@ -204,9 +210,11 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
           .flagIssue(widget.postId, reason);
       _toast('Thanks — your report has been submitted for review.');
     } on ApiException catch (e) {
+      debugPrint('IssueDetailScreen._report ApiException: ${e.statusCode}: ${e.message}');
       _toast(e.message);
     } catch (e) {
-      _toast('Could not submit report: $e');
+      debugPrint('IssueDetailScreen._report failed: ${e.runtimeType}: $e');
+      _toast('Could not submit report: ${_errorText(e)}');
     }
   }
 
@@ -242,9 +250,11 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
           .flagIssueComment(_post!.id, comment.id, reason);
       _toast('Thanks — your report has been submitted for review.');
     } on ApiException catch (e) {
+      debugPrint('IssueDetailScreen._reportComment ApiException: ${e.statusCode}: ${e.message}');
       _toast(e.message);
     } catch (e) {
-      _toast('Could not submit report: $e');
+      debugPrint('IssueDetailScreen._reportComment failed: ${e.runtimeType}: $e');
+      _toast('Could not submit report: ${_errorText(e)}');
     }
   }
 
@@ -272,7 +282,8 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
             const SnackBar(content: Text('Issue deleted.')));
       }
     } catch (e) {
-      _toast('Could not delete: $e');
+      debugPrint('IssueDetailScreen._delete failed: ${e.runtimeType}: $e');
+      _toast('Could not delete: ${_errorText(e)}');
     }
   }
 
