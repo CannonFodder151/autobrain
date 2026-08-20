@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/auth_state.dart';
 import '../../core/config.dart';
@@ -30,6 +31,7 @@ class _LoginScreenState extends State<LoginScreen> {
   String? _mfaQr;
   String? _mfaSecret;
   String? _error;
+  bool _serverOffline = false;
 
   bool get _isDemo =>
       AppConfig.apiBase.contains('demo.autobrainservice.app');
@@ -81,6 +83,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() {
       _busy = true;
       _error = null;
+      _serverOffline = false;
     });
     final auth = context.read<AuthState>();
     if (_mfaSetupStep) {
@@ -136,6 +139,12 @@ class _LoginScreenState extends State<LoginScreen> {
         _busy = false;
       });
       _focusCode();
+    } else if (outcome == LoginOutcome.serverOffline) {
+      setState(() {
+        _busy = false;
+        _serverOffline = true;
+        _error = 'Backend server offline. Please check your connection and try again.';
+      });
     } else if (outcome == LoginOutcome.failed) {
       setState(() {
         _busy = false;
@@ -150,6 +159,18 @@ class _LoginScreenState extends State<LoginScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _codeNode.requestFocus();
     });
+  }
+
+  Future<void> _openSupport() async {
+    final ok = await launchUrl(
+      Uri.parse('https://autobrainservice.app/contact.html?source=app'),
+      mode: LaunchMode.externalApplication,
+    );
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open the support page.')),
+      );
+    }
   }
 
   @override
@@ -335,6 +356,14 @@ class _LoginScreenState extends State<LoginScreen> {
                             Text(_error!,
                                 textAlign: TextAlign.center,
                                 style: TextStyle(color: Colors.red.shade600)),
+                            if (_serverOffline) ...[
+                              const SizedBox(height: 8),
+                              OutlinedButton.icon(
+                                onPressed: _openSupport,
+                                icon: const Icon(Icons.support_agent, size: 18),
+                                label: const Text('Contact support'),
+                              ),
+                            ],
                           ],
                           const SizedBox(height: 20),
                           FilledButton(

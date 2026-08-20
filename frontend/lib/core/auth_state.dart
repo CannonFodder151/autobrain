@@ -9,7 +9,7 @@ import 'config.dart';
 import 'token_store.dart';
 import '../services/dongle/dongle_settings.dart';
 
-enum LoginOutcome { ok, mfaRequired, mfaSetupRequired, failed }
+enum LoginOutcome { ok, mfaRequired, mfaSetupRequired, failed, serverOffline }
 
 /// Credentials live in secure storage (Keystore/Keychain) so they are not
 /// readable as plaintext on disk / from app backups. Non-sensitive prefs
@@ -129,8 +129,12 @@ class AuthState extends ChangeNotifier {
       }
       await _persist(data);
       return LoginOutcome.ok;
-    } catch (_) {
+    } on ApiException {
+      // Server answered (even 401) — valid credentials failed.
       return LoginOutcome.failed;
+    } catch (_) {
+      // No HTTP response (network/timeout/DNS) — backend unreachable.
+      return LoginOutcome.serverOffline;
     }
   }
 
