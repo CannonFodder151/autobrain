@@ -72,7 +72,7 @@ Oracle VM; the stack frontend nginx exposes `:8086`.
 | minio | `minio/minio:RELEASE.2025-09-07T16-13-09Z` | pinned (AUT-322); healthcheck `mc ready local`; volume `minio-data` |
 | minio-init | `minio/mc:RELEASE.2025-08-13T08-35-41Z` | one-shot bucket create; forces `anonymous set none` (bucket stays private, AUT-321) |
 | backend | `autobrain-backend:<tag>` | API on `:8000` (internal); `/health` |
-| worker / beat | `autobrain-worker:<tag>` | Celery worker + beat, separate containers |
+| worker | `autobrain-worker:<tag>` | Celery worker + beat (`-B`); single container (AUT-1242/C1) |
 | ai | `autobrain-ai:<tag>` | AI gateway on `:8001` (internal); `/health` |
 | frontend | `autobrain-frontend:<tag>` | nginx serves Flutter web + proxies `/api/*`, `/ws/*`, `/ai/*` |
 | hub | `ghcr.io/cannonfodder151/autobrain-federation-hub:<tag>` | federation hub (Community Garage); built + pushed from the PRIVATE repo `autobrain-federation-hub` (board rev 8); deploy config only in this repo |

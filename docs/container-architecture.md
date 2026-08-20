@@ -13,7 +13,7 @@ internally. Backend runs the API + Celery worker+beat in one container.
 
 ## Compose (hosted)
 
-`docker-compose.hosted.yml`: prebuilt tagged images (`cannonfodder151/autobrain-*:hosted`), frontend on :8086, Stripe billing env vars, self-signup + MFA enforced. Deployed via Portainer on the Oracle Cloud VM.
+`docker-compose.hosted.yml`: prebuilt tagged images (`cannonfodder151/autobrain-*:hosted`), frontend on :8086, Stripe billing env vars, self-signup + MFA enforced. Deployed via Portainer on the Oracle Cloud VM. Dedicated worker container runs Celery worker + beat (`-B`), single container (AUT-1242/C1).
 
 ## Image layout
 

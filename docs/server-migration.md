@@ -3,7 +3,7 @@
 ## Purpose
 
 This runbook covers picking up the entire AutoBrain stack (backend, AI gateway,
-worker, beat, Postgres, Redis, MinIO) from the current host and re-deploying it
+worker, Postgres, Redis, MinIO) from the current host and re-deploying it
 on another Linux host — typically the move from the on-prem Portainer box to a
 cloud VPS. It preserves users, vehicles, service/fuel/parts history, uploaded
 files and subscriptions. Target downtime is under an hour.
