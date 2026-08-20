@@ -174,3 +174,67 @@ async def test_auto_suggest_off_creates_no_suggestion() -> None:
         )).all())
         assert len(events) == 0, "setting off must suppress suggestions"
     await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_no_scheduled_service_creates_next_from_history(monkeypatch) -> None:
+    """Board note (AUT-1275 follow-up): when the odo is updated and no
+    scheduled service exists, the last recorded services drive a prediction
+    that creates the upcoming service with a due threshold."""
+    async def _fake_predict(payload: dict) -> dict:
+        return {
+            "service_type": "scheduled",
+            "interval_km": 10000,
+            "interval_months": 6,
+            "due_in_km": 0,
+            "due_in_days": 0,
+            "next_due_km": payload["last_service_km"] + 10000,
+            "next_due_date": "2027-01-01",
+            "confidence": 0.9,
+            "reason": "from test history",
+            "model": "rule-based-fallback",
+        }
+    import app.services.ai_client
+    monkeypatch.setattr(app.services.ai_client, "predict_service", _fake_predict)
+
+    suffix = uuid.uuid4().hex[:8]
+    async with SessionLocal() as db:
+        user = User(
+            email=f"hist-{suffix}@example.com", display_name="Hist",
+            hashed_password=hash_password("hunter22"), max_vehicles=3,
+        )
+        db.add(user)
+        await db.commit()
+        vehicle = Vehicle(user_id=user.id, nickname="Hist Car",
+                          auto_suggest_service=True, odometer_km=50000)
+        db.add(vehicle)
+        await db.commit()
+        # Past completed services — no scheduled service at all.
+        db.add(ServiceRecord(
+            vehicle_id=vehicle.id, service_date="2024-01-10", odometer_km=30000,
+            service_type="scheduled", status="completed",
+        ))
+        db.add(ServiceRecord(
+            vehicle_id=vehicle.id, service_date="2025-06-15", odometer_km=40000,
+            service_type="scheduled", status="completed",
+        ))
+        await db.commit()
+        token = create_access_token(user.id)
+        vid = vehicle.id
+    client = AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+    resp = await client.post(
+        f"/api/v1/vehicles/{vid}/fuel",
+        json={"fill_date": "2026-08-01", "odometer_km": 52000,
+              "litres": 50.0, "price_per_litre": 1.6, "total_cost": 80.0},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 201, resp.text
+    async with SessionLocal() as db:
+        assert await _odo(db, vid) == 52000
+        created = list((await db.scalars(select(ServiceRecord).where(
+            ServiceRecord.vehicle_id == vid, ServiceRecord.status == "scheduled",
+        ))).all())
+        assert len(created) == 1, "upcoming service should be auto-created"
+        assert created[0].next_due_km == 50000, created[0].next_due_km
+        assert created[0].ai_prediction == "from test history"
+    await client.aclose()

@@ -16,7 +16,7 @@ vehicle.odometer_km directly and intentionally bypasses this module.
 
 from datetime import date, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.logbook import LogEntry
@@ -62,6 +62,68 @@ async def sync_odometer(
     return target > prev
 
 
+async def _ensure_next_service(db: AsyncSession, vehicle: Vehicle) -> None:
+    """Board follow-up (AUT-1275): when the odo moves and no scheduled service
+    has been set yet, derive the next one from the vehicle's past service
+    records via the deterministic-first prediction module. Only creates when
+    auto-suggest is on and history exists — the due-check then fires when that
+    prediction's threshold is reached."""
+    from app.models.service import ServiceRecord
+
+    scheduled = await db.scalar(
+        select(func.count())
+        .select_from(ServiceRecord)
+        .where(ServiceRecord.vehicle_id == vehicle.id, ServiceRecord.status == "scheduled")
+    )
+    if scheduled:
+        return
+    from app.services.service_records import list_completed_services
+
+    history = await list_completed_services(db, vehicle.id)
+    if not history:
+        return
+    from app.services.ai_client import predict_service
+
+    payload = {
+        "service_type": "scheduled",
+        "odometer_km": vehicle.odometer_km or 0,
+        "last_service_km": history[-1].odometer_km,
+        "make": vehicle.make or "",
+        "model": vehicle.model or "",
+        "year": vehicle.year or date.today().year,
+        "vehicle_type": vehicle.vehicle_type or "car",
+        "service_history": [
+            {
+                "service_date": s.service_date.isoformat(),
+                "odometer_km": s.odometer_km,
+                "service_type": s.service_type,
+                "description": s.description,
+            }
+            for s in history
+        ],
+    }
+    result = await predict_service(payload)
+    if not result:
+        return
+    due_km = result.get("next_due_km")
+    due_date = result.get("next_due_date")
+    svc = ServiceRecord(
+        vehicle_id=vehicle.id,
+        service_date=date.today(),
+        odometer_km=vehicle.odometer_km or 0,
+        service_type=str(result.get("service_type") or "scheduled"),
+        description=(
+            f"Next {str(result.get('service_type') or 'scheduled').replace('_', ' ')} "
+            "auto-suggested from past service records"
+        ),
+        status="scheduled",
+        ai_prediction=result.get("reason"),
+        next_due_km=int(due_km) if due_km else None,
+        next_due_date=date.fromisoformat(due_date) if due_date else None,
+    )
+    db.add(svc)
+
+
 async def suggest_due_service(db: AsyncSession, vehicle: Vehicle) -> None:
     """AUT-1275: when auto-suggest is on and the odometer has reached an
     upcoming service's due threshold, surface a suggestion.
@@ -74,6 +136,8 @@ async def suggest_due_service(db: AsyncSession, vehicle: Vehicle) -> None:
     from app.services.events import add_event
     from app.models.service import ServiceRecord
     from app.models.vehicle import VehicleEvent
+
+    await _ensure_next_service(db, vehicle)
 
     odo = vehicle.odometer_km or 0
     today = date.today()
