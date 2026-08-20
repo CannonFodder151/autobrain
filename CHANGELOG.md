@@ -24,6 +24,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- Error page handling (AUT-1240): home screen now distinguishes an expired
+  session (401) from a backend-offline/network failure, showing a "Log out"
+  action and "Your login has expired" message for the former instead of a
+  generic "could not reach the server" error. Login screen differentiates
+  backend-offline from failed credentials, shows a "Contact support" button,
+  and provides the correct error message for each case.
+
 ## [0.3.112] - 2026-08-20
 
 ### Changed

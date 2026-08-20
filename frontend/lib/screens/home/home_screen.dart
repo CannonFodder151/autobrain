@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/api_client.dart';
 import '../../core/auth_state.dart';
 import '../../core/models.dart';
 import '../../widgets/vehicle_selector.dart';
@@ -36,6 +37,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Vehicle? _selected;
   bool _loading = true;
   String? _loadError;
+  bool _sessionExpired = false;
 
   @override
   void initState() {
@@ -48,6 +50,7 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _loading = true;
       _loadError = null;
+      _sessionExpired = false;
     });
     try {
       final data = await api.get('/vehicles') as List;
@@ -56,6 +59,13 @@ class _HomeScreenState extends State<HomeScreen> {
           .toList();
       _vehicles = vehicles;
       _selected = Vehicle.resolveSelection(vehicles, _selected);
+    } on ApiException catch (e) {
+      if (e.statusCode == 401) {
+        _loadError = 'Your login has expired. Please log in again.';
+        _sessionExpired = true;
+      } else {
+        _loadError = 'Could not reach the server. Check your connection or server settings.';
+      }
     } catch (_) {
       _loadError = 'Could not reach the server. Check your connection or server settings.';
     }
@@ -147,7 +157,12 @@ class _HomeScreenState extends State<HomeScreen> {
         child: _loading
             ? const Center(child: CircularProgressIndicator())
             : _loadError != null
-                ? _ErrorView(message: _loadError!, onRetry: _load)
+                ? _ErrorView(
+                    message: _loadError!,
+                    sessionExpired: _sessionExpired,
+                    onLogout: () => context.read<AuthState>().logout(),
+                    onRetry: _load,
+                  )
                 : ListView(
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                     children: [
@@ -445,9 +460,16 @@ class DownloadAppDialog extends StatelessWidget {
 }
 
 class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message, required this.onRetry});
+  const _ErrorView({
+    required this.message,
+    required this.onRetry,
+    this.sessionExpired = false,
+    this.onLogout,
+  });
   final String message;
   final VoidCallback onRetry;
+  final bool sessionExpired;
+  final VoidCallback? onLogout;
 
   @override
   Widget build(BuildContext context) {
@@ -458,15 +480,29 @@ class _ErrorView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.cloud_off, size: 56, color: scheme.error),
+            Icon(sessionExpired ? Icons.lock_clock : Icons.cloud_off,
+                size: 56, color: scheme.error),
             const SizedBox(height: 16),
             Text(message, textAlign: TextAlign.center),
             const SizedBox(height: 16),
-            FilledButton.tonalIcon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Retry'),
-            ),
+            if (sessionExpired && onLogout != null) ...[
+              FilledButton.tonalIcon(
+                onPressed: onLogout,
+                icon: const Icon(Icons.logout),
+                label: const Text('Log out'),
+              ),
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+              ),
+            ] else
+              FilledButton.tonalIcon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+              ),
           ],
         ),
       ),
