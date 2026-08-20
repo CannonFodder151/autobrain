@@ -83,10 +83,16 @@ async def update_vehicle(
     vehicle = await get_owned_vehicle(db, vehicle_id, user)
     if payload.is_primary:
         await clear_primary(db, user)
-    for key, value in payload.model_dump(exclude_unset=True).items():
+    data = payload.model_dump(exclude_unset=True)
+    odo_set = data.get("odometer_km")
+    for key, value in data.items():
         setattr(vehicle, key, value)
     await db.commit()
     await db.refresh(vehicle)
+    if odo_set is not None and vehicle.auto_suggest_service:
+        from app.services.odometer import suggest_due_service
+        await suggest_due_service(db, vehicle)
+        await db.commit()
     return vehicle
 
 

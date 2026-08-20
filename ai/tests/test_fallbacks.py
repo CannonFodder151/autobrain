@@ -42,12 +42,15 @@ def test_diagnostics_symptom_parts() -> None:
     assert "spark plug" in parts and "ignition coil" in parts
 
 
-def test_service_prediction_oil() -> None:
+def test_service_prediction_oil_merged_into_scheduled() -> None:
+    # AUT-1275: legacy "oil_change" is normalised to "scheduled" (20k/12mo), so
+    # the prediction uses the merged schedule rather than the old 10k oil rule.
     out = predict_service_fallback({"make": "Toyota", "odometer_km": 40000, "last_service_km": 35000,
                                     "service_type": "oil_change"})
-    assert out["interval_km"] == 9000  # 10k * toyota 0.9
-    assert out["next_due_km"] == 44000
-    assert out["due_in_km"] == 4000
+    assert out["service_type"] == "scheduled"
+    assert out["interval_km"] == 18000  # 20k * toyota 0.9
+    assert out["next_due_km"] == 53000
+    assert out["due_in_km"] == 13000
 
 
 def test_resale_depreciation() -> None:

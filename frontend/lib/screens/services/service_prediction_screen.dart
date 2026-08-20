@@ -16,7 +16,7 @@ class _ServicePredictionScreenState extends State<ServicePredictionScreen> {
   ServicePrediction? _result;
   bool _loading = false;
   String? _error;
-  String _type = 'oil_change';
+  String _type = 'scheduled';
   final _odo = TextEditingController();
   final _lastKm = TextEditingController();
 
@@ -110,7 +110,7 @@ class _ServicePredictionScreenState extends State<ServicePredictionScreen> {
                   value: _type,
                   items: const [
                     DropdownMenuItem(
-                        value: 'oil_change', child: Text('Oil change')),
+                        value: 'scheduled', child: Text('Scheduled service')),
                     DropdownMenuItem(
                         value: 'brake_pads', child: Text('Brake pads')),
                     DropdownMenuItem(
@@ -119,10 +119,8 @@ class _ServicePredictionScreenState extends State<ServicePredictionScreen> {
                         value: 'spark_plugs', child: Text('Spark plugs')),
                     DropdownMenuItem(
                         value: 'timing_belt', child: Text('Timing belt')),
-                    DropdownMenuItem(
-                        value: 'scheduled', child: Text('Scheduled service')),
                   ],
-                  onChanged: (v) => setState(() => _type = v ?? 'oil_change'),
+                  onChanged: (v) => setState(() => _type = v ?? 'scheduled'),
                 ),
                 const SizedBox(height: 12),
                 TextField(

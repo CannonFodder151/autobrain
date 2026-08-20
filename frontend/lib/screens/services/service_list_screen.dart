@@ -17,6 +17,7 @@ class ServiceListScreen extends StatefulWidget {
 
 class _ServiceListScreenState extends State<ServiceListScreen> {
   List<ServiceRecord> _services = const [];
+  int? _currentOdo;
   bool _loading = true;
 
   @override
@@ -33,6 +34,10 @@ class _ServiceListScreenState extends State<ServiceListScreen> {
       _services = data
           .map((e) => ServiceRecord.fromJson(e as Map<String, dynamic>))
           .toList();
+    } catch (_) {}
+    try {
+      final v = await api.get('/vehicles/${widget.vehicleId}') as Map<String, dynamic>;
+      _currentOdo = v['odometer_km'] as int?;
     } catch (_) {}
     setState(() => _loading = false);
   }
@@ -166,7 +171,13 @@ class _ServiceListScreenState extends State<ServiceListScreen> {
                           count: upcoming.length,
                           icon: Icons.schedule,
                         ),
-                        for (final s in upcoming) _ServiceCard(service: s, onEdit: _openForm, onComplete: _markCompleted, onDelete: _delete),
+                        for (final s in upcoming) _ServiceCard(
+                          service: s,
+                          currentOdo: _currentOdo,
+                          onEdit: _openForm,
+                          onComplete: _markCompleted,
+                          onDelete: _delete,
+                        ),
                         const SizedBox(height: 16),
                       ],
                       _SectionHeader(
@@ -174,7 +185,13 @@ class _ServiceListScreenState extends State<ServiceListScreen> {
                         count: history.length,
                         icon: Icons.history,
                       ),
-                      for (final s in history) _ServiceCard(service: s, onEdit: _openForm, onComplete: _markCompleted, onDelete: _delete),
+                      for (final s in history) _ServiceCard(
+                          service: s,
+                          currentOdo: null,
+                          onEdit: _openForm,
+                          onComplete: _markCompleted,
+                          onDelete: _delete,
+                        ),
                     ],
                   ),
       ),
@@ -210,14 +227,22 @@ class _SectionHeader extends StatelessWidget {
 class _ServiceCard extends StatelessWidget {
   const _ServiceCard({
     required this.service,
+    this.currentOdo,
     required this.onEdit,
     required this.onComplete,
     required this.onDelete,
   });
   final ServiceRecord service;
+  final int? currentOdo;
   final void Function(ServiceRecord?) onEdit;
   final void Function(ServiceRecord) onComplete;
   final void Function(ServiceRecord) onDelete;
+
+  bool get _isDueNow =>
+      service.isScheduled &&
+      service.nextDueKm != null &&
+      currentOdo != null &&
+      currentOdo! >= service.nextDueKm!;
 
   @override
   Widget build(BuildContext context) {
@@ -226,12 +251,16 @@ class _ServiceCard extends StatelessWidget {
     return Card(
       clipBehavior: Clip.antiAlias,
       child: ExpansionTile(
-        leading: service.isScheduled
-            ? const Icon(Icons.schedule, color: Colors.amber)
-            : const Icon(Icons.check_circle, color: Colors.green),
+        leading: _isDueNow
+            ? const Icon(Icons.warning_amber, color: Colors.red)
+            : service.isScheduled
+                ? const Icon(Icons.schedule, color: Colors.amber)
+                : const Icon(Icons.check_circle, color: Colors.green),
         title: Text(service.serviceType),
         subtitle: Text(
           '${service.serviceDate} · ${service.odometerKm} km'
+          '${service.nextDueKm != null ? ' · due ${service.nextDueKm} km' : ''}'
+          '${_isDueNow ? ' · DUE NOW' : ''}'
           '${service.workshop != null ? ' · ${service.workshop}' : ''}',
         ),
         trailing: Text(
