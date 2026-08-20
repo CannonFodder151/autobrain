@@ -8,7 +8,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > user-facing change ships with an entry here under `[Unreleased]` — see
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
+
 ## [Unreleased]
+
+## [0.3.114] - 2026-08-20
 
 ### Changed
 - Merged the market-data scraper into the AI image (AUT-1242-C3): the separate
