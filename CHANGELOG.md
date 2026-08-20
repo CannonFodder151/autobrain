@@ -19,7 +19,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.110] - 2026-08-20
 
 ### Fixed
 - Mobile error handling (AUT-1237): every bare `catch` block across the admin,
