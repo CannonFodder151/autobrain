@@ -34,6 +34,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [0.3.111] - 2026-08-20
 
 ### Fixed
+- Aligned `pydantic` pin across `ai/requirements.txt` and `backend/requirements.txt` to
+  `pydantic==2.10.4` (AUT-1298). The divergent pin (`2.13.4` in ai/ vs `2.10.4`
+  in backend/) caused the `pip-audit-gate` CI job to fail with a duplicate
+  requirement error on PR #238.
 - Community Garage social API calls are no longer fire-and-forget (AUT-1238):
   every flag/like/answer/report call in `social_api.dart` is awaited through a
   guarded wrapper that `debugPrint`s failures (errors were silent before) then
