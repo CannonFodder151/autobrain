@@ -94,13 +94,12 @@ jobs:
           WS_BASE_URL: ${{ github.event.inputs.ws_base_url }}
         run: |
           set -euo pipefail
-          for svc in backend worker ai frontend market-data; do
+          for svc in backend worker ai frontend; do
             case "$svc" in
               backend)  ctx=.;        df=docker/backend/Dockerfile;   args="";;
               worker)   ctx=.;        df=docker/worker/Dockerfile;     args="";;
-              ai)       ctx=./ai;     df=docker/ai/Dockerfile;         args="";;
+              ai)       ctx=.;        df=docker/ai/Dockerfile;         args="";;
               frontend) ctx=.;        df=docker/frontend/Dockerfile;   args="--build-arg API_BASE_URL=${API_BASE_URL} --build-arg WS_BASE_URL=${WS_BASE_URL}";;
-              market-data) ctx=./market-data; df=market-data/Dockerfile; args="";;
             esac
             echo "==> building autobrain-${svc}:${TAG}-${ARCH} for linux/${ARCH}"
             docker buildx build --platform linux/${ARCH} --push \
@@ -127,7 +126,7 @@ jobs:
           TAG: ${{ github.event.inputs.tag }}
         run: |
           set -euo pipefail
-          for svc in backend worker ai frontend market-data; do
+          for svc in backend worker ai frontend; do
             echo "==> manifest autobrain-${svc}:${TAG}"
             docker buildx imagetools create \
               -t "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}" \

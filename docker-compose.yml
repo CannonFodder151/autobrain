@@ -88,8 +88,8 @@ services:
 
   ai:
     build:
-      context: ./ai
-      dockerfile: ../docker/ai/Dockerfile
+      context: .
+      dockerfile: docker/ai/Dockerfile
     restart: unless-stopped
     env_file: .env
     environment:

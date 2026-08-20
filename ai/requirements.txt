@@ -1,4 +1,4 @@
-# AutoBrain AI inference gateway
+# AutoBrain AI gateway + market-data scraper (AUT-1242-C3 merged image)
 fastapi==0.133.0
 starlette==1.3.1
 uvicorn[standard]==0.34.0
@@ -6,6 +6,9 @@ pydantic==2.10.4
 httpx==0.28.1
 python-multipart==0.0.32
 structlog==24.4.0
+slowapi==0.1.9
+playwright==1.62.0
+playwright-stealth==2.0.3
 
 # Local OCR fallback (Tesseract via pytesseract, optional runtime dep)
 pytesseract==0.3.13

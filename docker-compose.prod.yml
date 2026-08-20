@@ -92,15 +92,17 @@ services:
 
   ai:
     build:
-      context: ./ai
-      dockerfile: ../docker/ai/Dockerfile
+      context: .
+      dockerfile: docker/ai/Dockerfile
     image: ${DOCKERHUB_USERNAME:-autobrain}/autobrain-ai:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file: .env
     environment:
       AI_ROUTER_URL: ${AI_ROUTER_URL}
       AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:?AI_GATEWAY_API_KEY must be set (prod fails closed)}
+      API_KEY: ${MARKET_DATA_API_KEY:-}
     expose:
+      - "8000"
       - "8001"
 
   frontend:
