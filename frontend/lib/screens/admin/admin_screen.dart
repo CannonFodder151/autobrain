@@ -2,9 +2,12 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/api_client.dart';
 import '../../core/auth_state.dart';
 import '../../core/download.dart';
 import 'server_screen.dart';
+
+String _errorText(Object e) => e is ApiException ? e.message : '$e';
 
 class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key});
@@ -36,7 +39,9 @@ class _AdminScreenState extends State<AdminScreen> {
           .api
           .get('/admin/version') as Map<String, dynamic>;
       if (mounted) setState(() => _version = data);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('AdminScreen._loadVersion failed: ${e.runtimeType}: $e');
+    }
   }
 
   Future<void> _load() async {
@@ -49,7 +54,9 @@ class _AdminScreenState extends State<AdminScreen> {
       _users = (data['items'] as List).cast<Map<String, dynamic>>();
       _total = data['total'] as int? ?? 0;
       _pages = data['pages'] as int? ?? 1;
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('AdminScreen._load failed: ${e.runtimeType}: $e');
+    }
     setState(() => _loading = false);
   }
 
@@ -155,8 +162,9 @@ class _AdminScreenState extends State<AdminScreen> {
         });
         _load();
       } catch (e) {
+        debugPrint('AdminScreen._create failed: ${e.runtimeType}: $e');
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_errorText(e))));
         }
       }
     }
@@ -168,8 +176,9 @@ class _AdminScreenState extends State<AdminScreen> {
       await api.patch('/admin/users/${u['id']}', changes);
       _load();
     } catch (e) {
+      debugPrint('AdminScreen._update failed: ${e.runtimeType}: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_errorText(e))));
       }
     }
   }
@@ -212,8 +221,9 @@ class _AdminScreenState extends State<AdminScreen> {
       await api.post('/admin/users/${u['id']}/re-upgrade?enabled=$enable');
       _load();
     } catch (e) {
+      debugPrint('AdminScreen._reUpgrade failed: ${e.runtimeType}: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_errorText(e))));
       }
     }
   }
@@ -246,9 +256,10 @@ class _AdminScreenState extends State<AdminScreen> {
       final bytes = await api.export('/admin/users/${u['id']}/backup');
       await downloadBytes('autobrain-user.json', bytes);
     } catch (e) {
+      debugPrint('AdminScreen._backupUser failed: ${e.runtimeType}: $e');
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Backup failed: $e')));
+            .showSnackBar(SnackBar(content: Text('Backup failed: ${_errorText(e)}')));
       }
     }
   }
@@ -296,9 +307,10 @@ class _AdminScreenState extends State<AdminScreen> {
             const SnackBar(content: Text('User profile restored.')));
       }
     } catch (e) {
+      debugPrint('AdminScreen._restoreUser failed: ${e.runtimeType}: $e');
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Restore failed: $e')));
+            .showSnackBar(SnackBar(content: Text('Restore failed: ${_errorText(e)}')));
       }
     }
   }

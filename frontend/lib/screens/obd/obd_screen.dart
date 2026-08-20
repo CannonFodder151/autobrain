@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/api_client.dart';
 import '../../core/auth_state.dart';
 import '../../core/models.dart';
 import '../../services/obd/obd_trip_monitor.dart';
 import '../diagnostics/add_diagnostic_screen.dart';
+
+String _errorText(Object e) => e is ApiException ? e.message : '$e';
 
 /// OBD fault-code library.
 ///
@@ -54,7 +57,9 @@ class _ObdScreenState extends State<ObdScreen> {
         _vin = vehicle['vin'] as String?;
       });
       _monitor.arm(widget.vehicleId);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('ObdScreen._load failed: ${e.runtimeType}: $e');
+    }
     setState(() => _loading = false);
   }
 
@@ -87,9 +92,10 @@ class _ObdScreenState extends State<ObdScreen> {
                 if (ctx.mounted) Navigator.pop(ctx);
                 _load();
               } catch (e) {
+                debugPrint('ObdScreen._setVin failed: ${e.runtimeType}: $e');
                 if (ctx.mounted) {
                   ScaffoldMessenger.of(ctx)
-                      .showSnackBar(SnackBar(content: Text('$e')));
+                      .showSnackBar(SnackBar(content: Text(_errorText(e))));
                 }
               }
             },
@@ -139,9 +145,10 @@ class _ObdScreenState extends State<ObdScreen> {
                 if (ctx.mounted) Navigator.pop(ctx);
                 _load();
               } catch (e) {
+                debugPrint('ObdScreen._addCode failed: ${e.runtimeType}: $e');
                 if (ctx.mounted) {
                   ScaffoldMessenger.of(ctx)
-                      .showSnackBar(SnackBar(content: Text('$e')));
+                      .showSnackBar(SnackBar(content: Text(_errorText(e))));
                 }
               }
             },
@@ -160,9 +167,10 @@ class _ObdScreenState extends State<ObdScreen> {
           .delete('/vehicles/${widget.vehicleId}/obd/codes/${c.id}');
       _load();
     } catch (e) {
+      debugPrint('ObdScreen._deleteCode failed: ${e.runtimeType}: $e');
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$e')));
+            .showSnackBar(SnackBar(content: Text(_errorText(e))));
       }
     }
   }
@@ -193,7 +201,8 @@ class _ObdScreenState extends State<ObdScreen> {
       await api.delete('/vehicles/${widget.vehicleId}/obd/codes');
       _load();
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      debugPrint('ObdScreen._clearSavedCodes failed: ${e.runtimeType}: $e');
+      messenger.showSnackBar(SnackBar(content: Text(_errorText(e))));
     }
   }
 

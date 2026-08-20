@@ -5,11 +5,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/api_client.dart';
 import '../../core/auth_state.dart';
 import '../../core/config.dart';
 import '../../core/download.dart';
 import 'car_integration_screen.dart';
 import 'dongle_wifi_screen.dart';
+
+String _errorText(Object e) => e is ApiException ? e.message : '$e';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -72,7 +75,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _profile = me;
         _mfaEnabled = me['mfa_enabled'] == true;
       });
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('SettingsScreen._load failed: ${e.runtimeType}: $e');
+    }
   }
 
   Future<void> _beginSetup() async {
@@ -85,7 +90,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final data = await api.get('/auth/mfa/setup') as Map<String, dynamic>;
       setState(() => _setup = data);
     } catch (e) {
-      setState(() => _error = '$e');
+      debugPrint('SettingsScreen._beginSetup failed: ${e.runtimeType}: $e');
+      setState(() => _error = _errorText(e));
     } finally {
       setState(() => _busy = false);
     }
@@ -105,6 +111,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _mfaEnabled = true;
       });
     } catch (e) {
+      debugPrint('SettingsScreen._enable failed: ${e.runtimeType}: $e');
       setState(() => _error = 'Invalid code — try again');
     } finally {
       setState(() => _busy = false);
@@ -124,6 +131,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _mfaEnabled = false;
       });
     } catch (e) {
+      debugPrint('SettingsScreen._disable failed: ${e.runtimeType}: $e');
       setState(() => _error = 'Invalid code — try again');
     } finally {
       setState(() => _busy = false);
@@ -136,9 +144,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final bytes = await api.export('/auth/export');
       await downloadBytes('autobrain-profile.json', bytes);
     } catch (e) {
+      debugPrint('SettingsScreen._export failed: ${e.runtimeType}: $e');
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Export failed: $e')));
+            .showSnackBar(SnackBar(content: Text('Export failed: ${_errorText(e)}')));
       }
     }
   }
@@ -166,9 +175,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             content: Text('Profile restored — your vehicles and records were replaced.')));
       }
     } catch (e) {
+      debugPrint('SettingsScreen._import failed: ${e.runtimeType}: $e');
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Restore failed: $e')));
+            .showSnackBar(SnackBar(content: Text('Restore failed: ${_errorText(e)}')));
       }
     }
   }

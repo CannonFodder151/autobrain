@@ -11,6 +11,8 @@ import '../social_api.dart';
 import '../widgets/premium_gate.dart';
 import 'social_compose.dart';
 
+String _errorText(Object e) => e is ApiException ? e.message : '$e';
+
 class SocialPostDetailScreen extends StatefulWidget {
   const SocialPostDetailScreen({super.key, required this.postId, this.initial});
 
@@ -56,6 +58,7 @@ class _SocialPostDetailScreenState extends State<SocialPostDetailScreen> {
         _loading = false;
       });
     } on ApiException catch (e) {
+      debugPrint('SocialPostDetail._load ApiException: ${e.statusCode}: ${e.message}');
       if (e.message.contains('Disabled by your admin')) {
         setState(() {
           _disabled = true;
@@ -66,7 +69,8 @@ class _SocialPostDetailScreenState extends State<SocialPostDetailScreen> {
       setState(() => _loading = false);
       _toast(e.message);
       return;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('SocialPostDetail._load failed: ${e.runtimeType}: $e');
       setState(() => _loading = false);
     }
     _loadComments();
@@ -78,7 +82,9 @@ class _SocialPostDetailScreenState extends State<SocialPostDetailScreen> {
       final comments =
           await SocialApi(context.read<AuthState>().api).comments(widget.postId);
       if (mounted) setState(() => _comments = comments);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('SocialPostDetail._loadComments failed: ${e.runtimeType}: $e');
+    }
     setState(() => _loadingComments = false);
   }
 
@@ -92,7 +98,8 @@ class _SocialPostDetailScreenState extends State<SocialPostDetailScreen> {
         _build = build.copyWith(likedByMe: result.liked, likeCount: result.count);
       });
     } catch (e) {
-      _toast('Could not update like: $e');
+      debugPrint('SocialPostDetail._toggleLike failed: ${e.runtimeType}: $e');
+      _toast('Could not update like: ${_errorText(e)}');
     }
   }
 
@@ -105,7 +112,8 @@ class _SocialPostDetailScreenState extends State<SocialPostDetailScreen> {
           .addComment(widget.postId, body);
       setState(() => _comments = [..._comments, comment]);
     } catch (e) {
-      _toast('Could not post comment: $e');
+      debugPrint('SocialPostDetail._addComment failed: ${e.runtimeType}: $e');
+      _toast('Could not post comment: ${_errorText(e)}');
     }
   }
 
@@ -147,9 +155,11 @@ class _SocialPostDetailScreenState extends State<SocialPostDetailScreen> {
           .flagBuildComment(widget.postId, comment.id, reason);
       _toast('Thanks — your report has been submitted for review.');
     } on ApiException catch (e) {
+      debugPrint('SocialPostDetail._reportComment ApiException: ${e.statusCode}: ${e.message}');
       _toast(e.message);
     } catch (e) {
-      _toast('Could not submit report: $e');
+      debugPrint('SocialPostDetail._reportComment failed: ${e.runtimeType}: $e');
+      _toast('Could not submit report: ${_errorText(e)}');
     }
   }
 
@@ -192,9 +202,11 @@ class _SocialPostDetailScreenState extends State<SocialPostDetailScreen> {
           .reportBuild(widget.postId, reason);
       _toast('Thanks — your report has been submitted for review.');
     } on ApiException catch (e) {
+      debugPrint('SocialPostDetail._report ApiException: ${e.statusCode}: ${e.message}');
       _toast(e.message);
     } catch (e) {
-      _toast('Could not submit report: $e');
+      debugPrint('SocialPostDetail._report failed: ${e.runtimeType}: $e');
+      _toast('Could not submit report: ${_errorText(e)}');
     }
   }
 
