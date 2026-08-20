@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/auth_state.dart';
+import '../../core/config.dart';
 
 /// Stripe subscription management: current plan + upgrade/downgrade/cancel.
 /// Prices come from GET /billing/pricing (with the early-adopter sale); the
@@ -81,28 +82,36 @@ class _LicenseScreenState extends State<LicenseScreen> {
       // Keep _error set to show auth failure, but allow plans to load
     }
     bool iapAvailable = false;
-    try {
-      final catalog = await api.get('/billing/iap/catalog') as Map<String, dynamic>;
-      final enabled = catalog['enabled'] == true;
-      if (enabled) {
-        final products = (catalog['products'] as List?) ?? [];
-        if (products.isNotEmpty) {
-          final currentPlatform = Theme.of(context).platform == TargetPlatform.iOS ? 'ios' : 'android';
-          final iapPlans = products
-              .where((p) => (p as Map)['platform'] == currentPlatform)
-              .toList()
-              .cast<Map<String, dynamic>>();
-          if (iapPlans.isNotEmpty) {
-            setState(() {
-              _iapMode = true;
-              _plans = iapPlans;
-            });
-            iapAvailable = true;
+    // IAP mode is for the native Android/iOS app only (AUT-1224). On the web
+    // build the catalog check must never run: `Theme.of(context).platform`
+    // resolves to a non-iOS target on desktop browsers, which then matched the
+    // android products from the hosted catalog and swapped the Stripe plan
+    // cards for "Buy from Store" buttons with hardcoded prices. Native mobile
+    // keeps IAP; the website always uses the Stripe checkout path.
+    if (AppConfig.isMobile) {
+      try {
+        final catalog = await api.get('/billing/iap/catalog') as Map<String, dynamic>;
+        final enabled = catalog['enabled'] == true;
+        if (enabled) {
+          final products = (catalog['products'] as List?) ?? [];
+          if (products.isNotEmpty) {
+            final currentPlatform = Theme.of(context).platform == TargetPlatform.iOS ? 'ios' : 'android';
+            final iapPlans = products
+                .where((p) => (p as Map)['platform'] == currentPlatform)
+                .toList()
+                .cast<Map<String, dynamic>>();
+            if (iapPlans.isNotEmpty) {
+              setState(() {
+                _iapMode = true;
+                _plans = iapPlans;
+              });
+              iapAvailable = true;
+            }
           }
         }
+      } catch (_) {
+        // IAP endpoint not available, fall back to Stripe pricing
       }
-    } catch (_) {
-      // IAP endpoint not available, fall back to Stripe pricing
     }
     if (!iapAvailable) {
       try {
