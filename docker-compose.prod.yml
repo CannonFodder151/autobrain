@@ -100,7 +100,9 @@ services:
     environment:
       AI_ROUTER_URL: ${AI_ROUTER_URL}
       AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:?AI_GATEWAY_API_KEY must be set (prod fails closed)}
+      API_KEY: ${MARKET_DATA_API_KEY:-}
     expose:
+      - "8000"
       - "8001"
 
   frontend:

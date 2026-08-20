@@ -1,5 +1,5 @@
-#!/bin/sh
-set -e
+#!/bin/bash
+set -u
 
 # AUT-1242-C3: run AI gateway (:8001) and market-data scraper (:8000)
 # as two uvicorn processes in one container.
@@ -14,7 +14,9 @@ AI_PID=$!
 
 trap 'kill $MD_PID $AI_PID 2>/dev/null || true' INT TERM
 
-wait $AI_PID
+# Whichever process dies first tears the container down so Docker restarts it.
+wait -n
 rc=$?
-kill $MD_PID 2>/dev/null || true
+kill $MD_PID $AI_PID 2>/dev/null || true
+wait 2>/dev/null || true
 exit $rc
