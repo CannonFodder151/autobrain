@@ -178,23 +178,11 @@ services:
   worker:
     image: ghcr.io/cannonfodder151/autobrain-worker:hosted
     restart: unless-stopped
-    command: celery -A app.workers.celery_app:celery_app worker -l info --concurrency=2
+    # AUT-1242/C1: beat scheduler embedded in the worker (-B), matching the dev
+    # compose. Removes the separate beat container.
+    command: celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2
     environment:
       <<: [*db-env, *core-env, *router-env]
-      PYTHONPATH: /app
-      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in the hosted stack env (Portainer)}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
-  beat:
-    image: ghcr.io/cannonfodder151/autobrain-worker:hosted
-    restart: unless-stopped
-    command: celery -A app.workers.celery_app:celery_app beat -l info
-    environment:
-      <<: [*db-env, *core-env]
       PYTHONPATH: /app
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in the hosted stack env (Portainer)}
     depends_on:
