@@ -21,7 +21,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.112] - 2026-08-20
 
 ### Changed
 - Hosted stack merges Celery worker + beat into one container (AUT-1242): `docker-compose.hosted.yml` drops the `beat` service; the `worker` service now runs `celery ... worker -B` (saves 1 container on the hosted stack).
