@@ -22,6 +22,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- Community Garage social API calls are no longer fire-and-forget (AUT-1238):
+  every flag/like/answer/report call in `social_api.dart` is awaited through a
+  guarded wrapper that `debugPrint`s failures (errors were silent before) then
+  rethrows, so screens surface a SnackBar on the user-initiated failure.
+
 ## [0.3.110] - 2026-08-20
 
 ### Fixed
