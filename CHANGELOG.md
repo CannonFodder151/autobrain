@@ -22,7 +22,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.113] - 2026-08-20
 
 ### Fixed
 - Error page handling (AUT-1240): home screen now distinguishes an expired
