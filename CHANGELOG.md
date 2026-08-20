@@ -8,22 +8,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > user-facing change ships with an entry here under `[Unreleased]` — see
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ## [Unreleased]
+
+### Changed
+- Merged the market-data scraper into the AI image (AUT-1242-C3): the separate
+  `market-data` container is gone. The AI image now runs both this AI gateway
+  (`:8001`) and the CarsGuide/BikeGuide market-data API (`:8000`) via an
+  entrypoint wrapper, saving a container in the hosted stack.
 
 ## [0.3.113] - 2026-08-20
 

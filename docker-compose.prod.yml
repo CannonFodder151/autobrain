@@ -92,8 +92,8 @@ services:
 
   ai:
     build:
-      context: ./ai
-      dockerfile: ../docker/ai/Dockerfile
+      context: .
+      dockerfile: docker/ai/Dockerfile
     image: ${DOCKERHUB_USERNAME:-autobrain}/autobrain-ai:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file: .env

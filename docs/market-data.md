@@ -121,14 +121,17 @@ configured".
 
 ## Deploying the scraper (AUT-290)
 
-The scraper lives in the monorepo as `market-data/` (FastAPI + `carsguide.py`).
-Image: `cannonfodder151/autobrain-market-data:hosted` (Docker Hub, multi-arch)
-or `ghcr.io/cannonfodder151/autobrain-market-data:hosted` (GHCR).
+The scraper source lives in the monorepo as `market-data/` (FastAPI + `carsguide.py`) and is
+bundled into the AI image (AUT-1242-C3). The `ai` container runs **two uvicorn processes**:
+- **:8001** — the AI inference gateway (`app.main:app`).
+- **:8000** — the CarsGuide/BikeGuide market-data scraper (`market-data/main:app`).
 
-- **Dev box mirror:** Portainer stack `market-data` on EP6, `:8003`.
-- **Hosted:** a `market-data` service inside the `autobrain-hosted` stack
-  (EP5), reachable by the backend as `http://market-data:8000`; the backend is
-  wired via `MARKET_DATA_URL`/`MARKET_DATA_API_KEY` (stack env).
+- **Hosted:** the `autobrain-hosted` stack (EP5) has no separate `market-data` service.
+  The backend is wired via `MARKET_DATA_URL: http://ai:8000` / `MARKET_DATA_API_KEY` (stack env).
+- **Prod/Dev compose:** uses the same image; `MARKET_DATA_URL` defaults to `http://ai:8000`
+  when the env var is set in the deployment env file.
+- **Dev box mirror:** Portainer stack `market-data` on EP6 (`:8003`) is legacy and
+  should be removed when convenient.
 - **Gotcha:** the current backend config refuses *default* credentials in
   `production` (`POSTGRES_PASSWORD`/`MINIO_SECRET_KEY` = `autobrain`,
   `SECRET_KEY` = `change-me`). Before the hosted backend can boot on the
