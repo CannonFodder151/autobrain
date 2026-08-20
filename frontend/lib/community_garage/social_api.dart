@@ -2,6 +2,8 @@
 /// P1 social contract (AUT-332). Screens never touch the wire format.
 library;
 
+import 'package:flutter/foundation.dart';
+
 import '../core/api_client.dart';
 import 'models.dart';
 
@@ -132,10 +134,21 @@ class SocialApi {
 
   Future<void> deletePost(String postId) => _api.delete('/social/posts/$postId');
 
+  /// Guard fire-and-forget callers: log every failure so silent drops are
+  /// visible in dev, then rethrow so screens can still show a SnackBar.
+  Future<void> _guarded(Future<void> Function() call, String op) async {
+    try {
+      await call();
+    } catch (e) {
+      debugPrint('SocialApi.$op failed: $e');
+      rethrow;
+    }
+  }
+
   /// Report a build post for review (AUT-896) — kept locally and fanned to
   /// the federation hub's moderation queue.
   Future<void> reportBuild(String postId, String reason) =>
-      _api.post('/social/posts/$postId/report', {'reason': reason});
+      _guarded(() => _api.post('/social/posts/$postId/report', {'reason': reason}), 'reportBuild');
 
   Future<SocialBuild> resolveShare(String token) async {
     final data = await _api.get('/social/share/$token') as Map<String, dynamic>;
@@ -158,11 +171,11 @@ class SocialApi {
 
   /// Report a build post (AUT-883 moderation queue).
   Future<void> flagBuild(String postId, String reason) =>
-      _api.post('/social/posts/$postId/flag', {'reason': reason});
+      _guarded(() => _api.post('/social/posts/$postId/flag', {'reason': reason}), 'flagBuild');
 
   /// Report a comment on a build (AUT-883 moderation queue).
   Future<void> flagBuildComment(String postId, String commentId, String reason) =>
-      _api.post('/social/posts/$postId/comments/$commentId/flag', {'reason': reason});
+      _guarded(() => _api.post('/social/posts/$postId/comments/$commentId/flag', {'reason': reason}), 'flagBuildComment');
 
   Future<({bool liked, int count})> toggleLike(String postId) async {
     final data =
@@ -263,13 +276,13 @@ class SocialApi {
   /// author only — the server 404s others, so the UI only surfaces it to
   /// eligible commenters).
   Future<void> markAnswer(String postId, String commentId) =>
-      _api.post('/social/issues/$postId/comments/$commentId/answer');
+      _guarded(() => _api.post('/social/issues/$postId/comments/$commentId/answer'), 'markAnswer');
 
   Future<void> flagIssue(String postId, String reason) =>
-      _api.post('/social/issues/$postId/flag', {'reason': reason});
+      _guarded(() => _api.post('/social/issues/$postId/flag', {'reason': reason}), 'flagIssue');
 
   Future<void> flagIssueComment(String postId, String commentId, String reason) =>
-      _api.post('/social/issues/$postId/comments/$commentId/flag', {'reason': reason});
+      _guarded(() => _api.post('/social/issues/$postId/comments/$commentId/flag', {'reason': reason}), 'flagIssueComment');
 
   Future<void> deleteIssue(String postId) =>
       _api.delete('/social/issues/$postId');
