@@ -5,6 +5,12 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, Field, field_validator
 
+# AUT-1275: "Oil Change" service type is merged into "Scheduled Service" across
+# the entire stack. Legacy values are normalised on ingress so stored records
+# stay consistent. The _LEGACY_OIL_TYPES set covers every variant that may
+# exist in the DB (seed data uses "oil", old clients used "oil_change").
+_LEGACY_OIL_TYPES = frozenset({"oil", "oil_change"})
+
 
 class ServiceItemIn(BaseModel):
     part_id: str | None = None
@@ -44,6 +50,11 @@ class ServiceCreate(BaseModel):
     steps: list[str] = []
     items: list[ServiceItemIn] = []
 
+    @field_validator("service_type")
+    @classmethod
+    def _merge_oil_change(cls, v: str) -> str:
+        return "scheduled" if v in _LEGACY_OIL_TYPES else v
+
 
 class ServiceUpdate(BaseModel):
     service_date: date | None = None
@@ -58,6 +69,11 @@ class ServiceUpdate(BaseModel):
     completed_date: date | None = None
     steps: list[str] | None = None
     items: list[ServiceItemIn] | None = None
+
+    @field_validator("service_type")
+    @classmethod
+    def _merge_oil_change(cls, v: str | None) -> str | None:
+        return "scheduled" if v in _LEGACY_OIL_TYPES else v
 
 
 class ServiceOut(BaseModel):
@@ -100,7 +116,12 @@ class ServicePredictionRequest(BaseModel):
     odometer_km: int
     last_service_km: int | None = None
     last_service_days_ago: int | None = None
-    service_type: str = "oil_change"
+    service_type: str = "scheduled"
+
+    @field_validator("service_type")
+    @classmethod
+    def _merge_oil_change(cls, v: str) -> str:
+        return "scheduled" if v in _LEGACY_OIL_TYPES else v
 
 
 class ServicePredictionResponse(BaseModel):

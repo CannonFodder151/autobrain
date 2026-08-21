@@ -72,6 +72,7 @@ class _ServiceFormScreenState extends State<ServiceFormScreen> {
     _notes.text = s?.notes ?? '';
     _steps.text = (s?.steps ?? []).join('\n');
     _type = s?.serviceType ?? 'scheduled';
+    if (_type == 'oil_change' || _type == 'oil') _type = 'scheduled';
     _statusCompleted = s?.status != 'scheduled';
     if (s != null) {
       for (final it in s.items) {
@@ -220,7 +221,6 @@ class _ServiceFormScreenState extends State<ServiceFormScreen> {
                 decoration: const InputDecoration(labelText: 'Service type'),
                 items: const [
                   DropdownMenuItem(value: 'scheduled', child: Text('Scheduled')),
-                  DropdownMenuItem(value: 'oil_change', child: Text('Oil change')),
                   DropdownMenuItem(value: 'repair', child: Text('Repair')),
                   DropdownMenuItem(value: 'tire', child: Text('Tyres')),
                   DropdownMenuItem(value: 'custom', child: Text('Custom')),

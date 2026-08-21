@@ -293,7 +293,7 @@ async def _seed_demo_data(db, user_id: str) -> None:
                     occurred_on=fill_date, odometer_km=odo, amount=cost,
                 ))
 
-        # ~1 service per year for 6 years, plus a few oil changes
+        # ~1 service per year for 6 years (oil changes folded into scheduled, AUT-1275)
         service_templates = {
             "Skyline R34": ["Major service + timing belt", "Brake pads & rotors", "Turbo rebuild"],
             "Family Commuter": ["Logbook service", "Brake pads", "Air-con regas", "Tyres"],
@@ -306,7 +306,7 @@ async def _seed_demo_data(db, user_id: str) -> None:
         for y in range(6):
             m = 6 - y
             svc_date = today - timedelta(days=int(m * 365) + rng.randint(0, 40))
-            kind = rng.choice(["oil", "scheduled", "repair"])
+            kind = rng.choice(["scheduled", "scheduled", "repair"])
             title = service_templates[y % len(service_templates)]
             cost = rng.choice([180, 320, 480, 650, 890, 1400, 2400])
             odo_at = base_odo - (6 - m) * rng.randint(9000, 13000)
@@ -318,9 +318,6 @@ async def _seed_demo_data(db, user_id: str) -> None:
             db.add(svc)
             await db.flush()
             item_sets = {
-                "oil": [("Engine oil 5W-30", "part", 1, 42.0),
-                        ("Oil filter", "part", 1, 14.0),
-                        ("Oil-change labour", "labour", 1, 110.0)],
                 "scheduled": [("Scheduled service labour", "labour", 1, 220.0),
                               ("Full inspection", "labour", 1, 60.0)],
                 "repair": [("Parts (repair)", "part", 2, 95.0),

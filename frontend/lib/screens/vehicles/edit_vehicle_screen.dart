@@ -32,6 +32,7 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
   bool _busy = false;
   bool _isPrimary = false;
   bool _clubReg = false;
+  bool _autoSuggest = false;
   bool _lookingUp = false;
   String? _lookupInfo;
 
@@ -53,6 +54,7 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
     _vehicleType = v.vehicleType;
     _isPrimary = v.isPrimary;
     _clubReg = v.clubReg;
+    _autoSuggest = v.autoSuggestService;
   }
 
   @override
@@ -118,6 +120,7 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
         'is_primary': _isPrimary,
         'vehicle_type': _vehicleType,
         'club_reg': _clubReg,
+        'auto_suggest_service': _autoSuggest,
       });
       if (mounted) Navigator.pop(context);
     } catch (e) {
@@ -308,6 +311,16 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
                     'club-registered vehicles, so the digital logbook is disabled.'),
                 value: _clubReg,
                 onChanged: (v) => setState(() => _clubReg = v ?? false),
+              ),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Auto suggest next service with AI'),
+                subtitle: const Text(
+                    'Whenever the odometer is updated (dongle, logbook or '
+                    'fuel entry), check for a scheduled service that is now due '
+                    'and surface the suggestion.'),
+                value: _autoSuggest,
+                onChanged: (v) => setState(() => _autoSuggest = v ?? false),
               ),
               const SizedBox(height: 20),
               FilledButton(

@@ -27,7 +27,7 @@ class ServiceRecord(Base):
     vehicle_id: Mapped[str] = mapped_column(String(36), ForeignKey("vehicles.id"), index=True)
     service_date: Mapped[date] = mapped_column(Date, index=True)
     odometer_km: Mapped[int] = mapped_column(Integer, nullable=False)
-    service_type: Mapped[str] = mapped_column(String(60))  # scheduled/repair/tire/oil/custom
+    service_type: Mapped[str] = mapped_column(String(60))  # scheduled/repair/tire/custom (oil merged into scheduled, AUT-1275)
     description: Mapped[str | None] = mapped_column(Text)
     workshop: Mapped[str | None] = mapped_column(String(255))
     cost: Mapped[float] = mapped_column(Float, default=0.0)

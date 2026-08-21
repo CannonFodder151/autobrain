@@ -46,6 +46,7 @@ class VehicleCreate(BaseModel):
     vehicle_type: str = "car"
     is_primary: bool = False
     club_reg: bool = False
+    auto_suggest_service: bool = False
 
 
 class VehicleUpdate(BaseModel):
@@ -64,6 +65,7 @@ class VehicleUpdate(BaseModel):
     vehicle_type: str | None = None
     is_primary: bool | None = None
     club_reg: bool | None = None
+    auto_suggest_service: bool | None = None
 
 
 class VehicleOut(BaseModel):
@@ -83,6 +85,7 @@ class VehicleOut(BaseModel):
     vehicle_type: str = "car"
     is_primary: bool
     club_reg: bool = False
+    auto_suggest_service: bool = False
     is_shared: bool = False
     shared_by: str | None = None  # owner display name when viewed via a share
     created_at: datetime

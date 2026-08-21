@@ -41,6 +41,7 @@ class Vehicle(Base):
     vehicle_type: Mapped[str] = mapped_column(String(20), default="car")  # car/motorcycle
     is_primary: Mapped[bool] = mapped_column(default=False)
     club_reg: Mapped[bool] = mapped_column(default=False)  # club reg => no ATO logbook
+    auto_suggest_service: Mapped[bool] = mapped_column(default=False)  # AUT-1275: suggest next service when odo updates
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

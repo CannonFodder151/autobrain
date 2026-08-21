@@ -6,7 +6,7 @@ from datetime import date, timedelta
 
 # interval_km, interval_months for common service types
 _SCHEDULE: dict[str, tuple[int, int]] = {
-    "oil_change": (10000, 12),
+    "scheduled": (20000, 12),
     "tyre_rotation": (10000, 12),
     "air_filter": (30000, 24),
     "brake_fluid": (50000, 24),
@@ -16,8 +16,12 @@ _SCHEDULE: dict[str, tuple[int, int]] = {
     "timing_belt": (100000, 60),
     "brake_pads": (40000, 36),
     "battery": (60000, 48),
-    "scheduled": (20000, 12),
 }
+
+# AUT-1275: "Oil Change" was merged into "Scheduled Service". Old records and
+# older clients may still send the legacy type; normalise it so prediction is
+# consistent with the merged schedule.
+_LEGACY_OIL_TYPES = frozenset({"oil", "oil_change"})
 
 # make-specific interval adjustments (multiplier)
 _MAKE_MULT: dict[str, float] = {
@@ -29,7 +33,9 @@ _MAKE_MULT: dict[str, float] = {
 
 def predict_service_fallback(payload: dict) -> dict:
     make = (payload.get("make") or "").lower()
-    service_type = payload.get("service_type", "oil_change")
+    service_type = payload.get("service_type", "scheduled")
+    if service_type in _LEGACY_OIL_TYPES:
+        service_type = "scheduled"
     history = [h for h in (payload.get("service_history") or []) if isinstance(h, dict)]
 
     interval_km, interval_months = _SCHEDULE.get(service_type, _SCHEDULE["scheduled"])
