@@ -24,7 +24,6 @@ RUN pip install --no-cache-dir -r /tmp/ai-requirements.txt
 COPY backend/app ./app
 COPY backend/alembic ./alembic
 COPY backend/alembic.ini ./
-COPY backend/tests ./tests
 COPY ai/app ./ai_app
 COPY ai/requirements.txt ./ai_requirements.txt
 

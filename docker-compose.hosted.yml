@@ -192,8 +192,16 @@ services:
     # AUT-473: localhost-bound. External clients reach the app via Cloudflare ->
     # npm (:443), which proxies to the frontend over the docker network. Never
     # re-expose 8086 to 0.0.0.0 (origin bypasses Cloudflare/WAF).
+    # AUT-1188: container now runs nginx-unprivileged on :8080 (non-root).
+    read_only: true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
     ports:
-      - "127.0.0.1:8086:80"
+      - "127.0.0.1:8086:8080"
     networks:
       default:
         ipv4_address: 172.18.0.14

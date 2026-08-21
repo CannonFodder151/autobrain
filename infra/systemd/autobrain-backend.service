@@ -8,6 +8,7 @@ Requires=docker.service
 
 [Service]
 Type=simple
+User=docker
 WorkingDirectory=/opt/autobrain
 EnvironmentFile=/opt/autobrain/.env
 ExecStart=/usr/local/bin/docker compose exec -T backend uvicorn app.main:app --host 0.0.0.0 --port 8000

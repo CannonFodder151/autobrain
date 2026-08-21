@@ -22,7 +22,6 @@ RUN python -m playwright install --with-deps chromium \
     && rm -rf /var/lib/apt/lists/*
 
 COPY ai/app ./app
-COPY ai/tests ./tests
 COPY market-data ./market-data
 COPY docker/ai/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
