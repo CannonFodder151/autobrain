@@ -5,6 +5,7 @@ swallowed so the API still succeeds even if mail is down.
 """
 
 import asyncio
+import html as html_mod
 import re
 import smtplib
 import ssl
@@ -133,7 +134,7 @@ async def send_signup_setup(to_email: str, display_name: str, token: str, app_ur
         f"The link expires in {expiry_days} days. If you didn't request this, ignore this email."
     )
     html = _branding(
-        f'<p style="color:#F5F7FA"><b>Hi {display_name},</b></p>'
+        f'<p style="color:#F5F7FA"><b>Hi {html_mod.escape(display_name)},</b></p>'
         f'<p style="color:#E5ECF5">Your AutoBrain account has been created on the '
         f'<b style="color:#00B7FF">free tier</b>. Finish setting it up to start tracking your garage:</p>'
         f'<p style="margin:22px 0"><b style="color:#F5F7FA">1.&nbsp;</b> Choose a password<br>'
@@ -153,7 +154,7 @@ async def send_welcome(to_email: str, display_name: str, app_url: str) -> None:
         "For security, use the password reset option if you were not given credentials."
     )
     html = _branding(
-        f'<p style="color:#F5F7FA">Hi <b>{display_name}</b>,</p>'
+        f'<p style="color:#F5F7FA">Hi <b>{html_mod.escape(display_name)}</b>,</p>'
         f'<p style="color:#E5ECF5">Your AutoBrain account has been created.</p>'
         f'<p>{_button(app_url, "Log in to AutoBrain")}</p>'
     )
@@ -169,7 +170,7 @@ async def send_password_reset(to_email: str, display_name: str, token: str, app_
         "If you didn't request this, you can safely ignore this email."
     )
     html = _branding(
-        f'<p style="color:#F5F7FA">Hi <b>{display_name}</b>,</p>'
+        f'<p style="color:#F5F7FA">Hi <b>{html_mod.escape(display_name)}</b>,</p>'
         f'<p style="color:#E5ECF5">We received a request to reset your AutoBrain password.</p>'
         f'<p>{_button(link, "Reset password")}</p>'
         f'<p style="color:#9CA3AF;font-size:12px">Link expires in 30 minutes. If you didn\'t request '
@@ -187,7 +188,7 @@ async def send_account_invite(to_email: str, display_name: str, token: str, app_
         f"The link expires in {expiry_days} days. If you didn't expect this, you can safely ignore this email."
     )
     html = _branding(
-        f'<p style="color:#F5F7FA">Hi <b>{display_name}</b>,</p>'
+        f'<p style="color:#F5F7FA">Hi <b>{html_mod.escape(display_name)}</b>,</p>'
         f'<p style="color:#E5ECF5">An administrator created an AutoBrain account for you.</p>'
         f'<p style="color:#E5ECF5">Set your password to activate it:</p>'
         f'<p>{_button(link, "Create account")}</p>'
@@ -201,7 +202,7 @@ async def send_password_changed(to_email: str, display_name: str) -> None:
     subject = "Your AutoBrain password was changed"
     text = f"Hi {display_name},\n\nYour AutoBrain password was successfully changed."
     html = _branding(
-        f'<p style="color:#F5F7FA">Hi <b>{display_name}</b>,</p>'
+        f'<p style="color:#F5F7FA">Hi <b>{html_mod.escape(display_name)}</b>,</p>'
         f'<p style="color:#E5ECF5">Your AutoBrain password was successfully changed.</p>'
     )
     await send_email(to_email, subject, html, text)
@@ -211,7 +212,7 @@ async def send_security_alert(to_email: str, display_name: str, event: str) -> N
     subject = "AutoBrain security update"
     text = f"Hi {display_name},\n\n{event}"
     html = _branding(
-        f'<p style="color:#F5F7FA">Hi <b>{display_name}</b>,</p>'
-        f'<p style="color:#E5ECF5">{event}</p>'
+        f'<p style="color:#F5F7FA">Hi <b>{html_mod.escape(display_name)}</b>,</p>'
+        f'<p style="color:#E5ECF5">{html_mod.escape(event)}</p>'
     )
     await send_email(to_email, subject, html, text)
