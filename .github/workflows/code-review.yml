@@ -10,9 +10,7 @@ concurrency:
 
 jobs:
   ocr-review:
-    # Default: X64 self-hosted runner on the dev box (reaches 9Router).
-    # arm64 builds: labelled PRs run on the hosted instance's ARM64 runner.
-    runs-on: ${{ (contains(github.event.pull_request.labels.*.name, 'arm64') || contains(github.event.pull_request.labels.*.name, 'arm-build')) && 'gh-runner-autobrain-arm64' || 'gh-runner-autobrain' }}
+    runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v4
         with:
