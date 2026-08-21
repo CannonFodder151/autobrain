@@ -9,7 +9,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
 
+
 ## [Unreleased]
+
+## [0.3.118] - 2026-08-21
 
 ### Added
 - Auto-suggest next service (AUT-1275): vehicles now carry an
