@@ -8,6 +8,7 @@ off-box retention (autobrain-backup).
 """
 
 import asyncio
+import os
 import secrets
 import tempfile
 from datetime import datetime, timezone
@@ -26,7 +27,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.auth import AdminUserUpdate, UserAdminOut, UserCreate
 from app.services import email as mail
-from app.services.assets import export_assets, restore_assets
+from app.services.assets import export_assets, restore_assets, restore_assets_file
 from app.services.backup import dump_backup, load_backup, restore_all, serialize_all
 
 router = APIRouter(prefix="/admin-api", tags=["admin-api"], dependencies=[Depends(require_admin_api_key)])
@@ -76,11 +77,39 @@ def _file_chunks(path: Path, size: int = 1 << 20):
 async def restore_assets_endpoint(
     file: UploadFile = File(...),
 ) -> dict:
-    """Wipe MINIO_BUCKET and restore its objects from an uploaded tar.gz. DANGEROUS."""
-    raw = await file.read()
-    if len(raw) > 5 * 1024 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="Image archive too large")
-    count = await asyncio.to_thread(restore_assets, get_minio(), raw)
+    """Wipe MINIO_BUCKET and restore its objects from an uploaded tar.gz. DANGEROUS.
+
+    Streams the upload to a temp file (1 GB cap) to avoid OOM on large archives.
+    """
+    max_size = 1 * 1024 * 1024 * 1024  # 1 GB
+    total = 0
+    with tempfile.NamedTemporaryFile(prefix="autobrain-assets-", suffix=".tar.gz", delete=False) as tmp:
+        tmp_path = tmp.name
+        try:
+            while chunk := await file.read(1 << 20):  # 1 MB chunks
+                total += len(chunk)
+                if total > max_size:
+                    raise HTTPException(status_code=413, detail="Image archive too large (max 1 GB)")
+                tmp.write(chunk)
+        except HTTPException:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+        except Exception:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise HTTPException(status_code=400, detail="Failed to save upload")
+    try:
+        count = await asyncio.to_thread(restore_assets_file, get_minio(), tmp_path)
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
     return {"message": "Assets restore complete", "objects": count}
 
 
@@ -102,16 +131,21 @@ async def restore_backup(
 
 
 
+def _escape_ilike(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 @router.get("/users", response_model=list[UserAdminOut])
 async def list_users(
     q: str | None = Query(default=None, max_length=255),
+    page: int = Query(default=1, ge=1, description="Page number (15 per page)"),
     db: AsyncSession = Depends(get_db),
 ) -> list[User]:
     stmt = select(User).order_by(User.created_at.desc())
     if q:
-        like = f"%{q.lower()}%"
-        stmt = stmt.where(User.email.ilike(like) | User.display_name.ilike(like))
-    return list((await db.scalars(stmt)).all())
+        like = f"%{_escape_ilike(q.lower())}%"
+        stmt = stmt.where(User.email.ilike(like, escape="\\") | User.display_name.ilike(like, escape="\\"))
+    return list((await db.scalars(stmt.offset((page - 1) * 15).limit(15))).all())
 
 
 @router.post("/users", response_model=UserAdminOut, status_code=201)

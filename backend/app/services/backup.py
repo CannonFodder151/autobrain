@@ -7,8 +7,12 @@ snapshot with original IDs, so foreign keys and relationships are preserved.
 """
 
 import asyncio
+import hashlib
+import hmac
 import json
-from datetime import datetime, timezone
+import os
+import tempfile
+from datetime import date, datetime, timezone
 
 import sqlalchemy
 from sqlalchemy import delete, select
@@ -85,36 +89,73 @@ async def _serialize_once(db: AsyncSession) -> dict:
 
 
 def dump_backup(data: dict) -> bytes:
-    return json.dumps(data, indent=2).encode("utf-8")
+    """Serialize a backup dict to JSON bytes, appending an integrity checksum."""
+    payload = {k: v for k, v in data.items() if k != "checksum"}
+    payload["checksum"] = _compute_checksum(payload)
+    return json.dumps(payload, indent=2).encode("utf-8")
+
+
+# Expected schema version for backup files
+BACKUP_SCHEMA_VERSION = 1
+
+
+def _compute_checksum(data: dict) -> str:
+    """Compute SHA-256 checksum of the backup data (excluding the checksum field)."""
+    # Create a copy without the checksum field for verification
+    verify_data = {k: v for k, v in data.items() if k != "checksum"}
+    serialized = json.dumps(verify_data, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(serialized).hexdigest()
+
+
+def _validate_backup_schema(data: dict) -> None:
+    """Validate backup file schema and checksum."""
+    if not isinstance(data, dict):
+        raise ValueError("Backup must be a JSON object")
+    if data.get("app") != "autobrain":
+        raise ValueError("Not an AutoBrain backup file (invalid app)")
+    if data.get("kind") != "backup":
+        raise ValueError("Not an AutoBrain backup file (invalid kind)")
+    if data.get("version") != BACKUP_SCHEMA_VERSION:
+        raise ValueError(f"Unsupported backup schema version: {data.get('version')} (expected {BACKUP_SCHEMA_VERSION})")
+    if "data" not in data or not isinstance(data["data"], dict):
+        raise ValueError("Backup file has no data object")
+    if "checksum" not in data:
+        raise ValueError("Backup file missing checksum")
+    
+    # Verify checksum
+    expected_checksum = _compute_checksum(data)
+    if not hmac.compare_digest(data["checksum"], expected_checksum):
+        raise ValueError("Backup file checksum mismatch — file may be corrupted or tampered")
 
 
 def load_backup(raw: bytes) -> dict:
     data = json.loads(raw.decode("utf-8"))
-    if not isinstance(data, dict) or data.get("app") != "autobrain" or data.get("kind") != "backup":
-        raise ValueError("Not an AutoBrain backup file")
+    _validate_backup_schema(data)
     return data
 
 
 async def restore_all(db: AsyncSession, data: dict) -> None:
-    """Wipe the database and re-insert the snapshot. Admin-only operation."""
+    """Wipe the database and re-insert the snapshot. Admin-only operation.
+
+    Runs in a single transaction so a failure mid-restore leaves the DB unchanged.
+    """
     if not isinstance(data.get("data"), dict):
         raise ValueError("Backup file has no data")
 
-    # Delete children-first.
-    # Delete children-first (reverse dependency order).
-    for name in reversed(_backup_order()):
-        table = _TABLES.get(name)
-        if table is not None:
-            await db.execute(delete(table))
-    await db.flush()
+    async with db.begin():
+        # Delete children-first.
+        for name in reversed(_backup_order()):
+            table = _TABLES.get(name)
+            if table is not None:
+                await db.execute(delete(table))
+        await db.flush()
 
-    for name in _backup_order():
-        table = _TABLES.get(name)
-        if table is None:
-            continue
-        for row in data["data"].get(name, []):
-            await db.execute(table.insert().values(**_coerce_values(table, row)))
-    await db.commit()
+        for name in _backup_order():
+            table = _TABLES.get(name)
+            if table is None:
+                continue
+            for row in data["data"].get(name, []):
+                await db.execute(table.insert().values(**_coerce_values(table, row)))
     logger.info("restore_completed", tables=len(_backup_order()))
 
 

@@ -12,6 +12,7 @@ from app.core.config import settings
 from app.core.logging import get_logger, setup_logging
 from app.core.storage import ensure_bucket
 from app.db.session import get_db, init_db
+from app.middleware.rate_limit import RateLimitMiddleware
 from app.ws.manager import manager
 
 logger = get_logger(__name__)
@@ -47,6 +48,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(RateLimitMiddleware)
 
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
 
