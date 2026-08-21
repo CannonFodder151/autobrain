@@ -126,7 +126,7 @@ def _button(link: str, label: str) -> str:
 
 async def send_signup_setup(to_email: str, display_name: str, token: str, app_url: str, expiry_days: int = 7) -> None:
     """Self-service signup completion: pick a password + set up MFA."""
-    link = f"{app_url}/reset-password?token={token}"
+    link = f"{app_url}/reset-password#token={token}"
     subject = "Complete your AutoBrain account"
     text = (
         f"Hi {display_name},\n\nYour AutoBrain account has been created on the free tier.\n"
@@ -162,7 +162,7 @@ async def send_welcome(to_email: str, display_name: str, app_url: str) -> None:
 
 
 async def send_password_reset(to_email: str, display_name: str, token: str, app_url: str) -> None:
-    link = f"{app_url}/reset-password?token={token}"
+    link = f"{app_url}/reset-password#token={token}"
     subject = "Reset your AutoBrain password"
     text = (
         f"Hi {display_name},\n\nWe received a request to reset your AutoBrain password.\n"
@@ -180,7 +180,7 @@ async def send_password_reset(to_email: str, display_name: str, token: str, app_
 
 
 async def send_account_invite(to_email: str, display_name: str, token: str, app_url: str, expiry_days: int = 7) -> None:
-    link = f"{app_url}/reset-password?token={token}"
+    link = f"{app_url}/reset-password#token={token}"
     subject = "Your AutoBrain account is ready"
     text = (
         f"Hi {display_name},\n\nYour AutoBrain account has been created.\n"

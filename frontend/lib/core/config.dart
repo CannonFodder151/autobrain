@@ -10,11 +10,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 class AppConfig {
   static const String _defaultApiBase = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://localhost:8000/api/v1',
+    defaultValue: 'https://localhost:8000/api/v1',
   );
   static const String _defaultWsBase = String.fromEnvironment(
     'WS_BASE_URL',
-    defaultValue: 'ws://localhost:8000/ws',
+    defaultValue: 'wss://localhost:8000/ws',
   );
 
   static const String _prefsKey = 'server_config';

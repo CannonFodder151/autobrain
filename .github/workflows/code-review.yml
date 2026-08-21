@@ -1,0 +1,55 @@
+name: Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: ocr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  ocr-review:
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      # Runner ships node v10 without npm; OCR action installs its CLI via npm.
+      - name: Setup Node for OCR
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Open Code Review
+        id: review
+        uses: alibaba/open-code-review@v1.9.9
+        with:
+          llm_url: ${{ secrets.OCR_URL }}
+          llm_auth_token: ${{ secrets.OCR_API_KEY }}
+          llm_model: ${{ secrets.OCR_MODEL }}
+          llm_use_anthropic: 'false'
+          review_concurrency: '1'
+          incremental: 'true'
+          route_severity_below: 'low'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Report to Discord #updates
+        if: always()
+        env:
+          PR_NUM: ${{ github.event.pull_request.number }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          RESULT: ${{ steps.review.outcome }}
+          COLOR: ${{ steps.review.outcome == 'success' && '0x57F287' || '0xED4245' }}
+          TITLE: ${{ steps.review.outcome == 'success' && 'OCR review clean' || 'OCR review found issues' }}
+        run: |
+          curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n --arg c updates --arg t "$TITLE" --arg col "$COLOR" --arg n "$PR_NUM" --arg u "$PR_URL" --arg r "$RESULT" \
+            '{channel:$c,title:$t,description:"Open Code Review PR analysis (PR #"+$n+").",color:$col,author:"OCR Scanner",fields:[{name:"PR",value:$u,inline:true},{name:"Result",value:$r,inline:true}]}')"

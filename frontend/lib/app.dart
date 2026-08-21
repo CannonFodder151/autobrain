@@ -23,12 +23,18 @@ class AutoBrainApp extends StatelessWidget {
   static String? initialFragment;
 
   /// True when the app was opened from a password-reset email link
-  /// (…/reset-password?token=…).
+  /// (…/reset-password#token=…) — fragment kept out of query logs/history.
   static String? resetTokenFromUrl() {
     final uri = Uri.base;
-    if (uri.pathSegments.isNotEmpty &&
-        uri.pathSegments.last == 'reset-password') {
-      return uri.queryParameters['token'];
+    if (uri.pathSegments.isEmpty || uri.pathSegments.last != 'reset-password') return null;
+    return _fragmentToken(uri.fragment) ?? uri.queryParameters['token'];
+  }
+
+  static String? _fragmentToken(String frag) {
+    if (frag.isEmpty) return null;
+    for (final part in frag.split('&')) {
+      final kv = part.split('=');
+      if (kv.length == 2 && kv[0] == 'token' && kv[1].isNotEmpty) return Uri.decodeComponent(kv[1]);
     }
     return null;
   }
