@@ -8,7 +8,7 @@ import os
 
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://autobrain:autobrain@postgres:5432/autobrain")
 os.environ.setdefault("SECRET_KEY", "test-secret")
-os.environ.setdefault("ADMIN_API_KEY", "test-admin-key")
+os.environ.setdefault("ADMIN_API_KEY", "test-admin-key-0123456789-0123456789")
 
 import uuid  # noqa: E402
 import json  # noqa: E402

@@ -76,7 +76,9 @@ def test_production_accepts_real_creds() -> None:
     assert s.ENVIRONMENT == "production"
 
 
-def test_development_accepts_defaults() -> None:
+def test_development_accepts_db_defaults_but_regenerates_secret() -> None:
+    """AUT-1181: dev may keep DB/MinIO defaults, but a known SECRET_KEY is
+    replaced by an ephemeral random key (never used to sign tokens)."""
     s = _make(
         ENVIRONMENT="development",
         SECRET_KEY="change-me",
@@ -85,4 +87,5 @@ def test_development_accepts_defaults() -> None:
         POSTGRES_USER="u",
         MINIO_ACCESS_KEY="a",
     )
-    assert s.SECRET_KEY == "change-me"
+    assert s.SECRET_KEY != "change-me"
+    assert len(s.SECRET_KEY) >= 64

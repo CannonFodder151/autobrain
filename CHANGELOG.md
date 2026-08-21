@@ -13,6 +13,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security
+- (AUT-1181) Fail-closed secret defaults (HIGH): `SECRET_KEY` no longer has a
+  development default that can forge JWTs — missing/placeholder values (the
+  historic `change-me` and `change-me-to-a-long-random-string`) require a real
+  key (`python -c "import secrets; print(secrets.token_urlsafe(64))"`); in
+  `development` only, an ephemeral random key is generated per boot.
+  `ADMIN_API_KEY` must be ≥ 32 chars when enabled; when `STRIPE_SECRET_KEY`
+  is set, an empty `STRIPE_WEBHOOK_SECRET` now crashes at startup so forged
+  webhooks cannot mutate subscriptions.
 ## [0.3.122] - 2026-08-21
 
 ### Security

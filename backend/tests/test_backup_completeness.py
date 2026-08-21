@@ -23,7 +23,7 @@ os.environ["MINIO_SECRET_KEY"] = "autobrain"
 os.environ["MINIO_BUCKET"] = "autobrain-assets"
 os.environ["MINIO_ENDPOINT"] = "minio:9000"
 os.environ["AI_GATEWAY_API_KEY"] = "test-ai-key"
-os.environ["ADMIN_API_KEY"] = "test-admin-key"
+os.environ["ADMIN_API_KEY"] = "test-admin-key-0123456789-0123456789"
 os.environ["MARKET_DATA_URL"] = ""
 os.environ["MARKET_DATA_API_KEY"] = ""
 
