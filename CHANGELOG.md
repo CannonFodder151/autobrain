@@ -9,7 +9,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
 
+
 ## [Unreleased]
+
+## [0.3.115] - 2026-08-21
 
 ### Changed
 - Hosted stack (AUT-1242): `minio-init` one-shot sidecar removed from
