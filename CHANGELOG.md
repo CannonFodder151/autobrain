@@ -10,7 +10,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.116] - 2026-08-21
 
 ### Added
 - Embed-on-create smoke test (AUT-1242-C4): new test suite asserting all five
