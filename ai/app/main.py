@@ -74,7 +74,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="AutoBrain AI Gateway",
-    version=os.environ.get("APP_VERSION", "0.3.118"),  # bump-version.sh keeps this in sync
+    version=os.environ.get("APP_VERSION", "0.3.119"),  # bump-version.sh keeps this in sync
     description="Inference layer. Routes through 9Router via AI_ROUTER_URL.",
     lifespan=lifespan,
 )
@@ -134,7 +134,7 @@ async def health() -> dict:
     return {
         "status": "ok",
         "service": "autobrain-ai",
-        "version": os.environ.get("APP_VERSION", "0.3.118"),
+        "version": os.environ.get("APP_VERSION", "0.3.119"),
         "router_url": router_url(),
         "router_enabled": router_enabled(),
     }

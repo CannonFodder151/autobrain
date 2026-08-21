@@ -10,7 +10,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.119] - 2026-08-21
 
 ### Security
 - Email HTML injection fix (AUT-1182): all `display_name` interpolations in email
