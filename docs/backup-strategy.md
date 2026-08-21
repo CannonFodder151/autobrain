@@ -57,9 +57,9 @@ docker compose -f docker-compose.prod.yml up -d postgres
 docker compose -f docker-compose.prod.yml exec -T postgres \
   pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists < autobrain.dump
 
-# MinIO
-docker compose run --rm minio-init \
-  sh -c "mc alias set local http://minio:9000 ... && mc mirror /local-restore local/autobrain-assets"
+# MinIO (AUT-1242-C2: bucket init is now in the minio entrypoint; mc ships in the minio image)
+docker compose -f docker-compose.prod.yml exec -T minio sh -c \
+  "mc alias set local http://localhost:9000 ${MINIO_ACCESS_KEY} ${MINIO_SECRET_KEY} && mc mirror /local-restore local/autobrain-assets"
 ```
 
 JSON backup restore is done in-app: admin → Backup & restore → upload → confirm.

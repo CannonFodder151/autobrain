@@ -11,6 +11,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+- Hosted stack (AUT-1242): `minio-init` one-shot sidecar removed from
+  `docker-compose.hosted.yml` — bucket init (create + force-private) now runs in
+  the minio container's own entrypoint before the server blocks, which waits for
+  MinIO to accept connections and stays idempotent. One fewer container to run.
+
 ## [0.3.114] - 2026-08-20
 
 ### Changed
