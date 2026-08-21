@@ -67,9 +67,9 @@ services:
       minio server /data --console-address ':9001' &
       MINIO_PID=$$!;
       trap 'kill -TERM $${MINIO_PID} 2>/dev/null' TERM INT;
-      until mc alias set local http://localhost:9000 ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY must be set} ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY must be set} >/dev/null 2>&1 && mc ready local >/dev/null 2>&1; do sleep 2; done;
-      mc mb -p local/${MINIO_BUCKET:-autobrain-assets} 2>/dev/null || true;
-      mc anonymous set none local/${MINIO_BUCKET:-autobrain-assets} 2>/dev/null || true;
+      until mc alias set local http://localhost:9000 \"$${MINIO_ROOT_USER}\" \"$${MINIO_ROOT_PASSWORD}\" >/dev/null 2>&1 && mc ready local >/dev/null 2>&1; do sleep 2; done;
+      mc mb -p local/$${MINIO_BUCKET:-autobrain-assets} 2>/dev/null || true;
+      mc anonymous set none local/$${MINIO_BUCKET:-autobrain-assets} 2>/dev/null || true;
       echo '[minio] bucket init complete';
       trap - TERM INT;
       wait $${MINIO_PID}
