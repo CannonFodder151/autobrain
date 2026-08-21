@@ -9,7 +9,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
 
+
 ## [Unreleased]
+
+## [0.3.121] - 2026-08-21
 
 ### Fixed
 - Deploy: .env and secrets/ excluded from remote tarball — prevents credential leak during deploy (AUT-1188)
