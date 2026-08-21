@@ -13,6 +13,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security
+- Email HTML injection fix (AUT-1182): all `display_name` interpolations in email
+  HTML bodies (`backend/app/services/email.py`, `backend/app/services/notify.py`)
+  now wrapped with `html.escape()`. Prevents attacker-controlled display names
+  from injecting arbitrary HTML/JS into password-reset, welcome, invite, security
+  alert, and service-due notification emails.
+
 ## [0.3.116] - 2026-08-21
 
 ### Added

@@ -13,6 +13,7 @@ Deduplicated via the notification_deliveries table (per vehicle + kind).
 """
 
 import asyncio
+import html
 import json
 import logging
 from datetime import date, timedelta
@@ -128,9 +129,10 @@ async def deliver_due_service(db, pref: NotificationPreference, vehicle: Vehicle
         user = await db.get(User, pref.user_id)
         if user:
             subject = title
+            safe_name = html.escape(user.display_name)
             text = f"Hi {user.display_name},\n\n{description}"
             html = mail._branding(
-                f'<p style="color:#F5F7FA">Hi <b>{user.display_name}</b>,</p>'
+                f'<p style="color:#F5F7FA">Hi <b>{safe_name}</b>,</p>'
                 f'<p style="color:#E5ECF5">{description.replace("**", "")}</p>'
             )
             if await _send_email(user.email, user.display_name, subject, html, text):
@@ -220,7 +222,7 @@ async def _check_pref(db, pref: NotificationPreference, vehicle: Vehicle) -> Non
                     text = (f"Hi {user.display_name},\n\nThe odometer hasn't been logged in "
                             f"{(odo - last_fuel.odometer_km):,} km. Add a fuel fill to keep stats accurate.")
                     html = mail._branding(
-                        f'<p style="color:#F5F7FA">Hi <b>{user.display_name}</b>,</p>'
+                        f'<p style="color:#F5F7FA">Hi <b>{html.escape(user.display_name)}</b>,</p>'
                         f'<p style="color:#E5ECF5">{text.split(chr(10), 1)[1]}</p>'
                     )
                     if await _send_email(user.email, user.display_name, subject, html, text):
