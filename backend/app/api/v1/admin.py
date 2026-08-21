@@ -64,6 +64,10 @@ async def restore_backup(
 
 
 
+def _escape_ilike(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 @router.get("", response_model=UserPage)
 async def list_users(
     q: str | None = Query(default=None, max_length=255),
@@ -73,8 +77,8 @@ async def list_users(
     """Search users by display name or email, alphabetical, 15 per page."""
     stmt = select(User)
     if q:
-        like = f"%{q.lower()}%"
-        stmt = stmt.where(User.email.ilike(like) | User.display_name.ilike(like))
+        like = f"%{_escape_ilike(q.lower())}%"
+        stmt = stmt.where(User.email.ilike(like, escape="\\") | User.display_name.ilike(like, escape="\\"))
     total = (await db.scalar(
         select(func.count()).select_from(stmt.subquery())
     )) or 0

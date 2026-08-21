@@ -54,6 +54,23 @@ def validate_assets(raw: bytes) -> list[str]:
     return names
 
 
+def validate_assets_file(path: str) -> list[str]:
+    """Return the member names of a tar.gz on disk without loading it into memory."""
+    names = []
+    try:
+        with tarfile.open(name=path, mode="r:gz") as tar:
+            for member in tar.getmembers():
+                if not member.isfile():
+                    raise ValueError("Archive contains a non-file entry")
+                name = member.name
+                if name.startswith("/") or ".." in name.split("/"):
+                    raise ValueError("Archive contains an unsafe member name")
+                names.append(name)
+    except (tarfile.TarError, EOFError, OSError) as exc:
+        raise ValueError(f"Invalid image archive: {exc}") from exc
+    return names
+
+
 def restore_assets(client, raw: bytes) -> int:
     """Wipe the bucket then upload every member of a validated archive."""
     members = validate_assets(raw)
@@ -66,5 +83,25 @@ def restore_assets(client, raw: bytes) -> int:
             client.put_object(
                 settings.MINIO_BUCKET, member.name, io.BytesIO(data),
                 length=len(data),
+            )
+    return len(members)
+
+
+def restore_assets_file(client, path: str) -> int:
+    """Wipe the bucket then upload every member of a validated archive on disk.
+
+    Streams each member to MinIO without holding the whole archive in memory.
+    """
+    members = validate_assets_file(path)
+    for obj in client.list_objects(settings.MINIO_BUCKET):
+        client.remove_object(settings.MINIO_BUCKET, obj.object_name)
+    with tarfile.open(name=path, mode="r:gz") as tar:
+        for member in tar.getmembers():
+            f = tar.extractfile(member)
+            if f is None:
+                continue
+            client.put_object(
+                settings.MINIO_BUCKET, member.name, f,
+                length=member.size,
             )
     return len(members)
