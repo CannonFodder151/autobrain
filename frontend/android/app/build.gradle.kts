@@ -25,11 +25,32 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            // Keystore material comes from local.properties or -P flags / CI
+            // secrets; never committed. See android/local.properties template.
+            val storeFilePath = project.findProperty("storeFile") as String?
+            val storePass = project.findProperty("storePassword") as String?
+            val aliasName = project.findProperty("keyAlias") as String?
+            val keyPass = project.findProperty("keyPassword") as String?
+            if (storeFilePath != null && storePass != null &&
+                aliasName != null && keyPass != null) {
+                storeFile = file(storeFilePath)
+                storePassword = storePass
+                keyAlias = aliasName
+                keyPassword = keyPass
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // ponytail: unsigned when no keystore props are present (local
+            // release builds); CI injects real secrets for production.
+            signingConfig =
+                if (project.hasProperty("storeFile"))
+                    signingConfigs.getByName("release")
+                else null
         }
     }
 }

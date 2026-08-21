@@ -1,7 +1,7 @@
 /// Self-service password reset screens.
 ///
 /// The web app is served as a SPA; a password-reset email links to
-/// `APP_BASE_URL/reset-password?token=...` which `app.dart` detects and routes
+/// `APP_BASE_URL/reset-password#token=...` which `app.dart` detects and routes
 /// to [ResetPasswordScreen].
 library;
 
