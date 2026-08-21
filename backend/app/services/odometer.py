@@ -5,22 +5,25 @@ Source priority (product decision, AUT-1275):
 2. Logbook — next. A completed trip's end reading is authoritative.
 3. Fuel — least. A fuel receipt reading is a guess taken at fill time.
 
-Hard rule: the odometer only ever moves FORWARD. Any source reading advances
+Hard rule: the odometer only ever moves FORWARD. Any source may advance
 it, but no source may roll it back below an existing higher reading — that is
 what happens when a user back-fills a past fuel receipt or past logbook trip.
-
-The one surface that can lower the odometer is an explicit owner edit via
-PATCH /vehicles/{id} (maintenance correction) — that path writes
-vehicle.odometer_km directly and intentionally bypasses this module.
+PATCH /vehicles/{id} also routes through this module (AUT-1275 QA fix).
 """
 
 from datetime import date, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.logbook import LogEntry
+from app.models.service import ServiceRecord
 from app.models.vehicle import Vehicle
+
+_VALID_SERVICE_TYPES = frozenset({
+    "scheduled", "tyre_rotation", "air_filter", "brake_fluid", "coolant",
+    "transmission", "spark_plugs", "timing_belt", "brake_pads", "battery",
+})
 
 
 async def _newest_logbook_entry(db: AsyncSession, vehicle_id: str) -> LogEntry | None:
@@ -64,12 +67,15 @@ async def sync_odometer(
 
 async def _ensure_next_service(db: AsyncSession, vehicle: Vehicle) -> None:
     """Board follow-up (AUT-1275): when the odo moves and no scheduled service
-    has been set yet, derive the next one from the vehicle's past service
-    records via the deterministic-first prediction module. Only creates when
+    has been set yet, derive the next one from the vehicle's past scheduled
+    services via the deterministic-first prediction module. Only creates when
     auto-suggest is on and history exists — the due-check then fires when that
-    prediction's threshold is reached."""
-    from app.models.service import ServiceRecord
+    prediction's threshold is reached.
 
+    Concurrency (QA fix): a Postgres advisory lock serialises the
+    check-then-insert so two simultaneous odo writes cannot both create a
+    suggestion. On non-Postgres dev fallbacks the lock call is skipped.
+    """
     scheduled = await db.scalar(
         select(func.count())
         .select_from(ServiceRecord)
@@ -77,17 +83,38 @@ async def _ensure_next_service(db: AsyncSession, vehicle: Vehicle) -> None:
     )
     if scheduled:
         return
+
+    # ponytail: advisory lock is Postgres-only; sqlite dev fallback skips it —
+    # upgrade path is a partial unique index when we drop sqlite.
+    try:
+        await db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:k))"), {"k": f"svc-suggest:{vehicle.id}"}
+        )
+    except Exception:
+        pass
+    scheduled = await db.scalar(
+        select(func.count())
+        .select_from(ServiceRecord)
+        .where(ServiceRecord.vehicle_id == vehicle.id, ServiceRecord.status == "scheduled")
+    )
+    if scheduled:
+        return
+
     from app.services.service_records import list_completed_services
 
-    history = await list_completed_services(db, vehicle.id)
+    history = [
+        s for s in await list_completed_services(db, vehicle.id)
+        if s.service_type in _VALID_SERVICE_TYPES
+    ]
     if not history:
         return
     from app.services.ai_client import predict_service
 
+    last = history[-1]
     payload = {
         "service_type": "scheduled",
         "odometer_km": vehicle.odometer_km or 0,
-        "last_service_km": history[-1].odometer_km,
+        "last_service_km": last.odometer_km,
         "make": vehicle.make or "",
         "model": vehicle.model or "",
         "year": vehicle.year or date.today().year,
@@ -105,23 +132,37 @@ async def _ensure_next_service(db: AsyncSession, vehicle: Vehicle) -> None:
     result = await predict_service(payload)
     if not result:
         return
-    due_km = result.get("next_due_km")
-    due_date = result.get("next_due_date")
-    svc = ServiceRecord(
-        vehicle_id=vehicle.id,
-        service_date=date.today(),
-        odometer_km=vehicle.odometer_km or 0,
-        service_type=str(result.get("service_type") or "scheduled"),
-        description=(
-            f"Next {str(result.get('service_type') or 'scheduled').replace('_', ' ')} "
-            "auto-suggested from past service records"
-        ),
-        status="scheduled",
-        ai_prediction=result.get("reason"),
-        next_due_km=int(due_km) if due_km else None,
-        next_due_date=date.fromisoformat(due_date) if due_date else None,
+    svc_type = str(result.get("service_type") or "scheduled")
+    if svc_type not in _VALID_SERVICE_TYPES:
+        svc_type = "scheduled"
+    due_km = None
+    due_date = None
+    try:
+        raw_km = result.get("next_due_km")
+        due_km = int(raw_km) if raw_km else None
+    except (TypeError, ValueError):
+        pass
+    try:
+        raw_date = result.get("next_due_date")
+        due_date = date.fromisoformat(raw_date) if raw_date else None
+    except (TypeError, ValueError):
+        pass
+    db.add(
+        ServiceRecord(
+            vehicle_id=vehicle.id,
+            service_date=date.today(),
+            odometer_km=vehicle.odometer_km or 0,
+            service_type=svc_type,
+            description=(
+                f"Next {svc_type.replace('_', ' ')} "
+                "auto-suggested from past service records"
+            ),
+            status="scheduled",
+            ai_prediction=result.get("reason"),
+            next_due_km=due_km,
+            next_due_date=due_date,
+        )
     )
-    db.add(svc)
 
 
 async def suggest_due_service(db: AsyncSession, vehicle: Vehicle) -> None:

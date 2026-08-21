@@ -133,6 +133,23 @@ async def test_fuel_past_entry_cannot_roll_back_odo_and_suggests_service() -> No
     async with SessionLocal() as db:
         assert await _odo(db, vid) == 30000
 
+    # QA fix: an owner PATCH edit must not roll the odo back either.
+    resp = await client.patch(base, json={"odometer_km": 5000}, headers=headers)
+    assert resp.status_code == 200, resp.text
+    async with SessionLocal() as db:
+        assert await _odo(db, vid) == 30000
+
+    # QA nice-to-have: a past-dated completed logbook trip after 30k must not roll back.
+    await client.post(f"{base}/logbook", json={"started_at": "2026-08-03T09:00:00Z"}, headers=headers)
+    past_done = await client.patch(
+        f"{base}/logbook/{(await client.get(f'{base}/logbook', headers=headers)).json()[-1]['id']}",
+        json={"ended_at": "2026-08-01T10:00:00Z", "status": "completed", "end_odometer_km": 15000},
+        headers=headers,
+    )
+    assert past_done.status_code == 200, past_done.text
+    async with SessionLocal() as db:
+        assert await _odo(db, vid) == 30000
+
     await client.aclose()
 
 
