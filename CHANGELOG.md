@@ -18,6 +18,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- **AUT-1185** AI gateway OOM DoS + auth bypass + prompt injection (security):
+  - social_image module: `width`/`height` now clamped to 200–2048 via Pydantic
+    validator — prevents ~3×10¹⁸-byte allocation from `width=height=999999999`.
+  - router_client: router response capped at 1 MB (`_MAX_ROUTER_RESPONSE_BYTES`),
+    nested schema validation enforces max depth 4 and max array length 100.
+  - router_client: user payload now wrapped in `<untrusted_user_data>` tags with
+    an explicit system instruction to treat it as data only (prompt-injection
+    mitigation).
+  - main: `AI_ENV=development` no longer disables auth; only the explicit
+    `AI_GATEWAY_AUTH_DISABLED=1` opt-out opens `/v1/*`.
+- **AUT-1185** Per-caller HMAC keyed auth is deferred — see follow-up issue for
+  rollout requiring backend coordination (key rotation + revocation lifecycle).
+
+### Added
+- Regression tests: `test_run_clamps_oversized_dimensions`, `test_validate_nested_depth_and_length`,
+  `test_ai_env_development_no_longer_bypasses_auth`, `test_enhance_drops_nested_too_deep`.
+
 ## [0.3.150] - 2026-08-28
 
 - Market-data rate limiting now keys the per-IP limit on the socket remote address instead of `X-Forwarded-For`, so a forged forwarded header can no longer rotate the bucket and evade the limit (AUT-1326).
