@@ -18,6 +18,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security
+- (AUT-1181) Fail-closed secret defaults (HIGH): `SECRET_KEY` no longer has a
+  development default that can forge JWTs — missing/placeholder values (the
+  historic `change-me` and `change-me-to-a-long-random-string`) require a real
+  key (`python -c "import secrets; print(secrets.token_urlsafe(64))"`); in
+  `development` only, an ephemeral random key is generated per boot.
+  `ADMIN_API_KEY` must be ≥ 32 chars when enabled; when `STRIPE_SECRET_KEY`
+  is set, an empty `STRIPE_WEBHOOK_SECRET` now crashes at startup so forged
+  webhooks cannot mutate subscriptions.
+
 ## [0.3.150] - 2026-08-28
 
 - Market-data rate limiting now keys the per-IP limit on the socket remote address instead of `X-Forwarded-For`, so a forged forwarded header can no longer rotate the bucket and evade the limit (AUT-1326).

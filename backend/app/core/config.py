@@ -3,10 +3,15 @@
 All settings are read from environment variables (see .env.example).
 """
 
+import secrets
 from functools import lru_cache
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Known-insecure SECRET_KEY values (AUT-1181): the historic default and the
+# .env.example placeholder — both public in the repo, so forgeable.
+_INSECURE_SECRET_KEYS = ("", "change-me", "change-me-to-a-long-random-string")
 
 
 class Settings(BaseSettings):
@@ -20,7 +25,11 @@ class Settings(BaseSettings):
     DEBUG: bool = False
 
     # Security
-    SECRET_KEY: str = "change-me"
+    # JWT signing key (AUT-1181). No insecure default: unset/placeholder values
+    # are refused everywhere except development, where an ephemeral random key
+    # is generated per boot. Generate a real one with:
+    #   python -c "import secrets; print(secrets.token_urlsafe(64))"
+    SECRET_KEY: str = ""
     ALGORITHM: str = "HS256"
     # Short-lived access tokens (minutes) — renewal goes through /auth/refresh
     # (refresh rotation revokes the previous token). Bump token_version on
@@ -222,7 +231,6 @@ class Settings(BaseSettings):
         if self.ENVIRONMENT == "development":
             return self
         defaults = {
-            "SECRET_KEY": "change-me",
             "POSTGRES_PASSWORD": "autobrain",
             "MINIO_SECRET_KEY": "autobrain",
         }
@@ -234,6 +242,35 @@ class Settings(BaseSettings):
                 f"environment '{self.ENVIRONMENT}' refuses default credentials: "
                 + ", ".join(offenders)
                 + " — set real values in the deployment env (see .env.example)"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _harden_secrets(self) -> "Settings":
+        """AUT-1181: fail closed on missing/weak secrets.
+
+        - SECRET_KEY: required everywhere; development auto-generates an
+          ephemeral random key so a known default can never sign tokens.
+        - ADMIN_API_KEY: min 32 chars when enabled.
+        - STRIPE_WEBHOOK_SECRET: required at startup whenever STRIPE_SECRET_KEY
+          is set (otherwise forged webhooks could mutate subscriptions).
+        """
+        if self.SECRET_KEY in _INSECURE_SECRET_KEYS:
+            if self.ENVIRONMENT != "development":
+                raise ValueError(
+                    "SECRET_KEY is required — generate one with: "
+                    'python -c "import secrets; print(secrets.token_urlsafe(64))"'
+                )
+            self.SECRET_KEY = secrets.token_urlsafe(64)
+        if self.ADMIN_API_KEY and len(self.ADMIN_API_KEY) < 32:
+            raise ValueError(
+                "ADMIN_API_KEY must be at least 32 characters "
+                "(or empty to disable the /admin-api endpoints)"
+            )
+        if self.STRIPE_SECRET_KEY and not self.STRIPE_WEBHOOK_SECRET:
+            raise ValueError(
+                "STRIPE_WEBHOOK_SECRET is required when STRIPE_SECRET_KEY is set "
+                "(whsec_... from the Stripe Dashboard) — unsigned webhooks are refused"
             )
         return self
 
