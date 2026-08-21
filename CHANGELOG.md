@@ -11,6 +11,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- Auto-suggest next service (AUT-1275): vehicles now carry an
+  `auto_suggest_service` toggle; odometer updates from any source (dongle,
+  logbook, fuel, manual edit) surface a deduplicated `service_due` suggestion
+  event when the next scheduled service interval is approaching. The
+  `sync_odometer` flow is now monotonic — no source can roll the odometer back
+  (priority Dongle > Logbook > Fuel) — and the AI prediction fallback covers the
+  merged 20 000 km / 12-month schedule. New `backend/tests/test_odometer_priority.py`
+  exercises every source's priority, rollback rejection, and auto-suggest emit.
+
+### Changed
+- 'Oil Change' service type merged into 'Scheduled Service' across backend
+  schemas, AI prediction (`ai/app/fallbacks/service_prediction.py`), seed data,
+  and the Flutter UI (`service_form_screen`, `service_list_screen`,
+  `service_prediction_screen`, `edit_vehicle_screen`). Legacy `oil` /
+  `oil_change` rows are normalised to `scheduled_service` via the
+  `b4c5d6e7f8a9_add_auto_suggest_service` migration.
+
 ## [0.3.117] - 2026-08-21
 
 ### Added
