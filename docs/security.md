@@ -90,9 +90,9 @@ All git operations MUST follow this procedure:
 - The AI gateway's `/v1/*` endpoints require the shared `AI_GATEWAY_API_KEY`
   (Bearer token, same value the backend sends via `ai_client.py`). This **fails
   closed** — with the key unset the gateway returns 401 on `/v1/*` unless an
-  explicit dev opt-out is set (`AI_ENV=development` or
-  `AI_GATEWAY_AUTH_DISABLED=1`).
-- Hosted and prod compose refuse to start without it
+  explicit opt-out is set (`AI_ENV=development` or `AI_GATEWAY_AUTH_DISABLED=1`;
+  the dev compose no longer sets it — AB-INFRA-006).
+- All compose files (dev, prod, hosted) refuse to start without it
   (`${AI_GATEWAY_API_KEY:?...}`). Set the same strong random value for the
   backend and `ai` services (Portainer stack env on the hosted instance).
 
