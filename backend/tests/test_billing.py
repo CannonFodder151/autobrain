@@ -282,7 +282,9 @@ def test_pricing_no_sale_when_unconfigured(stripe_prices) -> None:
 async def test_checkout_no_longer_auto_applies_sale_on_monthly(sale, fake_stripe) -> None:
     params = await _checkout(fake_stripe)
     assert "discounts" not in params
-    assert params["allow_promotion_codes"] is True
+    # Trial replaces the sale for monthly: no promo codes can stack on it.
+    assert params["subscription_data"] == {"trial_period_days": 7}
+    assert params["allow_promotion_codes"] is False
 
 
 @pytest.mark.asyncio
@@ -327,7 +329,8 @@ async def test_checkout_retry_allowed_for_pending_subscription(stripe_prices, fa
 
 @pytest.mark.asyncio
 async def test_checkout_no_promo_configured_allows_codes(stripe_prices, fake_stripe) -> None:
-    params = await _checkout(fake_stripe)
+    # Yearly (no trial) without a configured promo still allows checkout codes.
+    params = await _checkout(fake_stripe, billing="yearly")
     assert "discounts" not in params
     assert params["allow_promotion_codes"] is True
 
@@ -345,6 +348,93 @@ async def test_pricing_endpoint_public() -> None:
     body = resp.json()
     assert {p["key"] for p in body["plans"]} == {"enthusiast", "garage"}
     assert "sale" in body
+
+
+# --- 7-day free trial (AUT-1195/1196) ---
+
+
+@pytest.mark.asyncio
+async def test_checkout_grants_trial_on_monthly(stripe_prices, fake_stripe) -> None:
+    """Monthly checkout for a new user carries a 7-day trial."""
+    params = await _checkout(fake_stripe)
+    assert params["subscription_data"] == {"trial_period_days": 7}
+
+
+@pytest.mark.asyncio
+async def test_checkout_no_trial_on_yearly(stripe_prices, fake_stripe) -> None:
+    """Yearly checkout never carries a trial."""
+    params = await _checkout(fake_stripe, billing="yearly")
+    assert "subscription_data" not in params
+
+
+@pytest.mark.asyncio
+async def test_checkout_no_trial_with_promo(sale, fake_stripe) -> None:
+    """A monthly checkout with an explicit promo code carries no trial."""
+    params = await _checkout(fake_stripe, promo="early40")
+    assert "subscription_data" not in params
+
+
+@pytest.mark.asyncio
+async def test_checkout_blocks_trial_for_repeat_user(stripe_prices, fake_stripe) -> None:
+    """A user who already used their free trial cannot start another one."""
+    user = _user(free_account=True, stripe_customer_id="cus_1", has_had_trial=True)
+    with pytest.raises(ValueError, match="free trial"):
+        await svc.create_checkout_session(None, user, "enthusiast", "monthly")
+
+
+@pytest.mark.asyncio
+async def test_checkout_allows_yearly_for_tried_user(stripe_prices, fake_stripe) -> None:
+    """A user who used a trial can still buy a yearly plan."""
+    user = _user(free_account=True, stripe_customer_id="cus_1", has_had_trial=True)
+    url = await svc.create_checkout_session(None, user, "enthusiast", "yearly")
+    assert url == fake_stripe.session_url
+
+
+@pytest.mark.asyncio
+async def test_trial_webhook_sets_has_had_trial(stripe_prices, monkeypatch) -> None:
+    """checkout.session.completed sets has_had_trial = True and preserves access."""
+    user = _user(free_account=True, stripe_customer_id="cus_trial")
+    sub_data = {
+        "id": "sub_trial_1",
+        "customer": "cus_trial",
+        "status": "trialing",
+        "items": {"data": [{"price": {"id": "price_enth_m"}}]},
+    }
+
+    class _Subs:
+        def retrieve(self, _sub_id):
+            return type("S", (), {"to_dict": lambda self, d=sub_data: d})()
+
+    class _FakeBillingPortal:
+        pass
+
+    class _FullStripe:
+        subscriptions = _Subs()
+        billing_portal = _FakeBillingPortal()
+
+    monkeypatch.setattr(svc, "get_client", lambda: _FullStripe())
+
+    class _DB:
+        async def scalar(self, _q):
+            return user
+        async def get(self, _cls, _id):
+            return user
+        async def commit(self):
+            pass
+
+    await svc._on_checkout_completed(_DB(), {"mode": "subscription", "subscription": "sub_trial_1"})
+    assert user.has_had_trial is True
+    assert user.stripe_subscription_status == "trialing"
+    assert user.free_account is False  # trial grants paid access
+
+
+def test_pricing_includes_trial_days(stripe_prices) -> None:
+    """Monthly plans expose trial_days=7; yearly exposes 0."""
+    data = svc.pricing()
+    by_key = {p["key"]: p for p in data["plans"]}
+    for key in ("enthusiast", "garage"):
+        assert by_key[key]["trial_days"]["monthly"] == 7
+        assert by_key[key]["trial_days"]["yearly"] == 0
 
 
 def test_stripe_setup_refuses_archive_while_active_subs_reference_price(monkeypatch) -> None:

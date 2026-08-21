@@ -49,6 +49,11 @@ SALE_PERCENT_OFF = 40
 SALE_DURATION_MONTHS = 3
 SALE_CAP = 100
 
+# 7-day free trial (AUT-1195): one trial per account, granted on monthly
+# checkouts only (yearly takes no trial). Replaces the EARLY40 sale on monthly
+# — a promo-code checkout (EARLY40 entered explicitly) never carries a trial.
+TRIAL_PERIOD_DAYS = 7
+
 # Stripe statuses that still grant paid access (past_due keeps access while
 # Stripe retries the card; unpaid/canceled do not).
 ACTIVE_STATUSES = frozenset({"active", "trialing", "past_due"})
@@ -132,6 +137,7 @@ def pricing() -> dict:
             "max_vehicles": plan["max_vehicles"],
             "monthly": amounts["monthly"],
             "yearly": amounts["yearly"],
+            "trial_days": {"monthly": TRIAL_PERIOD_DAYS, "yearly": 0},
         }
         if sale["active"]:
             entry["sale_monthly"] = _discounted(amounts["monthly"], SALE_PERCENT_OFF)
@@ -351,12 +357,24 @@ async def create_checkout_session(
         "metadata": {"plan": plan_key, "billing": billing},
     }
     discounts = _promo_discounts(promo_code, billing)
+    # AUT-1195: a monthly checkout grants a 7-day trial unless a promo code
+    # enters the flow — trial replaces the sale for monthly; yearly never
+    # takes a trial. One trial per account, so repeat attempts are blocked.
+    trial_days = TRIAL_PERIOD_DAYS if (billing == "monthly" and not discounts) else None
+    if trial_days and user.has_had_trial:
+        raise ValueError("You have already used your 7-day free trial")
     if discounts:
         # Stripe forbids discounts + allow_promotion_codes together, so promo
         # is applied via the code and other codes are typed at checkout.
         params["discounts"] = discounts
+    elif trial_days:
+        # Trial replaces the sale for monthly: no promo codes at checkout so a
+        # discount cannot stack on top of the free trial.
+        params["allow_promotion_codes"] = False
     else:
         params["allow_promotion_codes"] = True
+    if trial_days:
+        params["subscription_data"] = {"trial_period_days": trial_days}
     session = client.checkout.sessions.create(params=params)
     return session.url
 
@@ -430,6 +448,9 @@ async def _on_checkout_completed(db: AsyncSession, session) -> None:
     if not user:
         return
     old_sub_id = user.stripe_subscription_id
+    # AUT-1195: a completed checkout consumes the account's one free trial.
+    # Committed together with the subscription apply below.
+    user.has_had_trial = True
     await _apply_subscription(db, user, sub)
     # Upgrades: a newly completed subscription must replace any previous one,
     # otherwise the account is double-billed during the overlap.
