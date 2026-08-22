@@ -54,6 +54,14 @@ class _LicenseScreenState extends State<LicenseScreen> {
   bool get _hasPending => _licenseStatus == 'pending';
   int get _maxVehicles => (_profile?['max_vehicles'] as int?) ?? 1;
 
+  /// One-time 7-day free trial (AUT-1195): offered by the backend on monthly
+  /// Stripe checkouts while the account has not used its trial yet. The
+  /// /auth/me payload carries the account-specific values.
+  bool get _trialAvailable =>
+      !_iapMode && !_hasSub && _profile?['trial_available'] == true;
+  int get _trialDays =>
+      (_profile?['trial_days'] as int?) ?? (_trialAvailable ? 7 : 0);
+
   @override
   void initState() {
     super.initState();
@@ -381,6 +389,7 @@ class _LicenseScreenState extends State<LicenseScreen> {
       isGarage = key == 'garage';
     }
     final vehicles = isGarage ? 5 : 1;
+    final showTrial = _trialAvailable && !_yearly;
 
     final String price;
     final String period;
@@ -438,6 +447,16 @@ class _LicenseScreenState extends State<LicenseScreen> {
                 const SizedBox(width: 4),
                 Text(period,
                     style: TextStyle(color: scheme.onSurfaceVariant)),
+                if (showTrial) ...[
+                  const SizedBox(width: 8),
+                  Chip(
+                    label: Text('$_trialDays days free'),
+                    labelStyle: TextStyle(color: Colors.green.shade800),
+                    visualDensity: VisualDensity.compact,
+                    side: BorderSide(color: Colors.green.shade400),
+                    backgroundColor: Colors.green.withValues(alpha: 0.08),
+                  ),
+                ],
                 if (_saleActive && saleMonthly != null && !_yearly) ...[
                   const SizedBox(width: 8),
                   Text(_fmt(monthly),
@@ -459,6 +478,12 @@ class _LicenseScreenState extends State<LicenseScreen> {
             const SizedBox(height: 4),
             Text('$vehicles vehicle${vehicles == 1 ? '' : 's'}',
                 style: Theme.of(context).textTheme.bodySmall),
+            if (showTrial)
+              Text(
+                'Free for $_trialDays days, then billed monthly. '
+                'Cancel any time during the trial.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             const SizedBox(height: 12),
             ..._featuresFor(key).map(
               (f) => Padding(
@@ -478,7 +503,11 @@ class _LicenseScreenState extends State<LicenseScreen> {
               width: double.infinity,
               child: FilledButton(
                 onPressed: _busy ? null : () => _checkout(key),
-                child: Text(_iapMode ? 'Buy from Store' : 'Upgrade to $name'),
+                child: Text(_iapMode
+                    ? 'Buy from Store'
+                    : showTrial
+                        ? 'Start your $_trialDays-day free trial'
+                        : 'Upgrade to $name'),
               ),
             ),
           ],
@@ -525,7 +554,8 @@ class _LicenseScreenState extends State<LicenseScreen> {
       color = Colors.blue;
       title = 'No active subscription';
       subtitle = '$_maxVehicles vehicle, no AI. '
-          'Upgrade for rego lookup and more vehicles.';
+          'Upgrade for rego lookup and more vehicles.'
+          '${_trialAvailable ? ' Monthly plans start with a $_trialDays-day free trial.' : ''}';
     }
     return Card(
       child: Padding(
