@@ -265,3 +265,86 @@ async def test_invite_accept_deny_and_remove_flow() -> None:
         f"/api/v1/vehicle-shares/{share3['id']}", headers=oh
     )).status_code == 204
     await c.aclose()
+
+
+@pytest.mark.asyncio
+async def test_invitee_can_write_fuel_on_shared_vehicle() -> None:
+    """An accepted invitee can add/edit/delete fuel logs on a shared vehicle."""
+    world = await _world()
+    await _accept(world)
+    c, vid = world["client"], world["vehicle_id"]
+    ih = {"Authorization": f"Bearer {world['invitee_token']}"}
+    oh = {"Authorization": f"Bearer {world['owner_token']}"}
+
+    # Invitee adds a fuel log
+    fuel_body = {
+        "fill_date": "2026-01-15",
+        "odometer_km": 15000,
+        "litres": 40.0,
+        "price_per_litre": 1.85,
+        "is_full_tank": True,
+    }
+    resp = await c.post(f"/api/v1/vehicles/{vid}/fuel", json=fuel_body, headers=ih)
+    assert resp.status_code == 201, resp.text
+    fuel_id = resp.json()["id"]
+    assert resp.json()["vehicle_id"] == vid
+    assert resp.json()["litres"] == 40.0
+
+    # Invitee can list fuel logs
+    resp = await c.get(f"/api/v1/vehicles/{vid}/fuel", headers=ih)
+    assert resp.status_code == 200
+    logs = resp.json()
+    assert len(logs) == 1
+    assert logs[0]["id"] == fuel_id
+
+    # Invitee can update the fuel log
+    resp = await c.patch(
+        f"/api/v1/vehicles/{vid}/fuel/{fuel_id}",
+        json={"notes": "added by invitee"},
+        headers=ih,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["notes"] == "added by invitee"
+
+    # Invitee can delete the fuel log
+    resp = await c.delete(f"/api/v1/vehicles/{vid}/fuel/{fuel_id}", headers=ih)
+    assert resp.status_code == 204, resp.text
+
+    # Verify deletion
+    resp = await c.get(f"/api/v1/vehicles/{vid}/fuel", headers=ih)
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+    # Owner can still access fuel too
+    resp = await c.post(f"/api/v1/vehicles/{vid}/fuel", json=fuel_body, headers=oh)
+    assert resp.status_code == 201, resp.text
+    await c.aclose()
+
+
+@pytest.mark.asyncio
+async def test_stranger_cannot_write_fuel_on_shared_vehicle() -> None:
+    """A user with no share gets 404 on fuel endpoints."""
+    world = await _world()
+    await _accept(world)
+    c, vid = world["client"], world["vehicle_id"]
+    sh = {"Authorization": f"Bearer {world['stranger_token']}"}
+
+    fuel_body = {
+        "fill_date": "2026-01-15",
+        "odometer_km": 15000,
+        "litres": 40.0,
+        "price_per_litre": 1.85,
+        "is_full_tank": True,
+    }
+    resp = await c.post(f"/api/v1/vehicles/{vid}/fuel", json=fuel_body, headers=sh)
+    assert resp.status_code == 404, resp.text
+
+    resp = await c.get(f"/api/v1/vehicles/{vid}/fuel", headers=sh)
+    assert resp.status_code == 404, resp.text
+
+    resp = await c.patch(f"/api/v1/vehicles/{vid}/fuel/some-id", json={}, headers=sh)
+    assert resp.status_code == 404, resp.text
+
+    resp = await c.delete(f"/api/v1/vehicles/{vid}/fuel/some-id", headers=sh)
+    assert resp.status_code == 404, resp.text
+    await c.aclose()
