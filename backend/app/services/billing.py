@@ -448,9 +448,8 @@ async def _on_checkout_completed(db: AsyncSession, session) -> None:
     if not user:
         return
     old_sub_id = user.stripe_subscription_id
-    # AUT-1195: a completed checkout consumes the account's one free trial.
-    # Committed together with the subscription apply below.
-    user.has_had_trial = True
+    # AUT-1195/1211: trial consumption is handled inside _apply_subscription
+    # so the flag is claimed on whichever webhook lands first.
     await _apply_subscription(db, user, sub)
     # Upgrades: a newly completed subscription must replace any previous one,
     # otherwise the account is double-billed during the overlap.
@@ -481,6 +480,28 @@ async def _apply_subscription(db: AsyncSession, user: User, sub) -> None:
     customer_id = sub.get("customer")
     user.stripe_subscription_id = sub.get("id")
     user.stripe_customer_id = customer_id
+
+    if sub.get("status") == "trialing":
+        # AUT-1211: claim the account's one free trial here (webhook path,
+        # committed atomically with the plan grant) so neither a lost
+        # checkout.session.completed nor two racing checkouts can yield a
+        # second 7-day trial.
+        if user.has_had_trial:
+            # Duplicate/racing subscription: end this trial immediately.
+            try:
+                sub = get_client().subscriptions.update(
+                    sub["id"], params={"trial_end": "now"}
+                ).to_dict()
+                logger.info(
+                    "stripe_duplicate_trial_ended",
+                    extra={"user": user.id, "sub": sub.get("id")},
+                )
+            except stripe.StripeError:
+                logger.exception("stripe_trial_end_failed", extra={"sub": sub.get("id")})
+        user.has_had_trial = True
+
+    # Assigned after the trial block: ending a duplicate trial rewrites `sub`
+    # (trial_end=now), so the local status must reflect Stripe's response.
     user.stripe_subscription_status = sub.get("status")
     items = sub.get("items", {}).get("data", []) if sub.get("items") else []
     price_id = items[0].get("price", {}).get("id") if items else None
