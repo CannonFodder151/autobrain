@@ -11,10 +11,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
+
+
 ## [Unreleased]
 
 ### Fixed
 - App: License screen surfaces the 7-day free trial — "7 days free" chip + trial copy on monthly plan cards, "Start your 7-day free trial" CTA, status-card mention; hidden in IAP mode, on yearly, and once the trial was used (AUT-1411)
+
+## [0.3.125] - 2026-08-22
+
+### Fixed
+- Docker: worker healthcheck detects embedded beat (`-B`) in the celery cmdline so the AUT-601 `celerybeat-schedule` freshness check fires on hosted workers (AUT-1286)
+
+## [0.3.124] - 2026-08-22
+
+### Security
+- Backend: billing trial TOCTOU fix — `has_had_trial` claimed in `_apply_subscription` (webhook path, atomic with plan grant); duplicate/racing trial subscriptions end immediately via Stripe `trial_end=now` (AUT-1211)
+
+## [0.3.123] - 2026-08-22
+
+### Fixed
+- Frontend: iOS fuel receipt entry — decimal keyboard enabled for Litres, Price, Total so users can type `.` (AUT-1381)
 
 ## [0.3.122] - 2026-08-21
 

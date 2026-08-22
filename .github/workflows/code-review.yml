@@ -39,6 +39,9 @@ jobs:
           llm_auth_token: ${{ secrets.OCR_API_KEY }}
           llm_model: ${{ secrets.OCR_MODEL }}
           llm_use_anthropic: 'false'
+          # AUT-1417: 9Router can stall >300s before response headers; default
+          # 300s per-request timeout aborted the review. Double the ceiling.
+          llm_timeout: '600'
           review_concurrency: '1'
           incremental: 'true'
           route_severity_below: 'low'
@@ -53,7 +56,11 @@ jobs:
           COLOR: ${{ steps.review.outcome == 'success' && '0x57F287' || '0xED4245' }}
           TITLE: ${{ steps.review.outcome == 'success' && 'OCR review clean' || 'OCR review found issues' }}
         run: |
-          curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
+          # AUT-1418: jq failure inside $( ) is swallowed by bash -e, which sent
+          # an empty body and reported success. Assign first so a jq error
+          # fails the step loudly.
+          body=$(jq -nc --arg c updates --arg t "$TITLE" --arg col "$COLOR" --arg n "$PR_NUM" --arg u "$PR_URL" --arg r "$RESULT" \
+            '{channel:$c,title:$t,description:"Open Code Review PR analysis (PR #\($n)).",color:$col,author:"OCR Scanner",fields:[{name:"PR",value:$u,inline:true},{name:"Result",value:$r,inline:true}]}')
+          curl -fsS -X POST https://n8n.nathanmartina.com/webhook/discord-report \
             -H "Content-Type: application/json" \
-            -d "$(jq -n --arg c updates --arg t "$TITLE" --arg col "$COLOR" --arg n "$PR_NUM" --arg u "$PR_URL" --arg r "$RESULT" \
-            '{channel:$c,title:$t,description:"Open Code Review PR analysis (PR #"+$n+").",color:$col,author:"OCR Scanner",fields:[{name:"PR",value:$u,inline:true},{name:"Result",value:$r,inline:true}]}')"
+            -d "$body"
