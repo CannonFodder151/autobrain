@@ -39,6 +39,9 @@ jobs:
           llm_auth_token: ${{ secrets.OCR_API_KEY }}
           llm_model: ${{ secrets.OCR_MODEL }}
           llm_use_anthropic: 'false'
+          # AUT-1417: 9Router can stall >300s before response headers; default
+          # 300s per-request timeout aborted the review. Double the ceiling.
+          llm_timeout: '600'
           review_concurrency: '1'
           incremental: 'true'
           route_severity_below: 'low'
