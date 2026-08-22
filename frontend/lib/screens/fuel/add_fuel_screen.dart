@@ -201,7 +201,8 @@ class _AddFuelScreenState extends State<AddFuelScreen> {
                     child: TextFormField(
                       controller: _litres,
                       decoration: const InputDecoration(labelText: 'Litres'),
-                      keyboardType: TextInputType.number,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
                       onChanged: (_) => _calcTotal,
                       validator: (v) =>
                           v == null || v.isEmpty ? 'Required' : null,
@@ -215,7 +216,8 @@ class _AddFuelScreenState extends State<AddFuelScreen> {
                         labelText: 'Price per litre',
                         prefixText: '\$ ',
                       ),
-                      keyboardType: TextInputType.number,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
                       onChanged: (_) => _calcTotal,
                       validator: (v) =>
                           v == null || v.isEmpty ? 'Required' : null,
@@ -230,7 +232,8 @@ class _AddFuelScreenState extends State<AddFuelScreen> {
                   labelText: 'Total cost (auto)',
                   prefixText: '\$ ',
                 ),
-                keyboardType: TextInputType.number,
+                keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
               ),
               const SizedBox(height: 12),
               TextFormField(
