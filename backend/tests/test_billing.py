@@ -428,6 +428,54 @@ async def test_trial_webhook_sets_has_had_trial(stripe_prices, monkeypatch) -> N
     assert user.free_account is False  # trial grants paid access
 
 
+@pytest.mark.asyncio
+async def test_trialing_subscription_claims_trial_flag(stripe_prices) -> None:
+    """A trialing customer.subscription.* event sets has_had_trial = True even
+    when checkout.session.completed never arrives (fail-open fix, AUT-1211)."""
+    user = _user(free_account=True, stripe_customer_id="cus_trial")
+    sub = {
+        "id": "sub_trial_1",
+        "customer": "cus_trial",
+        "status": "trialing",
+        "items": {"data": [{"price": {"id": "price_enth_m"}}]},
+    }
+    await svc._apply_subscription(_StubDB(), user, sub)
+    assert user.has_had_trial is True
+    assert user.stripe_subscription_status == "trialing"
+    assert user.free_account is False  # trial grants paid access
+
+
+@pytest.mark.asyncio
+async def test_racing_second_webhook_ends_trial(stripe_prices, monkeypatch) -> None:
+    """TOCTOU regression (AUT-1211): two concurrent checkouts both carry a
+    7-day trial; once has_had_trial is claimed, the second webhook must end
+    the duplicate trial at Stripe instead of extending it."""
+    user = _user(free_account=True, stripe_customer_id="cus_race", has_had_trial=True)
+    sub_data = {
+        "id": "sub_race_2",
+        "customer": "cus_race",
+        "status": "trialing",
+        "items": {"data": [{"price": {"id": "price_enth_m"}}]},
+    }
+    updates: list[tuple[str, dict]] = []
+
+    class _Subs:
+        def update(self, sub_id, params=None, **kw):
+            updates.append((sub_id, params))
+            ended = {**sub_data, "status": "active"}
+            return type("S", (), {"to_dict": lambda self: ended})()
+
+    class _FakeStripe:
+        subscriptions = _Subs()
+
+    monkeypatch.setattr(svc, "get_client", lambda: _FakeStripe())
+
+    await svc._apply_subscription(_StubDB(), user, dict(sub_data))
+    assert updates == [("sub_race_2", {"trial_end": "now"})]
+    assert user.stripe_subscription_status == "active"  # ended-trial status applied
+    assert user.free_account is False
+
+
 def test_pricing_includes_trial_days(stripe_prices) -> None:
     """Monthly plans expose trial_days=7; yearly exposes 0."""
     data = svc.pricing()
