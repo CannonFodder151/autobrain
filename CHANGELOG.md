@@ -13,6 +13,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security
+- Market-data rate limiting no longer trusts `X-Forwarded-For` (AUT-1326): the
+  per-IP limit now keys on the socket remote address. The service is
+  internal-only (compose `expose`, no reverse proxy), so XFF was fully
+  caller-controlled and let any network peer rotate fake headers to bypass the
+  30/min IP limit.
+- The market-data Playwright Chromium now launches sandboxed (AUT-1326) and
+  only falls back to `--no-sandbox` when the host lacks unprivileged user
+  namespaces, adding a second isolation layer when parsing untrusted
+  third-party listing pages.
+
+
 ## [0.3.122] - 2026-08-21
 
 ### Security
@@ -45,7 +57,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Dev compose: PostgreSQL, Redis, MinIO, and AI gateway bound to 127.0.0.1 (AB-INFRA-004/006) — no external exposure in local dev
 - Dev compose: Redis requires auth (REDIS_PASSWORD) — open broker eliminated (AB-INFRA-004)
 - Dev compose: AI gateway auth mandatory (AI_GATEWAY_API_KEY) — dev opt-out removed, fail-closed everywhere (AB-INFRA-006)
-
 ## [0.3.116] - 2026-08-21
 
 ### Added

@@ -59,13 +59,24 @@ async def scrape_bikesguide(query: str, year: int | None) -> dict:
                 "note": "playwright not installed in image"}
 
     async with async_playwright() as p:
+        # AUT-1326: prefer the chromium sandbox (second layer when parsing
+        # untrusted third-party content). It needs unprivileged user
+        # namespaces, which some docker hosts disable; only fall back to
+        # --no-sandbox if the sandboxed launch actually fails.
         try:
             browser = await p.chromium.launch(
                 headless=True,
-                args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"])
-        except Exception as exc:
-            return {"ok": False, "kind": "gated",
-                    "note": f"bikesguide chromium launch failed: {type(exc).__name__}"}
+                args=["--disable-dev-shm-usage", "--disable-gpu"])
+        except Exception:
+            browser = None
+        if browser is None:
+            try:
+                browser = await p.chromium.launch(
+                    headless=True,
+                    args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"])
+            except Exception as exc:
+                return {"ok": False, "kind": "gated",
+                        "note": f"bikesguide chromium launch failed: {type(exc).__name__}"}
         try:
             ctx = await browser.new_context(
                 user_agent=UA, locale="en-AU",
