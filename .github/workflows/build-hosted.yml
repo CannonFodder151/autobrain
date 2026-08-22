@@ -1,6 +1,8 @@
 name: Build hosted images (multi-arch)
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       tag:
