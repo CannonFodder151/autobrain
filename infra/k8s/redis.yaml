@@ -60,10 +60,6 @@ spec:
             claimName: autobrain-redis-pvc
         - name: tmp
           emptyDir: {}
-      volumes:
-        - name: data
-          persistentVolumeClaim:
-            claimName: autobrain-redis-pvc
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
