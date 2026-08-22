@@ -12,22 +12,31 @@ impact analysis.
 |-----------|------|
 | **Flutter app** | iOS/Android client. Offline-first, local SQLite cache. |
 | **FastAPI backend** | REST + WebSocket API, auth, business logic, exports. |
-| **PostgreSQL** | Primary datastore. |
+| **PostgreSQL (pgvector)** | Primary datastore; `vector` columns power semantic search. |
 | **Redis** | Cache + Celery broker/result backend. |
 | **MinIO** | S3-compatible object storage for receipts and photos. |
-| **Celery worker + beat** | Async OCR processing, scheduled valuations, reorder suggestions. Runs inside the backend container. |
+| **Celery worker + beat** | Async OCR processing, embedding generation, scheduled valuations, reorder suggestions. Dev/prod: inside the backend container. Hosted: dedicated `worker` container (AUT-1242/C1). |
 | **AI gateway (FastAPI)** | Hosts 7 deterministic-first inference modules; 9Router enrichment via `AI_ROUTER_URL`. |
-| **9Router** | External LLM router that powers AI modules when configured. |
+| **Market-data scraper** | Playwright-based price/valuation scraper. Dev: separate `market-data` service. Prod/hosted: merged into the `ai` container on :8000 (AUT-1242/C3). |
+| **Federation hub** | Community Garage federation hub — deploy-only config in this repo; code lives in the private `autobrain-federation-hub` repo. Hosted stack only. |
+| **9Router** | External LLM router that powers AI modules and embeddings when configured. |
 
 ## Deployment topologies
 
 | Topology | Compose file | Notes |
 |----------|-------------|-------|
-| Dev | `docker-compose.yml` | Source mounts, reload, all ports exposed |
-| Prod | `docker-compose.prod.yml` | Nginx frontend, no exposed ports except :80 |
-| Hosted | `docker-compose.hosted.yml` | Prebuilt Docker Hub images, Stripe, self-signup, Oracle Cloud VM |
+| Dev | `docker-compose.yml` | Source mounts, reload, all ports exposed; worker+beat in backend container |
+| Prod | `docker-compose.prod.yml` | Nginx frontend, no exposed ports except :80; worker+beat in backend container |
+| Hosted | `docker-compose.hosted.yml` | Prebuilt Docker Hub images, Stripe, self-signup, Oracle Cloud VM; 9 containers incl. dedicated `worker` |
 | Kubernetes | `infra/k8s/` | Ingress, 2 replicas, secrets |
 | Bare metal | `infra/systemd/` | Container-backed systemd units |
+
+### Hosted stack (9 containers)
+
+postgres · redis · minio · backend · ai (gateway :8001 + market-data :8000) ·
+worker (Celery worker + beat) · frontend (:8086, localhost-bound behind
+Cloudflare/npm) · hub · 9router (:20128, localhost-bound). A one-shot
+`minio-init` job creates buckets at boot.
 
 ## Data flow (AI)
 
@@ -43,6 +52,14 @@ impact analysis.
 
 The result carries a `model` field (`rule-based-fallback` / `rrp-depreciation` /
 `rule-based+ai`) so callers know which path produced it.
+
+## Data flow (search)
+
+Global search is hybrid keyword + vector: ILIKE keyword matching always runs;
+pgvector cosine similarity (`a <=> b`, HNSW-indexed) runs when an embedding can
+be generated via 9Router's `/embeddings`. Results are deduped and ranked by
+combined score, falling back to keyword-only if embeddings are unavailable.
+See `docs/container-architecture.md#vectorisation-pgvector`.
 
 ## Feature areas
 
