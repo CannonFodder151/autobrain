@@ -15,7 +15,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.127] - 2026-08-23
 
 ### Added
 - Shared fuel write access test suite (AUT-1382): new tests verifying shared vehicle fuel entry write permissions and access control.
