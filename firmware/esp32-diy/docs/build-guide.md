@@ -8,6 +8,15 @@ logger from scratch. Full pin map in `include/config.h`.
 All parts are AliExpress/eBay commodity items. Buy a 2-pack where cheaper; the
 only functional requirements are in the "Need" column.
 
+> **The CAN decoder is already on the board you bought.** The ESP32-WROOM-32
+> has the CAN controller (Espressif calls it **TWAI**, SJA1000-compatible) on
+> the chip itself, and the firmware talks to it directly via `driver/twai.h`.
+> You do **not** need an external CAN decoder/controller module (no MCP2515,
+> no SPI CAN board). Part #2 below is only the physical **transceiver** — the
+> level shifter between the WROOM's 3.3 V TX/RX pins and the ~12 V OBD CAN bus
+> — and it is electrically required: no ESP32 devkit can wire to CAN-H/CAN-L
+> directly.
+
 | # | Part | Exact thing to buy | Need | ~US$ |
 |---|---|---|---|---|
 | 1 | ESP32 dev board | ESP32-WROOM-32 devkit, 38-pin (DOIT-style, USB-C preferred) | MCU: CAN on-die (TWAI), BLE, LittleFS flash, deep sleep | 5–8 |
