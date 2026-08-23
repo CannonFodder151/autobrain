@@ -58,7 +58,7 @@ without a car (simulate "ignition" by injecting CAN traffic / raising ACC).
 | Part | Purpose | Approx cost |
 |---|---|---|
 | ESP32 dev board (ESP32-WROOM) | MCU, TWAI CAN on-die, BLE, LittleFS | US$5–8 |
-| MCP2551 or SN65HVD230 | CAN transceiver (0–24V tolerant bus side) | US$1–3 |
+| MCP2551 or SN65HVD230 | CAN transceiver only (level shifter; the CAN decoder is the WROOM's on-chip TWAI — no external decoder/controller) | US$1–3 |
 | DS3231 + battery | battery-backed RTC for epoch timestamps | US$2–3 |
 | **NEO-8M GPS module** | **lat/lon + speed/course per trip row — route-on-map in the logbook** | **US$3–5** |
 | **External patch/active GPS antenna (IPX lead)** | **reliable under-dash fix (tiny ceramic patch struggles in the OBD area)** | **US$2–4** |
