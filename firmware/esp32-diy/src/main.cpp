@@ -7,7 +7,7 @@
 //   4. Low power         — deep sleep between probes (timer + ACC GPIO wake)
 //   5. Sync              — BLE service exposes trip index (app pulls later)
 //
-// Wiring (see docs/bom.md):
+// Wiring (see ../docs/obd2-dongle/01-bom.md):
 //   TWAI TX=5 / RX=4  -> MCP2551/SN65HVD230 transceiver -> OBD-II 6/14
 //   I2C SDA=21/SCL=22 -> DS3231 RTC (battery backed)
 //   ACC=15            -> 12V ignition sense via divider (active HIGH)
