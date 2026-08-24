@@ -15,7 +15,7 @@
 x-secrets: &secrets
   volumes:
     - type: bind
-      source: /opt/autobrain/secrets
+      source: ${SECRETS_DIR:-/opt/autobrain/secrets}
       target: /run/secrets
       read_only: true
 
@@ -53,7 +53,7 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - type: bind
-        source: /opt/autobrain/secrets/postgres_password
+        source: ${SECRETS_DIR:-/opt/autobrain/secrets}/postgres_password
         target: /run/secrets/postgres_password
         read_only: true
     healthcheck:
@@ -71,7 +71,7 @@ services:
     volumes:
       - redis-data:/data
       - type: bind
-        source: /opt/autobrain/secrets/redis_password
+        source: ${SECRETS_DIR:-/opt/autobrain/secrets}/redis_password
         target: /run/secrets/redis_password
         read_only: true
     healthcheck:
@@ -107,11 +107,11 @@ services:
     volumes:
       - minio-data:/data
       - type: bind
-        source: /opt/autobrain/secrets/minio_access_key
+        source: ${SECRETS_DIR:-/opt/autobrain/secrets}/minio_access_key
         target: /run/secrets/minio_access_key
         read_only: true
       - type: bind
-        source: /opt/autobrain/secrets/minio_secret_key
+        source: ${SECRETS_DIR:-/opt/autobrain/secrets}/minio_secret_key
         target: /run/secrets/minio_secret_key
         read_only: true
     healthcheck:

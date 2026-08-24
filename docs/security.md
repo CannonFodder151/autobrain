@@ -145,7 +145,9 @@ Stack-config hardening from the AUT-1486/AUT-1498 audit. Applies to
 - Secret-class values live in `/opt/autobrain/secrets/<name>` on the host
   (`root:1000`, mode `0640`). The dir is bind-mounted read-only at
   `/run/secrets` into `backend`, `worker`, `ai`; postgres/redis/minio mount
-  only the files they need.
+  only the files they need. The bind source honours `${SECRETS_DIR}` — set it
+  in the stack env when the host rootfs is read-only (Oracle VM runs Ubuntu
+  Core; hosted uses `/data/autobrain/secrets`, AUT-1535).
 - At container start, `docker/lib-load-secrets.sh` exports each `FOO_FILE`
   var's file content as `FOO`, and derives authenticated
   `REDIS_URL`/`CELERY_*_URL` from `/run/secrets/redis_password`
