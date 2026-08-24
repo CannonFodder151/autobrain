@@ -126,12 +126,17 @@ jobs:
       - name: Assemble multi-arch manifests
         env:
           TAG: ${{ github.event.inputs.tag || 'hosted' }}
+          SHA_TAG: hosted-sha-${{ github.sha }}
         run: |
           set -euo pipefail
           for svc in backend worker ai frontend; do
             echo "==> manifest autobrain-${svc}:${TAG}"
+            # AUT-1533/F4: every build also publishes an immutable per-commit
+            # tag so prod/dev can pin distinct digests instead of drifting on
+            # the same floating :hosted ref.
             docker buildx imagetools create \
               -t "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}" \
+              -t "ghcr.io/cannonfodder151/autobrain-${svc}:${SHA_TAG}" \
               "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}-amd64" \
               "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}-arm64"
           done

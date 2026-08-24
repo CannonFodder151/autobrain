@@ -24,7 +24,9 @@ RUN python -m playwright install --with-deps chromium \
 COPY ai/app ./app
 COPY market-data ./market-data
 COPY docker/ai/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# AUT-1533: *_FILE secret loader, sourced by /entrypoint.sh.
+COPY docker/lib-load-secrets.sh /usr/local/bin/lib-load-secrets.sh
+RUN chmod +x /entrypoint.sh /usr/local/bin/lib-load-secrets.sh
 
 RUN useradd -m -u 1000 autobrain \
     && chown -R autobrain:autobrain /app \

@@ -34,12 +34,19 @@ RUN useradd -m -u 1000 autobrain && chown -R autobrain:autobrain /app
 COPY scripts/init-minio.sh /init-minio.sh
 RUN chmod +x /init-minio.sh
 
+# AUT-1533: *_FILE secret loader wraps the CMD so credentials arrive via
+# bind-mounted files instead of plain env vars.
+COPY docker/entrypoint.sh docker/lib-load-secrets.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/lib-load-secrets.sh
+
 USER autobrain
 
 EXPOSE 8000
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=5 \
     CMD curl -fsS http://localhost:8000/health || exit 1
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
 # Runs Celery worker+beat alongside the API (single-container backend).
 CMD ["sh", "-c", "/init-minio.sh && python -m app.db.bootstrap && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]

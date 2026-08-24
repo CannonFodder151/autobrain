@@ -135,6 +135,57 @@ secrets exfiltration). It is restricted by source at the host firewall:
 - Consider S3 server-side encryption in production.
 - Backups contain PII — encrypt backup artifacts at rest.
 
+## Secret-file pattern & broker auth (AUT-1533)
+
+Stack-config hardening from the AUT-1486/AUT-1498 audit. Applies to
+`docker-compose.hosted.yml` (AutoBrain-Hosted EP5 and the dev box stack).
+
+### How it works
+
+- Secret-class values live in `/opt/autobrain/secrets/<name>` on the host
+  (`root:1000`, mode `0640`). The dir is bind-mounted read-only at
+  `/run/secrets` into `backend`, `worker`, `ai`; postgres/redis/minio mount
+  only the files they need.
+- At container start, `docker/lib-load-secrets.sh` exports each `FOO_FILE`
+  var's file content as `FOO`, and derives authenticated
+  `REDIS_URL`/`CELERY_*_URL` from `/run/secrets/redis_password`
+  (AB-INFRA-004: an open Celery broker is RCE). Values never appear in
+  `docker inspect` or `/proc/*/environ`.
+- Redis starts with `--requirepass "$(cat /run/secrets/redis_password)"`;
+  its healthcheck authenticates the same way. Postgres/MinIO use their
+  images' native `*_FILE` support.
+- Non-secret config stays in the Portainer stack env as before.
+
+### Deploy / rotation runbook
+
+1. Dump the current stack env to a temp file, then seed:
+   `sudo ./scripts/seed-secrets.sh /tmp/stack-env.txt` — writes all mapped
+   secret files, generating a broker password if none exists.
+2. Shred the dump: `shred -u /tmp/stack-env.txt`.
+3. Update the Portainer stack from `docker-compose.hosted.yml` (secret-class
+   keys can be dropped from the stack env) and redeploy.
+4. Verify: `docker inspect <svc>` shows no plain secrets; every service
+   healthy; `redis-cli -a $(sudo cat /opt/autobrain/secrets/redis_password)
+   ping` → PONG; unauthenticated `redis-cli ping` → NOAUTH.
+5. Rotate any secret by rewriting its file and restarting the consuming
+   services (broker rotation restarts redis + backend + worker).
+
+### Image tag policy
+
+`:hosted` is a rolling tag for auto-deploys. CI also publishes immutable
+`hosted-sha-<commit>` tags — pin prod/dev to distinct digests when drift
+matters (audit finding F4), e.g. `image: ...:hosted-sha-<sha>` or
+`...@sha256:<digest>`. `decolua/9router` is digest-pinned in the compose;
+bump deliberately.
+
+### Known residuals
+
+- `hub` (private repo) still takes plain env until its image gains `*_FILE`
+  support; `rego-lookup-api` likewise in its own repo/deployment.
+- Post-redeploy, the hosted frontend port mapping aligns 8086→8080 (the
+  running container's stale 8086→80 was latent: npm proxies via static IP).
+- Secrets remain readable by root/host users — accepted residual.
+
 ## Vulnerability reporting
 
 See [SECURITY.md](../../SECURITY.md) for the reporting policy.
@@ -142,6 +193,8 @@ See [SECURITY.md](../../SECURITY.md) for the reporting policy.
 ## Hardening checklist
 
 - [ ] Rotate all default credentials (postgres, minio, SECRET_KEY).
+- [x] Redis `requirepass` on every stack incl. hosted + dev (AB-INFRA-004, AUT-1533).
+- [x] Secret-class env migrated to `_FILE` files (AUT-1533) — hub/rego-lookup pending.
 - [ ] Set a real `AI_ROUTER_URL` and key in prod.
 - [ ] Set a real `AI_GATEWAY_API_KEY` (same value for backend + ai services).
 - [ ] Restrict CORS origins.

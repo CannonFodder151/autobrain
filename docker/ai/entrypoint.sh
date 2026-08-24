@@ -1,6 +1,9 @@
 #!/bin/bash
 set -u
 
+# AUT-1533: load secret-class env vars from *_FILE files before services start.
+. /usr/local/bin/lib-load-secrets.sh
+
 # AUT-1242-C3: run AI gateway (:8001) and market-data scraper (:8000)
 # as two uvicorn processes in one container.
 
