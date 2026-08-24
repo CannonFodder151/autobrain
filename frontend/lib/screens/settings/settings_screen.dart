@@ -11,6 +11,7 @@ import '../../core/config.dart';
 import '../../core/download.dart';
 import 'car_integration_screen.dart';
 import 'dongle_wifi_screen.dart';
+import '../store/merch_screen.dart';
 
 String _errorText(Object e) => e is ApiException ? e.message : '$e';
 
@@ -340,6 +341,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   trailing: _chip(_aiEnabled),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.shopping_bag_outlined),
+              title: const Text('Merch store'),
+              subtitle: const Text('AutoBrain Beanie — buy merch, check your orders'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => const MerchScreen())),
             ),
           ),
           const SizedBox(height: 16),

@@ -310,6 +310,26 @@ def apply_free(user: User) -> None:
     user.max_vehicles = 1
 
 
+async def ensure_customer(db: AsyncSession, user: User) -> str:
+    """Find-or-create the Stripe customer for an account and cache its id."""
+    if user.stripe_customer_id:
+        return user.stripe_customer_id
+    client = get_client()
+    existing = client.customers.list(params={"email": user.email, "limit": 1})
+    customer_id = existing.data[0].id if existing.data else None
+    if not customer_id:
+        customer_id = client.customers.create(
+            params={
+                "email": user.email,
+                "name": user.display_name,
+                "metadata": {"user_id": user.id},
+            }
+        ).id
+    user.stripe_customer_id = customer_id
+    await db.commit()
+    return customer_id
+
+
 async def create_checkout_session(
     db: AsyncSession, user: User, plan_key: str, billing: str, promo_code: str | None = None
 ) -> str:
@@ -331,20 +351,7 @@ async def create_checkout_session(
         raise ValueError("Billing is not configured for that plan")
     client = get_client()
 
-    customer_id = user.stripe_customer_id
-    if not customer_id:
-        existing = client.customers.list(params={"email": user.email, "limit": 1})
-        customer_id = existing.data[0].id if existing.data else None
-        if not customer_id:
-            customer_id = client.customers.create(
-                params={
-                    "email": user.email,
-                    "name": user.display_name,
-                    "metadata": {"user_id": user.id},
-                }
-            ).id
-        user.stripe_customer_id = customer_id
-        await db.commit()
+    customer_id = await ensure_customer(db, user)
 
     base = settings.APP_BASE_URL.rstrip("/")
     params: dict = {
@@ -420,6 +427,12 @@ async def handle_event(db: AsyncSession, event) -> None:
     etype = event.get("type")
     obj = event.get("data", {}).get("object", {})
     if etype == "checkout.session.completed":
+        # Lazy import: merch imports this module for the Stripe client.
+        from app.services.merch import record_paid_session
+
+        if obj.get("mode") == "payment":
+            await record_paid_session(db, obj)
+            return
         await _on_checkout_completed(db, obj)
     elif etype in ("customer.subscription.created", "customer.subscription.updated"):
         await _on_subscription_event(db, obj)
