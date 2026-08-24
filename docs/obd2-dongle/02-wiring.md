@@ -10,20 +10,76 @@ Every wire between parts. Firmware expects exactly this mapping (`firmware/esp32
 
 ## Master pin map
 
-| Signal | ESP32 pin | Direction | Connects to | Notes |
-|--------|-----------|-----------|-------------|-------|
-| CAN TX | GPIO 5 | out | Transceiver TXD (data in) | |
-| CAN RX | GPIO 4 | in | Transceiver RXD (data out) | see transceiver § — may need divider |
-| CAN STBY | GPIO 18 | out | Transceiver RS/STBY | HIGH in sleep ⇒ ~10 µA standby |
-| I2C SDA | GPIO 21 | bidir | DS3231 SDA | |
-| I2C SCL | GPIO 22 | bidir | DS3231 SCL | |
-| ACC sense | GPIO 15 | in | Divider tap | `INPUT_PULLDOWN`; HIGH = ignition on |
-| GPS TX | GPIO 17 | out | NEO-8M RX | UART2, 9600 baud |
-| GPS RX | GPIO 16 | in | NEO-8M TX | UART2, 9600 baud |
-| GPS PWR | GPIO 14 | out | 2N7000 gate | HIGH = GPS on; 10 kΩ gate-to-GND pulldown |
-| 5 V rail | 5V/VBUS | in | Buck OUT+ | powers ESP32 + MCP2551 |
-| 3.3 V rail | 3V3 | out | NEO-8M VCC, DS3231 VCC, GPS gate pullup side | never feed these 5 V |
-| GND | GND | — | everything | one common ground |
+"Board label" is the silkscreen printed next to the header hole on the devkit
+(see the [board locator](#board-locator-where-every-pin-sits-on-the-devkit) below).
+
+| Signal | ESP32 pin | Board label | Direction | Connects to | Notes |
+|--------|-----------|-------------|-----------|-------------|-------|
+| CAN TX | GPIO 5 | **D5** | out | Transceiver TXD (data in) | strapping pin — see boot notes |
+| CAN RX | GPIO 4 | **D4** | in | Transceiver RXD (data out) | see transceiver § — may need divider |
+| CAN STBY | GPIO 18 | **D18** | out | Transceiver RS/STBY | HIGH in sleep ⇒ ~10 µA standby |
+| I2C SDA | GPIO 21 | **D21** | bidir | DS3231 SDA | default I2C SDA |
+| I2C SCL | GPIO 22 | **D22** | bidir | DS3231 SCL | default I2C SCL |
+| ACC sense | GPIO 15 | **D15** | in | Divider tap | `INPUT_PULLDOWN`; HIGH = ignition on; strapping pin |
+| GPS TX | GPIO 17 | **TX2** | out | NEO-8M RX | UART2 TX, 9600 baud |
+| GPS RX | GPIO 16 | **RX2** | in | NEO-8M TX | UART2 RX, 9600 baud |
+| GPS PWR | GPIO 14 | **D14** | out | 2N7000 gate | HIGH = GPS on; 10 kΩ gate-to-GND pulldown |
+| 5 V rail | 5V/VBUS | **VIN** | in | Buck OUT+ | powers ESP32 + MCP2551 |
+| 3.3 V rail | 3V3 | **3V3** | out | NEO-8M VCC, DS3231 VCC, GPS gate pullup side | never feed these 5 V |
+| GND | GND | **GND** | — | everything | one common ground |
+
+---
+
+## Board locator — where every pin sits on the devkit
+
+The BOM calls for a **38-pin DOIT-style ESP32-WROOM-32 devkit**. USB socket at
+the bottom, metal shield/antenna at top. Left/right as seen looking at the
+board with USB toward you:
+
+```
+            ┌─────────[ ESP32-WROOM-32 · antenna end ]─────────┐
+       3V3 ─┤ LEFT                                        RIGHT ├─ D23
+        EN ─┤                                             ├─ D22   ◄─ I2C SCL
+        VP ─┤ (GPIO36, input-only)                        ├─ TX0   (GPIO 1 — USB serial, leave alone)
+        VN ─┤ (GPIO39, input-only)                        ├─ RX0   (GPIO 3 — USB serial, leave alone)
+       D34 ─┤ (input-only)                                ├─ D21   ◄─ I2C SDA
+       D35 ─┤ (input-only)                                ├─ GND   ◄─ common ground
+       D32 ─┤                                             ├─ D19
+       D33 ─┤                                             ├─ D18   ◄─ CAN STBY
+       D25 ─┤                                             ├─ D5    ◄─ CAN TX
+       D26 ─┤                                             ├─ TX2   ◄─ GPS TX (GPIO 17)
+       D27 ─┤                                             ├─ RX2   ◄─ GPS RX (GPIO 16)
+       D14 ─┤ ◄─ GPS PWR                                  ├─ D4    ◄─ CAN RX
+       D12 ─┤ (unused; must stay LOW at boot)             ├─ D0    (unused; flashing strap)
+       D13 ─┤                                             ├─ D2    (unused; onboard LED)
+       GND ─┤ ◄─ common ground                            ├─ D15   ◄─ ACC sense
+       VIN ─┤ ◄─ 5 V in from buck                         ├─ GND   ◄─ common ground
+            └──[ CLK · SD0 · SD1 · SD2 · SD3 · CMD ]──────┘
+                 (GPIO 6–11 — wired to flash chip, DO NOT USE)
+```
+
+Every wire used by this build lands on the **right column except GPS PWR
+(D14)**, which is on the left between D27 and D12.
+
+> ⚠️ **Clones differ.** Some devkits are 30-pin (no 3V3 pin, no flash-pin row),
+> some shuffle which edge the extra pins sit on. The silkscreen labels above
+> (D5, TX2, VIN…) are identical across DOIT-style clones — always match the
+> label printed next to the hole, not the position.
+
+### Boot-time notes for the pins we use
+
+These GPIOs are also **strapping pins** sampled at power-on. The build is
+already compatible — don't "fix" them away:
+
+- **D5 (CAN TX)**: must be HIGH at boot. The transceiver only *listens* on
+  this line, so it can't pull it down. Safe.
+- **D15 (ACC sense)**: LOW at boot just suppresses the serial boot log (ignition
+  off = divider holds it low). HIGH at boot (ignition on) is the normal-boot
+  state. Either way it boots.
+- **D14 (GPS PWR)**: glitches high briefly during boot. The 10 kΩ gate pulldown
+  keeps the 2N7000 off, so the GPS stays unpowered until firmware drives the
+  pin — that's exactly why the pulldown is mandatory.
+- **D4 / D18 / D21 / D22 / TX2 / RX2**: no boot constraints.
 
 ---
 
