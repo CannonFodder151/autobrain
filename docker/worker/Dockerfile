@@ -18,6 +18,11 @@ COPY backend/alembic ./alembic
 COPY backend/alembic.ini ./
 
 RUN useradd -m -u 1000 autobrain && chown -R autobrain:autobrain /app
+
+# AUT-1533: *_FILE secret loader wraps the CMD.
+COPY docker/entrypoint.sh docker/lib-load-secrets.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/lib-load-secrets.sh
+
 USER autobrain
 
 # AUT-601 / AUT-1286: this image runs BOTH the worker and the beat scheduler.
@@ -30,5 +35,7 @@ USER autobrain
 # busy-loop from AUT-601); otherwise it falls back to `inspect ping`.
 HEALTHCHECK --interval=30s --timeout=15s --start-period=30s --retries=3 \
     CMD sh -c 'c=$(tr "\0" " " < /proc/1/cmdline); case "$c" in *" beat "*|*" -B "*) [ -f celerybeat-schedule ] || exit 1; [ -z "$(find celerybeat-schedule -mmin -30 2>/dev/null)" ] && exit 1; exit 0 ;; *) celery -A app.workers.celery_app:celery_app inspect ping -t 8 -d "celery@$(hostname)" ;; esac'
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
 CMD ["celery", "-A", "app.workers.celery_app:celery_app", "worker", "-l", "info", "--concurrency=2"]
