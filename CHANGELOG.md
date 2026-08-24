@@ -23,7 +23,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.135] - 2026-08-24
 
 ### Added
 - OBD: the app now connects to the custom AutoBrain OBD2 ESP32 adaptor over Bluetooth from the OBD tab — auto-connect on open (toggle), "Connect & sync now" pulls completed trips off the adaptor and into your logbook (deduped against WiFi uploads), and a codes section shows the fault codes the adaptor reads with one-tap AI diagnostics and a confirmed clear-codes-on-car action. Works over the adaptor's WiFi upload too: it now pushes its code snapshot to the same library.
