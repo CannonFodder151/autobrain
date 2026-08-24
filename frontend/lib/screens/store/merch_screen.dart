@@ -111,6 +111,11 @@ class _MerchScreenState extends State<MerchScreen> {
                         _fmtCents(p['amount'] as num? ?? 0,
                             p['currency'] as String? ?? 'aud'),
                         style: Theme.of(context).textTheme.titleMedium),
+                    if (p['free_shipping'] == true) ...[
+                      const SizedBox(width: 8),
+                      const Text('Free shipping',
+                          style: TextStyle(fontSize: 12)),
+                    ],
                     const Spacer(),
                     FilledButton.icon(
                       onPressed: busy ? null : () => _buy(p),
@@ -178,8 +183,7 @@ class _MerchScreenState extends State<MerchScreen> {
                           const Padding(
                             padding: EdgeInsets.symmetric(horizontal: 4),
                             child: Text(
-                                'Shipping collected at checkout. Flat rate '
-                                'applied automatically.',
+                                'Shipping address collected at checkout.',
                                 style: TextStyle(fontSize: 12)),
                           ),
                         ],

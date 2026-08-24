@@ -20,8 +20,8 @@ from app.services.billing import CURRENCY, ensure_customer, get_client
 
 logger = logging.getLogger(__name__)
 
-# Flat-rate shipping added at checkout; the address itself is collected by
-# Stripe via shipping_address_collection.
+# Optional flat-rate shipping added at checkout; products with free_shipping
+# skip it entirely (address still collected via shipping_address_collection).
 SHIPPING_FLAT_CENTS = 995
 SHIPPING_COUNTRIES = ["AU", "NZ", "US", "GB", "CA"]
 
@@ -29,7 +29,8 @@ PRODUCTS: dict[str, dict] = {
     "beanie": {
         "name": "AutoBrain Beanie",
         "description": "Embroidered AutoBrain beanie. One size.",
-        "amount": 2500,  # AUD cents
+        "amount": 5500,  # AUD cents
+        "free_shipping": True,
     },
 }
 
@@ -84,15 +85,6 @@ async def create_checkout_session(
         ],
         # AUT-1540: physical goods — Stripe must collect where to ship them.
         "shipping_address_collection": {"allowed_countries": SHIPPING_COUNTRIES},
-        "shipping_options": [
-            {
-                "shipping_rate_data": {
-                    "type": "fixed_amount",
-                    "fixed_amount": {"amount": SHIPPING_FLAT_CENTS, "currency": CURRENCY},
-                    "display_name": "Standard shipping",
-                }
-            }
-        ],
         "phone_number_collection": {"enabled": True},
         "success_url": f"{base}/?checkout=merch-success",
         "cancel_url": f"{base}/",
@@ -101,6 +93,16 @@ async def create_checkout_session(
             "metadata": {"kind": "merch", "product_id": product_id}
         },
     }
+    if not product.get("free_shipping"):
+        params["shipping_options"] = [
+            {
+                "shipping_rate_data": {
+                    "type": "fixed_amount",
+                    "fixed_amount": {"amount": SHIPPING_FLAT_CENTS, "currency": CURRENCY},
+                    "display_name": "Standard shipping",
+                }
+            }
+        ]
     session = client.checkout.sessions.create(params=params)
     logger.info(
         "merch_checkout_created",
