@@ -333,3 +333,78 @@ async def test_dongle_upload_gps_samples_are_cleaned_deterministically() -> None
     assert samples[0]["lat"] == -33.8687241
 
     await client.aclose()
+@pytest.mark.asyncio
+async def test_device_push_codes_snapshot() -> None:
+    """AUT-1573: dongle pushes its DTC snapshot; replaces obd-sourced rows,
+    keeps manual ones; requires OBD-enabled owner and the bound vehicle."""
+    world = await _setup("dev-codes")
+    headers = {"Authorization": f"Bearer {world['token']}"}
+    client: AsyncClient = world["client"]
+
+    # Seed a manual code that must survive every push.
+    resp = await client.post(
+        f"/api/v1/vehicles/{world['vehicle_id']}/obd/codes",
+        json={"code": "P9999", "source": "manual"},
+        headers=headers,
+    )
+    assert resp.status_code == 403  # owner has no OBD access yet
+
+    # Grant OBD access, then seed the manual code again.
+    from sqlalchemy import update  # noqa: E402
+
+    from app.db.session import SessionLocal  # noqa: E402
+    from app.models.user import User as UserM  # noqa: E402
+
+    async with SessionLocal() as db:
+        await db.execute(
+            update(UserM).where(UserM.id == world["user_id"]).values(obd_enabled=True)
+        )
+        await db.commit()
+    resp = await client.post(
+        f"/api/v1/vehicles/{world['vehicle_id']}/obd/codes",
+        json={"code": "P9999", "source": "manual"},
+        headers=headers,
+    )
+    assert resp.status_code == 201, resp.text
+
+    created = await client.post("/api/v1/devices", json={"name": "D", "vehicle_id": world["vehicle_id"]}, headers=headers)
+    device_id = created.json()["id"]
+    dev_headers = {"X-Device-API-Key": created.json()["api_key"]}
+
+    # First push: two codes (one duplicated in the same payload).
+    resp = await client.post(
+        f"/api/v1/devices/{device_id}/codes",
+        json={"codes": [{"code": "p0301"}, {"code": "P0301", "description": "dup"}, {"code": "U0100"}]},
+        headers=dev_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["accepted"] == 2
+    listed = await client.get(f"/api/v1/vehicles/{world['vehicle_id']}/obd/codes", headers=headers)
+    by_code = {c["code"]: c for c in listed.json()}
+    assert set(by_code) == {"P0301", "U0100", "P9999"}
+    assert by_code["P0301"]["description"] is None  # first occurrence wins
+    assert by_code["P9999"]["source"] == "manual"
+
+    # Second push: snapshot replace — P0301/U0100 gone, new list only.
+    resp = await client.post(
+        f"/api/v1/devices/{device_id}/codes",
+        json={"codes": [{"code": "C0035"}]},
+        headers=dev_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    listed = await client.get(f"/api/v1/vehicles/{world['vehicle_id']}/obd/codes", headers=headers)
+    assert {c["code"] for c in listed.json()} == {"C0035", "P9999"}
+
+    # Empty snapshot clears adapter-sourced rows but not manual ones.
+    resp = await client.post(f"/api/v1/devices/{device_id}/codes", json={"codes": []}, headers=dev_headers)
+    assert resp.status_code == 200, resp.text
+    listed = await client.get(f"/api/v1/vehicles/{world['vehicle_id']}/obd/codes", headers=headers)
+    assert [c["code"] for c in listed.json()] == ["P9999"]
+
+    # Bad key rejected.
+    resp = await client.post(
+        f"/api/v1/devices/{device_id}/codes", json={"codes": []}, headers={"X-Device-API-Key": "nope"}
+    )
+    assert resp.status_code == 401
+
+    await client.aclose()

@@ -90,3 +90,31 @@ inline void csv_first_last_epoch(const char* csv, uint32_t* first, uint32_t* las
 }
 
 }  // namespace autobrain
+// AUT-1573: pure body builder for the DTC snapshot push — one code per line
+// ("P0301\n..."), the same text the BLE DTC characteristic exposes. Anything
+// not shaped like a 5-char code line is skipped. Host-tested.
+inline size_t dtc_body_json(const char* lines, char* out, size_t n) {
+    size_t used = 0;
+    used += (size_t)snprintf(out + used, n - used, "{\"codes\":[");
+    bool first = true;
+    const char* p = lines;
+    while (*p) {
+        const char* nl = strchr(p, '\n');
+        size_t len = nl ? (size_t)(nl - p) : strlen(p);
+        if (len >= 5 && len <= 6) {  // "P0301" shape only
+            char code[8];
+            memcpy(code, p, len);
+            code[len] = '\0';
+            int need = snprintf(NULL, 0, "%s{\"code\":\"%s\"}", first ? "" : ",", code);
+            if ((size_t)need > 0 && used + (size_t)need + 2 < n) {
+                used += (size_t)snprintf(out + used, n - used,
+                                         "%s{\"code\":\"%s\"}", first ? "" : ",", code);
+                first = false;
+            }
+        }
+        if (!nl) break;
+        p = nl + 1;
+    }
+    used += (size_t)snprintf(out + used, n - used, "]}");
+    return used;
+}

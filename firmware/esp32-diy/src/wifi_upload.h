@@ -196,6 +196,28 @@ public:
         Serial.printf("WIFI upload failed HTTP %d\n", code);
         return 0;
     }
+
+    // AUT-1573: push the stored DTC snapshot to the bound vehicle. The server
+    // replaces its adapter-sourced code list, so this is idempotent. Returns
+    // true on a 2xx. `body` comes pre-built from dtc_body_json.
+    bool uploadCodes(const WifiCfg& cfg, const char* body) {
+        if (WiFi.status() != WL_CONNECTED) return false;
+        if (!autobrain::https_url_ok(cfg.api_url)) return false;  // Fw4
+        char url[192];
+        snprintf(url, sizeof url, "%s/devices/%s/codes", cfg.api_url, cfg.device_id);
+        WiFiClientSecure tls;
+        tls.setCACert(ROOT_CA_GTS_R4);  // embedded GTS Root R4; verifies chain
+        tls.setTimeout(15000);
+        HTTPClient http;
+        http.setTimeout(15000);
+        http.begin(tls, url);
+        http.addHeader("Content-Type", "application/json");
+        http.addHeader("X-Device-API-Key", cfg.api_key);
+        Serial.printf("WIFI POST %s (%u bytes)\n", url, (unsigned)strlen(body));
+        int code = http.POST(body);
+        http.end();
+        return code >= 200 && code < 300;
+    }
 };
 
 }  // namespace autobrain

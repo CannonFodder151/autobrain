@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "../include/config.h"
+#include "../src/dtc.h"
 #include "../src/obd_pids.h"
 #include "../src/prov_validate.h"
 #include "../src/sleep_heuristics.h"
@@ -253,6 +254,75 @@ int main() {
     assert(provision_window_open(PROVISION_WINDOW_MS, PROVISION_WINDOW_MS));
     assert(!provision_window_open(PROVISION_WINDOW_MS + 1, PROVISION_WINDOW_MS));
     assert(!provision_window_open(120001, PROVISION_WINDOW_MS));
+
+    // ---- AUT-1573: DTC parse / clear-request frames ----
+    uint8_t req3[8], req4[8];
+    build_dtc_request(req3, 0x03);
+    build_dtc_request(req4, 0x04);
+    assert(req3[0] == 1 && req3[1] == 0x03 && req3[2] == 0);
+    assert(req4[0] == 1 && req4[1] == 0x04 && req4[2] == 0);
+
+    // dtc_from_pair: P0301 = 0000_0001 0000_0011 -> wait: P=00, d1=0, d2=3,
+    // d3=0, d4=1 => b1 = (0<<6)|(0<<4)|0x03, b2 = (0x0<<4)|0x01.
+    char code[6];
+    assert(dtc_from_pair(0x03, 0x01, code));
+    assert(strcmp(code, "P0301") == 0);
+    // C1234 / B0021 / U0100 shapes.
+    assert(dtc_from_pair((1 << 6) | (1 << 4) | 0x02, 0x34, code) &&
+           strcmp(code, "C1234") == 0);
+    assert(dtc_from_pair((2 << 6) | (0 << 4) | 0x00, 0x21, code) &&
+           strcmp(code, "B0021") == 0);
+    assert(dtc_from_pair((3 << 6) | (0 << 4) | 0x01, 0x00, code) &&
+           strcmp(code, "U0100") == 0);
+    assert(!dtc_from_pair(0x00, 0x00, code));   // padding pair is not a code
+
+    // Mode-03 response frame: 43 02 P0301 U0100 + padding.
+    {
+        uint8_t frame[8] = {0x04, 0x43, 0x02, 0x03, 0x01, 0xC1, 0x00, 0x55};
+        char codes[8][6];
+        size_t n = parse_dtc_response(frame, sizeof frame, codes, 8);
+        assert(n == 2);
+        assert(strcmp(codes[0], "P0301") == 0);
+        assert(strcmp(codes[1], "U0100") == 0);
+
+        // Zero-DTC response.
+        uint8_t none[8] = {0x02, 0x43, 0x00, 0x55, 0x55, 0, 0, 0};
+        n = parse_dtc_response(none, sizeof none, codes, 8);
+        assert(n == 0);
+
+        // Count byte lies bigger than the payload: clamped, no overrun.
+        uint8_t liar[5] = {0x04, 0x43, 0xFF, 0x03, 0x01};
+        n = parse_dtc_response(liar, sizeof liar, codes, 8);
+        assert(n == 1);
+
+        // Not a mode-03 response.
+        uint8_t other[8] = {0x04, 0x41, 0x0C, 0x1A, 0xF8, 0, 0, 0};
+        assert(parse_dtc_response(other, sizeof other, codes, 8) == 0);
+        assert(parse_dtc_response(nullptr, 8, codes, 8) == 0);
+    }
+
+    // ---- AUT-1573: BLE trip-read target validation (path-traversal proof) ----
+    assert(trip_read_target_ok("20260801_090000.csv"));
+    assert(!trip_read_target_ok("20260801_090000.CSV"));      // case-pinned
+    assert(!trip_read_target_ok("index.txt"));                 // not a trip
+    assert(!trip_read_target_ok("../wifi/queue.tsv"));         // traversal
+    assert(!trip_read_target_ok("/trips/a.csv"));              // absolute path
+    assert(!trip_read_target_ok("20260801_090000.csv.txt"));   // wrong ext
+    assert(!trip_read_target_ok("2026801_090000.csv"));        // short stamp
+    assert(!trip_read_target_ok(""));
+    assert(!trip_read_target_ok(nullptr));
+
+    // ---- AUT-1573: DTC snapshot push body ----
+    {
+        char body[512];
+        dtc_body_json("P0301\nU0100\n", body, sizeof body);
+        assert(strcmp(body,
+                      "{\"codes\":[{\"code\":\"P0301\"},{\"code\":\"U0100\"}]}") == 0);
+        dtc_body_json("", body, sizeof body);                  // empty snapshot
+        assert(strcmp(body, "{\"codes\":[]}") == 0);
+        dtc_body_json("garbage-line\nP0301\n", body, sizeof body);
+        assert(strcmp(body, "{\"codes\":[{\"code\":\"P0301\"}]}") == 0);
+    }
 
     printf("all self-checks passed\n");
     return 0;

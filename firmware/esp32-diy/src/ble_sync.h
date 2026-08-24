@@ -1,7 +1,9 @@
 #pragma once
 
+#include <LittleFS.h>
 #include <NimBLEDevice.h>
 #include <esp_system.h>
+#include <functional>
 
 #include "config.h"
 #include "obd_pids.h"
@@ -25,6 +27,18 @@ static const char* BLE_CHAR_PROV_UUID = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E";
 // write, so a BLE peer that connects first can't push an attacker-chosen
 // config, and a captured/replayed write is rejected.
 static const char* BLE_CHAR_PROV_TOKEN_UUID = "6E400004-B5A3-F393-E0A9-E50E24DCCA9E";
+// AUT-1573: app-side trip sync + codes. TRIP_READ takes a write of
+// "<stamp>.csv@<offset>" and answers reads with up to TRIP_CHUNK_MAX bytes of
+// that completed trip file (loop until a short chunk). DTC carries the stored
+// code list as text (read) and accepts the write "clear" to erase car codes.
+static const char* BLE_CHAR_TRIPREAD_UUID = "6E400005-B5A3-F393-E0A9-E50E24DCCA9E";
+static const char* BLE_CHAR_DTC_UUID      = "6E400006-B5A3-F393-E0A9-E50E24DCCA9E";
+// Long-read chunk ceiling: under the 512-byte NimBLE characteristic cap so a
+// single GATT read (with transparent Read Long) always returns a full chunk.
+static const size_t TRIP_CHUNK_MAX = 460;
+// Set by main.cpp: performs the mode-04 clear on CAN, refreshes the stored
+// code file, and returns the ack text ("ok" / "err:…"). Null = no CAN layer.
+std::function<const char*()> g_dtc_clear_hook;
 
 // Minimal deterministic extractor for `"key":"value"` pairs in the small
 // provisioning JSON object. No JSON lib on the edge — we only ever accept this
@@ -87,6 +101,20 @@ public:
                                           NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_ENC);
         _prov->setCallbacks(new ProvisionCallbacks(_prov, _prov_token, _provToken,
                                                    &_prov_open_ms));
+        // AUT-1573: sync surface. Both are encrypted so only a paired app can
+        // pull trip data or wipe car codes.
+        _tripRead = svc->createCharacteristic(
+            BLE_CHAR_TRIPREAD_UUID,
+            NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::READ_ENC |
+                NIMBLE_PROPERTY::WRITE_ENC);
+        _tripRead->setValue((uint8_t*)"", 0);
+        _tripRead->setCallbacks(new TripReadCallbacks());
+        _dtc = svc->createCharacteristic(
+            BLE_CHAR_DTC_UUID,
+            NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::READ_ENC |
+                NIMBLE_PROPERTY::WRITE_ENC);
+        _dtc->setValue((uint8_t*)"", 0);
+        _dtc->setCallbacks(new DtcCallbacks(_dtc));
         svc->start();
         advertise();
     }
@@ -96,12 +124,86 @@ public:
         _list->notify();
     }
 
+    // AUT-1573: refresh the readable DTC snapshot (text lines, one code per
+    // line) and notify subscribers.
+    void publishDtc(const String& codes) {
+        if (!_dtc) return;
+        _dtc->setValue((uint8_t*)codes.c_str(), codes.length());
+        _dtc->notify();
+    }
+
     void advertise() {
         if (!_ble_on) return;
         NimBLEDevice::getAdvertising()->addServiceUUID(BLE_SERVICE_UUID);
         NimBLEDevice::getAdvertising()->setName(_name);
         NimBLEDevice::getAdvertising()->start();
     }
+
+    // AUT-1573: serves chunks of COMPLETED trip CSVs. The write carries
+    // "<stamp>.csv@<offset>"; the next read returns up to TRIP_CHUNK_MAX
+    // bytes from there (empty value = end/error). Only files listed in the
+    // completed-trips index are served — never the trip currently being
+    // captured, which the main loop is writing concurrently.
+    class TripReadCallbacks : public NimBLECharacteristicCallbacks {
+    public:
+        void onWrite(NimBLECharacteristic* c, NimBLEConnInfo&) override {
+            std::string v = c->getValue();
+            size_t at = v.rfind('@');
+            char name[40];
+            if (at == std::string::npos || at == 0 || at >= sizeof(name)) goto bad;
+            snprintf(name, sizeof name, "%s", v.substr(0, at).c_str());
+            if (!autobrain::trip_read_target_ok(name)) goto bad;
+            {
+                uint32_t offset = strtoul(v.c_str() + at + 1, nullptr, 10);
+                if (!index_has(name)) goto bad;
+                char path[48];
+                snprintf(path, sizeof path, "/trips/%s", name);
+                File f = LittleFS.open(path, "r");
+                if (!f) goto bad;
+                static uint8_t chunk[TRIP_CHUNK_MAX];
+                f.seek(offset);
+                size_t got = f.read(chunk, TRIP_CHUNK_MAX);
+                f.close();
+                c->setValue(chunk, got);
+            }
+            return;
+        bad:
+            c->setValue((uint8_t*)"", 0);
+        }
+
+    private:
+        static bool index_has(const char* name) {
+            File idx = LittleFS.open("/trips/index.txt", "r");
+            if (!idx) return false;
+            bool found = false;
+            while (idx.available()) {
+                String line = idx.readStringUntil('\n');
+                line.trim();
+                if (line == name) { found = true; break; }
+            }
+            idx.close();
+            return found;
+        }
+    };
+
+    // AUT-1573: read = current stored code list; write "clear" = run the
+    // mode-04 erase via the CAN hook and refresh the snapshot.
+    class DtcCallbacks : public NimBLECharacteristicCallbacks {
+    public:
+        explicit DtcCallbacks(NimBLECharacteristic* c) : _c(c) {}
+        void onWrite(NimBLECharacteristic* c, NimBLEConnInfo&) override {
+            std::string v = c->getValue();
+            if (v.compare("clear") != 0 || !g_dtc_clear_hook) {
+                _c->setValue((uint8_t*)"err:bad request", 15);
+                return;
+            }
+            const char* ack = g_dtc_clear_hook();
+            _c->setValue((uint8_t*)ack, strlen(ack));
+        }
+
+    private:
+        NimBLECharacteristic* _c;
+    };
 
     void stopAdvertising() {
         if (!_ble_on) return;
@@ -118,6 +220,8 @@ private:
     NimBLECharacteristic* _list = nullptr;
     NimBLECharacteristic* _prov = nullptr;
     NimBLECharacteristic* _provToken = nullptr;
+    NimBLECharacteristic* _tripRead = nullptr;
+    NimBLECharacteristic* _dtc = nullptr;
     const char* _name = "";
     bool _ble_on = false;
     // F2 (AUT-969): one-shot provisioning token + window deadline, so onWrite

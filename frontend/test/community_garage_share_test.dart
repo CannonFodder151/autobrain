@@ -40,7 +40,8 @@ class _FakeApi extends ApiClient {
   }
 
   @override
-  Future<dynamic> post(String path, [Object? body]) async {
+  Future<dynamic> post(String path,
+      [Object? body, Map<String, String>? headers]) async {
     if (path.endsWith('/share-link')) {
       return {'token': 'tok123', 'url': '/social/share/tok123'};
     }
