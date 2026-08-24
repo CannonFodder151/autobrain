@@ -115,7 +115,7 @@ class Settings(BaseSettings):
     APP_BASE_URL: str = "http://localhost:8000"
 
     # Versioning (local only; the GitHub update check was removed — AUT-461)
-    APP_VERSION: str = "0.3.133"  # mirror frontend/pubspec.yaml version
+    APP_VERSION: str = "0.3.134"  # mirror frontend/pubspec.yaml version
 
     # Scheduled backup (daily). When set, beats stores a full JSON snapshot to MinIO.
     BACKUP_ENABLED: bool = True
