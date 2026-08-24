@@ -1,10 +1,11 @@
-"""Merch store: catalogue, Stripe payment checkouts with shipping collection,
-and order history (AUT-1540).
+"""Merch webhook recording (order persistence only).
 
-The catalogue is a deterministic in-code dict — merch products are few and
-change rarely, so there is no merch table to manage. Orders themselves are
-persisted when the Stripe webhook reports checkout.session.completed
-(mode=payment); the session id makes recording idempotent against replays.
+AUT-1567 (board): merch is NOT sold in the AutoBrain app — the beanie and any
+future merch live only on the autobrainservice.app website merch section
+(see docs/product-rules.md PR-2). There is no in-app catalogue, checkout, or
+orders API. This module only records completed Stripe payment-mode checkouts
+(kind=merch metadata, e.g. from the website flow) so order history is not lost;
+recording is idempotent by Stripe session id.
 """
 
 import json
@@ -14,101 +15,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.merch import MerchOrder
-from app.models.user import User
-from app.core.config import settings
-from app.services.billing import CURRENCY, ensure_customer, get_client
+from app.services.billing import CURRENCY
 
 logger = logging.getLogger(__name__)
-
-# Optional flat-rate shipping added at checkout; products with free_shipping
-# skip it entirely (address still collected via shipping_address_collection).
-SHIPPING_FLAT_CENTS = 995
-SHIPPING_COUNTRIES = ["AU", "NZ", "US", "GB", "CA"]
-
-PRODUCTS: dict[str, dict] = {
-    "beanie": {
-        "name": "AutoBrain Beanie",
-        "description": "Embroidered AutoBrain beanie. One size.",
-        "amount": 5500,  # AUD cents
-        "free_shipping": True,
-    },
-}
-
-MAX_QTY = 10
-
-
-def catalog() -> dict:
-    """Deterministic catalogue for GET /merch/catalog."""
-    return {
-        "currency": CURRENCY,
-        "shipping_flat_cents": SHIPPING_FLAT_CENTS,
-        "products": [
-            {"id": pid, **prod} for pid, prod in PRODUCTS.items()
-        ],
-    }
-
-
-def _validate(product_id: str, quantity: int) -> str:
-    if product_id not in PRODUCTS:
-        raise ValueError("Unknown product")
-    if not isinstance(quantity, int) or quantity < 1 or quantity > MAX_QTY:
-        raise ValueError(f"Quantity must be between 1 and {MAX_QTY}")
-    return product_id
-
-
-async def create_checkout_session(
-    db: AsyncSession, user: User, product_id: str, quantity: int
-) -> str:
-    """Open a Stripe Checkout (payment mode) that collects the shipping address."""
-    product_id = _validate(product_id, quantity)
-    product = PRODUCTS[product_id]
-    client = get_client()
-    customer_id = await ensure_customer(db, user)
-
-    base = settings.APP_BASE_URL.rstrip("/")
-    params: dict = {
-        "mode": "payment",
-        "customer": customer_id,
-        "client_reference_id": user.id,
-        "line_items": [
-            {
-                "quantity": quantity,
-                "price_data": {
-                    "currency": CURRENCY,
-                    "unit_amount": product["amount"],
-                    "product_data": {
-                        "name": product["name"],
-                        "description": product["description"],
-                    },
-                },
-            }
-        ],
-        # AUT-1540: physical goods — Stripe must collect where to ship them.
-        "shipping_address_collection": {"allowed_countries": SHIPPING_COUNTRIES},
-        "phone_number_collection": {"enabled": True},
-        "success_url": f"{base}/?checkout=merch-success",
-        "cancel_url": f"{base}/",
-        "metadata": {"kind": "merch", "product_id": product_id, "quantity": quantity},
-        "payment_intent_data": {
-            "metadata": {"kind": "merch", "product_id": product_id}
-        },
-    }
-    if not product.get("free_shipping"):
-        params["shipping_options"] = [
-            {
-                "shipping_rate_data": {
-                    "type": "fixed_amount",
-                    "fixed_amount": {"amount": SHIPPING_FLAT_CENTS, "currency": CURRENCY},
-                    "display_name": "Standard shipping",
-                }
-            }
-        ]
-    session = client.checkout.sessions.create(params=params)
-    logger.info(
-        "merch_checkout_created",
-        extra={"user": user.id, "product": product_id, "qty": quantity},
-    )
-    return session.url
 
 
 def _dig(obj: dict, *path):
@@ -173,27 +82,3 @@ async def record_paid_session(db: AsyncSession, session: dict) -> None:
     db.add(order)
     await db.commit()
     logger.info("merch_order_recorded", extra={"session": session_id, "user": order.user_id})
-
-
-def order_view(order: MerchOrder) -> dict:
-    product = PRODUCTS.get(order.product_id, {})
-    return {
-        "id": order.id,
-        "product_id": order.product_id,
-        "product_name": product.get("name", order.product_id),
-        "quantity": order.quantity,
-        "amount_total": order.amount_total,
-        "currency": order.currency,
-        "status": order.status,
-        "created_at": order.created_at.isoformat() if order.created_at else None,
-        "shipping_address": json.loads(order.shipping_address) if order.shipping_address else None,
-    }
-
-
-async def list_orders(db: AsyncSession, user: User) -> list[dict]:
-    rows = await db.scalars(
-        select(MerchOrder)
-        .where(MerchOrder.user_id == user.id)
-        .order_by(MerchOrder.created_at.desc())
-    )
-    return [order_view(o) for o in rows]
