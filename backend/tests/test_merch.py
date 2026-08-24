@@ -60,7 +60,8 @@ def test_catalog_deterministic() -> None:
     ids = [p["id"] for p in a["products"]]
     assert "beanie" in ids
     beanie = next(p for p in a["products"] if p["id"] == "beanie")
-    assert beanie["amount"] > 0 and beanie["name"]
+    assert beanie["amount"] == 5500 and beanie["name"]  # AUT-1559: $55
+    assert beanie["free_shipping"] is True
 
 
 def test_checkout_collects_shipping(fake_stripe) -> None:
@@ -71,11 +72,11 @@ def test_checkout_collects_shipping(fake_stripe) -> None:
     assert url.startswith("https://checkout.stripe.com/")
     assert fake_stripe["mode"] == "payment"
     assert fake_stripe["shipping_address_collection"]["allowed_countries"]
-    assert fake_stripe["shipping_options"][0]["shipping_rate_data"]["fixed_amount"]["amount"] == svc.SHIPPING_FLAT_CENTS
+    assert "shipping_options" not in fake_stripe  # AUT-1559: free shipping
     assert fake_stripe["phone_number_collection"] == {"enabled": True}
     assert fake_stripe["metadata"]["kind"] == "merch"
     assert fake_stripe["line_items"][0]["quantity"] == 2
-    assert fake_stripe["line_items"][0]["price_data"]["unit_amount"] == 2500
+    assert fake_stripe["line_items"][0]["price_data"]["unit_amount"] == 5500
 
 
 def test_checkout_validation(fake_stripe) -> None:
