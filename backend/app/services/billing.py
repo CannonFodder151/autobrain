@@ -427,12 +427,6 @@ async def handle_event(db: AsyncSession, event) -> None:
     etype = event.get("type")
     obj = event.get("data", {}).get("object", {})
     if etype == "checkout.session.completed":
-        # Lazy import: merch imports this module for the Stripe client.
-        from app.services.merch import record_paid_session
-
-        if obj.get("mode") == "payment":
-            await record_paid_session(db, obj)
-            return
         await _on_checkout_completed(db, obj)
     elif etype in ("customer.subscription.created", "customer.subscription.updated"):
         await _on_subscription_event(db, obj)

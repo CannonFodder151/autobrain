@@ -10,7 +10,6 @@ from app.models.fuel import FuelLog
 from app.models.diagnostic import Diagnostic
 from app.models.mod import Modification
 from app.models.part import Part, PartMovement
-from app.models.merch import MerchOrder
 from app.models.receipt import Receipt, ExtractedItem
 from app.models.valuation import ValuationSnapshot
 from app.models.market_listing import MarketListingCache
@@ -41,7 +40,6 @@ __all__ = [
     "Modification",
     "Part",
     "PartMovement",
-    "MerchOrder",
     "Receipt",
     "ExtractedItem",
     "ValuationSnapshot",

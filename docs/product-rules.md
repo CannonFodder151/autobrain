@@ -45,37 +45,41 @@ document. Source issue: [AUT-90].
   (list/stats/odometer-photo) for a consistent disable; user copy cites the VIC
   requirement; dedicated test added.
 
-## PR-2 — Merch is sold ONLY on the autobrainservice.app website, never in the app
+## PR-2 — Merch/commerce lives ONLY on autobrainservice.app, never in the app
 
-**Status:** live (enforced 2026-08, AUT-1567) · **Owner:** Nathan (board) · **Category:** commerce
+**Status:** live (enforced 2026-08, AUT-1567; fully removed AUT-1571) · **Owner:** Nathan (board) · **Category:** commerce
 
 ### Rule
 
-The AutoBrain app (web + mobile) must never sell merch or expose any purchasable
-merch surface: no in-app store screen, no `GET /api/v1/merch/catalog`, no
-`POST /api/v1/merch/checkout`, no `/api/v1/merch/orders` endpoint, no bundled
-merch assets. The AutoBrain Beanie and any future merchandise are sold ONLY
-through the merch section of the **autobrainservice.app marketing website**.
-The backend may keep the passive `merch_orders` table and webhook recording so
-completed website orders are persisted, but must not expose sale endpoints.
+Merch/commerce lives ONLY on autobrainservice.app (autobrainservice-website
+repo). Never add storefront, product listings, checkout, or order flows to the
+app or backend API. The app and backend carry zero merch surface: no store
+screen, no merch assets, no `/merch/*` routes, no `merch_orders` table, no
+merch webhook handling. The AutoBrain Beanie and any future merchandise are
+sold ONLY through the merch section of the **autobrainservice.app marketing
+website**.
 
 ### Why
 
 Board decision (Nathan): selling physical merch inside the product app mixes
 storefronts, complicates fulfilment/shipping UX, and was explicitly rejected —
 "it should only be on the autobrainservice.app website in the merch section".
-Source issue: [AUT-1567].
+Source issues: [AUT-1569], [AUT-1571].
 
 ### Enforcement surfaces (keep in sync)
 
 | Surface | Behaviour |
 |---|---|
-| Backend router registration `backend/app/api/v1/__init__.py` | No merch router registered; `/merch/*` routes must not exist. |
-| Backend service `backend/app/services/merch.py` | Webhook order-recording only (`record_paid_session`); no `PRODUCTS` catalogue, no `create_checkout_session`. |
+| Backend `backend/app/api/v1/__init__.py` | No merch router registered; `/merch/*` routes must not exist. |
+| Backend models/services/tests | No `app/models/merch.py`, no `app/services/merch.py`, no `test_merch.py`; `MerchOrder` model deleted. |
+| Database | `merch_orders` table dropped by migration `o5n6p7q8r9s0`. |
+| Billing webhook | `checkout.session.completed` handles subscription mode only; payment-mode sessions are ignored. |
 | Frontend | No store screen, no Settings → Merch entry, no `assets/merch/` bundle. |
-| Tests `backend/tests/test_merch.py` | `test_pr2_no_merch_sale_surface_in_app` fails CI if any `/merch` route, catalogue, or checkout reappears. |
 
 ### History
 
+- 2026-08 — AUT-1571: full removal — merch model/service/tests deleted,
+  `merch_orders` table dropped, billing webhook payment branch removed.
+  Supersedes the passive-table compromise of AUT-1567.
 - 2026-08 — AUT-1567: beanie removed from app + backend sale API (was shipped as
   AUT-1540/AUT-1559); rule added with CI guard.
