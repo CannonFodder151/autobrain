@@ -46,6 +46,7 @@
 #define TRIP_END_MS 45000           // sustained silence (no CAN, no ACC) before closing trip
 #define IGNITION_PROBE_MS 2000      // ignition check window at boot
 #define PROBE_REQUIRED_FRAMES 2     // CAN responses needed to call bus active
+#define DTC_POLL_ROWS 30            // re-read stored codes every N sample rows (~30s)
 
 // ---- Deep sleep ----
 #define SLEEP_CHECK_MS (2u * 60u * 1000u)  // periodic wake to re-probe ignition

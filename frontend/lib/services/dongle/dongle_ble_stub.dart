@@ -14,4 +14,12 @@ class BleImpl {
   static Future<String> provision(String payload, {required String deviceId}) {
     throw DongleBleException('BLE provisioning is only supported on the app.');
   }
+
+  static Future<DongleSyncResult> sync(String deviceId) {
+    throw DongleBleException('Dongle sync is only supported on the app.');
+  }
+
+  static Future<void> clearCodes(String deviceId) {
+    throw DongleBleException('Dongle sync is only supported on the app.');
+  }
 }

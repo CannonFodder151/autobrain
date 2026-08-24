@@ -31,7 +31,9 @@ class _FakeApi extends ApiClient {
   }
 
   @override
-  Future<dynamic> post(String path, [Object? body]) async => null;
+  Future<dynamic> post(String path,
+          [Object? body, Map<String, String>? headers]) async =>
+      null;
 }
 
 class _FailingApi extends ApiClient {
@@ -41,7 +43,8 @@ class _FailingApi extends ApiClient {
   Future<dynamic> get(String path) async => throw Exception('boom');
 
   @override
-  Future<dynamic> post(String path, [Object? body]) async =>
+  Future<dynamic> post(String path,
+          [Object? body, Map<String, String>? headers]) async =>
       throw Exception('boom');
 }
 
@@ -92,7 +95,8 @@ void main() {
     'created_at': '2026-08-16T10:00:00Z',
   };
 
-  testWidgets('push blocked when saved device id not in account list', (tester) async {
+  testWidgets('push blocked when saved device id not in account list',
+      (tester) async {
     await _pump(tester, [
       {
         'id': 'dev-2',
@@ -103,14 +107,17 @@ void main() {
       }
     ]);
 
-    expect(find.text('Push credentials'), findsNothing);
+    expect(
+        find.textContaining(RegExp('Push credentials|Sync now')), findsNothing);
     expect(find.text('Link dongle'), findsOneWidget);
   });
 
-  testWidgets('push available when saved device is in the account list', (tester) async {
+  testWidgets('push available when saved device is in the account list',
+      (tester) async {
     await _pump(tester, [dev1]);
 
-    expect(find.text('Push credentials'), findsOneWidget);
+    expect(find.textContaining(RegExp('Push credentials|Sync now')),
+        findsOneWidget);
   });
 
   testWidgets('device-list fetch failure surfaces server hint, not no-dongle',
@@ -121,7 +128,8 @@ void main() {
     expect(find.textContaining('No dongle linked yet'), findsNothing);
   });
 
-  testWidgets('SSID/pass fields cap length at firmware buffer sizes (AUT-968 F3)',
+  testWidgets(
+      'SSID/pass fields cap length at firmware buffer sizes (AUT-968 F3)',
       (tester) async {
     await _pump(tester, [
       {
@@ -133,7 +141,8 @@ void main() {
       }
     ]);
 
-    final fields = tester.widgetList<TextField>(find.byType(TextField)).toList();
+    final fields =
+        tester.widgetList<TextField>(find.byType(TextField)).toList();
     expect(fields.length, greaterThanOrEqualTo(2));
     expect(fields[0].maxLength, 32); // ssid[33] on the dongle
     expect(fields[1].maxLength, 63); // pass[64] on the dongle
@@ -142,7 +151,7 @@ void main() {
   // Opens the confirm-dongle dialog. pumpAndSettle is unusable while the
   // busy spinner animates, so pump a bounded number of frames instead.
   Future<void> openConfirmDialog(WidgetTester tester) async {
-    await tester.tap(find.text('Push credentials'));
+    await tester.tap(find.textContaining('Sync now'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
   }
@@ -152,7 +161,8 @@ void main() {
       (tester) async {
     final writes = <String>[];
     DongleBle.scanOverride = () async => const [
-          DonglePeripheral(deviceId: 'AA:BB:CC:DD:EE:FF', name: 'AutoBrain-Tripper'),
+          DonglePeripheral(
+              deviceId: 'AA:BB:CC:DD:EE:FF', name: 'AutoBrain-Tripper'),
         ];
     DongleBle.provisionOverride = (payload, deviceId) async {
       writes.add(deviceId);
@@ -208,7 +218,8 @@ void main() {
         findsOneWidget);
   });
 
-  testWidgets('AUT-966: payload written to the confirmed device even when it '
+  testWidgets(
+      'AUT-966: payload written to the confirmed device even when it '
       'is the only match', (tester) async {
     final writes = <String>[];
     DongleBle.scanOverride = () async => const [

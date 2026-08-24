@@ -66,13 +66,16 @@ class ApiClient {
   Future<String?>? _inflightRefresh;
 
   Future<dynamic> get(String path) => _send('GET', path);
-  Future<dynamic> post(String path, [Object? body]) => _send('POST', path, body);
-  Future<dynamic> patch(String path, [Object? body]) => _send('PATCH', path, body);
+  Future<dynamic> post(String path,
+          [Object? body, Map<String, String>? headers]) =>
+      _send('POST', path, body, headers);
+  Future<dynamic> patch(String path, [Object? body]) =>
+      _send('PATCH', path, body);
   Future<dynamic> put(String path, [Object? body]) => _send('PUT', path, body);
   Future<dynamic> delete(String path) => _send('DELETE', path);
 
-  Future<dynamic> upload(String path, List<int> bytes, String filename,
-      String contentType) async {
+  Future<dynamic> upload(
+      String path, List<int> bytes, String filename, String contentType) async {
     final uri = Uri.parse('${AppConfig.apiBase}$path');
     final request = http.MultipartRequest('POST', uri)
       ..headers['Authorization'] = 'Bearer $_token'
@@ -97,17 +100,20 @@ class ApiClient {
             contentType: safeContentType(contentType, filename),
           ));
         final retried = await retry.send().timeout(_timeout);
-        return _decode(await http.Response.fromStream(retried).timeout(_timeout));
+        return _decode(
+            await http.Response.fromStream(retried).timeout(_timeout));
       }
     }
     return _decode(response);
   }
 
-  Future<dynamic> _send(String method, String path, [Object? body]) async {
+  Future<dynamic> _send(String method, String path,
+      [Object? body, Map<String, String>? extraHeaders]) async {
     final uri = Uri.parse('${AppConfig.apiBase}$path');
     final headers = {
       'Content-Type': 'application/json',
       if (_token != null) 'Authorization': 'Bearer $_token',
+      ...?extraHeaders,
     };
     var response = await _raw(method, uri, headers, body);
     if (response.statusCode == 401 && _token != null && onRefresh != null) {
@@ -121,8 +127,8 @@ class ApiClient {
     return _decode(response);
   }
 
-  Future<http.Response> _raw(String method, Uri uri,
-      Map<String, String> headers, Object? body) {
+  Future<http.Response> _raw(
+      String method, Uri uri, Map<String, String> headers, Object? body) {
     final encoded = body == null ? null : jsonEncode(body);
     switch (method) {
       case 'GET':
@@ -130,9 +136,13 @@ class ApiClient {
       case 'DELETE':
         return http.delete(uri, headers: headers).timeout(_timeout);
       case 'POST':
-        return http.post(uri, headers: headers, body: encoded).timeout(_timeout);
+        return http
+            .post(uri, headers: headers, body: encoded)
+            .timeout(_timeout);
       case 'PATCH':
-        return http.patch(uri, headers: headers, body: encoded).timeout(_timeout);
+        return http
+            .patch(uri, headers: headers, body: encoded)
+            .timeout(_timeout);
       case 'PUT':
         return http.put(uri, headers: headers, body: encoded).timeout(_timeout);
       default:

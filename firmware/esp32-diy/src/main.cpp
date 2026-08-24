@@ -18,6 +18,7 @@
 #include <Arduino.h>
 #include "driver/twai.h"
 #include "config.h"
+#include "dtc.h"
 #include "obd_pids.h"
 #include "rtc_ds3231.h"
 #include "trip_store.h"
@@ -87,6 +88,80 @@ static bool ignition_on(uint32_t probe_ms, uint32_t* responses_out) {
     return acc || bus_active(responses, false, PROBE_REQUIRED_FRAMES);
 }
 
+// ---------- DTC read / clear (AUT-1573) ----------
+// Snapshot of the ECU's stored codes, refreshed while driving and persisted
+// to /dtc/current.txt so the app can pull it over BLE or WiFi at any time.
+static char dtc_codes[16][6];
+static size_t dtc_n = 0;
+static bool dtc_valid = false;   // true once the ECU answered a mode-03
+
+static void dtc_store_save() {
+    File f = LittleFS.open("/dtc/current.txt", FILE_WRITE);
+    if (!f) return;
+    for (size_t i = 0; i < dtc_n; i++) {
+        f.print(dtc_codes[i]);
+        f.print("\n");
+    }
+    f.close();
+}
+
+static String dtc_text() {
+    String s;
+    for (size_t i = 0; i < dtc_n; i++) {
+        s += dtc_codes[i];
+        s += "\n";
+    }
+    return s;
+}
+
+// One mode-03 exchange: refreshes the snapshot. True when the ECU answered.
+static bool dtc_read_now() {
+    if (!can_ok) return false;
+    uint8_t req[8], resp[8];
+    build_dtc_request(req, 0x03);
+    twai_message_t msg = {};
+    msg.identifier = 0x7DF;
+    msg.data_length_code = 8;
+    memcpy(msg.data, req, 8);
+    if (twai_transmit(&msg, pdMS_TO_TICKS(20)) != ESP_OK) return false;
+    uint32_t end = millis() + 120;
+    while ((int32_t)(end - millis()) > 0) {
+        twai_message_t rx;
+        if (twai_receive(&rx, pdMS_TO_TICKS(10)) != ESP_OK) continue;
+        if (rx.data_length_code >= 3 && rx.data[1] == 0x43) {
+            dtc_n = parse_dtc_response(rx.data, rx.data_length_code, dtc_codes, 16);
+            dtc_valid = true;
+            return true;
+        }
+    }
+    return false;
+}
+
+// BLE "clear" hook: mode 04 erases stored codes + turns off the MIL.
+static const char* dtc_clear_now() {
+    if (!can_ok) return "err:no can bus";
+    uint8_t req[8];
+    build_dtc_request(req, 0x04);
+    twai_message_t msg = {};
+    msg.identifier = 0x7DF;
+    msg.data_length_code = 8;
+    memcpy(msg.data, req, 8);
+    if (twai_transmit(&msg, pdMS_TO_TICKS(20)) != ESP_OK) return "err:bus busy";
+    uint32_t end = millis() + 120;
+    while ((int32_t)(end - millis()) > 0) {
+        twai_message_t rx;
+        if (twai_receive(&rx, pdMS_TO_TICKS(10)) != ESP_OK) continue;
+        if (rx.data_length_code >= 2 && rx.data[1] == 0x44) {
+            dtc_n = 0;
+            dtc_valid = true;
+            dtc_store_save();
+            ble.publishDtc("");
+            return "ok";
+        }
+    }
+    return "err:ecu did not confirm";
+}
+
 // ---------- GPS (NEO-8M, UART2) ----------
 static GpsNeo8M gps;
 
@@ -109,9 +184,11 @@ static void run_trip() {
     }
     ble.begin(APP_NAME);  // BLE radio only while capturing — off during sleep/probes
     ble.publishTrips(trips.index());
+    if (dtc_valid) ble.publishDtc(dtc_text());
     gps_start();
 
     uint32_t quiet = 0;
+    uint32_t rows = 0;
     while (true) {
         gps.update();                       // drain NMEA, refresh fix state
         int32_t lat = gps.lat(), lon = gps.lon();
@@ -130,6 +207,13 @@ static void run_trip() {
                                 0, 0, lat, lon);
                 trips.appendRow(row);
                 any = true;
+                // Refresh the stored-code snapshot periodically while the
+                // bus is alive (AUT-1573) — codes are unreadable once the
+                // engine is off, so this window is the only chance.
+                if (++rows % DTC_POLL_ROWS == 0 && dtc_read_now()) {
+                    dtc_store_save();
+                    ble.publishDtc(dtc_text());
+                }
             }
         } else if (digitalRead(ACC_PIN) == HIGH || gps_moving) {
             // CAN absent: ACC-only / GPS-movement heartbeat rows.
@@ -175,6 +259,17 @@ static void wifi_upload_opportunity(uint32_t window_ms) {
         delay(backoff_delay_ms(attempt++, WIFI_BACKOFF_BASE_MS, WIFI_BACKOFF_CAP_MS));
         up.disconnect();
     }
+    // AUT-1573: push the latest DTC snapshot once trips are drained. Only
+    // when the ECU actually answered this session — never wipe app-side codes
+    // because a parked board had no bus to ask.
+    if (dtc_valid && WiFi.status() == WL_CONNECTED) {
+        File f = LittleFS.open("/dtc/current.txt", "r");
+        String lines = f ? f.readString() : String();
+        if (f) f.close();
+        char body[512];
+        dtc_body_json(lines.c_str(), body, sizeof body);
+        if (!up.uploadCodes(cfg, body)) Serial.println("WIFI codes push failed");
+    }
     if (WiFi.status() == WL_CONNECTED) up.disconnect();
     ble.wifi_window(false);  // advertising resumes for the app
 }
@@ -194,6 +289,22 @@ void setup() {
         Serial.println("WARN: DS3231 not found — timestamps will be 0");
     }
     trips.begin();
+    LittleFS.mkdir("/dtc");
+    // Load the last snapshot so the app can read/clear codes even parked.
+    if (LittleFS.exists("/dtc/current.txt")) {
+        File f = LittleFS.open("/dtc/current.txt", "r");
+        while (f && f.available() && dtc_n < 16) {
+            String line = f.readStringUntil('\n');
+            line.trim();
+            if (line.length() == 5) {
+                snprintf(dtc_codes[dtc_n], 6, "%s", line.c_str());
+                dtc_n++;
+                dtc_valid = true;
+            }
+        }
+        if (f) f.close();
+    }
+    g_dtc_clear_hook = dtc_clear_now;
     can_init();
     // GPS is intentionally not started here: it is powered up (gps_start) only
     // once a trip begins, so the module draws nothing while parked or probing.
@@ -214,6 +325,7 @@ void setup() {
         // Cancelled early if config arrives (checked each loop).
         Serial.println("wifi not configured — BLE provisioning window open");
         ble.begin(APP_NAME);
+        ble.publishDtc(dtc_text());
         uint32_t w0 = millis();
         while (millis() - w0 < PROVISION_WINDOW_MS) {
             Preferences chk;

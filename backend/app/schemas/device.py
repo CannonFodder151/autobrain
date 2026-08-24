@@ -59,3 +59,21 @@ class DeviceTripsResult(BaseModel):
     accepted: int
     duplicates: int
     vehicle_id: str
+
+
+class DeviceCodeIn(BaseModel):
+    """One DTC read off the car by the dongle (mode 03)."""
+
+    code: str = Field(min_length=1, max_length=16)
+    description: str | None = None
+
+
+class DeviceCodesIn(BaseModel):
+    """Snapshot of the dongle's current DTC list (AUT-1573).
+
+    The whole list replaces the previous `source=obd` rows for the bound
+    vehicle; manual entries are never touched. An empty list clears the
+    adapter-sourced codes (the dongle read none / they were cleared on-car).
+    """
+
+    codes: list[DeviceCodeIn] = Field(max_length=64)

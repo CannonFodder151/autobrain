@@ -18,16 +18,18 @@ The BLE live-logging path is unchanged; this surface is additive.
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_device_from_key, require_write
 from app.db.session import get_db
 from app.models.device import Device
 from app.models.logbook import LogEntry
+from app.models.obd import ObdCode
 from app.models.user import User
 from app.models.vehicle import Vehicle
 from app.schemas.device import (
+    DeviceCodesIn,
     DeviceCreate,
     DeviceCreated,
     DeviceOut,
@@ -142,3 +144,53 @@ async def upload_trips(
             await sync_odometer(db, vehicle, trip.end_odometer_km, trip.ended_at)
     await db.commit()
     return DeviceTripsResult(accepted=accepted, duplicates=duplicates, vehicle_id=vehicle.id)
+
+@router.post("/{device_id}/codes", status_code=200)
+async def push_codes(
+    device_id: str,
+    payload: DeviceCodesIn,
+    db: AsyncSession = Depends(get_db),
+    device: Device = Depends(get_device_from_key),
+) -> dict:
+    """Snapshot of the dongle's current DTC list (AUT-1573).
+
+    The dongle reads stored codes (mode 03) during a trip and pushes the whole
+    list here over WiFi; over BLE the app relays the same snapshot. The
+    snapshot replaces previous `source=obd` rows on the bound vehicle — manual
+    entries are never touched, so retries are idempotent.
+    """
+    if device.id != device_id:
+        raise HTTPException(status_code=404, detail="Device not found")
+    owner = await db.get(User, device.user_id)
+    if not device.vehicle_id or owner is None:
+        raise HTTPException(status_code=409, detail="No vehicle bound to this device")
+    vehicle = await db.get(Vehicle, device.vehicle_id)
+    if vehicle is None or vehicle.user_id != device.user_id:
+        raise HTTPException(status_code=409, detail="Bound vehicle is unavailable")
+    if not owner.obd_enabled:
+        raise HTTPException(
+            status_code=403,
+            detail="OBD access is not enabled for this account. Contact your administrator.",
+        )
+    device.last_seen_at = datetime.now(timezone.utc)
+
+    seen: set[str] = set()
+    codes: list = []
+    for c in payload.codes:
+        if c.code.upper() not in seen:
+            seen.add(c.code.upper())
+            codes.append(c)
+    await db.execute(
+        delete(ObdCode).where(ObdCode.vehicle_id == vehicle.id, ObdCode.source == "obd")
+    )
+    for c in codes:
+        db.add(
+            ObdCode(
+                vehicle_id=vehicle.id,
+                code=c.code.upper(),
+                description=c.description,
+                source="obd",
+            )
+        )
+    await db.commit()
+    return {"accepted": len(codes), "vehicle_id": vehicle.id}

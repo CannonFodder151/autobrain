@@ -57,4 +57,24 @@ inline bool provision_window_open(uint32_t elapsed_ms, uint32_t window_ms) {
     return elapsed_ms <= window_ms;
 }
 
+// AUT-1573: the app pulls trip CSVs over BLE by writing "name@offset" to the
+// read characteristic. `name` is attacker-controlled, so pin it to a plain
+// completed-trip filename: "<digits>_<digits>.csv" (the RTC stamp layout
+// TripStore writes). Anything else — separators, "..", non-CSV — is rejected,
+// which also makes path traversal structurally impossible.
+inline bool trip_read_target_ok(const char* name) {
+    if (!name) return false;
+    size_t len = strlen(name);
+    const size_t kStamp = 15;   // YYYYMMDD_HHMMSS
+    if (len != kStamp + 4) return false;
+    for (size_t i = 0; i < len; i++) {
+        char c = name[i];
+        bool digit = c >= '0' && c <= '9';
+        bool okChar = digit || (i == 8 && c == '_') ||
+                      (i >= kStamp && c == ".csv"[i - kStamp]);
+        if (!okChar) return false;
+    }
+    return true;
+}
+
 }  // namespace autobrain

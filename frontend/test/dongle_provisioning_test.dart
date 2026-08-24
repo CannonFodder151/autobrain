@@ -49,7 +49,8 @@ void main() {
       );
     });
 
-    test('inserts api_url for self-hosted users between pass and device_id', () {
+    test('inserts api_url for self-hosted users between pass and device_id',
+        () {
       final payload = buildProvisioningPayload(
         ssid: 'S',
         pass: 'P',
@@ -64,7 +65,8 @@ void main() {
       );
     });
 
-    test('escapes quotes and backslashes so substring parsing cannot break', () {
+    test('escapes quotes and backslashes so substring parsing cannot break',
+        () {
       final payload = buildProvisioningPayload(
         ssid: 'Net"5',
         pass: r'p\a"ss',
@@ -73,7 +75,8 @@ void main() {
       );
       expect(payload, contains(r'"ssid":"Net\"5"'));
       expect(payload, contains(r'"pass":"p\\a\"ss"'));
-      expect(payload, isNot(contains(r'"pass":"p\a"ss"')), reason: 'raw pass must not appear unescaped');
+      expect(payload, isNot(contains(r'"pass":"p\a"ss"')),
+          reason: 'raw pass must not appear unescaped');
     });
   });
 
@@ -124,21 +127,25 @@ void main() {
 
     test('rejects empty or oversize ssid', () {
       expect(validateWifiInput(ssid: '', pass: '12345678'), isNotNull);
-      expect(validateWifiInput(ssid: 'A' * 33, pass: '12345678'), contains('SSID'));
+      expect(validateWifiInput(ssid: 'A' * 33, pass: '12345678'),
+          contains('SSID'));
     });
 
     test('rejects short or oversize pass', () {
-      expect(validateWifiInput(ssid: 'Home', pass: '1234567'), contains('at least 8'));
+      expect(validateWifiInput(ssid: 'Home', pass: '1234567'),
+          contains('at least 8'));
       expect(validateWifiInput(ssid: 'Home', pass: 'x' * 64), contains('63'));
     });
 
     test('counts octets, not characters, for non-ASCII input', () {
-      expect(validateWifiInput(ssid: 'é' * 33, pass: '12345678'), contains('SSID'));
+      expect(validateWifiInput(ssid: 'é' * 33, pass: '12345678'),
+          contains('SSID'));
     });
 
     test('rejects " or \\ in ssid/pass — firmware cannot unescape (AUT-968 F2)',
         () {
-      expect(validateWifiInput(ssid: 'Net"5', pass: '12345678'), contains('" or \\'));
+      expect(validateWifiInput(ssid: 'Net"5', pass: '12345678'),
+          contains('" or \\'));
       expect(validateWifiInput(ssid: r'Net\5', pass: '12345678'), isNotNull);
       expect(validateWifiInput(ssid: 'Home', pass: 'pa"ssword1'), isNotNull);
       expect(validateWifiInput(ssid: 'Home', pass: r'p\assword1'), isNotNull);
@@ -171,7 +178,8 @@ void main() {
   });
 
   group('DongleApi', () {
-    test('create posts name + vehicle_id and parses the one-time key', () async {
+    test('create posts name + vehicle_id and parses the one-time key',
+        () async {
       final api = _FakeApi()
         ..response = {
           'id': 'dev-1',
@@ -188,7 +196,8 @@ void main() {
         vehicleId: 'v9',
       );
       expect(api.requests.single, 'POST /devices');
-      expect(api.bodies.single, {'name': 'AutoBrain-Tripper', 'vehicle_id': 'v9'});
+      expect(
+          api.bodies.single, {'name': 'AutoBrain-Tripper', 'vehicle_id': 'v9'});
       expect(device.id, 'dev-1');
       expect(device.oneTimeApiKey, 'abdev_abcd1234');
       expect(device.vehicleId, 'v9');
@@ -242,7 +251,8 @@ class _FakeApi extends ApiClient {
   }
 
   @override
-  Future<dynamic> post(String path, [Object? body]) {
+  Future<dynamic> post(String path,
+      [Object? body, Map<String, String>? headers]) {
     requests.add('POST $path');
     bodies.add(body);
     return Future.value(response);

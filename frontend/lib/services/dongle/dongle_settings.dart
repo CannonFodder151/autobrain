@@ -15,9 +15,21 @@ class DongleSettings {
   static const _deviceId = 'dongle_device_id';
   static const _deviceName = 'dongle_device_name';
   static const _vehicleId = 'dongle_vehicle_id';
+  static const _bleId = 'dongle_ble_id'; // AUT-1573: confirmed BLE remoteId
   static const _pass = 'dongle_wifi_pass';
   static const _apiKey = 'dongle_api_key';
   static const _storage = FlutterSecureStorage();
+
+  /// Remembers which physical dongle the user confirmed (BLE remoteId) so
+  /// auto-connect can target it without re-asking (AUT-1573).
+  static Future<void> saveBleId(String? bleId) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (bleId == null || bleId.isEmpty) {
+      await prefs.remove(_bleId);
+    } else {
+      await prefs.setString(_bleId, bleId);
+    }
+  }
 
   /// Persists the provisioning inputs so the user can re-push over BLE
   /// without re-entering them.
@@ -55,6 +67,12 @@ class DongleSettings {
     );
   }
 
+  /// The BLE remoteId of the user-confirmed dongle, or null.
+  static Future<String?> loadBleId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_bleId);
+  }
+
   /// Clears every dongle store — the credentials in secure storage
   /// (WiFi password + one-time API key) and the non-sensitive prefs.
   /// Called on logout / server switch so a previous account's device key
@@ -89,5 +107,6 @@ class DongleConfig {
   });
 
   /// True when enough is saved to re-push provisioning without re-entering.
-  bool get provisionable => ssid.isNotEmpty && deviceId != null && apiKey != null;
+  bool get provisionable =>
+      ssid.isNotEmpty && deviceId != null && apiKey != null;
 }

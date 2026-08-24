@@ -16,7 +16,8 @@ class _FakeApi extends ApiClient {
   }
 
   @override
-  Future<dynamic> post(String path, [Object? body]) {
+  Future<dynamic> post(String path,
+      [Object? body, Map<String, String>? headers]) {
     requests.add('POST $path');
     bodies.add(body);
     return Future.value(response);

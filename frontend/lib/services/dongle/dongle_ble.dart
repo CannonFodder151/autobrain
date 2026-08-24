@@ -9,8 +9,7 @@ library;
 
 import 'package:flutter/foundation.dart';
 
-import 'dongle_ble_stub.dart'
-    if (dart.library.io) 'dongle_ble_io.dart' as impl;
+import 'dongle_ble_stub.dart' if (dart.library.io) 'dongle_ble_io.dart' as impl;
 
 class DongleBle {
   /// Whether this platform can provision the dongle over BLE (mobile only).
@@ -28,9 +27,17 @@ class DongleBle {
   /// string ("ok" or "err:…"). Never auto-picks a device. Throws
   /// [DongleBleException] with a user-facing message when the confirmed
   /// dongle cannot be reached or does not ack in time.
-  static Future<String> provision(String payload,
-          {required String deviceId}) =>
+  static Future<String> provision(String payload, {required String deviceId}) =>
       (provisionOverride ?? impl.BleImpl.provision)(payload, deviceId);
+
+  /// AUT-1573: pulls the trip index, all completed trip CSVs and the stored
+  /// DTC snapshot from the confirmed dongle.
+  static Future<DongleSyncResult> sync(String deviceId) =>
+      (syncOverride ?? impl.BleImpl.sync)(deviceId);
+
+  /// AUT-1573: clears car codes on the confirmed dongle (firmware mode 04).
+  static Future<void> clearCodes(String deviceId) =>
+      (clearCodesOverride ?? impl.BleImpl.clearCodes)(deviceId);
 
   /// Test seams (AUT-966): swap in fakes so widget tests never touch the BLE
   /// plugin. Reset to null in tearDown.
@@ -39,6 +46,17 @@ class DongleBle {
   @visibleForTesting
   static Future<String> Function(String payload, String deviceId)?
       provisionOverride;
+  @visibleForTesting
+  static Future<DongleSyncResult> Function(String deviceId)? syncOverride;
+  @visibleForTesting
+  static Future<void> Function(String deviceId)? clearCodesOverride;
+}
+
+/// Result of one BLE sync pass: completed-trip CSVs keyed by filename and the
+/// current DTC text (empty when the board has none or old firmware).
+class DongleSyncResult {
+  final Map<String, String> trips = {};
+  String dtc = '';
 }
 
 /// Identity of a discovered dongle, surfaced for explicit user confirmation

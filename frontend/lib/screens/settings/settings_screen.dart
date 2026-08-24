@@ -7,10 +7,8 @@ import 'package:provider/provider.dart';
 
 import '../../core/api_client.dart';
 import '../../core/auth_state.dart';
-import '../../core/config.dart';
 import '../../core/download.dart';
 import 'car_integration_screen.dart';
-import 'dongle_wifi_screen.dart';
 
 String _errorText(Object e) => e is ApiException ? e.message : '$e';
 
@@ -353,20 +351,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(MaterialPageRoute(
                     builder: (_) => const CarIntegrationScreen())),
-              ),
-            ),
-          const SizedBox(height: 16),
-          if (AppConfig.isMobile)
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.settings_input_antenna),
-                title: const Text('Dongle WiFi upload'),
-                subtitle: const Text(
-                    'WiFi auto-upload + BLE provisioning for the '
-                    'AutoBrain-Tripper'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                    builder: (_) => const DongleWifiScreen())),
               ),
             ),
           const SizedBox(height: 16),
