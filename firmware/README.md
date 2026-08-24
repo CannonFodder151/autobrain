@@ -4,6 +4,11 @@ Two firmware paths for phone-dead trip capture (GoFar parity). This is the CTO-o
 deliverable from [AUT-369](/AUT/issues/AUT-369). Hardware sourcing + prototype
 board is the BDM/Nathan track.
 
+**Build documentation** (BOM, wiring, soldering, flash/test) lives in its own
+folder: [`docs/obd2-dongle/`](../docs/obd2-dongle/) — written for the
+**ESP32-WROOM-32 DevKit** (CAN decodes on-chip via TWAI; the MCP2551/SN65HVD230
+is only the level-shifting transceiver).
+
 | Path | Status | Cost/unit | Compile-verified |
 |---|---|---|---|
 | [`esp32-diy/`](esp32-diy/) | Primary PoC — ESP32 + MCP2551/SN65HVD230 + DS3231 RTC + NEO-8M GPS (+ external antenna + power gate) + 12V buck + BLE, **WiFi trip auto-upload (AUT-918 + AUT-969 provisioning)** | US$20–35 | ✅ (`pio run`, self-check passes) |
@@ -53,25 +58,9 @@ Then power from a 5V bench supply (or the OBD pin 16 via the buck). Serial print
 `ignition ON/OFF` and `trip ended` so the state machine is observable on a bench
 without a car (simulate "ignition" by injecting CAN traffic / raising ACC).
 
-## Parts (DIY board) — BOM
+## Deep-sleep design
 
-| Part | Purpose | Approx cost |
-|---|---|---|
-| ESP32 dev board (ESP32-WROOM) | MCU, TWAI CAN on-die, BLE, LittleFS | US$5–8 |
-| MCP2551 or SN65HVD230 | CAN transceiver only (level shifter; the CAN decoder is the WROOM's on-chip TWAI — no external decoder/controller) | US$1–3 |
-| DS3231 + battery | battery-backed RTC for epoch timestamps | US$2–3 |
-| **NEO-8M GPS module** | **lat/lon + speed/course per trip row — route-on-map in the logbook** | **US$3–5** |
-| **External patch/active GPS antenna (IPX lead)** | **reliable under-dash fix (tiny ceramic patch struggles in the OBD area)** | **US$2–4** |
-| 2N7000 + 10 kΩ | GPS VCC power gate (off in deep sleep) | US$1 |
-| 12V→5V DC-DC buck (e.g. MP1584) | always-on OBD power, survives crank dips | US$1–2 |
-| Voltage divider + OBD-2 female plug | ACC sense + bus tap | US$1–3 |
-
-Wiring note: wire the transceiver **RS** pin to **GPIO18** (`CAN_STBY_PIN`) so
-auto-sleep can put it in low-power standby (see
-[`esp32-diy/docs/auto-sleep.md`](esp32-diy/docs/auto-sleep.md)); set the pin to
-`-1` in `config.h` if unwired. Wire the **NEO-8M VCC through the 2N7000 gate on
-GPIO14** (`GPS_PWR_PIN`) so the GPS is off in sleep; `-1` if unwired. GPS VCC is
-**3.3 V only**.
+Full design + bench test plan in [`esp32-diy/docs/auto-sleep.md`](esp32-diy/docs/auto-sleep.md) (AUT-387 → AUT-917).
 
 See the full research memo + component table in the Outline doc
 _2026-W33 OBD Dongle Research (AUT-363)_.
