@@ -1,5 +1,5 @@
-"""Merch store tests (AUT-1540): catalogue, checkout validation, webhook order
-recording with shipping details."""
+"""Merch webhook-recording tests (AUT-1567): in-app merch sale is banned
+(docs/product-rules.md PR-2); only order recording from Stripe webhooks exists."""
 
 import os
 
@@ -9,84 +9,17 @@ os.environ.setdefault("SECRET_KEY", "test-secret")
 import json  # noqa: E402
 import uuid  # noqa: E402
 
-import pytest  # noqa: E402
-
-from app.models.user import User  # noqa: E402
-from app.services import billing as billing_svc  # noqa: E402
+from app.api.v1 import api_router  # noqa: E402
 from app.services import merch as svc  # noqa: E402
 
 
-def _user() -> User:
-    return User(
-        id=str(uuid.uuid4()),
-        email="u@example.com",
-        display_name="U",
-        hashed_password="x",
-        role="user",
-        max_vehicles=1,
-        free_account=True,
-    )
-
-
-class _FakeSessions:
-    def __init__(self, capture: dict):
-        self._capture = capture
-
-    def create(self, params):
-        self._capture.update(params)
-        return type("S", (), {"url": "https://checkout.stripe.com/x"})()
-
-
-class _FakeClient:
-    def __init__(self, capture: dict):
-        self.checkout = type("C", (), {"sessions": _FakeSessions(capture)})()
-
-
-@pytest.fixture()
-def fake_stripe(monkeypatch):
-    capture: dict = {}
-    monkeypatch.setattr(billing_svc, "get_client", lambda: _FakeClient(capture))
-    monkeypatch.setattr(svc, "get_client", lambda: _FakeClient(capture))
-    async def _ensure(db, user):
-        user.stripe_customer_id = "cus_test"
-        return "cus_test"
-    monkeypatch.setattr(svc, "ensure_customer", _ensure)
-    return capture
-
-
-def test_catalog_deterministic() -> None:
-    a, b = svc.catalog(), svc.catalog()
-    assert a == b
-    ids = [p["id"] for p in a["products"]]
-    assert "beanie" in ids
-    beanie = next(p for p in a["products"] if p["id"] == "beanie")
-    assert beanie["amount"] == 5500 and beanie["name"]  # AUT-1559: $55
-    assert beanie["free_shipping"] is True
-
-
-def test_checkout_collects_shipping(fake_stripe) -> None:
-    import asyncio
-
-    u = _user()
-    url = asyncio.run(svc.create_checkout_session(None, u, "beanie", 2))
-    assert url.startswith("https://checkout.stripe.com/")
-    assert fake_stripe["mode"] == "payment"
-    assert fake_stripe["shipping_address_collection"]["allowed_countries"]
-    assert "shipping_options" not in fake_stripe  # AUT-1559: free shipping
-    assert fake_stripe["phone_number_collection"] == {"enabled": True}
-    assert fake_stripe["metadata"]["kind"] == "merch"
-    assert fake_stripe["line_items"][0]["quantity"] == 2
-    assert fake_stripe["line_items"][0]["price_data"]["unit_amount"] == 5500
-
-
-def test_checkout_validation(fake_stripe) -> None:
-    import asyncio
-
-    u = _user()
-    with pytest.raises(ValueError):
-        asyncio.run(svc.create_checkout_session(None, u, "nope", 1))
-    with pytest.raises(ValueError):
-        asyncio.run(svc.create_checkout_session(None, u, "beanie", 99))
+def test_pr2_no_merch_sale_surface_in_app() -> None:
+    """Guard: the app API must never expose a merch catalogue/checkout/orders."""
+    paths = {route.path for route in api_router.routes}
+    merch_paths = [p for p in paths if "/merch" in p]
+    assert merch_paths == [], f"In-app merch surface must not exist: {merch_paths}"
+    assert not hasattr(svc, "PRODUCTS"), "No in-code merch catalogue allowed"
+    assert not hasattr(svc, "create_checkout_session"), "No in-app merch checkout allowed"
 
 
 def test_shipping_from_session_variants() -> None:
@@ -118,17 +51,6 @@ def test_shipping_from_session_variants() -> None:
     assert svc.shipping_from_session({}) is None
 
 
-class _FakeResult:
-    def __init__(self, value=None):
-        self._value = value
-
-    def scalar(self, *a, **k):
-        return None
-
-    def scalars(self, *a, **k):
-        return []
-
-
 class _FakeDB:
     def __init__(self):
         self.added = []
@@ -149,7 +71,7 @@ def test_record_paid_session_idempotent_shape() -> None:
         "id": "cs_test_1",
         "mode": "payment",
         "client_reference_id": str(uuid.uuid4()),
-        "amount_total": 2595,
+        "amount_total": 5500,
         "currency": "aud",
         "metadata": {"kind": "merch", "product_id": "beanie", "quantity": "1"},
         "collected_information": {
@@ -163,7 +85,7 @@ def test_record_paid_session_idempotent_shape() -> None:
     assert len(db.added) == 1
     order = db.added[0]
     assert order.product_id == "beanie"
-    assert order.amount_total == 2595
+    assert order.amount_total == 5500
     shipping = json.loads(order.shipping_address)
     assert shipping["name"] == "Nat" and shipping["country"] == "AU"
 

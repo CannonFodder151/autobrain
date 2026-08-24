@@ -44,3 +44,38 @@ document. Source issue: [AUT-90].
 - 2026-08-10 — AUT-177: rule documented here; guard extended to read endpoints
   (list/stats/odometer-photo) for a consistent disable; user copy cites the VIC
   requirement; dedicated test added.
+
+## PR-2 — Merch is sold ONLY on the autobrainservice.app website, never in the app
+
+**Status:** live (enforced 2026-08, AUT-1567) · **Owner:** Nathan (board) · **Category:** commerce
+
+### Rule
+
+The AutoBrain app (web + mobile) must never sell merch or expose any purchasable
+merch surface: no in-app store screen, no `GET /api/v1/merch/catalog`, no
+`POST /api/v1/merch/checkout`, no `/api/v1/merch/orders` endpoint, no bundled
+merch assets. The AutoBrain Beanie and any future merchandise are sold ONLY
+through the merch section of the **autobrainservice.app marketing website**.
+The backend may keep the passive `merch_orders` table and webhook recording so
+completed website orders are persisted, but must not expose sale endpoints.
+
+### Why
+
+Board decision (Nathan): selling physical merch inside the product app mixes
+storefronts, complicates fulfilment/shipping UX, and was explicitly rejected —
+"it should only be on the autobrainservice.app website in the merch section".
+Source issue: [AUT-1567].
+
+### Enforcement surfaces (keep in sync)
+
+| Surface | Behaviour |
+|---|---|
+| Backend router registration `backend/app/api/v1/__init__.py` | No merch router registered; `/merch/*` routes must not exist. |
+| Backend service `backend/app/services/merch.py` | Webhook order-recording only (`record_paid_session`); no `PRODUCTS` catalogue, no `create_checkout_session`. |
+| Frontend | No store screen, no Settings → Merch entry, no `assets/merch/` bundle. |
+| Tests `backend/tests/test_merch.py` | `test_pr2_no_merch_sale_surface_in_app` fails CI if any `/merch` route, catalogue, or checkout reappears. |
+
+### History
+
+- 2026-08 — AUT-1567: beanie removed from app + backend sale API (was shipped as
+  AUT-1540/AUT-1559); rule added with CI guard.
