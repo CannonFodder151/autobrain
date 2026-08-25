@@ -2,11 +2,13 @@ import 'dart:ui' show TargetPlatform;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/auth_state.dart';
 import '../../core/config.dart';
+import '../../services/iap_service.dart';
 
 /// Stripe subscription management: current plan + upgrade/downgrade/cancel.
 /// Prices come from GET /billing/pricing (with the early-adopter sale); the
@@ -37,6 +39,7 @@ class _LicenseScreenState extends State<LicenseScreen> {
   bool _yearly = false;
   bool _busy = false;
   String? _error;
+  IapService? _iapService;
 
   String? get _subStatus => _profile?['subscription_status'] as String?;
   String? get _licenseStatus {
@@ -68,9 +71,28 @@ class _LicenseScreenState extends State<LicenseScreen> {
     _load();
   }
 
+  void _onIapPurchase(PurchaseDetails purchase) {
+    if (!mounted) return;
+    if (purchase.status == PurchaseStatus.purchased ||
+        purchase.status == PurchaseStatus.restored) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Purchase verified. Refreshing...')),
+      );
+      _load(); // refresh profile to reflect new entitlement
+    } else if (purchase.status == PurchaseStatus.error) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Purchase failed: ${purchase.error}')),
+      );
+    } else if (purchase.status == PurchaseStatus.canceled) {
+      // User dismissed the store dialog — no feedback needed.
+    }
+    if (mounted) setState(() => _busy = false);
+  }
+
   @override
   void dispose() {
     _promoController.dispose();
+    _iapService?.dispose();
     super.dispose();
   }
 
@@ -114,6 +136,13 @@ class _LicenseScreenState extends State<LicenseScreen> {
                 _plans = iapPlans;
               });
               iapAvailable = true;
+              // Initialize native IAP billing for Play Store / App Store purchases.
+              if (_iapService == null) {
+                _iapService = IapService(context.read<AuthState>());
+                _iapService!.purchaseStream.listen(_onIapPurchase);
+                final ids = iapPlans.map((p) => p['product_id'] as String).toList();
+                await _iapService!.init(ids);
+              }
             }
           }
         }
@@ -141,7 +170,7 @@ class _LicenseScreenState extends State<LicenseScreen> {
     if (mounted) setState(() => _loading = false);
   }
 
-  Future<void> _checkout(String plan) async {
+  Future<void> _checkout(String plan, [Map<String, dynamic>? planData]) async {
     final api = context.read<AuthState>().api;
     final promo = _promoController.text.trim();
     setState(() {
@@ -149,6 +178,22 @@ class _LicenseScreenState extends State<LicenseScreen> {
       _error = null;
     });
     try {
+      // Use native store purchase when IAP is available.
+      if (_iapMode && _iapService != null && _iapService!.available) {
+        final productId = planData != null
+            ? (planData['product_id'] as String? ?? '')
+            : '';
+        if (productId.isEmpty || !_iapService!.products.containsKey(productId)) {
+          setState(() => _error = 'Product not found in store.');
+          return;
+        }
+        final launched = await _iapService!.buy(productId);
+        if (!launched) {
+          setState(() => _error = 'Could not start store purchase.');
+        }
+        return;
+      }
+      // Fallback to Stripe browser checkout.
       final data = await api.post('/billing/checkout', {
         'plan': plan,
         'billing': _yearly ? 'yearly' : 'monthly',
@@ -502,7 +547,7 @@ class _LicenseScreenState extends State<LicenseScreen> {
             SizedBox(
               width: double.infinity,
               child: FilledButton(
-                onPressed: _busy ? null : () => _checkout(key),
+                onPressed: _busy ? null : () => _checkout(key, plan),
                 child: Text(_iapMode
                     ? 'Buy from Store'
                     : showTrial
