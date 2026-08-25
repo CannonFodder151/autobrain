@@ -115,11 +115,12 @@ jobs:
           exit 1
 
   publish:
-    # amd64 only on the x64 dev-box runner (AUT-987). The arm64 runner is
-    # offline; multi-arch builds are handled by build-hosted.yml (AUT-967).
+    # amd64 on ubuntu-latest fallback while x64 self-hosted runners are
+    # offline (AUT-987). Revert to [self-hosted, linux, x64] when runners
+    # are restored.
     needs: auto-bump
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
