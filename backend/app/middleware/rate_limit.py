@@ -16,6 +16,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.services.auth import client_ip as _client_ip
 
 logger = get_logger(__name__)
 
@@ -64,7 +65,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if request.url.path.startswith("/api/v1/ai/"):
             return await call_next(request)
 
-        ip = self._client_ip(request)
+        ip = _client_ip(request)
         method = request.method
         path = request.url.path
 
@@ -110,16 +111,3 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         response.headers["X-RateLimit-Remaining"] = str(max(0, limit - current))
         response.headers["X-RateLimit-Reset"] = str(int(time.time()) + window - (int(time.time()) % window))
         return response
-
-    def _client_ip(self, request: Request) -> str:
-        """Extract client IP, respecting X-Forwarded-For from trusted proxy."""
-        # Check X-Forwarded-For (first IP is the original client)
-        forwarded = request.headers.get("X-Forwarded-For")
-        if forwarded:
-            return forwarded.split(",")[0].strip()
-        # Check X-Real-IP (nginx)
-        real_ip = request.headers.get("X-Real-IP")
-        if real_ip:
-            return real_ip
-        # Fallback to direct connection
-        return request.client.host if request.client else "unknown"
