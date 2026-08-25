@@ -14,6 +14,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Security
+- Docker: added Redis authentication (`--requirepass` + authenticated URLs) to `docker-compose.prod.yml` — open Celery broker no longer allows unauthenticated access in production (AB-INFRA-004).
 
 ## [0.3.147] - 2026-08-28
 
