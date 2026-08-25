@@ -108,7 +108,7 @@ class IapService {
         'platform': platform,
         'product_id': purchase.productID,
         'transaction_id': purchase.purchaseID ?? '',
-        'purchase_token': purchase.billingClientPurchase.purchaseToken,
+        'purchase_token': purchase.verificationData.serverVerificationData,
         'purchase_time_ms': purchase.transactionDate != null
             ? int.tryParse(purchase.transactionDate!) ?? 0
             : 0,
