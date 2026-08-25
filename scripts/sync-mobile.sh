@@ -13,14 +13,15 @@
 #   - lib/core/config.dart                   (storeBuild, AUT-610)
 #   - lib/screens/auth/login_screen.dart     (Play Store update prompt)
 #   - lib/screens/settings/license_screen.dart (store-native IAP UI, AUT-610)
+#   - lib/services/iap_service.dart (singleton IapService + IapCatalog/IapProduct, AUT-610)
 #   - lib/services/car/car_kit_trip_monitor.dart (phone-path GPS types)
 #   - lib/services/car/car_kit_service.dart (phone-path GPS position wiring,
 #     AUT-427; the shared base must stay position-free for the web build)
 #   - package_info_plus pubspec dependency   (mobile-only)
 # If the shared base of auth_state.dart / config.dart / login_screen.dart /
-# license_screen.dart / car_kit_trip_monitor.dart changes on the web side, a
-# human must re-merge the mobile deltas on top — the script refuses to silently
-# drop them.
+# license_screen.dart / iap_service.dart / car_kit_trip_monitor.dart changes
+# on the web side, a human must re-merge the mobile deltas on top — the script
+# refuses to silently drop them.
 set -euo pipefail
 
 MOBILE="${1:?Usage: sync-mobile.sh <path-to-autobrain-mobile>}"
@@ -34,16 +35,18 @@ cd "$MOBILE"
 # Copy lib/ verbatim except the mobile-only-delta files.
 for f in core/auth_state.dart core/config.dart \
     screens/auth/login_screen.dart screens/settings/license_screen.dart \
+    services/iap_service.dart \
     services/car/car_kit_trip_monitor.dart services/car/car_kit_service.dart; do
   [[ -f "lib/$f" ]] || { echo "::error::lib/$f missing in mobile checkout" >&2; exit 1; }
 done
 cp -a "$FRONT/lib/." lib/
 # Restore the mobile-only deltas that cp just overwrote (frontend base + deltas
 # live in the mobile repo; the web copy would drop the mobile-only features:
-# the update prompt, the storeBuild/IAP UI, and the phone-path GPS types —
-# GpsFix/PositionSource — used by position_source*.dart).
+# the update prompt, the storeBuild/IAP UI, the singleton IAP service, and the
+# phone-path GPS types — GpsFix/PositionSource — used by position_source*.dart).
 git checkout -- lib/core/auth_state.dart lib/core/config.dart \
   lib/screens/auth/login_screen.dart lib/screens/settings/license_screen.dart \
+  lib/services/iap_service.dart \
   lib/services/car/car_kit_trip_monitor.dart \
   lib/services/car/car_kit_service.dart 2>/dev/null || true
 cp -a "$FRONT/assets/." assets/ 2>/dev/null || true
