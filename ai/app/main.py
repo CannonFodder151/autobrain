@@ -108,7 +108,9 @@ def require_gateway_key(authorization: str | None = Header(default=None)) -> Non
 def _window_allows(key: str, limit: int, window: int) -> bool:
     bucket = int(time.time()) // window
     if len(_rate_windows) > 10_000:
-        _rate_windows.clear()
+        stale = [k for k, v in _rate_windows.items() if v[0] != bucket]
+        for k in stale[: len(stale) // 2]:
+            del _rate_windows[k]
     current = _rate_windows.get(key)
     if current is None or current[0] != bucket:
         _rate_windows[key] = (bucket, 1)

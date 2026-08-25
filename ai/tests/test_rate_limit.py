@@ -40,3 +40,40 @@ def test_global_limit_also_429(monkeypatch) -> None:
     payload = {"payload": {"symptoms": "squealing brakes"}}
     assert client.post("/v1/diagnostics", json=payload).status_code == 200
     assert client.post("/v1/diagnostics", json=payload).status_code == 429
+
+
+def test_overflow_evicts_stale_not_all(monkeypatch) -> None:
+    """AUT-1605: overflow must evict stale entries, not clear all state.
+
+    Attack: 10K+ distinct IPs fill the dict, then overflow triggers.
+    Before fix: _rate_windows.clear() resets ALL clients' quotas.
+    After fix: only stale (old-bucket) entries are evicted; current-bucket
+    entries and the 'global' key survive with their counters intact.
+    """
+    import time
+
+    from app.main import _window_allows
+
+    bucket = int(time.time()) // 60
+
+    _rate_windows.clear()
+    # Fill with 10_001 stale entries (old bucket)
+    for i in range(10_001):
+        _rate_windows[f"stale:{i}"] = (bucket - 1, 1)
+
+    # Insert a legitimate current-bucket entry at count=1, limit=2
+    legit_key = "ip:10.0.0.1"
+    _rate_windows[legit_key] = (bucket, 1)
+    _rate_windows["global"] = (bucket, 1)
+
+    # First call: should pass (count goes 1→2)
+    assert _window_allows(legit_key, 2, 60) is True
+    # Second call: should be blocked (count=2, limit=2)
+    assert _window_allows(legit_key, 2, 60) is False
+
+    # Stale entries should have been evicted, but legit key must survive
+    assert legit_key in _rate_windows, "current-bucket entry lost after overflow"
+    assert "global" in _rate_windows, "global counter lost after overflow"
+    # Stale keys should be gone (at least half evicted)
+    stale_remaining = sum(1 for k in _rate_windows if k.startswith("stale:"))
+    assert stale_remaining < 10_001, "stale entries not evicted"
