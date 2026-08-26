@@ -139,6 +139,7 @@ class Settings(BaseSettings):
     # Paperclip API (server-side, for creating child issues from the webhook)
     PAPERCLIP_API_URL: str = ""  # e.g. https://paperclip.nathanmartina.com
     PAPERCLIP_API_KEY: str = ""  # long-lived agent key or service token
+    PAPERCLIP_COMPANY_ID: str = ""  # AutoBrain company UUID in Paperclip control plane
 
     # Self-service signup (hosted). When enabled, anyone can register a
     # Free-tier account via POST /auth/signup. Self-hosted instances keep
