@@ -8,6 +8,7 @@ from app.api.v1 import (
     analytics,
     auth,
     billing,
+    ci,
     devices,
     diagnostics,
     dongle_firmware,
@@ -51,3 +52,4 @@ api_router.include_router(dongle_firmware.router)
 api_router.include_router(search.router)
 api_router.include_router(social.router)
 api_router.include_router(issues.router)
+api_router.include_router(ci.router)

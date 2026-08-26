@@ -130,6 +130,16 @@ class Settings(BaseSettings):
     # allow_credentials=True — browsers reject that combo.
     CORS_ALLOWED_ORIGINS: list[str] = []
 
+    # CI Triage webhook (AUT-1669): receives GitHub Actions CI pings and relays
+    # to the CI Triage Agent via Paperclip issue creation.
+    CI_TRIAGE_WEBHOOK_SECRET: str = ""  # bearer auth secret for the webhook
+    CI_TRIAGE_PARENT_ISSUE_ID: str = ""  # parent issue for child issue creation
+    CI_TRIAGE_GOAL_ID: str = ""  # goal to link child issues to
+    CI_TRIAGE_AGENT_ID: str = "acae6bf2"  # CI Triage Agent short id
+    # Paperclip API (server-side, for creating child issues from the webhook)
+    PAPERCLIP_API_URL: str = ""  # e.g. https://paperclip.nathanmartina.com
+    PAPERCLIP_API_KEY: str = ""  # long-lived agent key or service token
+
     # Self-service signup (hosted). When enabled, anyone can register a
     # Free-tier account via POST /auth/signup. Self-hosted instances keep
     # admin-only provisioning by leaving this off.
