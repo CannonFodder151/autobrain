@@ -34,3 +34,4 @@ jobs:
         run: |
           payload=$(jq -n --arg repo "$GITHUB_REPOSITORY" --arg ref "$GITHUB_REF" '{event:"push",repo:$repo,ref:$ref}')
           curl -fsS -X POST "$CI_TRIAGE_WEBHOOK_URL" -H "Authorization: Bearer $CI_TRIAGE_WEBHOOK_SECRET" -d "$payload"
+# ci-triage-webhook trigger: re-run OCR review with timeout fix
