@@ -14,7 +14,7 @@ on:
 jobs:
   audit:
     if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     steps:
       - name: Checkout repository
         run: |

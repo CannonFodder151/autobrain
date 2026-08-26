@@ -20,7 +20,7 @@ permissions: {}
 
 jobs:
   fire:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     steps:
       - name: Wait for runs to settle
         run: sleep 900

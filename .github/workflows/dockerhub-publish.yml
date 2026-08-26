@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   changelog-gate:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -71,7 +71,7 @@ jobs:
           echo "changelog gate OK — CHANGELOG.md iterated with app/docker changes"
 
   pip-audit-gate:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v4
       - name: Install pip-audit
@@ -85,7 +85,7 @@ jobs:
   auto-bump:
     needs: changelog-gate
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     permissions:
       contents: write
     steps:
@@ -120,7 +120,7 @@ jobs:
     # are restored.
     needs: auto-bump
     if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     permissions:
       contents: read
     steps:
@@ -198,7 +198,7 @@ jobs:
     # the arm64 runner is available.
     needs: publish
     if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     permissions:
       contents: read
     steps:
@@ -252,7 +252,7 @@ jobs:
   sync-changelog:
     needs: publish-manifest
     if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     permissions:
       contents: write
     steps:
