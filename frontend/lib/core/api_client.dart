@@ -65,7 +65,14 @@ class ApiClient {
   static const Duration _timeout = Duration(seconds: 30);
   Future<String?>? _inflightRefresh;
 
-  Future<dynamic> get(String path) => _send('GET', path);
+  Future<dynamic> get(String path, [Map<String, String>? query]) {
+    final uri = Uri.parse('${AppConfig.apiBase}$path')
+        .replace(queryParameters: query ?? {});
+    return _raw('GET', uri, {
+      'Content-Type': 'application/json',
+      if (_token != null) 'Authorization': 'Bearer $_token',
+    }, null);
+  }
   Future<dynamic> post(String path,
           [Object? body, Map<String, String>? headers]) =>
       _send('POST', path, body, headers);

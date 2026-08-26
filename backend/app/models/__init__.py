@@ -2,6 +2,7 @@
 
 from app.models.user import User
 from app.models.device import Device
+from app.models.dongle_firmware import DongleFirmware, DongleInstalledFirmware
 from app.models.vehicle import Vehicle, VehicleEvent
 from app.models.logbook import LogEntry
 from app.models.obd import ObdCode
@@ -29,6 +30,8 @@ from app.social.models import (
 __all__ = [
     "User",
     "Device",
+    "DongleFirmware",
+    "DongleInstalledFirmware",
     "Vehicle",
     "VehicleEvent",
     "LogEntry",

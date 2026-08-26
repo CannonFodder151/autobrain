@@ -10,6 +10,7 @@ from app.api.v1 import (
     billing,
     devices,
     diagnostics,
+    dongle_firmware,
     fuel,
     issues,
     logbook,
@@ -46,6 +47,7 @@ api_router.include_router(valuation.router)
 api_router.include_router(analytics.router)
 api_router.include_router(notifications.router)
 api_router.include_router(devices.router)
+api_router.include_router(dongle_firmware.router)
 api_router.include_router(search.router)
 api_router.include_router(social.router)
 api_router.include_router(issues.router)
