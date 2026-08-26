@@ -22,6 +22,7 @@ permissions: {}
 jobs:
   fire:
     runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 20
     steps:
       - name: Wait for runs to settle
         run: sleep 900
