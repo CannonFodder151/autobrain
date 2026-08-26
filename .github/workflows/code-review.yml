@@ -15,7 +15,10 @@ permissions:
 
 jobs:
   ocr-review:
-    runs-on: [self-hosted, Linux, X64]
+    # AUT-1661: Moved from self-hosted (offline) to GitHub-hosted.
+    # The alibaba/open-code-review action only needs Node (provided by
+    # setup-node) — no Docker, no local hardware, no self-hosted deps.
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: write
