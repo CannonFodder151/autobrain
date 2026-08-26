@@ -20,6 +20,10 @@ permissions: {}
 
 jobs:
   fire:
+    # Only fire on main pushes — PR branch pushes spam the 900s-sleep job and
+    # starve the shared x64 self-hosted runner (blocks OCR + pip-audit gates).
+    # CI triage reviews settled main runs, not PR branch runs.
+    if: github.ref == 'refs/heads/main'
     runs-on: [self-hosted, linux, x64]
     steps:
       - name: Wait for runs to settle
