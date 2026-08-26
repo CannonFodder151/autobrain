@@ -16,6 +16,7 @@ import asyncio
 import html
 import json
 import logging
+import re
 from datetime import date, timedelta
 
 import httpx
@@ -29,6 +30,10 @@ from app.models.user import User
 from app.models.vehicle import Vehicle
 from app.services import email as mail
 from sqlalchemy import select
+
+_DISCORD_WEBHOOK_RE = re.compile(
+    r"^https://discord(?:app)?\.com/api/webhooks/\d+/[\w-]+$"
+)
 
 logger = get_logger(__name__)
 
@@ -56,6 +61,9 @@ async def _send_email(to_email: str, display_name: str, subject: str, html: str,
 
 async def _send_discord(webhook_url: str, title: str, description: str) -> bool:
     if not webhook_url:
+        return False
+    if not _DISCORD_WEBHOOK_RE.match(webhook_url):
+        logger.warning("discord_webhook_rejected", url=webhook_url[:80])
         return False
     payload = {
         "content": None,

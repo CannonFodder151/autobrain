@@ -5,10 +5,9 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
 
-_DISCORD_WEBHOOK_PATTERN = re.compile(
+_DISCORD_WEBHOOK_RE = re.compile(
     r"^https://discord(?:app)?\.com/api/webhooks/\d+/[\w-]+$"
 )
-
 
 class NotificationPreferenceIn(BaseModel):
     push_enabled: bool | None = None
@@ -22,27 +21,10 @@ class NotificationPreferenceIn(BaseModel):
 
     @field_validator("discord_webhook_url")
     @classmethod
-    def validate_discord_webhook_url(cls, v: str | None) -> str | None:
-        if v is not None and not _DISCORD_WEBHOOK_PATTERN.match(v):
+    def _validate_discord_webhook(cls, v: str | None) -> str | None:
+        if v is not None and not _DISCORD_WEBHOOK_RE.match(v):
             raise ValueError(
                 "Must be a valid Discord webhook URL "
                 "(https://discord.com/api/webhooks/{id}/{token})"
             )
         return v
-
-
-class NotificationPreferenceOut(BaseModel):
-    id: str
-    vehicle_id: str
-    push_enabled: bool
-    email_enabled: bool
-    discord_enabled: bool
-    service_due_days: int
-    service_due_km: int
-    fuel_gap_km: int
-    discord_webhook_url: str | None
-    fcm_token: str | None
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
-
-    model_config = {"from_attributes": True}
