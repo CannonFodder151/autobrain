@@ -32,7 +32,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
-- CI: added CI triage webhook receiver at `POST /api/v1/ci/webhook` to create Paperclip issues from GitHub Actions CI failures, replacing the broken n8n webhook (AUT-1669).
+- CI: added CI triage webhook receiver at `POST /api/v1/ci/webhook` with bearer auth, fail-closed PAPERCLIP config validation, and `repo`/`ref` payload validation to create Paperclip issues from GitHub Actions CI failures, replacing the broken n8n webhook (AUT-1669).
+
+### Fixed
+- CI: scoped `ci-triage-webhook.yml` `push` trigger to `main` only, preventing cancelled `fire` checks on PR branches that marked pull requests as unstable.
+- Tests: fixed `test_ci_webhook.py` settings monkeypatching (patch `ci_mod.settings`, not just `config_mod`) and corrected `resp.json` mock to synchronous; all 8 tests pass.
+- CI: hardened ci_webhook httpx calls with try/except for httpx.HTTPError and non-JSON Paperclip responses; both return 502 instead of raising 500.
+- CI: use `python3 -m pip` and `python3 -m pip_audit` in pip-audit-gate so it works on runners without `pip` on PATH.
 
 ## [0.3.140] - 2026-08-26
 
