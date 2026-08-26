@@ -128,6 +128,17 @@ jobs:
           # main against an older version input (version-mismatch failures).
           git tag -f "$tag" HEAD
           git push -f origin "$tag"
+          # Check API rate limit before dispatching — MOBILE_SYNC_TOKEN is a PAT
+          # with 5000 req/hour shared across all uses. If exhausted, defer the
+          # dispatch to avoid a403; the next push to main will re-sync and
+          # retry (AUT-1639).
+          remaining="$(gh api rate_limit --jq '.resources.core.remaining' 2>/dev/null || echo 5000)"
+          if [ "$remaining" -lt 100 ]; then
+            echo "::warning::GitHub API rate limit nearly exhausted (${remaining}/5000 remaining) — deferring mobile release dispatch for $tag. Next push to main will re-sync and dispatch."
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "deferred=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           # A freshly pushed tag can lag GitHub's ref lookup (eventual
           # consistency); dispatch then 422s "No ref found". Poll ~5s up to
           # ~60s before giving up so the pinned tag is released (AUT-451).
