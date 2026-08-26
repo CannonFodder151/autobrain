@@ -39,7 +39,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - CI: added `timeout-minutes: 20` to the CI triage `fire` job to prevent zombie `sleep 900` jobs from consuming self-hosted runner capacity.
 - Tests: fixed `test_ci_webhook.py` settings monkeypatching (patch `ci_mod.settings`, not just `config_mod`) and corrected `resp.json` mock to synchronous; all 8 tests pass.
 - CI: hardened ci_webhook httpx calls with try/except for httpx.HTTPError and non-JSON Paperclip responses; both return 502 instead of raising 500.
-- CI: bootstrap pip via `get-pip.py` in pip-audit-gate when `python3 -m pip` is unavailable on self-hosted runners, then install via `python3 -m pip`.
+- CI: bootstrap pip via `get-pip.py` (user scope) in pip-audit-gate when `python3 -m pip` is unavailable on self-hosted runners, and use `--break-system-packages` to handle PEP 668; then install via `python3 -m pip`.
 
 ## [0.3.140] - 2026-08-26
 

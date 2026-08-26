@@ -76,6 +76,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install pip-audit
         run: |
+        run: |
           # Self-hosted runners may lack pip entirely (minimal images). Bootstrap
           it if missing, then install pip-audit with PEP 668 bypass.
           python3 -m pip --version 2>/dev/null || \
