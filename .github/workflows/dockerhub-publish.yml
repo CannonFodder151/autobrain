@@ -74,7 +74,7 @@ jobs:
     runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
-  - name: Install pip-audit
+      - name: Install pip-audit
         run: |
           # Self-hosted runners may lack pip entirely (minimal images). Bootstrap
           it if missing, then install pip-audit with PEP 668 bypass.
