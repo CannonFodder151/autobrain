@@ -37,6 +37,13 @@ const _tokenCharUuid = '6E400004-B5A3-F393-E0A9-E50E24DCCA9E';
 // AUT-1573: trip-file pull + DTC snapshot/clear.
 const _tripReadCharUuid = '6E400005-B5A3-F393-E0A9-E50E24DCCA9E';
 const _dtcCharUuid = '6E400006-B5A3-F393-E0A9-E50E24DCCA9E';
+// AUT-1673: model/fw/serial read.
+const _modelCharUuid = '6E400007-B5A3-F393-E0A9-E50E24DCCA9E';
+const _fwCharUuid = '6E400008-B5A3-F393-E0A9-E50E24DCCA9E';
+const _serialCharUuid = '6E400009-B5A3-F393-E0A9-E50E24DCCA9E';
+// OTA write characteristic (future). For now, we only READ installed info.
+// When OTA arrives, it will use a dedicated chunked-write characteristic.
+// const _otaCharUuid = '6E40000A-B5A3-F393-E0A9-E50E24DCCA9E';
 // Must stay below the firmware's TRIP_CHUNK_MAX (460).
 const _chunkSize = 440;
 const _maxTripBytes = 2 * 1024 * 1024; // sanity cap per trip CSV
@@ -316,5 +323,75 @@ class BleImpl {
   static String _advName(ScanResult r) {
     final adv = r.advertisementData.advName;
     return adv.isNotEmpty ? adv : r.device.platformName;
+  }
+
+  /// Reads model, firmware version and serial number from the dongle's
+  /// Bluetooth GATT. Returns the raw strings as-is; caller should persist to
+  /// the backend via DongleFirmwareApi.reportInstalled.
+  ///
+  /// Firmware before AUT-1673 may not expose all three characteristics.
+  /// Missing ones return empty string.
+  static Future<({String model, String firmwareVersion, String serialNumber})>
+      readDeviceInfo(String deviceId) async {
+    if (!supported) {
+      throw DongleBleException(
+          'Device info read is only available in the mobile app.');
+    }
+    final device = await _findDongle(deviceId);
+    String model = '';
+    String firmwareVersion = '';
+    String serialNumber = '';
+    try {
+      await device.connect(timeout: const Duration(seconds: 15));
+      for (final s in await device.discoverServices()) {
+        if (s.uuid.toString().toUpperCase() != _serviceUuid) continue;
+        for (final c in s.characteristics) {
+          final uuid = c.uuid.toString().toUpperCase();
+          if (uuid == _modelCharUuid) {
+            model = await _readText(c);
+          } else if (uuid == _fwCharUuid) {
+            firmwareVersion = await _readText(c);
+          } else if (uuid == _serialCharUuid) {
+            serialNumber = await _readText(c);
+          }
+        }
+      }
+    } on DongleBleException {
+      rethrow;
+    } catch (e) {
+      throw DongleBleException('Could not read device info: $e');
+    } finally {
+      if (device.isConnected) {
+        await device.disconnect().catchError((_) {});
+      }
+    }
+    return (model: model, firmwareVersion: firmwareVersion, serialNumber: serialNumber);
+  }
+
+  /// Writes a firmware blob to the dongle in chunks (AUT-1673 OTA).
+  ///
+  /// The app first verifies SHA-256 of the downloaded blob against the
+  /// manifest, then chunk-writes over this characteristic. The firmware
+  /// writes to NVS only when ALL chunks arrive and the final checksum matches.
+  ///
+  /// [blob] is the raw firmware bytes. [deviceId] is the user-confirmed dongle.
+  /// Throws DongleBleException with user-facing message on failure.
+  static Future<void> applyOta(String deviceId, List<int> blob) async {
+    if (!supported) {
+      throw DongleBleException(
+          'OTA update is only available in the mobile app.');
+    }
+    // TODO: implement chunked write to _otaCharUuid once the firmware
+    // OTA characteristic is defined and the firmware image loader is wired.
+    // For now, this is a placeholder that documents the expected flow:
+    // - read device info (model/fw/serial)
+    // - compare with latest manifest
+    // - if newer: fetch blob from signed URL
+    // - verify SHA-256
+    // - chunked write (440 bytes max per chunk per firmware limitation)
+    // - firmware verifies and applies on final chunk
+    // - read device info again to confirm version bump
+    throw DongleBleException(
+        'OTA update not yet implemented — wait for a future firmware release.');
   }
 }
