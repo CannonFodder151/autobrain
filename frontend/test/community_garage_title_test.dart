@@ -17,7 +17,7 @@ class _FakeApi extends ApiClient {
   _FakeApi() : super(null);
 
   @override
-  Future<dynamic> get(String path) async => {'items': []};
+  Future<dynamic> get(String path, {Map<String, String>? query}) async => {'items': []};
 }
 
 class _FakeAuthState extends AuthState {

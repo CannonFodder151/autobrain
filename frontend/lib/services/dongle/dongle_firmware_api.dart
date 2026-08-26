@@ -74,7 +74,10 @@ class DongleFirmwareApi {
     return DongleFirmwareVersion.fromJson(data as Map<String, dynamic>);
   }
 
-  /// What the server last heard from THIS user's device (null = never reported).
+  /// Installed firmware for the device whose [deviceId] is the ``Device.id``
+  /// UUID returned by ``GET /devices`` (NOT the BLE hardware serial — that is
+  /// only written via [/report]). The server does a primary-key lookup on this
+  /// value, so the app↔server mapping is exact: a mismatched UUID yields 404.
   Future<DongleInstalledFirmware?> installed(String deviceId) async {
     final data = await api.get(
       '/dongle/firmware/installed',

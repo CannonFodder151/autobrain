@@ -17,7 +17,7 @@ class _FakeApi extends ApiClient {
   final List<String> requested = [];
 
   @override
-  Future<dynamic> get(String path) async {
+  Future<dynamic> get(String path, {Map<String, String>? query}) async {
     requested.add(path);
     if (path == '/vehicles/abc') {
       return {

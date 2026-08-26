@@ -20,7 +20,7 @@ The OTA payload itself is chunked over BLE (characteristic
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -65,7 +65,11 @@ async def latest_firmware(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> DongleFirmwareOut | None:
-    """Newest firmware manifest for [model]. 404 when no release exists yet."""
+    """Newest firmware manifest for [model]. Returns null (200 OK) when no
+    release has been published yet — consistent with [installed_firmware],
+    which also returns null rather than 404 so the app can treat "never
+    reported" and "no release published" with the same null check.
+    """
     row = await db.scalar(
         select(DongleFirmware)
         .where(DongleFirmware.model == model)
@@ -84,7 +88,15 @@ async def installed_firmware(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> DongleInstalledFirmwareOut | None:
-    """Installed firmware row for one of THIS user's devices. Null = never reported."""
+    """Installed firmware row for one of THIS user's devices. Null = never reported.
+
+    [device_id] is the ``Device.id`` primary key (a UUID string), the same value
+    the app receives from ``GET /devices`` and stores as ``DongleDevice.id`` —
+    NOT the hardware serial (which is read over BLE and only used on the
+    unauthenticated /report write). The ``db.get`` calls below are primary-key
+    lookups on that UUID, so the app↔server identifier mapping is exact; a
+    mismatched UUID yields 404, never a silent null.
+    """
     device = await db.get(Device, device_id)
     if device is None or device.user_id != user.id:
         raise HTTPException(status_code=404, detail="Device not found")
@@ -106,9 +118,15 @@ async def report_installed_firmware(
 ) -> DongleInstalledFirmwareOut:
     """Dongle reports its current model / firmware / serial. Device-authenticated.
 
-    Idempotent: an existing row for this device is updated in place; the first
+    idempotent: an existing row for this device is updated in place; the first
     report creates it. This is the write that lets the app render
     "firmware v1.4.2 on OBD Logging Device V1" and "Update available".
+
+    Retention / growth: ``dongle_installed_firmware.device_id`` is the primary
+    key and a FK on ``devices.id ON DELETE CASCADE`` — one row per active
+    device, removed automatically when the device is deleted, so the table is
+    bounded by the fleet size, not by report frequency. No background vacuuming
+    is required.
     """
     row = await db.get(DongleInstalledFirmware, device.id)
     if row is None:

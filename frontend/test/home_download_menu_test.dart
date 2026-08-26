@@ -13,7 +13,7 @@ import 'package:autobrain/screens/home/home_screen.dart';
 class _FakeApi extends ApiClient {
   _FakeApi() : super(null);
   @override
-  Future<dynamic> get(String path) async {
+  Future<dynamic> get(String path, {Map<String, String>? query}) async {
     if (path == '/vehicles') return <dynamic>[];
     return <String, dynamic>{};
   }

@@ -109,6 +109,12 @@ class _DongleWifiPanelState extends State<DongleWifiPanel> {
 
   /// AUT-1673: fetch this device's installed firmware + the latest published
   /// manifest so we can render "Update available". Cached; re-reads on demand.
+  ///
+  /// [deviceId] is ``DongleDevice.id`` — the ``Device.id`` UUID the server
+  /// returns from ``GET /devices`` — which is exactly the primary key the
+  /// backend's `installed` endpoint does ``db.get(Device, ...)`` on. It is NOT
+  /// the hardware serial (that is read over BLE in [_readAndRefresh] and only
+  /// sent as the report body, not as the lookup key).
   Future<void> _refreshFirmware() async {
     final api = context.read<AuthState>().api;
     final deviceId = _linked?.id;
@@ -149,6 +155,18 @@ class _DongleWifiPanelState extends State<DongleWifiPanel> {
     try {
       final info = await DongleBle.readDeviceInfo(cfg.deviceId!);
       final api = context.read<AuthState>().api;
+      // Don't POST empty fields: the backend schema rejects min_length=1, and a
+      // partial read (older firmware without the info characteristics) would
+      // 422 instead of surfacing a clear "not reported yet" state. The backend
+      // schema also whitelists the charset, so we only validate presence here.
+      if (info.model.isEmpty ||
+          info.firmwareVersion.isEmpty ||
+          info.serialNumber.isEmpty) {
+        if (!mounted) return;
+        setState(() => _firmwareStatus =
+            'Dongle did not report full firmware info (older firmware?).');
+        return;
+      }
       await api.post(
         '/dongle/firmware/report',
         {
@@ -165,10 +183,12 @@ class _DongleWifiPanelState extends State<DongleWifiPanel> {
             : 'Dongle does not report firmware info yet.';
       });
     } catch (e) {
-      if (mounted) setState(() => _firmwareStatus = 'Could not read device: $e');
+      if (mounted)
+        setState(() => _firmwareStatus = 'Could not read device: $e');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
 
   /// Reuses the saved device only when it still exists in the current
   /// account's list; otherwise returns null so the user re-links. Never falls
@@ -470,18 +490,37 @@ class _DongleWifiPanelState extends State<DongleWifiPanel> {
     return DateFormat('d MMM yyyy, h:mm a').format(lastSeen.toLocal());
   }
 
-  /// AUT-1673: compact firmware info row.
-  Widget _fwRow(String label, String value) => Padding(
-        padding: const EdgeInsets.only(bottom: 4),
-        child: Row(
-          children: [
-            Text('$label: ',
-                style: TextStyle(
-                    fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.onSurfaceVariant)),
-            Expanded(child: Text(value, overflow: TextOverflow.ellipsis)),
-          ],
-        ),
-      );
+  /// AUT-1673: compact firmware info row. Empty values render a muted
+  /// placeholder instead of a blank row, so users can tell "not reported"
+  /// (older firmware) from a genuinely empty field.
+  Widget _fwRow(String label, String value) {
+    final empty = value.isEmpty;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          Text('$label: ',
+              style: TextStyle(
+                  fontWeight: FontWeight.w500,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          Expanded(
+            child: Text(
+              empty ? '— not reported' : value,
+              overflow: TextOverflow.ellipsis,
+              style: empty
+                  ? TextStyle(
+                      fontStyle: FontStyle.italic,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .onSurfaceVariant
+                          .withOpacity(0.5))
+                  : null,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -617,14 +656,12 @@ class _DongleWifiPanelState extends State<DongleWifiPanel> {
                       const SizedBox(height: 8),
                       if (_latest != null) ...[
                         if (_latest!.version != _installed!.firmwareVersion)
-                          Text(
-                              'Update available: ${_latest!.version}',
+                          Text('Update available: ${_latest!.version}',
                               style: TextStyle(
-                                  color: Theme.of(context)
-                                      .colorScheme.primary,
+                                  color: Theme.of(context).colorScheme.primary,
                                   fontWeight: FontWeight.bold)),
                         if (_latest!.version == _installed!.firmwareVersion)
-                        const Text('Up to date'),
+                          const Text('Up to date'),
                       ] else
                         const Text('No firmware release published yet.'),
                     ],
