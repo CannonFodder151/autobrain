@@ -3,6 +3,9 @@
 Receives GitHub Actions CI webhook pings from ci-triage-webhook.yml and
 creates a child issue in Paperclip assigned to the CI Triage Agent.
 Replaces the broken n8n webhook (trigger bb257f7977a59cbc8eef76ba).
+
+Endpoint: POST /api/v1/ci/webhook
+Auth:    Bearer token matching CI_TRIAGE_WEBHOOK_SECRET
 """
 
 import hmac
@@ -72,15 +75,19 @@ async def ci_webhook(request: Request) -> dict:
         "status": "todo",
     }
 
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(
-            issue_url,
-            json=payload,
-            headers={
-                "Authorization": f"Bearer {settings.PAPERCLIP_API_KEY}",
-                "Content-Type": "application/json",
-            },
-        )
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                issue_url,
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {settings.PAPERCLIP_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+            )
+    except httpx.HTTPError as exc:
+        logger.error("ci_webhook_paperclip_request_failed error=%s", exc)
+        raise HTTPException(status_code=502, detail="Failed to reach Paperclip API")
 
     if resp.status_code >= 400:
         logger.error(
@@ -90,6 +97,12 @@ async def ci_webhook(request: Request) -> dict:
         )
         raise HTTPException(status_code=502, detail="Failed to create Paperclip issue")
 
-    created = resp.json()
+    try:
+        created = resp.json()
+    except (ValueError, TypeError):
+        logger.error("ci_webhook_paperclip_non_json body=%s", resp.text[:500])
+        raise HTTPException(status_code=502, detail="Paperclip API returned non-JSON response")
+
     logger.info("ci_webhook_child_created issue_id=%s", created.get("id"))
     return {"received": True, "issueId": created.get("id")}
+
