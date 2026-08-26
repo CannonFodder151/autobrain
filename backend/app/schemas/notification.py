@@ -1,8 +1,13 @@
 """Notification preference schemas."""
 
+import re
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+_DISCORD_WEBHOOK_PATTERN = re.compile(
+    r"^https://discord(?:app)?\.com/api/webhooks/\d+/[\w-]+$"
+)
 
 
 class NotificationPreferenceIn(BaseModel):
@@ -14,6 +19,16 @@ class NotificationPreferenceIn(BaseModel):
     fuel_gap_km: int | None = Field(default=None, ge=0, le=100000)
     discord_webhook_url: str | None = Field(default=None, max_length=500)
     fcm_token: str | None = Field(default=None, max_length=500)
+
+    @field_validator("discord_webhook_url")
+    @classmethod
+    def validate_discord_webhook_url(cls, v: str | None) -> str | None:
+        if v is not None and not _DISCORD_WEBHOOK_PATTERN.match(v):
+            raise ValueError(
+                "Must be a valid Discord webhook URL "
+                "(https://discord.com/api/webhooks/{id}/{token})"
+            )
+        return v
 
 
 class NotificationPreferenceOut(BaseModel):
