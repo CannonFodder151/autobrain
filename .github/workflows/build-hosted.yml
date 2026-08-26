@@ -27,7 +27,7 @@ concurrency:
 jobs:
   auto-bump:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     permissions:
       contents: write
     steps:
@@ -67,7 +67,7 @@ jobs:
       matrix:
         include:
           - arch: amd64
-            runs_on: ubuntu-latest
+            runs_on: [self-hosted, linux, x64]
           - arch: arm64
             runs_on: [self-hosted, linux, ARM64]
     runs-on: ${{ matrix.runs_on }}
@@ -112,7 +112,7 @@ jobs:
   build-manifest:
     needs: build
     if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     permissions:
       contents: read
       packages: write

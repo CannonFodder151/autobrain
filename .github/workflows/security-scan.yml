@@ -6,15 +6,14 @@ on:
     # CVEs in the resolved tree that the PR-time `--no-deps` pip-audit gate in
     # dockerhub-publish.yml cannot see (AUT-794). Covers backend, ai and the
     # market-data service (AUT-1019); rego-lookup-api has its own weekly scan
-    # (separate repo). Runs on a GitHub-hosted runner: the self-hosted runner's
-    # pip index is a stale mirror that cannot resolve uvicorn==0.34.0 (AUT-1019).
+    # (separate repo).
     - cron: '0 6 * * 1'
   workflow_dispatch:
 
 jobs:
   audit:
     if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     steps:
       - name: Checkout repository
         run: |
