@@ -245,7 +245,7 @@ class _FakeApi extends ApiClient {
   Object? response;
 
   @override
-  Future<dynamic> get(String path) {
+  Future<dynamic> get(String path, {Map<String, String>? query}) {
     requests.add('GET $path');
     return Future.value(response);
   }

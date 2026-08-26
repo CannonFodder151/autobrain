@@ -20,18 +20,32 @@ class DongleFirmwareOut(BaseModel):
 
 
 class DongleInstalledFirmwareReport(BaseModel):
-    """Posted by the dongle over BLE (device-authenticated)."""
+    """Posted by the dongle over BLE (device-authenticated).
 
-    model: str = Field(min_length=1, max_length=64)
-    firmware_version: str = Field(min_length=1, max_length=32)
-    serial_number: str = Field(min_length=1, max_length=64)
+    The dongle proves its identity via X-Device-API-Key, but the NVS values it
+    reports are NOT trusted: every field is bounded by length AND a tight
+    charset whitelist so a compromised/malicious board cannot inject stored XSS
+    (rendered in the admin UI) or SQL-meta characters. This is defence-in-depth —
+    the SQLAlchemy write path is parameterised regardless, so this exists to keep
+    the stored strings safe to display. Firmware identifiers are alphanumeric
+    with a small punctuation set; anything else is rejected here.
+    """
+
+    # Whitelist: alphanumerics, space, and the punctuation that legitimately
+    # appears in model names / semver versions / serial numbers. Explicitly
+    # excludes < > " ' ; ` \ and all control chars (XSS + SQLi surface).
+    _safe_text = r"^[A-Za-z0-9 .,_/()-]+$"
+
+    model: str = Field(min_length=1, max_length=64, pattern=_safe_text)
+    firmware_version: str = Field(min_length=1, max_length=32, pattern=_safe_text)
+    serial_number: str = Field(min_length=1, max_length=64, pattern=_safe_text)
 
     @field_validator("model", "firmware_version", "serial_number")
     @classmethod
     def _no_control(cls, v: str) -> str:
-        # Firmware writes these from NVS; the API trusts them only after this
-        # length+charset guard. Newlines/tabs would let a rogue device poison
-        # future log lines or admin views.
+        # Belt-and-suspenders: the Field pattern above already excludes control
+        # chars; this guard surfaces an explicit message and rejects NUL even if
+        # a future caller loosens the pattern.
         for ch in ("\n", "\r", "\t", "\x00"):
             if ch in v:
                 raise ValueError("must not contain control characters")
@@ -55,7 +69,8 @@ class DongleFirmwareCreate(BaseModel):
 
     model: str = Field(min_length=1, max_length=64)
     version: str = Field(min_length=1, max_length=32)
-    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    # esptool / MinIO emit hex in either case; accept both.
+    sha256: str = Field(pattern=r"(?i)^[0-9a-f]{64}$")
     size_bytes: int = Field(gt=0, le=16 * 1024 * 1024)
     blob_key: str = Field(min_length=1, max_length=256)
     release_notes: str | None = Field(default=None, max_length=4000)

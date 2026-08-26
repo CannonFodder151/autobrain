@@ -24,7 +24,7 @@ class _FakeApi extends ApiClient {
   final List<Map<String, dynamic>> devices;
 
   @override
-  Future<dynamic> get(String path) async {
+  Future<dynamic> get(String path, {Map<String, String>? query}) async {
     if (path == '/devices') return devices;
     if (path == '/vehicles') return const [];
     return null;
@@ -40,7 +40,7 @@ class _FailingApi extends ApiClient {
   _FailingApi() : super(null);
 
   @override
-  Future<dynamic> get(String path) async => throw Exception('boom');
+  Future<dynamic> get(String path, {Map<String, String>? query}) async => throw Exception('boom');
 
   @override
   Future<dynamic> post(String path,

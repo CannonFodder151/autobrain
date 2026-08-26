@@ -59,6 +59,11 @@ class BleImpl {
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
 
+  /// OTA is not implemented until the firmware defines its OTA characteristic
+  /// (AUT-1673). Exposed so the facade's [isOtaAvailable] guard can short-circuit
+  /// callers before they reach the throwing stub below.
+  static bool get isOtaAvailable => false;
+
   /// Provision the dongle over BLE and return the firmware ack ("ok" or
   /// "err:…"). Writes ONLY to the peripheral whose remoteId matches
   /// [deviceId] — the identity the user explicitly confirmed (AUT-966); the
@@ -365,7 +370,11 @@ class BleImpl {
         await device.disconnect().catchError((_) {});
       }
     }
-    return (model: model, firmwareVersion: firmwareVersion, serialNumber: serialNumber);
+    return (
+      model: model,
+      firmwareVersion: firmwareVersion,
+      serialNumber: serialNumber
+    );
   }
 
   /// Writes a firmware blob to the dongle in chunks (AUT-1673 OTA).

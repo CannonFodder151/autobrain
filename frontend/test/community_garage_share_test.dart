@@ -32,7 +32,7 @@ class _FakeApi extends ApiClient {
       };
 
   @override
-  Future<dynamic> get(String path) async {
+  Future<dynamic> get(String path, {Map<String, String>? query}) async {
     if (path.startsWith('/social/feed')) return {'items': [_build]};
     if (path.startsWith('/social/share/')) return _build;
     if (path.startsWith('/social/posts/')) return _build;
