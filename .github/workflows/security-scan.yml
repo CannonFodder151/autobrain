@@ -28,7 +28,10 @@ jobs:
           git reset --hard origin/main
 
       - name: Install pip-audit
-        run: pip install --quiet pip-audit
+        run: |
+          python3 -m pip --version 2>/dev/null || \
+            curl -sS https://bootstrap.pypa.io/get-pip.py | PIP_BREAK_SYSTEM_PACKAGES=1 python3 -
+          PIP_BREAK_SYSTEM_PACKAGES=1 python3 -m pip install --quiet pip-audit
 
       - name: Fail on known vulns in the resolved tree
         id: audit
@@ -38,7 +41,7 @@ jobs:
           # ai/market-data (fastapi 0.115.x) pin different major versions and
           # cannot coexist in one env (AUT-1019).
           for req in backend/requirements.txt ai/requirements.txt market-data/requirements.txt; do
-            pip-audit -r "$req"
+            python3 -m pip_audit -r "$req"
           done
           echo "result=clean" >> "$GITHUB_OUTPUT"
 
