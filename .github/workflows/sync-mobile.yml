@@ -5,12 +5,6 @@ name: Sync mobile app
 # mirror frontend/lib + assets + CHANGELOG into autobrain-mobile, bump its
 # version to match APP_VERSION, and trigger the mobile release pipeline.
 # Manual dispatch always available: gh workflow run sync-mobile.yml.
-#
-# Auth: MOBILE_SYNC_TOKEN is a classic PAT (5 000 req/h). The dispatch step
-# uses gh workflow run (REST), which is the primary rate-limit consumer.
-# Exponential backoff on dispatch retries mitigates transient exhaustion
-# (AUT-1639). Long-term: migrate to a GitHub App installation token
-# (15 000 req/h) — tracked separately.
 
 on:
   push:
@@ -134,26 +128,32 @@ jobs:
           # main against an older version input (version-mismatch failures).
           git tag -f "$tag" HEAD
           git push -f origin "$tag"
+          # Check API rate limit before dispatching — MOBILE_SYNC_TOKEN is a PAT
+          # with 5000 req/hour shared across all uses. If exhausted, defer the
+          # dispatch to avoid a403; the next push to main will re-sync and
+          # retry (AUT-1639).
+          remaining="$(gh api rate_limit --jq '.resources.core.remaining' 2>/dev/null || echo 5000)"
+          if [ "$remaining" -lt 100 ]; then
+            echo "::warning::GitHub API rate limit nearly exhausted (${remaining}/5000 remaining) — deferring mobile release dispatch for $tag. Next push to main will re-sync and dispatch."
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "deferred=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           # A freshly pushed tag can lag GitHub's ref lookup (eventual
-          # consistency); dispatch then 422s "No ref found". Poll with
-          # exponential backoff (2^n seconds, capped at 30s) up to ~4 min
-          # before giving up so the pinned tag is released (AUT-451, AUT-1639).
-          max_attempts=8
-          for attempt in $(seq 1 $max_attempts); do
+          # consistency); dispatch then 422s "No ref found". Poll ~5s up to
+          # ~60s before giving up so the pinned tag is released (AUT-451).
+          for attempt in $(seq 1 12); do
             if out="$(gh workflow run release-mobile.yml --repo CannonFodder151/autobrain-mobile \
                 --ref "$tag" -f "version=$tag" 2>&1)"; then
               echo "dispatched mobile release $tag"
               exit 0
             fi
-            echo "dispatch attempt $attempt/$max_attempts failed: $out"
+            echo "dispatch attempt $attempt/12 failed: $out"
             if ! printf '%s' "$out" | grep -qi 'No ref found'; then
               echo "::error::$out"
               exit 1
             fi
-            delay=$(( 2 ** attempt ))
-            [ "$delay" -gt 30 ] && delay=30
-            echo "retrying in ${delay}s (rate limit backoff)"
-            sleep "$delay"
+            sleep 5
           done
-          echo "::error::could not dispatch mobile release $tag — ref not resolvable after $max_attempts attempts"
+          echo "::error::could not dispatch mobile release $tag — ref not resolvable after ~60s"
           exit 1
