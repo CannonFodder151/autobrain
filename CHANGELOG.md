@@ -31,6 +31,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- CI: added CI triage webhook receiver at `POST /api/v1/ci/webhook` to create Paperclip issues from GitHub Actions CI failures, replacing the broken n8n webhook (AUT-1669).
+
 ## [0.3.140] - 2026-08-26
 
 ### Fixed
