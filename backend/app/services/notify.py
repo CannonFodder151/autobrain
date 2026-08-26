@@ -68,7 +68,7 @@ async def _send_discord(webhook_url: str, title: str, description: str) -> bool:
         ],
     }
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with httpx.AsyncClient(timeout=10, follow_redirects=False) as client:
             resp = await client.post(webhook_url, json=payload)
         ok = resp.status_code in (200, 204)
         if not ok:
