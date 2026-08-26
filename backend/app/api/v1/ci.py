@@ -39,17 +39,23 @@ async def ci_webhook(request: Request) -> dict:
 
     try:
         body = await request.json()
-    except Exception:
+    except (ValueError, TypeError):
         raise HTTPException(status_code=400, detail="Invalid JSON body")
 
-    repo = body.get("repo", "unknown")
-    ref = body.get("ref", "unknown")
+    repo = body.get("repo")
+    ref = body.get("ref")
+    if not repo or not ref:
+        raise HTTPException(status_code=400, detail="Missing 'repo' or 'ref' in payload")
 
     logger.info("ci_webhook_received repo=%s ref=%s", repo, ref)
 
     if not settings.PAPERCLIP_API_URL or not settings.PAPERCLIP_API_KEY:
         logger.error("ci_webhook_paperclip_not_configured")
         raise HTTPException(status_code=503, detail="Paperclip API not configured")
+
+    if not settings.PAPERCLIP_COMPANY_ID or not settings.CI_TRIAGE_PARENT_ISSUE_ID or not settings.CI_TRIAGE_GOAL_ID:
+        logger.error("ci_webhook_paperclip_incomplete_config")
+        raise HTTPException(status_code=503, detail="Paperclip config incomplete")
 
     issue_url = f"{settings.PAPERCLIP_API_URL}/api/companies/{settings.PAPERCLIP_COMPANY_ID}/issues"
     payload = {
