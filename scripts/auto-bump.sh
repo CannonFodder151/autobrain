@@ -41,6 +41,6 @@ awk -v v="## [$NEXT] - " '
 if [[ "$COMMIT" == "1" ]]; then
   git add -A
   git -c user.name="AutoBrain Release Bot" -c user.email="release@autobrainservice.app" \
-    commit -m "chore: release v$NEXT (auto-bump, AUT-240)" -q
+    commit -m "chore: release v$NEXT (auto-bump, AUT-240) [skip ci]" -q
   echo "==> committed v$NEXT"
 fi
