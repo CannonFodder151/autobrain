@@ -1,0 +1,16 @@
+# .trivyignore — review-approved exceptions for the trivy image CVE gate.
+#
+# Policy (AUT-1749): the base-image scan (.github/workflows/trivy-image-scan.yml)
+# fails on HIGH/CRITICAL CVEs that have an upstream fix. Only CVEs listed here are
+# tolerated, and each MUST carry a justification + the PR/issue that approved it.
+# Prefer a digest bump over an ignore entry whenever a fixed image exists.
+#
+# Format: one CVE id per line (leading `#` = comment; empty lines ignored).
+#
+# Example (do NOT ship blind suppressions — only add a CVE after confirming it is
+# not exploitable in our usage and the CTO/security reviewer has signed off):
+# CVE-2024-0000  # accepted: bookworm-slim base, no network-exposed listener; review AUT-XXXX
+
+# No exceptions approved yet. The pinned pgvector/pgvector:pg17 digest is scanned
+# clean-by-default; entries are added here only when the weekly scan surfaces a
+# reviewed, acceptable CVE.

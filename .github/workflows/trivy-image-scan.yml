@@ -1,0 +1,86 @@
+name: Security — base image CVE scan (trivy)
+
+# Scans the pinned Postgres data-store image for HIGH/CRITICAL CVEs and enforces
+# that the postgres image is pinned by digest (not a floating tag). Image digest
+# and .trivyignore are reviewed alongside AUT-1749 pg16 -> pg17.
+
+on:
+  pull_request:
+    paths:
+      - 'docker-compose.yml'
+      - 'docker-compose.prod.yml'
+      - 'docker-compose.hosted.yml'
+      - '.trivyignore'
+      - '.github/workflows/trivy-image-scan.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'docker-compose.yml'
+      - 'docker-compose.prod.yml'
+      - 'docker-compose.hosted.yml'
+      - '.trivyignore'
+      - '.github/workflows/trivy-image-scan.yml'
+  schedule:
+    # Weekly, Monday 07:00 UTC — re-scans the digest-pinned image after the
+    # upstream pgvector/pgvector pg17 build is refreshed.
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: trivy-image-scan-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  POSTGRES_IMAGE: 'pgvector/pgvector:pg17@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f'
+
+jobs:
+  image-scan:
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pin guard — postgres image must be digest-pinned
+        # Deterministic guard: a floating pgvector tag is a supply-chain surface
+        # (AUT-1749). Reject any compose file that still references a bare tag.
+        run: |
+          set -euo pipefail
+          if grep -rqE 'image:[[:space:]]*pgvector/pgvector:pg1[0-9][[:space:]]*$' \
+              docker-compose.yml docker-compose.prod.yml docker-compose.hosted.yml; then
+            echo "::error::postgres image is floatably tagged — pin by @sha256 digest (AUT-1749)."
+            exit 1
+          fi
+          echo "OK: postgres image is digest-pinned across all compose files."
+
+      - name: Scan pinned postgres image (HIGH/CRITICAL, unfixed ignored)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+            image-ref: ${{ env.POSTGRES_IMAGE }}
+            scanner: vuln
+            severity: 'HIGH,CRITICAL'
+            ignore-unfixed: true
+            format: 'table'
+            output: 'trivy-postgres-report.txt'
+            exit-code: '1'
+
+      - name: Upload scan report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-postgres-report
+          path: trivy-postgres-report.txt
+
+      - name: Report to Discord #status
+        if: always()
+        env:
+          RESULT: ${{ job.status }}
+          COLOR: ${{ job.status == 'success' && '0x57F287' || '0xED4245' }}
+          TITLE: ${{ job.status == 'success' && 'Postgres image scan clean' || 'Postgres image scan found HIGH/CRITICAL CVEs' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
+            -H "Content-Type: application/json" \
+            -d "$(jq -nc --arg c status --arg t "$TITLE" --arg col "$COLOR" --arg u "$RUN_URL" \
+              '{channel:$c,title:$t,description:"Weekly trivy image scan of the digest-pinned pgvector/pgvector:pg17 data-store image.",color:$col,author:"Security Scan",fields:[{name:"Scope",value:"postgres:17 image digest",inline:true},{name:"Run",value:$u,inline:true}]}')"
