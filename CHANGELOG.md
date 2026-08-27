@@ -15,6 +15,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+
+- Backend: service-level Discord webhook URL validation (defense-in-depth) — `_send_discord_webhook` now checks the URL pattern before the outbound HTTP call, rejecting non-Discord URLs even if schema validation was bypassed; consolidated the `DISCORD_WEBHOOK_RE` pattern and removed the redundant `NotificationPreferenceOut` model (AUT-1603 follow-up).
 ## [0.3.147] - 2026-08-28
 
 ### Added
