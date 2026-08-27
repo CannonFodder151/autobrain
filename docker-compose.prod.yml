@@ -45,7 +45,11 @@ x-backend-base: &backend-base
 services:
   # ── Datastores ──────────────────────────────────────────────
   postgres:
-    image: pgvector/pgvector:pg16
+    # Major bump pg16 → pg17 (AUT-1749). Pinned by manifest-list digest so the
+    # multi-arch image (amd64 + arm64) is immutable across Demo/Default/Hosted
+    # (Hosted = arm64 Oracle VM; dev box = x64). Bump deliberately: verify
+    # release notes, then update this digest.
+    image: pgvector/pgvector:pg17@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f
     restart: unless-stopped
     read_only: true
     cap_drop:

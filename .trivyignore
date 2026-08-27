@@ -1,0 +1,43 @@
+# .trivyignore — review-approved exceptions for the trivy image CVE gate.
+#
+# Policy (AUT-1749): the base-image scan (.github/workflows/trivy-image-scan.yml)
+# fails on HIGH/CRITICAL CVEs that have an upstream fix. Only CVEs listed here are
+# tolerated, and each MUST carry a justification + the PR/issue that approved it.
+# Prefer a digest bump over an ignore entry whenever a fixed image exists.
+#
+# Format: one CVE id per line (leading `#` = comment; empty lines ignored).
+#
+# Example (do NOT ship blind suppressions — only add a CVE after confirming it is
+# not exploitable in our usage and the CTO/security reviewer has signed off):
+# CVE-2024-0000  # accepted: bookworm-slim base, no network-exposed listener; review AUT-XXXX
+
+# --- AUT-1749: pgvector/pgvector:pg17 gosu-stdlib CVEs -----------------------
+# Source: the `gosu` binary (GOSU_VERSION=1.19) bundled in the postgres image.
+# trivy attributes Go stdlib CVEs to it (package "stdlib", Go 1.24/1.25). gosu
+# is used ONLY to drop privileges before exec'ing postgres — it performs no
+# network/TLS/URL/XML/MIME/HTTP2 processing, so none of these are reachable in
+# AutoBrain's Postgres data-store role. Confirmed: the pinned pg17 digest has
+# ZERO postgres/debian HIGH|CRITICAL CVEs; all 22 findings are gosu-stdlib.
+# Flagged for security-reviewer acknowledgement on PR #306 (AUT-1749).
+CVE-2025-61726  # gosu-stdlib: net/url; unreachable in privilege-drop helper
+CVE-2025-61729  # gosu-stdlib: net/url; unreachable
+CVE-2025-68121  # gosu-stdlib: crypto/tls cert validation; gosu does no TLS
+CVE-2026-25679  # gosu-stdlib; unreachable in privilege-drop helper
+CVE-2026-27145  # gosu-stdlib; unreachable
+CVE-2026-32280  # gosu-stdlib; unreachable
+CVE-2026-32281  # gosu-stdlib; unreachable
+CVE-2026-32283  # gosu-stdlib; unreachable
+CVE-2026-33811  # gosu-stdlib; unreachable
+CVE-2026-33814  # gosu-stdlib; unreachable
+CVE-2026-33818  # gosu-stdlib; unreachable
+CVE-2026-39820  # gosu-stdlib; unreachable
+CVE-2026-39821  # gosu-stdlib: idna/punycode; gosu does no DNS
+CVE-2026-39822  # gosu-stdlib: os.Root symlink; gosu exec's a fixed target
+CVE-2026-39836  # gosu-stdlib: net NUL byte; unreachable
+CVE-2026-42499  # gosu-stdlib: net/mail; gosu parses no mail
+CVE-2026-42504  # gosu-stdlib: mime; unreachable
+CVE-2026-56853  # gosu-stdlib: net/http HTTP/2; gosu does no HTTP
+CVE-2026-56858  # gosu-stdlib: html/template; unreachable
+CVE-2026-56859  # gosu-stdlib: encoding/xml; unreachable
+CVE-2026-56860  # gosu-stdlib: net/url; unreachable
+CVE-2026-56862  # gosu-stdlib: crypto/tls KeyUpdate; gosu does no TLS
