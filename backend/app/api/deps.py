@@ -166,6 +166,21 @@ async def require_admin_api_key(request: Request) -> None:
     return None
 
 
+async def verify_dongle_server(request: Request) -> None:
+    """Machine-to-machine backchannel auth from the dongle-server.
+
+    The dongle-server sends its own DONGLE_SERVER_API_KEY as X-Internal-Api-Key
+    when it calls /devices/verify; we check it against our configured value so
+    only the legitimate dongle-server can ask for paid-gate verification.
+    """
+    if not settings.DONGLE_SERVER_API_KEY:
+        raise HTTPException(status_code=503, detail="Dongle-server backchannel is not configured")
+    supplied = request.headers.get("X-Internal-Api-Key", "")
+    if not supplied or not hmac.compare_digest(supplied, settings.DONGLE_SERVER_API_KEY):
+        raise HTTPException(status_code=401, detail="Invalid or missing internal API key")
+    return None
+
+
 async def get_device_from_key(
     request: Request,
     db: AsyncSession = Depends(get_db),

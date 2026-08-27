@@ -21,9 +21,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_device_from_key, require_write
+from app.api.deps import get_current_user, get_device_from_key, require_write, verify_dongle_server
 from app.db.session import get_db
 from app.models.device import Device
+from app.models.dongle_firmware import DongleInstalledFirmware
 from app.models.logbook import LogEntry
 from app.models.obd import ObdCode
 from app.models.user import User
@@ -35,8 +36,10 @@ from app.schemas.device import (
     DeviceOut,
     DeviceTripsIn,
     DeviceTripsResult,
+    DeviceVerifyIn,
+    DeviceVerifyOut,
 )
-from app.services.device_keys import generate_key, hash_key, key_prefix
+from app.services.device_keys import generate_key, hash_key, key_prefix, verify_key
 from app.services.odometer import sync_odometer
 from app.services.ownership import get_owned_vehicle, require_logbook_enabled
 
@@ -77,6 +80,52 @@ async def create_device(
     await db.commit()
     await db.refresh(device)
     return DeviceCreated.model_validate(device.__dict__ | {"api_key": key})
+
+
+@router.post("/verify", dependencies=[Depends(verify_dongle_server)])
+async def verify_device(
+    payload: DeviceVerifyIn,
+    db: AsyncSession = Depends(get_db),
+) -> DeviceVerifyOut:
+    """Dongle-server backchannel: verify a device's key + serial + paid status
+    (AUT-1673).
+
+    The dongle-server (which already checked its local serial whitelist) POSTs
+    the hardware serial it read over BLE and the device API key it provisioned.
+    We resolve the device from the key hash, compare the stored serial (from the
+    device's last firmware report), and check the owning account's paid status.
+
+    Any failure returns serial_matched=False / paid=False — the dongle-server
+    interprets that as a 403 and keeps the firmware locked. We never leak
+    which check failed to an unauthenticated caller.
+    """
+    candidates = list(
+        (
+            await db.scalars(
+                select(Device).where(Device.api_key_prefix == key_prefix(payload.api_key))
+            )
+        ).all()
+    )
+    device = next(
+        (d for d in candidates if verify_key(payload.api_key, d.api_key_hash)), None
+    )
+    if device is None:
+        return DeviceVerifyOut(serial_matched=False, paid=False)
+    installed = await db.get(DongleInstalledFirmware, device.id)
+    serial_matched = (
+        installed is not None
+        and installed.serial_number == payload.serial
+    )
+    user = await db.get(User, device.user_id)
+    paid = bool(user and not user.free_account)
+    model = installed.model if installed else None
+    return DeviceVerifyOut(
+        serial_matched=serial_matched,
+        paid=paid,
+        model=model,
+        device_id=device.id,
+        user_id=device.user_id,
+    )
 
 
 @router.post("/{device_id}/trips", response_model=DeviceTripsResult)
