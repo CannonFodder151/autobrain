@@ -170,10 +170,13 @@ surfaces directly to the internet. Fixed and enforced via compose:
   traffic goes through Cloudflare → npm (`:443`), which proxies to the frontend
   over the docker network. Never re-expose `8086` to `0.0.0.0`; that was a
   plaintext origin bypassing Cloudflare's WAF/rate limiting.
-- **Port `:80`** — npm's default "Default Site" welcome page still serves
-  unmatched hosts. Cosmetic info disclosure only (Cloudflare has Always Use
-  HTTPS, so real clients never hit origin `:80`). Replace via npm Settings →
-  Default Site when npm admin creds are available.
+- **Port `:80`** — remediated (AUT-1744): a custom `default_server` block in
+  `/data/nginx/custom/http.conf` returns `301 https://$host$request_uri`, so ALL
+  plaintext `:80` traffic is redirected to HTTPS and the NPM "Default Site"
+  welcome page is no longer served (kills the NPM version/CVE fingerprint). Both
+  proxy hosts (`hosted.`, `hub.autobrainservice.app`) already have Force SSL, so
+  their `:80` requests 301 as well. The NPM admin UI (`:81`) stays locked down /
+  not internet-exposed, so the fix lives in the custom config, not the DB.
 - **TLS/HSTS** — confirmed: HSTS `max-age=31536000; includeSubDomains; preload`
   at the Cloudflare edge; origin `:443` serves TLS.
 - **Residual (needs OCI security list)** — `:9001` Portainer agent must stay
