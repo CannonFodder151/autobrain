@@ -1,0 +1,76 @@
+name: Security — container image scan (trivy)
+
+# AUT-1736: base-image CVE scanning for the AutoBrain stack. Scans the pinned
+# postgres image (and the other datastore base images) for HIGH/CRITICAL CVEs and
+# fails the build on hits. Also guards against the postgres image regressing to a
+# floating tag (digest pin is mandatory per AUT-1736).
+
+on:
+  pull_request:
+    paths:
+      - 'docker-compose.yml'
+      - 'docker-compose.prod.yml'
+      - 'docker-compose.hosted.yml'
+      - '.github/workflows/trivy-image-scan.yml'
+  schedule:
+    # Weekly, Monday 07:00 UTC — catch newly-disclosed base-image CVEs.
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
+
+jobs:
+  digest-pin-guard:
+    # Refuse to merge if the postgres image is not digest-pinned (AUT-1736).
+    if: github.event_name != 'schedule'
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce digest-pinned postgres image
+        run: |
+          set -euo pipefail
+          echo "Checking that postgres uses a digest-pinned pgvector image..."
+          hits=$(grep -rnE "image:\s*pgvector/pgvector:" docker-compose.yml docker-compose.prod.yml docker-compose.hosted.yml | grep -v "@sha256:")
+          if [ -n "$hits" ]; then
+            echo "::error::postgres image is not digest-pinned (AUT-1736):"; echo "$hits"
+            exit 1
+          fi
+          echo "OK: all postgres images are digest-pinned."
+
+  trivy:
+    needs: digest-pin-guard
+    if: always() && (needs.digest-pin-guard.result == 'success' || github.event_name == 'schedule')
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan postgres (pgvector) base image
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: 'pgvector/pgvector:pg16@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b'
+          scan-type: 'image'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+          ignore-unfixed: true
+          scanners: 'os,library'
+
+      - name: Scan other datastore base images
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: 'redis:7-alpine'
+          scan-type: 'image'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+          ignore-unfixed: true
+          scanners: 'os,library'
+
+      - name: Report to Discord #status
+        if: always() && github.event_name == 'schedule'
+        env:
+          RESULT: ${{ job.status }}
+          COLOR: ${{ job.status == 'success' && '0x57F287' || '0xED4245' }}
+          TITLE: ${{ job.status == 'success' && 'Trivy image scan clean' || 'Trivy image scan found CVEs' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
+            -H "Content-Type: application/json" \
+            -d "$(jq -nc --arg c status --arg t "$TITLE" --arg col "$COLOR" --arg u "$RUN_URL" \
+              '{channel:$c,title:$t,description:"Weekly trivy scan of postgres/redis base images (AUT-1736).",color:$col,author:"Security Scan",fields:[{name:"Scan",value:"CRITICAL,HIGH (os,library)",inline:true},{name:"Run",value:$u,inline:true}]}')"

@@ -43,7 +43,10 @@ x-router-env: &router-env
 
 services:
   postgres:
-    image: pgvector/pgvector:pg16
+    # AUT-1736: pin postgres base image by digest to remediate 50+ base-OS CVEs
+    # in the floating pgvector/pgvector:pg16 tag (perl/SQLite/zlib/libxml2/OpenSSL).
+    # Drop-in same-major upgrade; pg17 major bump tracked separately (needs pg_upgrade).
+    image: pgvector/pgvector:pg16@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be set}
