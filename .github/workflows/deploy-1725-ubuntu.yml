@@ -108,9 +108,9 @@ jobs:
         run: |
           echo "==> Building ghcr frontend:demo"
           docker buildx build --platform linux/amd64 --push \
-            -t "ghcr.io/CannonFodder151/autobrain-frontend:demo-amd64" \
+            -t "ghcr.io/cannonfodder151/autobrain-frontend:demo-amd64" \
             --build-arg API_BASE_URL=$API_BASE_URL --build-arg WS_BASE_URL=$WS_BASE_URL \
             -f docker/frontend/Dockerfile .
           docker buildx imagetools create \
-            -t "ghcr.io/CannonFodder151/autobrain-frontend:demo" \
+            -t "ghcr.io/cannonfodder151/autobrain-frontend:demo" \
             "ghcr.io/CannonFodder151/autobrain-frontend:demo-amd64"
