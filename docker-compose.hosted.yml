@@ -317,7 +317,14 @@ services:
   9router:
     # AUT-1533: pinned by digest (was floating :latest — supply-chain surface).
     # Bump deliberately: verify release notes, then update this digest.
-    image: decolua/9router:latest@sha256:f00fe389ef41a1999dd0d0275ad0c2955d13d176f7c4c5cb844b2f88c293c471
+    # AUT-1738: 0.5.55 is the current latest published tag (digest f00fe389…,
+    # 2026-08-14). It still carries 11 CVEs (incl. CVE-2026-59873 tar DoS and
+    # CVE-2026-48815 sigstore). No patched upstream image exists yet — do NOT
+    # float :latest (re-introduces AUT-1533 supply-chain risk). Bump this digest
+    # only once decolua ships a tagged fix; the weekly image-scan job in
+    # .github/workflows/security-scan.yml will fail on any CRITICAL/HIGH so a
+    # patched tag is caught and the pin is updated promptly.
+    image: decolua/9router:0.5.55@sha256:f00fe389ef41a1999dd0d0275ad0c2955d13d176f7c4c5cb844b2f88c293c471
     restart: unless-stopped
     entrypoint: ["/entrypoint.sh"]
     command: ["node", "custom-server.js"]
