@@ -77,7 +77,7 @@ jobs:
       - name: Install pip-audit
         run: |
           # Self-hosted runners may lack pip entirely (minimal images). Bootstrap
-          it if missing, then install pip-audit with PEP 668 bypass.
+          # it if missing, then install pip-audit with PEP 668 bypass.
           python3 -m pip --version 2>/dev/null || \
             curl -sS https://bootstrap.pypa.io/get-pip.py | PIP_BREAK_SYSTEM_PACKAGES=1 python3 -
           PIP_BREAK_SYSTEM_PACKAGES=1 python3 -m pip install --quiet pip-audit
