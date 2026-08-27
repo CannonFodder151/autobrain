@@ -116,7 +116,7 @@ endpoint. Market data is best-effort — never blocks the estimate.
 
 `MARKET_DATA_URL` unset → the service returns `source=fallback`,
 `sample_size=0`, and valuation behaves exactly as before (deterministic model
-+ AI advice). Everything works offline; the search UI shows "provider not
++ AI advice). Everything still works; the search UI shows "provider not
 configured".
 
 ## Deploying the scraper (AUT-290)
