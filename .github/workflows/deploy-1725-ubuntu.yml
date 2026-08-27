@@ -113,4 +113,4 @@ jobs:
             -f docker/frontend/Dockerfile .
           docker buildx imagetools create \
             -t "ghcr.io/cannonfodder151/autobrain-frontend:demo" \
-            "ghcr.io/CannonFodder151/autobrain-frontend:demo-amd64"
+            "ghcr.io/cannonfodder151/autobrain-frontend:demo-amd64"
