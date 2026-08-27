@@ -15,6 +15,9 @@ x-core-env: &core-env
   PYTHONPATH: /app
   REDIS_URL: redis://redis:6379/0
   MINIO_ENDPOINT: minio:9000
+  # AUT-1786: explicit passthrough for init-minio.sh and runtime uploads.
+  MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-}
+  MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-}
   AI_LOCAL_BASE_URL: http://ai:8001
   AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:?AI_GATEWAY_API_KEY must be set (prod fails closed)}
 
