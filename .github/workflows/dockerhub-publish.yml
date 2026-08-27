@@ -90,8 +90,17 @@ jobs:
       - name: Fail on known-vuln pinned deps (AUT-781)
         run: |
           set -euo pipefail
-          python3 -m pip_audit --disable-pip --no-deps \
-            -r backend/requirements.txt -r ai/requirements.txt
+          # backend/ and ai/requirements.txt duplicate several identical pins
+          # (fastapi, pydantic, httpx, …). The latest pip-audit rejects duplicate
+          # requirement lines across combined -r inputs — a latent failure that
+          # surfaced when the gate moved to a fresh arm64 runner (AUT-1761);
+          # the x64 runner only passed because a stale cached pip-audit tolerated
+          # it. Audit one deduplicated pin list so every package is still scanned
+          # exactly once.
+          TMPREQ="$(mktemp)"
+          cat backend/requirements.txt ai/requirements.txt | sort -u > "$TMPREQ"
+          python3 -m pip_audit --disable-pip --no-deps -r "$TMPREQ"
+          rm -f "$TMPREQ"
 
   auto-bump:
     needs: changelog-gate
