@@ -64,7 +64,7 @@ jobs:
           echo "OK: frontend nginx image is digest-pinned in Dockerfile."
 
       - name: Scan pinned postgres image (HIGH/CRITICAL, unfixed ignored)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.28.0
         with:
             image-ref: ${{ env.POSTGRES_IMAGE }}
             scanner: vuln
@@ -75,7 +75,7 @@ jobs:
             exit-code: '1'
 
       - name: Scan pinned frontend nginx image (HIGH/CRITICAL, unfixed ignored)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.28.0
         with:
             image-ref: ${{ env.NGINX_FRONTEND_IMAGE }}
             scanner: vuln
