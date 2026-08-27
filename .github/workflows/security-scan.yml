@@ -98,15 +98,31 @@ jobs:
           fi
           echo "result=clean" >> "$GITHUB_OUTPUT"
 
-      - name: Report to Discord #status
+      - name: Scan MinIO image for CRITICAL/HIGH CVEs (AUT-1737)
+        id: scan-minio
+        # AUT-1737: MinIO base image ships Go stdlib CVEs. Pinned by digest in
+        # compose for immutability; this scan is EXPECTED RED until minio publishes
+        # a patched image, mirroring the 9router tracking pattern above.
+        run: |
+          set -uo pipefail
+          MINIO_IMG="minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e"
+          trivy image --severity CRITICAL,HIGH --exit-code 1 --format table "$MINIO_IMG"
+          CODE=$?
+          if [ "$CODE" -ne 0 ]; then
+            echo "result=vulns" >> "$GITHUB_OUTPUT"
+            exit "$CODE"
+          fi
+          echo "result=clean" >> "$GITHUB_OUTPUT"
+
+      - name: Report MinIO scan to Discord #status
         if: always()
         env:
-          RESULT: ${{ steps.scan.outputs.result }}
-          COLOR: ${{ steps.scan.outputs.result == 'clean' && '0x57F287' || '0xED4245' }}
-          TITLE: ${{ steps.scan.outputs.result == 'clean' && '9Router image scan clean' || '9Router image scan found CRITICAL/HIGH CVEs' }}
+          RESULT: ${{ steps.scan-minio.outputs.result }}
+          COLOR: ${{ steps.scan-minio.outputs.result == 'clean' && '0x57F287' || '0xED4245' }}
+          TITLE: ${{ steps.scan-minio.outputs.result == 'clean' && 'MinIO image scan clean' || 'MinIO image scan found CRITICAL/HIGH CVEs' }}
           RUN_URL: ${{ github.server_url }}${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
             -H "Content-Type: application/json" \
             -d "$(jq -nc --arg c status --arg t "$TITLE" --arg col "$COLOR" --arg u "$RUN_URL" \
-              '{channel:$c,title:$t,description:"Weekly trivy scan of decolua/9router:0.5.55 (Node OS + npm tree). AUT-1738.",color:$col,author:"Security Scan",fields:[{name:"Scan",value:"trivy CRITICAL/HIGH",inline:true},{name:"Run",value:$u,inline:true}]}')"
+              '{channel:$c,title:$t,description:"Weekly trivy scan of minio/minio pinned to RELEASE.2025-09-07T16-13-09Z digest. AUT-1737.",color:$col,author:"Security Scan",fields:[{name:"Scan",value:"trivy CRITICAL/HIGH",inline:true},{name:"Run",value:$u,inline:true}]}')"
