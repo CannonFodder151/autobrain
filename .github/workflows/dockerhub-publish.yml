@@ -15,7 +15,11 @@ concurrency:
 
 jobs:
   changelog-gate:
-    runs-on: [self-hosted, linux, x64]
+    # Routed to the idle arm64 runner (Phase 1(a)): this gate is git/jq only,
+    # arch-independent, and runs on every PR. Moving it off x64 frees capacity
+    # for the PR-check queue. The amd64 build jobs below stay on x64 so they
+    # build natively (no QEMU) — reliable, fast (Phase 1(c)).
+    runs-on: [self-hosted, linux, arm64]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -71,7 +75,9 @@ jobs:
           echo "changelog gate OK — CHANGELOG.md iterated with app/docker changes"
 
   pip-audit-gate:
-    runs-on: [self-hosted, linux, x64]
+    # Routed to the idle arm64 runner (Phase 1(a)): arch-independent Python
+    # scan, runs on every PR. See changelog-gate note above.
+    runs-on: [self-hosted, linux, arm64]
     steps:
       - uses: actions/checkout@v4
       - name: Install pip-audit
