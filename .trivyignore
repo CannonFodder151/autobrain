@@ -41,3 +41,23 @@ CVE-2026-56858  # gosu-stdlib: html/template; unreachable
 CVE-2026-56859  # gosu-stdlib: encoding/xml; unreachable
 CVE-2026-56860  # gosu-stdlib: net/url; unreachable
 CVE-2026-56862  # gosu-stdlib: crypto/tls KeyUpdate; gosu does no TLS
+
+# --- AUT-1793: nginxinc/nginx-unprivileged:stable-alpine OpenSSL QUIC DoS ---
+# CVE-2026-14456 (HIGH): OpenSSL QUIC server unbounded memory growth DoS, fixed in
+# libssl3/libcrypto3 3.5.8-r0. The pinned stable-alpine digest (alpine 3.24.1, last
+# built 2026-08-24) still ships 3.5.7-r0, and no nginx-unprivileged tag currently
+# carries the fix (every tag last built 2026-08-24) — re-pinning cannot help yet.
+#
+# Why accepted (NOT exploitable for our usage): the frontend nginx serves PLAIN HTTP
+# only. docker/frontend/nginx.conf has `listen 8080;` with NO `quic`/`http3` directive
+# and NO TLS listener (verified: zero quic/http3/ssl/443 hits in docker/frontend/).
+# OpenSSL's QUIC server state machine is only entered by a QUIC listener, which we do
+# not configure, so the vulnerable code path is never reached. The vulnerable library
+# is present on disk but dead in this deployment.
+#
+# Blast radius if accepted: none for THIS deployment. Residual risk: if a future
+# config enables HTTP/3 (`quic`/`http3`), this CVE BECOMES exploitable and this entry
+# MUST be removed. Time-boxed: re-check 2026-09-24 (30d) — drop this entry the moment a
+# nginx-unprivileged:stable-alpine digest shipping libssl3/libcrypto3 >= 3.5.8-r0 is
+# published (tracking follow-up on AUT-1793). Approved: Security Officer (AUT-1793).
+CVE-2026-14456  # nginx frontend: OpenSSL QUIC DoS; no QUIC/TLS listener configured; re-check 2026-09-24
