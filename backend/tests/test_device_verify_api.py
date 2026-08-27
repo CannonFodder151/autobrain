@@ -18,7 +18,8 @@ Requires the compose Postgres. Run locally with:
 import os
 import uuid
 
-os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test-user:test-password@postgres:5432/autobrain")
+# Override conftest's Postgres URL with SQLite for local testing.
+os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test_verify.db"
 os.environ.setdefault("SECRET_KEY", "test-secret")
 os.environ.setdefault("DONGLE_SERVER_API_KEY", "test-internal-key")
 os.environ.setdefault("DONGLE_SERVER_URL", "http://dongle-server:8000")
