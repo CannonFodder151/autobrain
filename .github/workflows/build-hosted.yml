@@ -18,11 +18,17 @@ on:
         required: true
         default: wss://hosted.autobrainservice.app/ws
 
-# Only one pipeline per ref at a time. A newer dispatch cancels any in-flight
-# run so two auto-bumps never race on the same push (non-fast-forward on main).
+# Only one pipeline per ref at a time, but do NOT cancel an in-flight build.
+# The multi-arch release build takes ~20 min; a newer push to main (PR merge or
+# auto-bump) arriving mid-build would otherwise cancel it and leave main with no
+# :hosted image (AUT-1756, root cause AUT-1762). Queue the newer run behind the
+# in-flight one so every push to main still produces a published manifest. The
+# auto-bump commit is tagged [skip ci] (scripts/auto-bump.sh) so it never
+# re-triggers this workflow and the in-flight build is never cancelled by its
+# own version cut.
 concurrency:
   group: build-hosted-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   auto-bump:
