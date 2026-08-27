@@ -3,6 +3,13 @@ name: Code Review
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+    # Skip the heavy OCR review on changes that are not source (e.g.
+    # workflow-only / docs-only PRs like AUT-1691). The run is triggered
+    # only when at least one non-ignored file changes, keeping the arm64
+    # runner busy only for reviews that have real code to scan.
+    paths-ignore:
+      - '.github/**'
+      - 'docs/**'
 
 concurrency:
   group: ocr-review-${{ github.event.pull_request.number }}
@@ -15,7 +22,10 @@ permissions:
 
 jobs:
   ocr-review:
-    runs-on: [self-hosted, Linux, X64]
+    # Routed to the idle arm64 runner (Phase 1(a)): OCR is a pure Node/CPU
+    # workload with no architecture-specific binaries, so it does not need
+    # the x64 runner that builds amd64 images. Frees x64 for PR-check jobs.
+    runs-on: [self-hosted, Linux, ARM64]
     permissions:
       contents: read
       pull-requests: write
