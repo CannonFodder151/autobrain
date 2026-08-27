@@ -164,10 +164,15 @@ services:
       STRIPE_PRICE_ENTHUSIAST_YEARLY: ${STRIPE_PRICE_ENTHUSIAST_YEARLY:-}
       STRIPE_PRICE_GARAGE_MONTHLY: ${STRIPE_PRICE_GARAGE_MONTHLY:-}
       STRIPE_PRICE_GARAGE_YEARLY: ${STRIPE_PRICE_GARAGE_YEARLY:-}
-  # Early-adopter sale (AUT-111): coupon EARLY40, 40% off first 3 months.
       STRIPE_PROMO_EARLY_ADOPTER: ${STRIPE_PROMO_EARLY_ADOPTER:-}
       STRIPE_PROMO_EARLY_ADOPTER_CODE: ${STRIPE_PROMO_EARLY_ADOPTER_CODE:-EARLY40}
       STRIPE_SALE_ENDS_AT: ${STRIPE_SALE_ENDS_AT:-}
+      # AUT-1673: dongle-server backchannel. The backend and the dongle-server
+      # share DONGLE_SERVER_API_KEY as X-Internal-Api-Key; the backend calls
+      # the dongle-server to upsert the serial whitelist, and the dongle-server
+      # calls the backend's /devices/verify to check paid status at the edge.
+      DONGLE_SERVER_API_KEY_FILE: /run/secrets/dongle_server_api_key
+      DONGLE_SERVER_URL: http://dongle-server:8000
       # Store-native IAP (AUT-610/617): empty = disabled (mobile falls back to
       # the Stripe browser path). Credentials are Paperclip secrets.
       IAP_GOOGLE_SERVICE_ACCOUNT_JSON_FILE: /run/secrets/iap_google_service_account_json
@@ -223,6 +228,34 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+
+  # AUT-1673: firmware release + distribution service for OBD ESP32 dongles.
+  # Owns firmware manifests, MinIO signed blob URLs, the serial-number
+  # whitelist (paid-account gate), and the ops web GUI. Shares the hosted
+  # stack's MinIO and Postgres where applicable (SQLite in the local compose).
+  dongle-server:
+    image: ghcr.io/cannonfodder151/autobrain-dongle-server:hosted
+    restart: unless-stopped
+    environment:
+      <<: *core-env
+      AUTOBRIAN_BACKEND_URL: http://backend:8000
+      DONGLE_SERVER_API_KEY_FILE: /run/secrets/dongle_server_api_key
+      MINIO_ENDPOINT: minio:9000
+      MINIO_EXTERNAL_ENDPOINT: ${MINIO_EXTERNAL_ENDPOINT:-}
+      MINIO_BUCKET: ${MINIO_BUCKET:-autobrain-assets}
+      MINIO_ACCESS_KEY_FILE: /run/secrets/minio_access_key
+      MINIO_SECRET_KEY_FILE: /run/secrets/minio_secret_key
+      MINIO_SECURE: ${MINIO_SECURE:-false}
+      WEB_UI_BASIC_USER: ${WEB_UI_BASIC_USER:-admin}
+      WEB_UI_BASIC_PASSWORD_FILE: /run/secrets/dongle_web_basic_password
+      FIRMWARE_BUCKET_PREFIX: dongle_firmware
+      SIGNED_URL_TTL_SECONDS: 900
+      MAX_FIRMWARE_BYTES: 16777216
+    <<: *secrets
+    depends_on:
+      - backend
+    expose:
+      - "8000"
 
   frontend:
     image: ghcr.io/cannonfodder151/autobrain-frontend:hosted

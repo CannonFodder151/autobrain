@@ -7,6 +7,35 @@ from pydantic import BaseModel, Field, field_validator
 from app.services.trip_gps import clean_samples
 
 
+class DeviceVerifyIn(BaseModel):
+    """Body for POST /devices/verify (dongle-server backchannel, AUT-1673).
+
+    The dongle-server sends the hardware serial it read over BLE and the device
+    API key it received during provisioning. The backend resolves the device from
+    the key, checks the stored serial matches, and checks the account is paid.
+    """
+
+    serial: str = Field(min_length=1, max_length=64)
+    api_key: str = Field(min_length=1, max_length=256)
+
+
+class DeviceVerifyOut(BaseModel):
+    """Response shape the dongle-server consumes in verify_device_with_backend.
+
+    Fields map 1:1 to what the dongle-server checks:
+    - serial_matched: the device's reported serial == the requested serial
+    - paid: the owning account is on a paid plan (free_account is False)
+    - model: the hardware model string from the device's last firmware report
+    - device_id / user_id: stable identifiers for the dongle-server's own rows
+    """
+
+    serial_matched: bool
+    paid: bool
+    model: str | None = None
+    device_id: str | None = None
+    user_id: str | None = None
+
+
 class DeviceCreate(BaseModel):
     name: str = Field(default="", max_length=80)
     vehicle_id: str | None = None

@@ -3,12 +3,12 @@
 Surface:
 
 - ``GET /dongle/firmware/latest?model=…`` — returns the newest manifest for
-  that model (user-authenticated; the app uses it to decide whether an update
+  that model (premium-authenticated; the app uses it to decide whether an update
   is available).
 - ``POST /dongle/firmware/report`` — the dongle POSTs its current model,
   firmware version and serial number over the device-authenticated channel
-  (X-Device-API-Key). The row in ``dongle_installed_firmware`` lets the app
-  render "Update available" without a fresh BLE read.
+  (X-Device-API-Key). WHEN the device's account is premium, the backend upserts
+  the serial into the dongle-server whitelist (paid-account gate).
 - ``GET /dongle/firmware/installed`` — the app reads its own installed
   firmware for the linked device.
 - ``POST /dongle/firmware`` — admin-only; publishes a new manifest (the blob
@@ -20,6 +20,7 @@ The OTA payload itself is chunked over BLE (characteristic
 
 from datetime import datetime, timezone
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,7 +29,9 @@ from app.api.deps import (
     get_current_user,
     get_device_from_key,
     require_admin,
+    require_premium,
 )
+from app.core.config import settings
 from app.core.storage import presigned_url
 from app.db.session import get_db
 from app.models.device import Device
@@ -63,12 +66,14 @@ def _to_manifest(row: DongleFirmware, signed: str) -> DongleFirmwareOut:
 async def latest_firmware(
     model: str = Query(min_length=1, max_length=64),
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_premium),
 ) -> DongleFirmwareOut | None:
     """Newest firmware manifest for [model]. Returns null (200 OK) when no
     release has been published yet — consistent with [installed_firmware],
     which also returns null rather than 404 so the app can treat "never
     reported" and "no release published" with the same null check.
+    
+    Requires a paid account (require_premium); free accounts get 403.
     """
     row = await db.scalar(
         select(DongleFirmware)
@@ -145,7 +150,43 @@ async def report_installed_firmware(
         row.last_reported_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(row)
+
+    # AUT-1673 paid-account gate: when the device's owning account is paid,
+    # upsert the serial into the dongle-server whitelist so the device-edge
+    # fetch (GET /firmware/latest?serial=) can proceed. Free accounts are not
+    # whitelisted — the dongle-server returns 403 at the edge. Best-effort:
+    # a backchannel failure does not roll back the telemetry write.
+    owner = await db.get(User, device.user_id)
+    if owner and not owner.free_account:
+        await _upsert_whitelist(
+            serial=payload.serial_number,
+            device_id=device.id,
+            user_id=device.user_id,
+        )
+
     return DongleInstalledFirmwareOut.model_validate(row.__dict__)
+
+
+async def _upsert_whitelist(serial: str, device_id: str, user_id: str) -> None:
+    """Best-effort push of a (serial, device_id, user_id) into the dongle-server
+    whitelist. Fails open on network/5xx so firmware telemetry is never lost;
+    a stale whitelist entry is corrected on the next report."""
+    if not settings.DONGLE_SERVER_URL or not settings.DONGLE_SERVER_API_KEY:
+        return
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            await client.post(
+                f"{settings.DONGLE_SERVER_URL.rstrip('/')}/_internal/whitelist",
+                data={
+                    "serial": serial,
+                    "device_id": device_id,
+                    "user_id": user_id,
+                    "paid": "true",
+                },
+                headers={"X-Internal-Api-Key": settings.DONGLE_SERVER_API_KEY},
+            )
+    except httpx.HTTPError:
+        pass
 
 
 @router.post(

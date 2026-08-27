@@ -124,6 +124,12 @@ class Settings(BaseSettings):
     # Admin API key: enables machine-to-machine user management via X-Admin-API-Key.
     ADMIN_API_KEY: str = ""  # leave empty to disable the /admin-api endpoints
 
+    # Dongle-server backchannel: the backend calls the dongle-server to upsert
+    # the serial whitelist (paid gate) and the dongle-server calls us back via
+    # /devices/verify. The shared secret travels as X-Internal-Api-Key both ways.
+    DONGLE_SERVER_API_KEY: str = ""  # leave empty to disable the backchannel
+    DONGLE_SERVER_URL: str = ""       # base URL for the dongle-server (e.g. http://dongle-server:8000)
+
     # CORS origins: explicit allow-list (JSON list in env, e.g.
     # CORS_ALLOWED_ORIGINS='["https://app.example.com"]'). Empty list = same-origin
     # only (the nginx frontend proxies /api, /ws, /ai). Never pair "*" with

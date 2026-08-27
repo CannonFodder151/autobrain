@@ -17,8 +17,12 @@
 ///    queue hint.
 library;
 
+import 'dart:typed_data';
+
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
@@ -143,6 +147,16 @@ class _DongleWifiPanelState extends State<DongleWifiPanel> {
 
   /// AUT-1673: read live device info over BLE, persist the report server-side,
   /// then re-fetch the latest manifest to detect an upgrade.
+  Future<Uint8List> _downloadFirmware(String url) async {
+    final resp = await http.Client().get(Uri.parse(url)).timeout(
+      const Duration(seconds: 30),
+    );
+    if (resp.statusCode != 200) {
+      throw Exception('Firmware download failed (HTTP ${resp.statusCode})');
+    }
+    return Uint8List.fromList(resp.bodyBytes);
+  }
+
   Future<void> _readAndRefresh() async {
     final cfg = _config;
     final link = _linked;
@@ -185,6 +199,50 @@ class _DongleWifiPanelState extends State<DongleWifiPanel> {
     } catch (e) {
       if (mounted)
         setState(() => _firmwareStatus = 'Could not read device: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// AUT-1673: triggers an OTA firmware update over BLE.
+  /// Downloads the blob from the signed manifest URL, verifies SHA-256,
+  /// then writes it chunked to the dongle. Currently a no-op until the
+  /// firmware exposes its OTA characteristic — [DongleBle.isOtaAvailable]
+  /// gates the button, so this only runs when the flow is wired.
+  Future<void> _applyOta() async {
+    final latest = _latest;
+    final installed = _installed;
+    final cfg = _config;
+    if (latest == null || installed == null || cfg.deviceId == null) return;
+    if (!DongleBle.isOtaAvailable) {
+      if (!mounted) return;
+      setState(() => _firmwareStatus =
+          'OTA update is not available yet — update your dongle firmware.');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _firmwareStatus = 'Downloading firmware update…';
+    });
+    try {
+      final blob = await _downloadFirmware(latest.blobUrl);
+      final shaHex = sha256.convert(blob).toString();
+      if (shaHex != latest.sha256.toLowerCase()) {
+        if (!mounted) return;
+        setState(() => _firmwareStatus =
+            'SHA-256 mismatch — refusing to flash corrupted firmware.');
+        return;
+      }
+      setState(() => _firmwareStatus = 'Flashing over BLE…');
+      await DongleBle.applyOta(cfg.deviceId!, blob);
+      if (!mounted) return;
+      setState(() {
+        _firmwareStatus = 'Firmware updated to ${latest.version}.';
+        _latest = null;
+      });
+      await _readAndRefresh();
+    } catch (e) {
+      if (mounted) setState(() => _firmwareStatus = 'Update failed: $e');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -674,6 +732,16 @@ class _DongleWifiPanelState extends State<DongleWifiPanel> {
                           icon: const Icon(Icons.bluetooth_searching),
                           label: const Text('Read firmware info'),
                         ),
+                        if (_installed != null &&
+                            _latest != null &&
+                            _latest!.version != _installed!.firmwareVersion)
+                          FilledButton.icon(
+                            onPressed: _busy
+                                ? null
+                                : () => _applyOta(),
+                            icon: const Icon(Icons.system_update),
+                            label: const Text('Update firmware'),
+                          ),
                       ],
                     ),
                   ],
