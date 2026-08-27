@@ -34,6 +34,7 @@ jobs:
         run: sleep 900
 
       - name: Fire CI triage webhook
+        shell: bash
         env:
           CI_TRIAGE_WEBHOOK_URL: ${{ secrets.CI_TRIAGE_WEBHOOK_URL }}
           CI_TRIAGE_WEBHOOK_SECRET: ${{ secrets.CI_TRIAGE_WEBHOOK_SECRET }}
