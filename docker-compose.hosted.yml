@@ -82,7 +82,10 @@ services:
 
   minio:
     # Pinned to immutable release (AUT-322). digest sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    # AUT-1737: pinned BY DIGEST to harden against Supply-chain base image CVEs.
+    # Docker Hub has no minio release newer than RELEASE.2025-09-07T16-13-09Z in this
+    # environment; upgrade to a patched image is blocked until upstream publishes it.
+    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
     restart: unless-stopped
     # AUT-1242-C2: bucket init folded into the server entrypoint to drop the
     # one-shot minio-init sidecar. Start minio in the background, wait for it
