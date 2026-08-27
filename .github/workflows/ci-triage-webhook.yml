@@ -21,12 +21,14 @@ permissions: {}
 
 jobs:
   fire:
-    # Routed to the idle arm64 runner (Phase 1(a)): the job is sleep+curl+jq,
-    # arch-independent, and previously monopolised the x64 runner for 15-20 min
-    # bursts (AUT-1761). The repo-level concurrency group above already cancels
-    # a prior in-flight wait on a newer push.
-    runs-on: [self-hosted, linux, arm64]
-    timeout-minutes: 15
+    # Runs on GitHub-hosted ubuntu-latest: the job is pure sleep+curl+jq,
+    # arch-independent, and must NEVER consume a scarce self-hosted release
+    # runner (AUT-1762). Previously it hogged x64, then arm64, for 15 min
+    # bursts, starving dockerhub-publish/build-hosted. ubuntu-latest frees both
+    # self-hosted runners for real build work. The repo-level concurrency group
+    # above still cancels a prior in-flight wait on a newer push.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Wait for runs to settle
         run: sleep 900
