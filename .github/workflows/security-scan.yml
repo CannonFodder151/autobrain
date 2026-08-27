@@ -57,3 +57,56 @@ jobs:
             -H "Content-Type: application/json" \
             -d "$(jq -nc --arg c status --arg t "$TITLE" --arg col "$COLOR" --arg u "$RUN_URL" \
               '{channel:$c,title:$t,description:"Weekly full-resolution pip-audit of backend + ai + market-data requirements.",color:$col,author:"Security Scan",fields:[{name:"Scan",value:"full-resolution (transitive)",inline:true},{name:"Run",value:$u,inline:true}]}')"
+
+  # AUT-1738: node/image CVE audit for the external 9Router AI-gateway image.
+  # 9Router ships a Node.js image (decolua/9router) not covered by the Python
+  # pip-audit gate above. Trivy scans CRITICAL/HIGH CVEs across its OS + npm
+  # library tree. As of 0.5.55 (= latest published tag, == pinned digest) 11 CVEs
+  # remain unfixed upstream, so this job is EXPECTED TO BE RED until decolua
+  # publishes a patched tag — that red weekly state is the intended tracking
+  # signal, reported to #status every run. The pinned 9router digest in
+  # docker-compose.hosted.yml is bumped only after this job goes green.
+  image-scan:
+    if: github.event_name != 'pull_request'
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - name: Checkout repository
+        run: |
+          set -euo pipefail
+          if [ -d .git ]; then
+            git fetch origin
+          else
+            git init && git remote add origin "https://github.com/${{ github.repository }}.git" || true
+            git fetch origin
+          fi
+          git checkout -f main
+          git reset --hard origin/main
+
+      - name: Install trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+
+      - name: Scan 9Router image for CRITICAL/HIGH CVEs
+        id: scan
+        run: |
+          set -uo pipefail
+          trivy image --severity CRITICAL,HIGH --exit-code 1 --format table decolua/9router:0.5.55
+          CODE=$?
+          if [ "$CODE" -ne 0 ]; then
+            echo "result=vulns" >> "$GITHUB_OUTPUT"
+            exit "$CODE"
+          fi
+          echo "result=clean" >> "$GITHUB_OUTPUT"
+
+      - name: Report to Discord #status
+        if: always()
+        env:
+          RESULT: ${{ steps.scan.outputs.result }}
+          COLOR: ${{ steps.scan.outputs.result == 'clean' && '0x57F287' || '0xED4245' }}
+          TITLE: ${{ steps.scan.outputs.result == 'clean' && '9Router image scan clean' || '9Router image scan found CRITICAL/HIGH CVEs' }}
+          RUN_URL: ${{ github.server_url }}${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
+            -H "Content-Type: application/json" \
+            -d "$(jq -nc --arg c status --arg t "$TITLE" --arg col "$COLOR" --arg u "$RUN_URL" \
+              '{channel:$c,title:$t,description:"Weekly trivy scan of decolua/9router:0.5.55 (Node OS + npm tree). AUT-1738.",color:$col,author:"Security Scan",fields:[{name:"Scan",value:"trivy CRITICAL/HIGH",inline:true},{name:"Run",value:$u,inline:true}]}')"
