@@ -15,6 +15,10 @@ x-backend-base: &backend-base
     POSTGRES_HOST: postgres
     REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379/0
     MINIO_ENDPOINT: minio:9000
+    # AUT-1786: explicitly propagate MinIO creds so init-minio.sh (and runtime
+    # uploads) work; optional passthrough — the script skips cleanly if absent.
+    MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-}
+    MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-}
     AI_ROUTER_URL: ${AI_ROUTER_URL:-http://your-9router-instance:port}
     SOCIAL_FEDERATION_HUB_URL: ${SOCIAL_FEDERATION_HUB_URL:-https://hub.autobrainservice.app}
     SOCIAL_FEDERATION_HOSTED: ${SOCIAL_FEDERATION_HOSTED:-false}

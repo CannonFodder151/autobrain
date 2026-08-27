@@ -1,13 +1,27 @@
 #!/bin/sh
-set -e
-
+# Best-effort MinIO bucket initialization — never block backend startup (AUT-1786).
 ENDPOINT="${MINIO_ENDPOINT:-minio:9000}"
-ACCESS_KEY="${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY must be set}"
-SECRET_KEY="${MINIO_SECRET_KEY:?MINIO_SECRET_KEY must be set}"
 BUCKET="${MINIO_BUCKET:-autobrain-assets}"
 
+if [ -z "${MINIO_ACCESS_KEY:-}" ] || [ -z "${MINIO_SECRET_KEY:-}" ]; then
+  echo "[init-minio] MINIO_ACCESS_KEY / MINIO_SECRET_KEY not set; skipping bucket init." >&2
+  exit 0
+fi
+
+set -e
+
+ACCESS_KEY="$MINIO_ACCESS_KEY"
+SECRET_KEY="$MINIO_SECRET_KEY"
+
 echo "[init-minio] Waiting for MinIO at $ENDPOINT ..."
+# Bounded wait: give MinIO 60s before giving up (prevents infinite hang if MinIO is down).
+TRIES=0
 until mc alias set local "http://$ENDPOINT" "$ACCESS_KEY" "$SECRET_KEY" 2>/dev/null; do
+  TRIES=$((TRIES + 1))
+  if [ "$TRIES" -ge 30 ]; then
+    echo "[init-minio] MinIO not reachable after ${TRIES} attempts; skipping." >&2
+    exit 0
+  fi
   sleep 2
 done
 
