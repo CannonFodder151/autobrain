@@ -33,6 +33,7 @@ jobs:
   sync:
     if: github.event_name != 'pull_request'
     runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 20
     steps:
       - name: Checkout autobrain repo
         run: |
@@ -140,8 +141,9 @@ jobs:
             exit 0
           fi
           # A freshly pushed tag can lag GitHub's ref lookup (eventual
-          # consistency); dispatch then 422s "No ref found". Poll ~5s up to
-          # ~60s before giving up so the pinned tag is released (AUT-451).
+          # consistency); dispatch then 422s "No ref found". Poll with
+          # linear backoff (5–60s per retry, up to 12 retries) before giving
+          # up so the pinned tag is released (AUT-451, AUT-1652).
           for attempt in $(seq 1 12); do
             if out="$(gh workflow run release-mobile.yml --repo CannonFodder151/autobrain-mobile \
                 --ref "$tag" -f "version=$tag" 2>&1)"; then
@@ -149,11 +151,20 @@ jobs:
               exit 0
             fi
             echo "dispatch attempt $attempt/12 failed: $out"
-            if ! printf '%s' "$out" | grep -qi 'No ref found'; then
-              echo "::error::$out"
-              exit 1
+            # Rate limit (403) — wait for window to reset then retry
+            if printf '%s' "$out" | grep -qi 'rate limit'; then
+              echo "::warning::rate limit hit during dispatch — waiting for reset (attempt $attempt/12)"
+              sleep $(( attempt * 5 ))
+              continue
             fi
-            sleep 5
+            # 422 "No ref found" — tag not yet visible (eventual consistency)
+            if printf '%s' "$out" | grep -qi 'No ref found'; then
+              sleep 5
+              continue
+            fi
+            # Any other error is unexpected — fail fast
+            echo "::error::$out"
+            exit 1
           done
-          echo "::error::could not dispatch mobile release $tag — ref not resolvable after ~60s"
+          echo "::error::could not dispatch mobile release $tag — retries exhausted"
           exit 1
