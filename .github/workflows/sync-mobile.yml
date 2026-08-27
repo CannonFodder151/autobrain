@@ -33,6 +33,7 @@ jobs:
   sync:
     if: github.event_name != 'pull_request'
     runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 20
     steps:
       - name: Checkout autobrain repo
         run: |
@@ -141,8 +142,8 @@ jobs:
           fi
           # A freshly pushed tag can lag GitHub's ref lookup (eventual
           # consistency); dispatch then 422s "No ref found". Poll with
-          # exponential backoff up to ~90s before giving up so the pinned
-          # tag is released (AUT-451, AUT-1652).
+          # linear backoff (5–60s per retry, up to 12 retries) before giving
+          # up so the pinned tag is released (AUT-451, AUT-1652).
           for attempt in $(seq 1 12); do
             if out="$(gh workflow run release-mobile.yml --repo CannonFodder151/autobrain-mobile \
                 --ref "$tag" -f "version=$tag" 2>&1)"; then
