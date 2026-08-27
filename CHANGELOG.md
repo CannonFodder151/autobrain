@@ -9,7 +9,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
 
+
 ## [Unreleased]
+
+## [0.3.143] - 2026-08-27
 
 ### Fixed
 - CI: moved the `ci-triage-webhook.yml` `fire` job to GitHub-hosted `ubuntu-latest` so its 15-min `sleep`+curl never monopolises a scarce self-hosted release runner (x64 or arm64), freeing both for real build work (AUT-1762).
