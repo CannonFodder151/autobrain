@@ -1,5 +1,9 @@
 """Regression tests for /search constant-time auth + rate limiting (AUT-782).
 
+AUT-1326: the per-IP limit keys on socket remote address only (XFF is
+spoofable), so IP variation is simulated with distinct TestClient source
+addresses instead of X-Forwarded-For headers.
+
 Run: python test_auth.py   (needs: slowapi + httpx installed)
 """
 
@@ -22,21 +26,27 @@ async def _fake_search(query, year):
 
 main.search_carsguide = _fake_search
 main.search_bikesguide = _fake_search
-client = TestClient(main.app)
 
 KEY = "test-key"
 
 
-def _search(ip, key=KEY, query="toyota camry"):
+def _search(ip, key=KEY, query="toyota camry", xff=None):
+    client = TestClient(main.app, client=(ip, 12345))
     headers = {}
     if key:
         headers["X-API-Key"] = key
-    if ip:
-        headers["X-Forwarded-For"] = ip
+    if xff:
+        headers["X-Forwarded-For"] = xff
     return client.post("/search", json={"query": query}, headers=headers)
 
 
+def _reset_limits():
+    # In-memory buckets are shared across tests; start each test clean.
+    main.limiter.limiter.storage.reset()
+
+
 def test_auth_uses_constant_time_compare():
+    _reset_limits()
     # The key check must go through hmac.compare_digest, not plain != .
     calls = []
     real = hmac.compare_digest
@@ -55,6 +65,7 @@ def test_auth_uses_constant_time_compare():
 
 
 def test_per_ip_limit():
+    _reset_limits()
     # Each IP is allowed RATE_LIMIT_IP (4) searches; the 5th gets 429.
     for _ in range(4):
         r = _search("2.2.2.2")
@@ -66,7 +77,19 @@ def test_per_ip_limit():
     assert _search("3.3.3.3").status_code == 200
 
 
+def test_xff_does_not_rotate_ip_bucket():
+    _reset_limits()
+    # AUT-1326: rotating fake X-Forwarded-For values from one source address
+    # must NOT evade the per-IP limit.
+    for i in range(4):
+        r = _search("5.5.5.5", xff=f"10.9.9.{i}")
+        assert r.status_code == 200, r.text
+    r = _search("5.5.5.5", xff="10.9.9.99")
+    assert r.status_code == 429, "XFF rotation bypassed the per-IP limit"
+
+
 def test_per_key_limit():
+    _reset_limits()
     # A single key is allowed RATE_LIMIT_KEY (8) searches even from many IPs.
     main.API_KEY = "key-a"
     for i in range(8):
@@ -80,6 +103,7 @@ def test_per_key_limit():
 
 
 def test_missing_key_rejected():
+    _reset_limits()
     # No key falls into the shared "anon" bucket and is still IP-limited.
     main.API_KEY = "test-key"
     for i in range(4):
@@ -92,6 +116,7 @@ def test_missing_key_rejected():
 if __name__ == "__main__":
     test_auth_uses_constant_time_compare()
     test_per_ip_limit()
+    test_xff_does_not_rotate_ip_bucket()
     test_per_key_limit()
     test_missing_key_rejected()
     print("all tests passed")
