@@ -32,8 +32,13 @@ concurrency:
 
 jobs:
   auto-bump:
+    # x64 jobs run on the new vm2 runner (gh-runner-autobrain-2). The legacy
+    # x64 runner (gh-runner-autobrain) is currently degraded (AUT-1781); routing
+    # on `vm2` guarantees dispatch to the healthy new runner. Re-balance across
+    # legacy+new again by dropping `vm2` once AUT-1781 is repaired. ARM builds
+    # stay pinned to the Oracle VM arm64 runner below.
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, linux, x64]
+    runs-on: [self-hosted, linux, x64, vm2]
     permissions:
       contents: write
     steps:
@@ -73,7 +78,8 @@ jobs:
       matrix:
         include:
           - arch: amd64
-            runs_on: [self-hosted, linux, x64]
+            runs_on: [self-hosted, linux, x64, vm2]
+          # arm64 builds stay on the Oracle VM arm64 runner (gh-runner-autobrain-arm64).
           - arch: arm64
             runs_on: [self-hosted, linux, ARM64]
     runs-on: ${{ matrix.runs_on }}
@@ -118,7 +124,7 @@ jobs:
   build-manifest:
     needs: build
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux, x64]
+    runs-on: [self-hosted, linux, x64, vm2]
     permissions:
       contents: read
       packages: write
