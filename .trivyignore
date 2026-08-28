@@ -51,3 +51,17 @@ CVE-2026-56862  # gosu-stdlib: crypto/tls KeyUpdate; gosu does no TLS
 # stable-alpine digest shipping OpenSSL >= 3.5.8-r0) and drop this entry + bump
 # the pinned digest in docker/frontend/Dockerfile.
 CVE-2026-14456  # QUIC DoS: no QUIC listener in frontend nginx
+
+# --- AUT-1735 / python base image HIGH CVEs (unused at runtime) ------------------
+# Both findings are pre-installed pip packages shipped in the python:3.13-slim
+# base image (PYTHON_BASE_IMAGE). grep across the repo confirms NEITHER msgpack
+# nor setuptools is imported or invoked by any AutoBrain runtime service
+# (backend/ai/worker/market-data), so neither is reachable.
+# python:3.13-slim@sha256:7ce4b6d... is the LATEST 3.13-slim digest (Docker Hub
+# confirmed) — no digest bump carries patched wheels — so suppress per policy
+# ("tolerate when no fixed image exists") until a 3.13-slim respin ships them.
+# Time-boxed: re-check 2026-11-28; drop entries + bump PYTHON_BASE_IMAGE digest
+# once a 3.13-slim ships msgpack>=1.2.1 and setuptools>=78.1.1.
+# Security Officer sign-off requested — see child issue AUT-1844 (sign-off).
+GHSA-6v7p-g79w-8964  # msgpack OOB read: not imported by any runtime service
+CVE-2025-47273  # setuptools PackageIndex path traversal: build-time only, no runtime install path
