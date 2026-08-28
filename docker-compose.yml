@@ -106,6 +106,8 @@ services:
       context: .
       dockerfile: docker/ai/Dockerfile
     restart: unless-stopped
+    # AUT-1739: adequate /dev/shm for Chromium (market-data scraper).
+    shm_size: "256m"
     env_file: .env
     environment:
       AI_ROUTER_URL: ${AI_ROUTER_URL:-http://your-9router-instance:port}
