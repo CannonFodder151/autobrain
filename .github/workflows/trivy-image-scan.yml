@@ -95,7 +95,7 @@ jobs:
           echo "OK: python base images are digest-pinned across all Dockerfiles."
 
       - name: Scan pinned postgres image (HIGH/CRITICAL, unfixed ignored)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
             image-ref: ${{ env.POSTGRES_IMAGE }}
             scanner: vuln
@@ -106,7 +106,7 @@ jobs:
             exit-code: '1'
 
       - name: Scan pinned frontend nginx image (HIGH/CRITICAL, unfixed ignored)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
             image-ref: ${{ env.NGINX_FRONTEND_IMAGE }}
             scanner: vuln
@@ -117,7 +117,7 @@ jobs:
             exit-code: '1'
 
       - name: Scan pinned python base image (HIGH/CRITICAL, AUT-1735)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.PYTHON_BASE_IMAGE }}
           scanner: vuln
