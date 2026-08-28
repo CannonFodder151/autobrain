@@ -1,0 +1,4 @@
+# AUT-1720: allow the runner-watchdog timer (run as the non-root service user)
+# to self-heal a wedged dockerd / frozen listener without a password.
+# Install with: install -m 0440 -o root -g root gh-runner-watchdog.sudoers /etc/sudoers.d/
+administrator ALL=(root) NOPASSWD: /usr/bin/systemctl restart docker.service, /usr/bin/systemctl restart containerd.service, /usr/bin/systemctl restart gh-runner@*.service, /usr/bin/systemctl list-units *, /usr/bin/systemctl show *
