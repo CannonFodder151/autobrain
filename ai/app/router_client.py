@@ -106,8 +106,21 @@ _SYSTEM_PROMPTS: dict[str, str] = {
         'Return STRICT JSON: {"odometer_km": int|null, "confidence": number (0-1)}. '
         "If the reading is not clearly visible, return odometer_km null with low confidence."
     ),
+    "parts-guide": (
+        "You are AutoBrain's parts-catalogue formatter. The deterministic engine "
+        "has already classified Supercheap Auto parts-guide categories into "
+        "Inventory-shaped part suggestions (each with name, category, supplier, "
+        "sku, brand, description, service_group). Your job is ONLY to tidy the "
+        "human-readable fields — improve clarity of each part's 'description', "
+        "normalise 'brand' casing (e.g. 'NGK', 'SCA', 'Bosch'), and ensure "
+        "'category' is one of the existing normalised values — without inventing "
+        "new parts, changing 'sku', 'service_group', or 'supplier'. "
+        "Today's vehicle is identified by make/model/year in the payload. "
+        'Return STRICT JSON: {"parts": [{"name": string, "category": string, '
+        '"brand": string, "description": string}], "note": string|null}. '
+        "Keep every part from the baseline; only refine the listed fields."
+    ),
 }
-
 # Sampling temperature per module. All modules default to 0 (deterministic);
 # stable resale estimates depend on this.
 _TEMPERATURES: dict[str, float] = {}
@@ -182,6 +195,12 @@ _SCHEMAS: dict[str, dict[str, tuple]] = {
         "total_cost": (int, float, type(None)),
         "currency": (str,),
         "notes": (str, type(None)),
+    },
+    "parts-guide": {
+        "parts": (list,),
+        "vehicle": (dict,),
+        "model": (str,),
+        "suggested_parts": (list,),
     },
 }
 

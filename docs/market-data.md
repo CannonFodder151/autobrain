@@ -140,3 +140,30 @@ bundled into the AI image (AUT-1242-C3). The `ai` container runs **two uvicorn p
   role with `ALTER USER ... PASSWORD '...'` and MinIO with
   `mc admin user set-password`, then redeploy. The demo/default tiers have the
   same latent debt.
+
+## Supercheap Auto parts-guide scraper (AUT-1792)
+
+The same market-data container also scrapes the **Supercheap Auto parts-guide**
+so AutoBrain can suggest real parts for a vehicle. Source: `market-data/sca.py`.
+
+- **Endpoint:** `POST /sca-parts` with `{rego, state, make, model, year}`
+  (rego+state resolve the vehicle via the browser flow; make/model/year is the
+  deterministic fallback). Returns `{source: "supercheap", vehicle, categories}`
+  where each category is `{slug, name, service_group, part_category, url}`.
+- **Pattern (deterministic-first):** plain HTTP to the SSR parts-guide page
+  extracts the category taxonomy; if rego+state are supplied a **Playwright**
+  subprocess (`browser.py scrape_sca`) drives the Demandware FindRegoVehicle
+  form to resolve the real vehicle, then degrades to the taxonomy if the CSRF
+  gate doesn't clear. Never raises — returns an empty `categories` + `note`.
+- **Formatting:** the backend (`app/services/parts_guide.py`) posts the raw
+  categories to the AI gateway `parts-guide` module, which normalises them into
+  Inventory-shaped part suggestions and uses 9Router (only) to *tidy*
+  descriptions / brands / categories — the deterministic classification is the
+  ground truth and is never overwritten by the model.
+- **Two backend endpoints** sit on top of this (see `docs/api-spec.md`):
+  - `GET /vehicles/{id}/parts/sca-lookup` → Inventory-formatted SCA parts.
+  - `POST /vehicles/{id}/parts/suggest-for-service` → parts prefill for an
+    AI-suggested service, **inventory-first then SCA**.
+- **Config:** no new env var — it reuses `MARKET_DATA_URL` / `MARKET_DATA_API_KEY`.
+- **Caching:** results are cached in `sca_parts_cache` (keyed by
+  `make|model|year`, 24h TTL) so repeat lookups are stable and cheap.

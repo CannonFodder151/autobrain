@@ -16,11 +16,20 @@ class PartsScreen extends StatefulWidget {
 class _PartsScreenState extends State<PartsScreen> {
   List<Part> _parts = const [];
   bool _loading = true;
+  final _regoCtrl = TextEditingController();
+  final _stateCtrl = TextEditingController(text: 'VIC');
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _regoCtrl.dispose();
+    _stateCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -53,11 +62,163 @@ class _PartsScreenState extends State<PartsScreen> {
     }
   }
 
+  Future<void> _lookupSca(BuildContext context) async {
+    if (_regoCtrl.text.trim().isEmpty) {
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Supercheap Auto parts lookup'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _regoCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Registration number (rego)',
+                  hintText: 'e.g. ABC123',
+                ),
+                textCapitalization: TextCapitalization.characters,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _stateCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'State',
+                  hintText: 'e.g. VIC',
+                ),
+                textCapitalization: TextCapitalization.characters,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx),
+                       child: const Text('Cancel')),
+            FilledButton(
+              onPressed: _regoCtrl.text.trim().isEmpty
+                  ? null
+                  : () => Navigator.pop(ctx),
+              child: const Text('Lookup'),
+            ),
+          ],
+        ),
+      );
+      if (_regoCtrl.text.trim().isEmpty) return;
+    }
+
+    final rego = _regoCtrl.text.trim();
+    final state = _stateCtrl.text.toUpperCase();
+    setState(() => _loading = true);
+    try {
+      final api = context.read<AuthState>().api;
+      final data = await api.post(
+        '/vehicles/${widget.vehicleId}/parts/sca-lookup', {
+        'rego': rego,
+        'state': state,
+      }) as Map<String, dynamic>;
+      final parts = (data['parts'] as List? ?? [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      if (mounted) await _showScaResults(context, parts);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _showScaResults(
+      BuildContext context, List<Map<String, dynamic>> parts) async {
+    final selected = <Map<String, dynamic>>{};
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          title: const Text('Supercheap Auto parts'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: parts.isEmpty
+                ? const Text('No parts returned.')
+                : ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: parts.length,
+                    itemBuilder: (_, i) {
+                      final part = parts[i];
+                      final key = part['sku'] as String? ?? part['name'];
+                      final isSel = selected.containsKey(key);
+                      return CheckboxListTile(
+                        value: isSel,
+                        onChanged: (v) => setSt(() {
+                          if (v == true) {
+                            selected[key!] = part;
+                          } else {
+                            selected.remove(key);
+                          }
+                        }),
+                        title: Text(part['name'] ?? 'Part'),
+                        subtitle: Text(part['category'] ?? ''),
+                      );
+                    },
+                  ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Close'),
+            ),
+            FilledButton(
+              onPressed: selected.isEmpty
+                  ? null
+                  : () async {
+                      final api = context.read<AuthState>().api;
+                      var added = 0;
+                      for (final part in selected.values) {
+                        try {
+                          await api.post(
+                              '/vehicles/${widget.vehicleId}/parts', {
+                            'name': part['name'],
+                            'sku': part['sku'],
+                            'category': part['category'],
+                            'quantity': 0,
+                            'min_quantity': 1,
+                            'supplier': part['supplier'],
+                            'notes': part['description'],
+                          });
+                          added++;
+                        } catch (_) {}
+                      }
+                      if (mounted) Navigator.pop(ctx);
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Added $added part(s) to inventory')),
+                        );
+                      }
+                      _load();
+                    },
+              child: const Text('Add selected to inventory'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final low = _parts.where((p) => p.needsReorder).toList();
     return Scaffold(
-      appBar: AppBar(title: const Text('Parts inventory')),
+      appBar: AppBar(
+        title: const Text('Parts inventory'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.storefront),
+            tooltip: 'Look up Supercheap Auto parts',
+            onPressed: () => _lookupSca(context),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           await Navigator.of(context).push(

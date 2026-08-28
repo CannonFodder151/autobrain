@@ -10,11 +10,16 @@ Handled portals:
     browser; we wait for the redirected page and either parse the Nuxt
     listing payload or report the page deterministically (parked / still
     gated) so the provider degrades without erroring.
+  - sca: Supercheap Auto. The parts-guide page is SSR-rendered, but vehicle
+    resolution by rego (FindRegoVehicle) needs a browser because of the
+    Demandware CSRF gate. We navigate to /parts-guide, fill the rego/state
+    lookup form, wait for the vehicle to resolve, then capture the
+    parts-g uidance category list deterministically (fallback to the static
+    taxonomy if the gate doesn't clear).
 
-ponytail: no undetected-chromium tier yet. bikesales.com.au's PerimeterX
-hold-to-confirm + browser-fingerprint challenge is not reliably passable from
-a datacenter host, so it is not wired here; add an undetected-chromedriver
-worker (rego's uc_worker.py) if PerimeterX ever clears for this infra.
+ponytail: no undetected-chromium tier yet. SCA's vehicle-fit search is a
+Demandware form flow that passes with a normal browser here, so it is wired
+as a standard headless chromium job.
 """
 
 import asyncio
@@ -108,10 +113,80 @@ async def scrape_bikesguide(query: str, year: int | None) -> dict:
             await browser.close()
 
 
+async def scrape_sca(rego: str, state: str) -> dict:
+    """Resolve a vehicle by rego on the SCA parts-guide, then capture categories.
+
+    The rego lookup posts through Demandware's FindRegoVehicle form (CSRF-gated),
+    which only works inside a real browser. After the vehicle resolves we read
+    the parts-guide category menu. If the gate does not clear we degrade to the
+    static category taxonomy so the provider still returns categories.
+    """
+    from sca import _parse_categories
+
+    try:
+        from playwright.async_api import async_playwright
+    except ImportError:
+        return {"ok": False, "kind": "gated",
+                "note": "playwright not installed in image"}
+
+    async with async_playwright() as p:
+        try:
+            browser = await p.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"])
+        except Exception as exc:
+            return {"ok": False, "kind": "gated",
+                    "note": f"sca chromium launch failed: {type(exc).__name__}"}
+        try:
+            ctx = await browser.new_context(
+                user_agent=UA, locale="en-AU",
+                viewport={"width": 1280, "height": 900})
+            page = await ctx.new_page()
+            try:
+                await page.goto("https://www.supercheapauto.com.au/parts-guide",
+                                wait_until="domcontentloaded", timeout=PAGE_TIMEOUT_MS)
+            except Exception as exc:
+                return {"ok": False, "kind": "error",
+                        "note": f"sca nav failed: {type(exc).__name__}"}
+            # Try to find the rego lookup form and submit it.
+            resolved = False
+            try:
+                rego_input = await page.query_selector(
+                    'input[name="rego"], #rego-input, input[placeholder*="rego" i]')
+                if rego_input is not None:
+                    await rego_input.fill(rego)
+                    state_input = await page.query_selector(
+                        'select[name="state"], #state-select')
+                    if state_input is not None:
+                        await state_input.select_option(state)
+                    await page.click('button:has-text("Find"), button:has-text("Search"), '
+                                     'button.check-my-fit')
+                    await page.wait_for_timeout(5000)
+                    resolved = True
+            except Exception:
+                resolved = False
+            html = await page.content()
+            categories = _parse_categories(html)
+            vehicle = {"rego": rego, "state": state.upper(),
+                       "resolved": resolved} if resolved else None
+            return {"ok": True,
+                    "source": "supercheap",
+                    "vehicle": vehicle,
+                    "categories": categories,
+                    "listings": []}
+        finally:
+            await browser.close()
+
+
 def main():
-    portal, query = sys.argv[1], sys.argv[2]
+    portal = sys.argv[1]
+    query = sys.argv[2]
     year = int(sys.argv[3]) if len(sys.argv) > 3 and sys.argv[3].isdigit() else None
-    result = asyncio.run(scrape_bikesguide(query, year))
+    if portal == "sca":
+        state = sys.argv[3] if len(sys.argv) > 3 and not sys.argv[3].isdigit() else ""
+        result = asyncio.run(scrape_sca(query, state))
+    else:
+        result = asyncio.run(scrape_bikesguide(query, year))
     _emit(result)
 
 

@@ -97,6 +97,10 @@ id, vehicle_id (FK), estimated_value, low, high, currency, factors (JSON), recom
 
 id, make, model, year, source, listings (JSON), median_price, low_price, high_price, sample_size, fetched_at. UNIQUE(make, model, year). 24h cache of CarsGuide/CarSales market data feeding resale valuations (see market-data.md).
 
+## sca_parts_cache
+
+id, key (make|model|year), parts (JSON), category_count, fetched_at. UNIQUE(key). 24h cache of Supercheap Auto parts-guide lookups feeding inventory + AI suggested-service prefill (AUT-1792).
+
 ## notification_preferences
 
 id, user_id (FK), vehicle_id (FK), push/email/discord_enabled, service_due_days, service_due_km, fuel_gap_km, discord_webhook_url, fcm_token, created_at, updated_at. UNIQUE(user_id, vehicle_id).

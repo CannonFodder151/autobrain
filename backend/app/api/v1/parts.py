@@ -1,6 +1,9 @@
 """Parts inventory routes."""
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,6 +12,7 @@ from app.services.ownership import get_accessible_vehicle
 from app.db.session import get_db
 from app.models.part import Part, PartMovement
 from app.models.user import User
+from app.models.vehicle import Vehicle
 from app.schemas.part import (
     PartCreate,
     PartMovementCreate,
@@ -16,8 +20,25 @@ from app.schemas.part import (
     PartUpdate,
     ReorderSuggestion,
 )
+from app.services import parts_guide
 
 router = APIRouter(prefix="/vehicles/{vehicle_id}/parts", tags=["parts"])
+
+
+class SCALookupRequest(BaseModel):
+    rego: str | None = None
+    state: str | None = None
+    make: str | None = None
+    model: str | None = None
+    year: int | None = None
+    refresh: bool = False
+
+
+class ServicePartsRequest(BaseModel):
+    service_type: str = "scheduled"
+    rego: str | None = None
+    state: str | None = None
+    refresh: bool = False
 
 
 @router.get("", response_model=list[PartOut])
@@ -138,3 +159,60 @@ async def reorder_suggestions(
         )
     return suggestions
 
+
+@router.get("/sca-lookup", response_model=dict[str, Any])
+async def sca_lookup(
+    vehicle_id: str,
+    req: SCALookupRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Lookup Supercheap Auto parts categories for the given vehicle.
+
+    Returns Inventory-formatted parts with SCA categories normalised and
+    ready for the inventory tab. Uses rego+state or make/model/year.
+    """
+    await get_accessible_vehicle(db, vehicle_id, user)
+    vehicle = await db.get(Vehicle, vehicle_id)
+    if not vehicle:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+
+    make = req.make or vehicle.make or ""
+    model = req.model or vehicle.model or ""
+    year = req.year or vehicle.year
+
+    result = await parts_guide.lookup_sca_parts(
+        db, rego=req.rego, state=req.state, make=make, model=model,
+        year=year, vehicle_type=vehicle.vehicle_type, refresh=req.refresh,
+    )
+    return result
+
+
+@router.post("/suggest-for-service", response_model=dict[str, Any])
+async def suggest_parts_for_service(
+    vehicle_id: str,
+    payload: ServicePartsRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Get prefill parts for an AI-suggested service.
+
+    Preference order:
+      1. Parts already in inventory whose category matches the service.
+      2. SCA suggestions for that service type (cleaned/normalised).
+
+    Returns ServiceItemIn-like items ready to attach to a scheduled service.
+    """
+    await get_accessible_vehicle(db, vehicle_id, user)
+    vehicle = await db.get(Vehicle, vehicle_id)
+    if not vehicle:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+
+    result = await parts_guide.suggest_service_parts(
+        db, vehicle_id=vehicle_id,
+        make=vehicle.make or "", model=vehicle.model or "", year=vehicle.year,
+        service_type=payload.service_type,
+        rego=vehicle.rego, state=payload.state,
+        refresh=payload.refresh,
+    )
+    return result
