@@ -12,6 +12,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Fixed
+- **AUT-1185** AI gateway OOM DoS + auth bypass + prompt injection (security):
+  - social_image module: `width`/`height` now clamped to 200–2048 via Pydantic
+    validator — prevents ~3×10¹⁸-byte allocation from `width=height=999999999`.
+  - router_client: router response capped at 1 MB (`_MAX_ROUTER_RESPONSE_BYTES`),
+    nested schema validation enforces max depth 4 and max array length 100.
+  - router_client: user payload now wrapped in `<untrusted_user_data>` tags with
+    an explicit system instruction to treat it as data only (prompt-injection
+    mitigation).
+  - main: `AI_ENV=development` no longer disables auth; only the explicit
+    `AI_GATEWAY_AUTH_DISABLED=1` opt-out opens `/v1/*`.
+- **AUT-1185** Per-caller HMAC keyed auth is deferred — see follow-up issue for
+  rollout requiring backend coordination (key rotation + revocation lifecycle).
+
+### Added
+- Regression tests: `test_run_clamps_oversized_dimensions`, `test_validate_nested_depth_and_length`,
+  `test_ai_env_development_no_longer_bypasses_auth`, `test_enhance_drops_nested_too_deep`.
+
+
+### Fixed
 - **App (AUT-1771):** The 7-day free trial now appears on the Android (and iOS) app. The trial chip/Copy/CTA were previously hidden whenever the store (IAP) purchase path was active — and the hosted instance reports IAP as enabled, so Android users never saw the offer. The trial is now surfaced for both the Stripe checkout path and the store path, driven by the per-account `trial_available`/`trial_days` flags from `GET /auth/me`. Note: for the store path the native Google Play / App Store subscription base plan must be configured with the 7-day free trial for it to apply; the Stripe monthly checkout already grants it via `trial_period_days`.
 
 ## [0.3.152] - 2026-08-28
