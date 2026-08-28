@@ -38,11 +38,11 @@ RATE_LIMIT_IP = os.getenv("RATE_LIMIT_IP", "30/minute")
 RATE_LIMIT_KEY = os.getenv("RATE_LIMIT_KEY", "120/minute")
 
 
-def _client_ip(request: Request) -> str:
-    fwd = request.headers.get("x-forwarded-for")
-    if fwd:
-        return fwd.split(",")[0].strip()
-    return get_remote_address(request)
+# AUT-1326: rate-limit on socket remote address only. This service is
+# internal-only (compose `expose`, no reverse proxy in front), so any
+# X-Forwarded-For header is caller-controlled and spoofable; never trust it
+# as a limit key. If a trusted proxy is ever added, key off its connection
+# address explicitly instead of re-introducing an XFF branch here.
 
 
 def _api_key(request: Request) -> str:
@@ -74,7 +74,7 @@ def health():
 
 
 @app.post("/search", response_model=SearchResponse)
-@limiter.limit(RATE_LIMIT_IP, key_func=_client_ip)
+@limiter.limit(RATE_LIMIT_IP, key_func=get_remote_address)
 @limiter.limit(RATE_LIMIT_KEY, key_func=_api_key)
 async def search(request: Request, response: Response, req: SearchRequest, x_api_key: str | None = Header(None)):
     if not API_KEY or not hmac.compare_digest(x_api_key or "", API_KEY):
@@ -108,7 +108,7 @@ class SCALookupResponse(BaseModel):
 
 
 @app.post("/sca-parts", response_model=SCALookupResponse)
-@limiter.limit(RATE_LIMIT_IP, key_func=_client_ip)
+@limiter.limit(RATE_LIMIT_IP, key_func=get_remote_address)
 @limiter.limit(RATE_LIMIT_KEY, key_func=_api_key)
 async def sca_parts(request: Request, response: Response,
                     req: SCALookupRequest, x_api_key: str | None = Header(None)):

@@ -9,17 +9,52 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
 
-
-
-
-
-
-
 ## [Unreleased]
 
 ### Fixed
 - AI: rate limiter evicts stale buckets on overflow instead of clearing all entries, preventing 10K+ IP rotation from keeping limits perpetually ineffective (AUT-1605).
 
+
+### Fixed
+- **AUT-1185** AI gateway OOM DoS + auth bypass + prompt injection (security):
+  - social_image module: `width`/`height` now clamped to 200–2048 via Pydantic
+    validator — prevents ~3×10¹⁸-byte allocation from `width=height=999999999`.
+  - router_client: router response capped at 1 MB (`_MAX_ROUTER_RESPONSE_BYTES`),
+    nested schema validation enforces max depth 4 and max array length 100.
+  - router_client: user payload now wrapped in `<untrusted_user_data>` tags with
+    an explicit system instruction to treat it as data only (prompt-injection
+    mitigation).
+  - main: `AI_ENV=development` no longer disables auth; only the explicit
+    `AI_GATEWAY_AUTH_DISABLED=1` opt-out opens `/v1/*`.
+- **AUT-1185** Per-caller HMAC keyed auth is deferred — see follow-up issue for
+  rollout requiring backend coordination (key rotation + revocation lifecycle).
+
+### Added
+- Regression tests: `test_run_clamps_oversized_dimensions`, `test_validate_nested_depth_and_length`,
+  `test_ai_env_development_no_longer_bypasses_auth`, `test_enhance_drops_nested_too_deep`.
+
+
+### Fixed
+- **App (AUT-1771):** The 7-day free trial now appears on the Android (and iOS) app. The trial chip/Copy/CTA were previously hidden whenever the store (IAP) purchase path was active — and the hosted instance reports IAP as enabled, so Android users never saw the offer. The trial is now surfaced for both the Stripe checkout path and the store path, driven by the per-account `trial_available`/`trial_days` flags from `GET /auth/me`. Note: for the store path the native Google Play / App Store subscription base plan must be configured with the 7-day free trial for it to apply; the Stripe monthly checkout already grants it via `trial_period_days`.
+
+## [0.3.152] - 2026-08-28
+
+### Security
+- **CI/Infra (AUT-1739):** `market-data/Dockerfile` no longer runs as root (CWE-250): creates a non-root `appuser` (uid 1000), chowns the app tree, and sets `USER appuser`. Playwright Chromium's `chrome-sandbox` is kept root-owned + setuid (`4755`) so the market-data scraper sandboxes untrusted third-party content as non-root; `market-data/browser.py` (`scrape_sca`) now launches Chromium sandboxed and only falls back to `--no-sandbox` when the sandboxed launch fails (matching `scrape_bikesguide`). The `ai` image (`docker/ai/Dockerfile`, already non-root) now also sets the SUID bit on its Playwright Chromium `chrome-sandbox`. The `ai` service in `docker-compose{.prod,.hosted,yml}` now sets `shm_size: 256m` for an adequate `/dev/shm`.
+
+### Added
+- **CI/Ops (AUT-1720):** `scripts/runner-watchdog.sh` + `infra/systemd/gh-runner-watchdog.{service,timer}` (with `gh-runner-watchdog.sudoers` NOPASSWD drop-in) that self-heal the x64 runner. Each tick probes dockerd with a hard timeout and, only after repeated unresponsive probes (so a slow multi-minute `docker buildx` publish is never killed), restarts containerd + docker and prunes orphaned buildx/builder state. It also restarts a `Runner.Listener` stuck in uninterruptible sleep. Deployed live on the vm2 x64 runner host (`gh-runner2`).
+- **CI/Ops (AUT-1720):** `ci-queue-guard.yml` scheduled workflow that automatically cancels GitHub Actions runs left `queued` on a branch that has been merged/deleted — the exact condition that wedged the x64 publish pipeline (the run becomes an un-cancellable GitHub zombie that makes the queue look frozen).
+
+### Fixed
+- **CI/Ops (AUT-1720):** The x64 self-hosted runner no longer freezes indefinitely during heavy `docker buildx build --push` publishes. Root cause was an intermittent dockerd wedge (publish job would hang until GitHub killed it with `context deadline exceeded`); the new watchdog restarts the daemon proactively before it wedges the next job.
+
+
+
+## [0.3.150] - 2026-08-28
+
+- Market-data rate limiting now keys the per-IP limit on the socket remote address instead of `X-Forwarded-For`, so a forged forwarded header can no longer rotate the bucket and evade the limit (AUT-1326).
+- The market-data Playwright Chromium now launches **sandboxed**, falling back to `--no-sandbox` only when the sandboxed launch actually fails (AUT-1326).
 ## [0.3.149] - 2026-08-28
 
 ### Fixed
@@ -28,8 +63,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 - Backend: SSRF hardening for Discord webhook URLs (AUT-1603). `discord_webhook_url` now allowlists `https://discord.com/api/webhooks/{id}/{token}` at two layers — a Pydantic `field_validator` on the notification-preference schema rejects non-Discord URLs at input time, and `_send_discord` re-checks the pattern before the outbound `httpx` call as defense-in-depth (rejecting internal/loopback addresses). `NotificationPreferenceOut` response schema restored so the preferences API keeps working.
-
-## [0.3.147] - 2026-08-28
 
 ### Added
 - Parts: Supercheap Auto parts-guide lookup integrated into market-data container. Users can now extract SCA parts categories by rego+state (via Playwright browser) or manually (plain HTTP). Integration provides clean Inventory-formatted JSON with 9Router tidying. AI suggested services now prefill parts (inventory-first, then SCA secondary). Feature AUT-1792.

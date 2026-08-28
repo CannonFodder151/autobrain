@@ -1,0 +1,11 @@
+[Unit]
+Description=Timer for the GitHub Actions runner watchdog (AUT-1720)
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=3min
+AccuracySec=30s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

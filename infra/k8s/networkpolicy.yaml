@@ -1,0 +1,84 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: autobrain-redis
+  namespace: autobrain
+spec:
+  podSelector:
+    matchLabels:
+      app: autobrain
+      component: redis
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: autobrain
+              component: backend
+        - podSelector:
+            matchLabels:
+              app: autobrain
+              component: worker
+        - podSelector:
+            matchLabels:
+              app: autobrain
+              component: beat
+      ports:
+        - port: 6379
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: autobrain-postgres
+  namespace: autobrain
+spec:
+  podSelector:
+    matchLabels:
+      app: autobrain
+      component: postgres
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: autobrain
+              component: backend
+        - podSelector:
+            matchLabels:
+              app: autobrain
+              component: worker
+        - podSelector:
+            matchLabels:
+              app: autobrain
+              component: beat
+      ports:
+        - port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: autobrain-minio
+  namespace: autobrain
+spec:
+  podSelector:
+    matchLabels:
+      app: autobrain
+      component: minio
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: autobrain
+              component: backend
+        - podSelector:
+            matchLabels:
+              app: autobrain
+              component: worker
+        - podSelector:
+            matchLabels:
+              app: autobrain
+              component: beat
+      ports:
+        - port: 9000
+        - port: 9001
