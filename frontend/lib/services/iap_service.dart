@@ -50,8 +50,16 @@ class IapService {
       for (final p in resp.productDetails) {
         products[p.id] = p;
       }
+      // If none of the requested product IDs were found in the store, mark
+      // IAP as unavailable so the UI falls back to Stripe checkout instead
+      // of showing the store's native "not available" error overlay.
+      if (products.isEmpty) {
+        debugPrint('[IAP] no products found for $productIds — falling back');
+        _available = false;
+      }
     } catch (e) {
       debugPrint('[IAP] queryProductDetails failed: $e');
+      _available = false;
     }
   }
 
