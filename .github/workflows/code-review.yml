@@ -22,10 +22,10 @@ permissions:
 
 jobs:
   ocr-review:
-    # Routed to the idle arm64 runner (Phase 1(a)): OCR is a pure Node/CPU
-    # workload with no architecture-specific binaries, so it does not need
-    # the x64 runner that builds amd64 images. Frees x64 for PR-check jobs.
-    runs-on: [self-hosted, Linux, ARM64]
+    # AUT-1802: OCR must NOT run on the ARM64 runner. That runner is reserved
+    # exclusively for building arm64 images (see build-hosted.yml). OCR is a
+    # pure-Node/CPU job, so it runs on the x64 runner (vm2) instead.
+    runs-on: [self-hosted, linux, x64, vm2]
     permissions:
       contents: read
       pull-requests: write
