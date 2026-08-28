@@ -22,10 +22,14 @@ permissions:
 
 jobs:
   ocr-review:
-    # AUT-1802: OCR must NOT run on the arm64 runner — that runner is reserved
-    # solely for building arm images. OCR is a pure Node/CPU workload with no
-    # architecture-specific binaries, so it runs on the healthy x64 vm2 runner.
-    runs-on: [self-hosted, linux, x64, vm2]
+    # AUT-1785: OCR routes to bare [self-hosted, linux, x64] (not the `vm2`
+    # label) so GitHub can pick the idle legacy x64 runner (gh-runner-autobrain)
+    # when vm2 (gh-runner-autobrain-2) is busy with the heavy docker publish
+    # pipeline. AUT-1802: OCR must NOT run on the arm64 runner. OCR is a pure
+    # Node/CPU workload with no arch-specific binaries. Note: OCR is already
+    # non-blocking (continue-on-error + 10min timeout + AUT-1814 auto-approve),
+    # so a legacy-runner stall degrades to a neutral advisory, never a block.
+    runs-on: [self-hosted, linux, x64]
     permissions:
       contents: read
       pull-requests: write
