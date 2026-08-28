@@ -1,6 +1,7 @@
 # AutoBrain AI image: AI gateway (:8001) + market-data scraper (:8000)
 # AUT-1242-C3: market-data merged into this image to drop a container.
-FROM python:3.12-slim AS base
+# AUT-1735: bump off vulnerable python:3.12-slim; pin base by digest.
+FROM python:3.13-slim@sha256:7ce4b6dfe35e55397b7cda544f8a13f191b7ae28dc5aad71fe664dbc9bc2623f AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
