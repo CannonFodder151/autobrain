@@ -11,6 +11,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+
+### Security
+- Hardened Redis in `docker-compose.prod.yml` — added `--requirepass` and updated healthcheck to authenticate; environment variable `REDIS_PASSWORD` is now required (AUT-1600).
+
+
 ### Security
 - (AUT-1181) Fail-closed secret defaults (HIGH): `SECRET_KEY` no longer has a
   development default that can forge JWTs — missing/placeholder values (the
