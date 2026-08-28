@@ -129,6 +129,29 @@ secrets exfiltration). It is restricted by source at the host firewall:
 - If the Portainer server egress IP ever changes, update the source in the
   `fw-keeper` container command and re-apply.
 
+### `9Router` AI router `:20128` (AUT-473, AUT-1754)
+
+Unlike `:9001`, `:20128` is also consumed **internally** by the `backend`
+(`AI_ROUTER_URL=http://9router:20128/v1`), so the firewall must additionally
+allow the internal docker subnet — a blanket `:20128` drop on `DOCKER-USER`
+silently breaks `backend → 9router` (SYN times out across the bridge).
+
+- Published `0.0.0.0:20128` (was `127.0.0.1`). Dev reaches
+  `http://152.69.188.133:20128/v1` from the allow-listed `122.199.30.128`.
+- `DOCKER-USER` (forward/DNAT path), in this order:
+  1. `--dport 20128 -s 172.18.0.0/16 -j ACCEPT` (internal docker subnet — required)
+  2. `--dport 20128 -s 122.199.30.128 -j ACCEPT` (dev egress IP)
+  3. `--dport 20128 -j DROP` (everything else)
+- `INPUT` (docker-proxy/local path for the published port):
+  `--dport 20128 ! -s 122.199.30.128 -j DROP`.
+- All four rules live in the `fw-keeper` container command (canonical rule
+  source), re-asserted every 60s; they survive in kernel netfilter across a
+  `fw-keeper` restart and are re-applied on host boot.
+- Verification note: the dev egress IP is the only *external* allow-source; the
+  internal subnet is allow-listed only so the docker-bridge traffic that
+  `DOCKER-USER` sees is not dropped. OCI-level `:20128` ingress restriction is
+  pending (same as `:9001`).
+
 ## Data protection
 
 - Receipts/photos stored in MinIO; keys are random per upload.

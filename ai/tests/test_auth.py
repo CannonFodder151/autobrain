@@ -59,11 +59,19 @@ def test_modules_endpoint_requires_auth():
     assert client.get("/v1/modules").status_code == 401
 
 
-@pytest.mark.parametrize("optout", [("AI_ENV", "development"), ("AI_GATEWAY_AUTH_DISABLED", "1")])
+@pytest.mark.parametrize("optout", [("AI_GATEWAY_AUTH_DISABLED", "1")])
 def test_dev_optout_opens_gateway(monkeypatch, optout):
     monkeypatch.setenv(optout[0], optout[1])
     resp = client.post("/v1/diagnostics", json={"payload": {"symptoms": "squealing brakes"}})
     assert resp.status_code == 200
+
+
+def test_ai_env_development_no_longer_bypasses_auth(monkeypatch):
+    """AUT-1185 FINDING-05: AI_ENV=development is not an auth opt-out."""
+    monkeypatch.setenv("AI_ENV", "development")
+    monkeypatch.delenv("AI_GATEWAY_AUTH_DISABLED", raising=False)
+    resp = client.post("/v1/diagnostics", json={"payload": {"symptoms": "squealing brakes"}})
+    assert resp.status_code == 401
 
 
 def test_health_stays_open():

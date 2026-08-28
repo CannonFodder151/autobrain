@@ -17,7 +17,7 @@ BOGUS_ROUTER = "http://your-9router-instance:port/v1"
 @pytest.fixture(autouse=True)
 def _env(monkeypatch):
     monkeypatch.setenv("AI_ROUTER_URL", BOGUS_ROUTER)
-    monkeypatch.setenv("AI_ENV", "development")  # auth off for the test
+    monkeypatch.setenv("AI_GATEWAY_AUTH_DISABLED", "1")  # auth off for the test
     monkeypatch.setenv("AI_GATEWAY_RATE_LIMIT_PER_WINDOW", "2")
     monkeypatch.setenv("AI_GATEWAY_GLOBAL_RATE_LIMIT_PER_WINDOW", "1000")
     monkeypatch.setenv("AI_GATEWAY_RATE_WINDOW_SECONDS", "60")

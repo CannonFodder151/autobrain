@@ -115,9 +115,25 @@ Services:
 
 ## Deploy (hosted)
 
+**Always use the GitHub Actions runner on the Oracle VM** — do NOT build
+hosted images on a local machine. The `build-hosted.yml` workflow dispatch
+builds multi-arch images on the self-hosted runners (x64 + ARM64 on the
+Oracle VM) and pushes them to ghcr.io with the `:hosted` tag. The ARM64
+images are built natively on the VM, avoiding cross-architecture pulls.
+
+1. Trigger `build-hosted.yml` via workflow_dispatch on GitHub:
+   - tag: `hosted`
+   - api_base_url: `https://hosted.autobrainservice.app/api/v1`
+   - ws_base_url: `wss://hosted.autobrainservice.app/ws`
+2. Wait for the workflow to complete (auto-bump → build amd64/arm64 → manifest).
+3. Update the Portainer stack (AutoBrain-Hosted, EP5) via the API to pull the
+   new images (`pullImage:true`). This pulls the freshly built `:hosted` images
+   from ghcr.io and recreates changed services (AUT-372). The frontend has a
+   static IP, so npm keeps working.
+
 ```bash
-./scripts/publish-images.sh hosted
-# Then update the Portainer stack (AutoBrain-Hosted) to pull new images.
+# Or, for local Docker Hub images (demo/default tiers only):
+./scripts/publish-images.sh latest
 ```
 
 Portainer stack updates pull images and recreate changed services (AUT-372).
@@ -159,13 +175,16 @@ Rules:
 The AutoBrain-Hosted VM (152.69.188.133) exposed several management/origin
 surfaces directly to the internet. Fixed and enforced via compose:
 
-- **`9router` (`:20128`)** — bound to `127.0.0.1` only. The Next.js admin
-  dashboard and the OpenAI-compatible API are not internet-reachable. Backend/ai
-  call it over the docker network (`http://9router:20128/v1`), which is
-  unaffected by the host binding. Ops access the dashboard via SSH tunnel.
-  Data volume `9router-data` is **external** (created by the original standalone
-  container) — keep it external, never let compose create a fresh prefixed
-  volume or the provider/API-key config is lost.
+- **`9router` (`:20128`)** — published on `0.0.0.0:20128` so it is reachable
+  from the host's public interface. It is locked down by the host firewall
+  (`fw-keeper`, see docs/security.md): ingress on `:20128` is allowed only from
+  the allow-listed dev egress IP (`122.199.30.128`) and the internal docker
+  subnet (`172.18.0.0/16`); everything else is dropped. Backend/ai call it over
+  the docker network (`http://9router:20128/v1`), which is unaffected by the host
+  binding. The internal-subnet allow is required because backend consumes this
+  service directly. Data volume `9router-data` is **external** (created by the
+  original standalone container) — keep it external, never let compose create a
+  fresh prefixed volume or the provider/API-key config is lost.
 - **`frontend` origin (`:8086`)** — bound to `127.0.0.1` only. All client
   traffic goes through Cloudflare → npm (`:443`), which proxies to the frontend
   over the docker network. Never re-expose `8086` to `0.0.0.0`; that was a

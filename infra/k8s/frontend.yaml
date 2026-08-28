@@ -15,12 +15,23 @@ spec:
         app: autobrain
         component: frontend
     spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: frontend
           image: autobrain-frontend:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 80
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            # nginx binds :80; everything else dropped.
+            capabilities:
+              drop: ["ALL"]
+              add: ["NET_BIND_SERVICE"]
           readinessProbe:
             httpGet:
               path: /
@@ -33,6 +44,16 @@ spec:
               port: 80
             initialDelaySeconds: 30
             periodSeconds: 15
+          volumeMounts:
+            - name: cache
+              mountPath: /var/cache/nginx
+            - name: run
+              mountPath: /var/run
+      volumes:
+        - name: cache
+          emptyDir: {}
+        - name: run
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

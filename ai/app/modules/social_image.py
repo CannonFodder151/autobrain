@@ -18,6 +18,24 @@ import io
 
 import httpx
 from PIL import Image, ImageDraw, ImageFont
+from pydantic import BaseModel, field_validator
+
+_MAX_DIM = 2048
+_MIN_DIM = 200
+
+
+class SocialImagePayload(BaseModel):
+    title: str = "AutoBrain"
+    hook: str = ""
+    cta: str = ""
+    prompt: str = ""
+    width: int = 1200
+    height: int = 630
+
+    @field_validator("width", "height", mode="before")
+    @classmethod
+    def _clamp_dim(cls, v):
+        return max(_MIN_DIM, min(int(v), _MAX_DIM))
 
 _BRAND_TEAL = (13, 148, 136)
 _BRAND_CHARCOAL = (23, 28, 33)
@@ -116,12 +134,13 @@ async def _ai_image(prompt: str, width: int, height: int) -> bytes | None:
 
 
 async def run(payload: dict) -> dict:
-    width = int(payload.get("width", 1200))
-    height = int(payload.get("height", 630))
-    title = str(payload.get("title") or "AutoBrain").strip()
-    hook = str(payload.get("hook") or "").strip()
-    cta = str(payload.get("cta") or "").strip()
-    prompt = str(payload.get("prompt") or "").strip()
+    validated = SocialImagePayload(**payload)
+    width = validated.width
+    height = validated.height
+    title = validated.title.strip()
+    hook = validated.hook.strip()
+    cta = validated.cta.strip()
+    prompt = validated.prompt.strip()
 
     if prompt and len(prompt) > 8:
         png = await _ai_image(prompt, width, height)

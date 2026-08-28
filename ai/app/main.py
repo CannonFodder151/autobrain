@@ -7,7 +7,7 @@ Security: /v1/* requires the shared gateway key (AI_GATEWAY_API_KEY, the same
 value the backend sends as a Bearer token) and bodies are capped at
 AI_GATEWAY_MAX_BODY_BYTES. Auth FAILS CLOSED: when the key is unset the
 gateway rejects /v1 calls with 401 unless the explicit development opt-out is
-set (AI_GATEWAY_AUTH_DISABLED=1 or AI_ENV=development).
+set (AI_GATEWAY_AUTH_DISABLED=1).
 
 Cost control: an in-memory fixed-window limiter (per client IP + global)
 rejects with 429 when authenticated traffic exceeds
@@ -54,10 +54,7 @@ def _gateway_key() -> str:
 
 
 def _auth_disabled() -> bool:
-    return (
-        os.environ.get("AI_GATEWAY_AUTH_DISABLED") == "1"
-        or os.environ.get("AI_ENV") == "development"
-    )
+    return os.environ.get("AI_GATEWAY_AUTH_DISABLED") == "1"
 
 
 @asynccontextmanager
@@ -74,7 +71,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="AutoBrain AI Gateway",
-    version=os.environ.get("APP_VERSION", "0.3.147"),  # bump-version.sh keeps this in sync
+    version=os.environ.get("APP_VERSION", "0.3.152"),  # bump-version.sh keeps this in sync
     description="Inference layer. Routes through 9Router via AI_ROUTER_URL.",
     lifespan=lifespan,
 )
@@ -134,7 +131,7 @@ async def health() -> dict:
     return {
         "status": "ok",
         "service": "autobrain-ai",
-        "version": os.environ.get("APP_VERSION", "0.3.147"),
+        "version": os.environ.get("APP_VERSION", "0.3.152"),
         "router_url": router_url(),
         "router_enabled": router_enabled(),
     }
