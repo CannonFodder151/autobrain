@@ -140,3 +140,60 @@ bundled into the AI image (AUT-1242-C3). The `ai` container runs **two uvicorn p
   role with `ALTER USER ... PASSWORD '...'` and MinIO with
   `mc admin user set-password`, then redeploy. The demo/default tiers have the
   same latent debt.
+
+## Supercheap Auto parts-guide (AUT-1792)
+
+A second scraper, `market-data/supercheap.py`, serves the inventory tab. Unlike
+the valuation scrapers (which find *listings*), this one returns the vehicle's
+available **parts categories**, normalised and classified into **service
+groups**, as Inventory-formatted JSON — the exact shape the parts tab imports.
+
+Endpoint: `POST {MARKET_DATA_URL}/parts-guide` (X-API-Key auth).
+
+```
+POST {MARKET_DATA_URL}/parts-guide
+X-API-Key: <key>
+{ "rego": "VICTCR", "state": "VIC", "make": "Toyota",
+  "model": "Crown", "year": 1997, "engine": "2.5L Twin-Turbo" }
+```
+
+Response:
+
+```json
+{
+  "source": "supercheap",
+  "mode": "deterministic",                 // or "live" when SCA scrape augmented
+  "vehicle": {"rego": "VICTCR", "state": "VIC", "make": "Toyota",
+              "model": "Crown", "year": 1997, "engine": "..."},
+  "categories": [{"service_group_key": "oils_fluids",
+                  "service_group": "Engine Oils & Fluids", "count": 2}],
+  "parts": [{"name": "Engine Oil (5W-30)", "sku": null, "category": "engine_oil",
+             "service_group": "Engine Oils & Fluids", "service_group_key": "oils_fluids",
+             "brand": "Castrol", "supplier": "Supercheap Auto", "unit_cost": 54.99,
+             "quantity": 5, "notes": "5L semi-synthetic"}],
+  "note": "..."
+}
+```
+
+**Deterministic-first, no live-SCA dependency:** the scraper ships a canonical
+service-parts catalogue keyed by make/model/engine (diesel → glow plugs,
+coil-on-plug → no leads, V6 → 6 plugs, etc.). SCA's live fitment widget is a
+third-party AutoInfo iframe with its own auth, so a direct rego→SKU API is not
+reachable here; the scraper keeps the canonical catalogue as the baseline.
+
+Live augmentation (`SCA_LIVE_SCRAPE=1`) queries SCA's category search pages and
+merges real product names/brands/prices; failures fall back to the baseline.
+
+The backend (`app/services/sca_parts.py`) calls `/parts-guide`, then runs the
+result through the **9Router `parts-format` module** (`/v1/parts-format`) to
+tidy descriptions/brands/categories. That module is deterministic-first too:
+brand canonicalisation, snake_case categories, and service_group assignment are
+the rule baseline; 9Router only refines the human-readable text. The AI router
+can never invent prices, SKUs or stock levels.
+
+**AI suggested-service prefill:** when the `/predict` endpoint produces a service
+prediction, the backend now returns `suggested_parts` (see
+`backend/app/api/v1/services.py`). Each service type maps to a set of part
+categories; the helper prefers **parts already in the vehicle's inventory** for
+those categories, then fills the rest from the SCA parts-guide. This is the only
+SCA lookup that feeds the AI suggested-service flow.

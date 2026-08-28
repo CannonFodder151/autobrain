@@ -16,6 +16,7 @@ from app.fallbacks.mod_impact import mod_impact_fallback
 from app.fallbacks.ocr import extract_receipt_fallback
 from app.ocr_utils import _extract_date
 from app.fallbacks.odometer import _odometer_fallback
+from app.fallbacks.parts_format import format_parts_fallback
 from app.fallbacks.resale import estimate_value_fallback, rrp_for
 from app.fallbacks.service_prediction import predict_service_fallback
 
@@ -24,6 +25,7 @@ __all__ = [
     "estimate_condition",
     "estimate_value_fallback",
     "extract_receipt_fallback",
+    "format_parts_fallback",
     "mod_impact_fallback",
     "predict_service_fallback",
     "rrp_for",

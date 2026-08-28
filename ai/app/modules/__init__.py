@@ -1,6 +1,6 @@
 """AI module registry."""
 
-from app.modules import condition, diagnostics, fuel_ocr, mod_impact, ocr, odometer, resale, service_prediction, social_image
+from app.modules import condition, diagnostics, fuel_ocr, mod_impact, ocr, odometer, parts_format, resale, service_prediction, social_image
 
 MODULES = {
     "diagnostics": diagnostics.run,
@@ -12,6 +12,7 @@ MODULES = {
     "resale": resale.run,
     "mod-impact": mod_impact.run,
     "social-image": social_image.run,
+    "parts-format": parts_format.run,
 }
 
 __all__ = ["MODULES"]

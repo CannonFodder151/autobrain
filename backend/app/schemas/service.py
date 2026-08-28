@@ -124,6 +124,18 @@ class ServicePredictionRequest(BaseModel):
         return "scheduled" if v in _LEGACY_OIL_TYPES else v
 
 
+class SuggestedPart(BaseModel):
+    name: str
+    category: str
+    service_group: str | None = None
+    brand: str | None = None
+    supplier: str | None = None
+    unit_cost: float | None = None
+    quantity: int = 1
+    source: str  # "inventory" | "sca"
+    notes: str | None = None
+
+
 class ServicePredictionResponse(BaseModel):
     service_type: str
     interval_km: int
@@ -134,3 +146,4 @@ class ServicePredictionResponse(BaseModel):
     next_due_date: date
     confidence: float
     reason: str
+    suggested_parts: list[SuggestedPart] = []

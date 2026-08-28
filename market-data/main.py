@@ -24,6 +24,7 @@ from slowapi.util import get_remote_address
 
 from bikesguide import search_bikesguide
 from carsguide import search_carsguide
+from supercheap import search_supercheap
 
 app = FastAPI(title="Market Data API", version="1.2.0")
 
@@ -66,6 +67,22 @@ class SearchResponse(BaseModel):
     listings: list[dict]
     note: str | None = None
 
+class PartsGuideRequest(BaseModel):
+    rego: str = ""
+    state: str = "AU"
+    make: str = ""
+    model: str = ""
+    year: int | None = None
+    engine: str = ""
+
+class PartsGuideResponse(BaseModel):
+    source: str
+    mode: str
+    vehicle: dict
+    categories: list[dict]
+    parts: list[dict]
+    note: str | None = None
+
 
 @app.get("/health")
 def health():
@@ -86,5 +103,24 @@ async def search(request: Request, response: Response, req: SearchRequest, x_api
         if vehicle_type in ("motorcycle", "bike", "motorbike"):
             return await search_bikesguide(query, req.year)
         return await search_carsguide(query, req.year)
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"upstream error: {exc}")
+
+@app.post("/parts-guide", response_model=PartsGuideResponse)
+@limiter.limit(RATE_LIMIT_IP, key_func=_client_ip)
+@limiter.limit(RATE_LIMIT_KEY, key_func=_api_key)
+async def parts_guide(request: Request, response: Response, req: PartsGuideRequest,
+                      x_api_key: str | None = Header(None)):
+    """Supercheap Auto parts-guide for a vehicle (rego + state, or make/model/year).
+
+    Returns the vehicle's available parts categories, normalised and classified
+    into service groups, as Inventory-formatted JSON (AUT-1792). The backend's
+    inventory tab imports these directly; the AI formatting layer (9Router) is
+    applied by the backend after this call to tidy descriptions/brands/categories.
+    """
+    if not API_KEY or not hmac.compare_digest(x_api_key or "", API_KEY):
+        raise HTTPException(status_code=401, detail="invalid API key")
+    try:
+        return await search_supercheap(req.rego, req.state, req.make, req.model, req.year, req.engine)
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"upstream error: {exc}")

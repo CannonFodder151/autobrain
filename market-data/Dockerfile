@@ -7,7 +7,7 @@ RUN pip install --no-cache-dir -r requirements.txt \
     && python -m playwright install --with-deps chromium \
     && rm -rf /var/lib/apt/lists/*
 
-COPY main.py carsguide.py bikesguide.py browser.py ./
+COPY main.py carsguide.py bikesguide.py browser.py supercheap.py ./
 
 EXPOSE 8000
 

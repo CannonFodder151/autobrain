@@ -10,6 +10,7 @@ from app import modules  # noqa: E402
 from app.fallbacks import (  # noqa: E402
     diagnose_fallback,
     estimate_condition,
+    format_parts_fallback,
     estimate_value_fallback,
     extract_receipt_fallback,
     mod_impact_fallback,
@@ -379,3 +380,25 @@ def test_condition_user_override_not_overwritten_by_resale() -> None:
     })
     assert out["factors"]["condition"] == "excellent"
     assert "condition_estimate" not in out["factors"]
+
+
+def test_parts_format_normalises_brands_and_groups() -> None:
+    raw = {
+        "vehicle": {"make": "toyota", "model": "hilux", "year": 2021, "state": "VIC"},
+        "parts": [
+            {"name": "engine oil", "category": "Oil Filters", "brand": "castrol",
+             "supplier": "supercheap", "unit_cost": "54.99", "quantity": "5"},
+            {"name": " ", "category": "brake_pads_front", "brand": "Bendix"},
+        ],
+    }
+    out = format_parts_fallback(raw)
+    assert out["model"] == "rule-based-fallback"
+    assert len(out["parts"]) == 1, out["parts"]
+    p = out["parts"][0]
+    # brand canonicalised, cost coerced, empty name part dropped by category guard.
+    assert p["brand"] == "Castrol"
+    assert p["unit_cost"] == 54.99
+    assert p["quantity"] == 5
+    assert p["category"] == "oil filters"
+    assert isinstance(out["service_groups"], list) and out["service_groups"]
+

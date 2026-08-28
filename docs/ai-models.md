@@ -18,6 +18,7 @@ rule-based engine that always produces a valid result, then optionally lets
 | Mod impact | `/v1/mod-impact` | per-category performance/value/reliability table | Advice prose |
 | Fuel receipt | `/v1/fuel-ocr` | line-scan for vendor, date, litres, price-per-litre, total | Fills only missing optional fields |
 | Odometer | `/v1/odometer` | local Tesseract + regex digit scan on the dashboard photo | **None — deterministic-only** |
+| Parts format | `/v1/parts-format` | canonicalises brand/category text, guarantees a `service_group` (AUT-1792) | Tidies part names / brands / categories for the SCA parts-guide |
 | Social image | `/v1/social-image` | Pillow on-brand card renderer (title/hook/CTA, 1200x630) | Optional prompt → free Pollinations photo (falls back to deterministic card) |
 
 ## Deterministic-first flow
@@ -47,7 +48,7 @@ The response includes a `model` field so callers know which path produced it:
 
 `ai/app/fallbacks/` implements the deterministic engines, one module per
 feature (`condition.py`, `diagnose.py`, `service_prediction.py`, `ocr.py`,
-`resale.py`, `mod_impact.py`, `fuel_ocr.py`, `odometer.py`).
+`resale.py`, `mod_impact.py`, `fuel_ocr.py`, `odometer.py`, `parts_format.py`).
 
 - **Diagnostics:** keyword rules for symptoms (brakes, vibration, leaks,
   noises…) + OBD code table mapped to parts/costs.

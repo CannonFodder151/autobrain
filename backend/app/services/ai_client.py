@@ -62,3 +62,6 @@ async def mod_impact(payload: dict) -> dict | None:
 
 async def estimate_condition(payload: dict) -> dict | None:
     return await _call("condition", payload)
+
+async def format_parts(payload: dict) -> dict | None:
+    return await _call("parts-format", payload)

@@ -100,6 +100,22 @@ _SYSTEM_PROMPTS: dict[str, str] = {
         '(ISO YYYY-MM-DD), "litres": number|null, "price_per_litre": number|null, '
         '"total_cost": number|null, "currency": "AUD", "notes": string|null}'
     ),
+    "parts-format": (
+        "You are an automotive parts data cleaner for AutoBrain's inventory. "
+        "You are given a list of parts scraped from a Supercheap Auto parts-guide "
+        "for a vehicle. Tidy each part's human-readable text only: write a concise, "
+        "consistent product name; canonicalise the brand to its proper capitalisation "
+        "(e.g. 'castrol' -> 'Castrol', 'ngk' -> 'NGK'); normalise the category into a "
+        "short snake_case label (e.g. 'Oil Filters' -> 'oil_filter'); and choose a "
+        "service_group from {Engine Oils & Fluids, Filters, Ignition & Tune-Up, "
+        "Brakes, Electrical & Battery, Wipers & Visibility, Tyres & Wheels, "
+        "Engine & Belts}. Never invent prices, part numbers, or stock levels — keep "
+        "the deterministic engine's numbers. "
+        'Return STRICT JSON: {"parts": [{"name": string, "sku": string|null, '
+        '"category": string, "service_group": string, "service_group_key": string, '
+        '"brand": string, "supplier": string|null, "unit_cost": number|null, '
+        '"quantity": number|null, "notes": string|null}]}'
+    ),
     "odometer": (
         "You are an odometer-reading OCR engine. The user photographed a car "
         "dashboard; read the odometer value shown. "
@@ -182,6 +198,9 @@ _SCHEMAS: dict[str, dict[str, tuple]] = {
         "total_cost": (int, float, type(None)),
         "currency": (str,),
         "notes": (str, type(None)),
+    },
+    "parts-format": {
+        "parts": (list,),
     },
 }
 

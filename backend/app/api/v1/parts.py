@@ -4,6 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pydantic import BaseModel
+
 from app.api.deps import get_current_user, require_write
 from app.services.ownership import get_accessible_vehicle
 from app.db.session import get_db
@@ -16,8 +18,42 @@ from app.schemas.part import (
     PartUpdate,
     ReorderSuggestion,
 )
+from app.services.sca_parts import get_sca_parts_guide
 
 router = APIRouter(prefix="/vehicles/{vehicle_id}/parts", tags=["parts"])
+
+
+class SCALookupRequest(BaseModel):
+    rego: str = ""
+    state: str = "VIC"
+    make: str = ""
+    model: str = ""
+    year: int | None = None
+    engine: str = ""
+
+
+class SCAPart(BaseModel):
+    name: str
+    sku: str | None = None
+    category: str
+    service_group: str | None = None
+    service_group_key: str | None = None
+    brand: str | None = None
+    supplier: str | None = None
+    unit_cost: float | None = None
+    quantity: int = 1
+    notes: str | None = None
+
+
+class SCALookupResponse(BaseModel):
+    source: str
+    mode: str | None = None
+    vehicle: dict
+    categories: list[dict]
+    parts: list[SCAPart]
+    service_groups: list[str] = []
+    note: str | None = None
+    formatted_with: str | None = None
 
 
 @router.get("", response_model=list[PartOut])
@@ -137,4 +173,26 @@ async def reorder_suggestions(
             )
         )
     return suggestions
+
+
+@router.post("/sca-lookup", response_model=SCALookupResponse)
+async def sca_lookup(
+    vehicle_id: str,
+    payload: SCALookupRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """SCA parts-guide for a vehicle (rego + state), AI-formatted (AUT-1792).
+
+    Inventory-tab feature: returns the vehicle's available parts categories,
+    normalised, classified into service groups, and tidied by the 9Router
+    formatting layer. The client imports parts straight into inventory.
+    """
+    await get_accessible_vehicle(db, vehicle_id, user)
+    return await get_sca_parts_guide(
+        db, vehicle_id,
+        rego=payload.rego, state=payload.state,
+        make=payload.make, model=payload.model,
+        year=payload.year, engine=payload.engine,
+    )
 

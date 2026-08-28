@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/auth_state.dart';
 import '../../core/models.dart';
 import 'add_part_screen.dart';
+import 'sca_parts_screen.dart';
 
 class PartsScreen extends StatefulWidget {
   const PartsScreen({super.key, required this.vehicleId});
@@ -57,7 +58,23 @@ class _PartsScreenState extends State<PartsScreen> {
   Widget build(BuildContext context) {
     final low = _parts.where((p) => p.needsReorder).toList();
     return Scaffold(
-      appBar: AppBar(title: const Text('Parts inventory')),
+      appBar: AppBar(
+        title: const Text('Parts inventory'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.storefront),
+            tooltip: 'SCA Parts Guide',
+            onPressed: () async {
+              final imported = await Navigator.of(context).push<bool>(
+                MaterialPageRoute(
+                  builder: (_) => ScaPartsScreen(vehicleId: widget.vehicleId),
+                ),
+              );
+              if (imported == true) _load();
+            },
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           await Navigator.of(context).push(

@@ -24,6 +24,7 @@ from app.schemas.service import (
     ServiceUpdate,
 )
 from app.services.ai_client import predict_service
+from app.services.sca_parts import suggest_service_parts
 from app.services.export import export_service_history_csv, export_service_history_pdf, export_zip
 from app.services.rate_limit import require_ai_rate_limit
 from app.services.service_records import (
@@ -235,4 +236,5 @@ async def predict(
     result = await predict_service(data)
     if not result:
         raise HTTPException(status_code=503, detail="Prediction engine unavailable")
-    return ServicePredictionResponse(**result)
+    suggested = await suggest_service_parts(db, vehicle, result.get("service_type", "scheduled"))
+    return ServicePredictionResponse(**result, suggested_parts=suggested)
