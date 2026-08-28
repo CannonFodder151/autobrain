@@ -15,6 +15,10 @@ spec:
         app: autobrain
         component: backend
     spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: backend
           image: autobrain-backend:latest
@@ -29,12 +33,23 @@ spec:
           env:
             - name: POSTGRES_HOST
               value: autobrain-postgres
+            # AB-INFRA-001: authenticated Redis URL (password URL-encoded in Secret).
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: autobrain-secrets
+                  key: redis-password
             - name: REDIS_URL
-              value: redis://autobrain-redis:6379/0
+              value: redis://:$(REDIS_PASSWORD)@autobrain-redis:6379/0
             - name: MINIO_ENDPOINT
               value: autobrain-minio:9000
             - name: AI_LOCAL_BASE_URL
               value: http://autobrain-ai:8001
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           readinessProbe:
             httpGet:
               path: /health
@@ -47,6 +62,12 @@ spec:
               port: 8000
             initialDelaySeconds: 30
             periodSeconds: 15
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
