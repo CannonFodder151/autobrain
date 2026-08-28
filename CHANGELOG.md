@@ -23,6 +23,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ### Fixed
+- AI: rate limiter evicts stale buckets on overflow instead of clearing all entries, preventing 10K+ IP rotation from keeping limits perpetually ineffective (AUT-1605).
+
+
+### Fixed
 - **AUT-1185** AI gateway OOM DoS + auth bypass + prompt injection (security):
   - social_image module: `width`/`height` now clamped to 200–2048 via Pydantic
     validator — prevents ~3×10¹⁸-byte allocation from `width=height=999999999`.
