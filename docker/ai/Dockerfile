@@ -32,6 +32,12 @@ RUN chmod +x /entrypoint.sh /usr/local/bin/lib-load-secrets.sh
 RUN useradd -m -u 1000 autobrain \
     && chown -R autobrain:autobrain /app \
     && mkdir -p /ms-playwright && chown -R autobrain:autobrain /ms-playwright
+# AUT-1739 (CWE-250): the image already runs as non-root `autobrain`. Re-own
+# Chromium's SUID sandbox helper to root + setuid so the market-data scraper
+# can sandbox untrusted third-party content as that non-root user; the scraper
+# falls back to --no-sandbox only if a host can't initialise the sandbox.
+RUN find /ms-playwright -name chrome-sandbox -exec chown root:root {} \; \
+    && find /ms-playwright -name chrome-sandbox -exec chmod 4755 {} \;
 USER autobrain
 
 EXPOSE 8000 8001

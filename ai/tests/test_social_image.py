@@ -24,3 +24,31 @@ async def test_run_deterministic_default() -> None:
     assert out["width"] == 1200 and out["height"] == 630
     png = base64.b64decode(out["image_base64"])
     assert png[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("dims", [
+    (999999999, 999999999),
+    (5000, 5000),
+    (2048, 2048),   # exactly at cap — should pass through
+    (0, 0),         # below min — clamped to 200
+    (-100, -100),   # negative — clamped to 200
+])
+async def test_run_clamps_oversized_dimensions(dims) -> None:
+    """AUT-1185 FINDING-01: width/height must be clamped to prevent OOM."""
+    w, h = dims
+    out = await run({"title": "Clamp", "width": w, "height": h})
+    assert out["width"] == max(200, min(w, 2048))
+    assert out["height"] == max(200, min(h, 2048))
+    assert out["width"] <= 2048 and out["height"] <= 2048
+    png = base64.b64decode(out["image_base64"])
+    assert png[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+@pytest.mark.asyncio
+async def test_run_clamps_string_dimensions() -> None:
+    """String dimensions (e.g. from JSON) must be coerced + clamped."""
+    out = await run({"title": "Str", "width": "99999", "height": "99999"})
+    assert out["width"] == 2048
+    assert out["height"] == 2048
+

@@ -15,6 +15,10 @@ spec:
         app: autobrain
         component: worker
     spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: worker
           image: autobrain-backend:latest
@@ -27,13 +31,42 @@ spec:
           env:
             - name: POSTGRES_HOST
               value: autobrain-postgres
+            # AB-INFRA-001: authenticated Redis URL (password URL-encoded in Secret).
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: autobrain-secrets
+                  key: redis-password
             - name: REDIS_URL
-              value: redis://autobrain-redis:6379/0
+              value: redis://:$(REDIS_PASSWORD)@autobrain-redis:6379/0
             - name: MINIO_ENDPOINT
               value: autobrain-minio:9000
             - name: AI_LOCAL_BASE_URL
               value: http://autobrain-ai:8001
           command: ["celery", "-A", "app.workers.celery_app:celery_app", "worker", "-l", "info"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          # AB-INFRA-012: worker liveness via Celery ping.
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "celery -A app.workers.celery_app:celery_app inspect ping -d celery@$HOSTNAME"]
+            initialDelaySeconds: 20
+            periodSeconds: 30
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "celery -A app.workers.celery_app:celery_app inspect ping -d celery@$HOSTNAME"]
+            initialDelaySeconds: 60
+            periodSeconds: 60
+            timeoutSeconds: 15
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -52,6 +85,10 @@ spec:
         app: autobrain
         component: beat
     spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: beat
           image: autobrain-backend:latest
@@ -64,11 +101,40 @@ spec:
           env:
             - name: POSTGRES_HOST
               value: autobrain-postgres
+            # AB-INFRA-001: authenticated Redis URL (password URL-encoded in Secret).
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: autobrain-secrets
+                  key: redis-password
             - name: REDIS_URL
-              value: redis://autobrain-redis:6379/0
+              value: redis://:$(REDIS_PASSWORD)@autobrain-redis:6379/0
             - name: MINIO_ENDPOINT
               value: autobrain-minio:9000
             - name: AI_LOCAL_BASE_URL
               value: http://autobrain-ai:8001
-          command: ["celery", "-A", "app.workers.celery_app:celery_app", "beat", "-l", "info"]
+          # /tmp schedule file because root filesystem is read-only.
+          command: ["celery", "-A", "app.workers.celery_app:celery_app", "beat", "-l", "info", "--schedule", "/tmp/celerybeat-schedule"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          # AB-INFRA-012: beat has no RPC endpoint; probe the process.
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pgrep -f 'celery.*beat'"]
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "pgrep -f 'celery.*beat'"]
+            initialDelaySeconds: 30
+            periodSeconds: 60
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
 

@@ -9,20 +9,53 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
 
-
-
-
-
-
-
-
-
 ## [Unreleased]
 
 ### Security
 - **Security (AUT-1735):** Bumped `docker/backend`, `docker/ai`, `docker/worker` and `market-data` Dockerfiles off the vulnerable `python:3.12-slim` base (trivy reported 18 HIGH/CRITICAL CVEs: CVE-2026-13221 perl RCE, CVE-2026-42496 perl-Archive-Tar path traversal, CVE-2026-8376 perl heap overflow, CVE-2026-14456 OpenSSL QUIC DoS, CVE-2026-11822/11824 SQLite FTS5 code exec, CVE-2025-7458 SQLite integer overflow, CVE-2023-45853 zlib heap overflow). All python bases now pin `python:3.13-slim@sha256:...` by digest. Added a python base-image scan to `.github/workflows/trivy-image-scan.yml` (`--severity HIGH,CRITICAL --exit-code 1`) plus a pin guard that fails any floating `FROM python:*` tag. `rego-lookup-api/Dockerfile` (separate private repo) tracked in follow-up AUT-1735-r1.
 
-## [0.3.151] - 2026-08-28
+
+### Security
+- (AUT-1181) Fail-closed secret defaults (HIGH): `SECRET_KEY` no longer has a
+  development default that can forge JWTs — missing/placeholder values (the
+  historic `change-me` and `change-me-to-a-long-random-string`) require a real
+  key (`python -c "import secrets; print(secrets.token_urlsafe(64))"`); in
+  `development` only, an ephemeral random key is generated per boot.
+  `ADMIN_API_KEY` must be ≥ 32 chars when enabled; when `STRIPE_SECRET_KEY`
+  is set, an empty `STRIPE_WEBHOOK_SECRET` now crashes at startup so forged
+  webhooks cannot mutate subscriptions.
+
+
+### Fixed
+- AI: rate limiter evicts stale buckets on overflow instead of clearing all entries, preventing 10K+ IP rotation from keeping limits perpetually ineffective (AUT-1605).
+
+
+### Fixed
+- **AUT-1185** AI gateway OOM DoS + auth bypass + prompt injection (security):
+  - social_image module: `width`/`height` now clamped to 200–2048 via Pydantic
+    validator — prevents ~3×10¹⁸-byte allocation from `width=height=999999999`.
+  - router_client: router response capped at 1 MB (`_MAX_ROUTER_RESPONSE_BYTES`),
+    nested schema validation enforces max depth 4 and max array length 100.
+  - router_client: user payload now wrapped in `<untrusted_user_data>` tags with
+    an explicit system instruction to treat it as data only (prompt-injection
+    mitigation).
+  - main: `AI_ENV=development` no longer disables auth; only the explicit
+    `AI_GATEWAY_AUTH_DISABLED=1` opt-out opens `/v1/*`.
+- **AUT-1185** Per-caller HMAC keyed auth is deferred — see follow-up issue for
+  rollout requiring backend coordination (key rotation + revocation lifecycle).
+
+### Added
+- Regression tests: `test_run_clamps_oversized_dimensions`, `test_validate_nested_depth_and_length`,
+  `test_ai_env_development_no_longer_bypasses_auth`, `test_enhance_drops_nested_too_deep`.
+
+
+### Fixed
+- **App (AUT-1771):** The 7-day free trial now appears on the Android (and iOS) app. The trial chip/Copy/CTA were previously hidden whenever the store (IAP) purchase path was active — and the hosted instance reports IAP as enabled, so Android users never saw the offer. The trial is now surfaced for both the Stripe checkout path and the store path, driven by the per-account `trial_available`/`trial_days` flags from `GET /auth/me`. Note: for the store path the native Google Play / App Store subscription base plan must be configured with the 7-day free trial for it to apply; the Stripe monthly checkout already grants it via `trial_period_days`.
+
+## [0.3.152] - 2026-08-28
+
+### Security
+- **CI/Infra (AUT-1739):** `market-data/Dockerfile` no longer runs as root (CWE-250): creates a non-root `appuser` (uid 1000), chowns the app tree, and sets `USER appuser`. Playwright Chromium's `chrome-sandbox` is kept root-owned + setuid (`4755`) so the market-data scraper sandboxes untrusted third-party content as non-root; `market-data/browser.py` (`scrape_sca`) now launches Chromium sandboxed and only falls back to `--no-sandbox` when the sandboxed launch fails (matching `scrape_bikesguide`). The `ai` image (`docker/ai/Dockerfile`, already non-root) now also sets the SUID bit on its Playwright Chromium `chrome-sandbox`. The `ai` service in `docker-compose{.prod,.hosted,yml}` now sets `shm_size: 256m` for an adequate `/dev/shm`.
 
 ### Added
 - **CI/Ops (AUT-1720):** `scripts/runner-watchdog.sh` + `infra/systemd/gh-runner-watchdog.{service,timer}` (with `gh-runner-watchdog.sudoers` NOPASSWD drop-in) that self-heal the x64 runner. Each tick probes dockerd with a hard timeout and, only after repeated unresponsive probes (so a slow multi-minute `docker buildx` publish is never killed), restarts containerd + docker and prunes orphaned buildx/builder state. It also restarts a `Runner.Listener` stuck in uninterruptible sleep. Deployed live on the vm2 x64 runner host (`gh-runner2`).
