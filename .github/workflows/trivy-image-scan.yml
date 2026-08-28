@@ -3,7 +3,7 @@ name: Security — base image CVE scan (trivy)
 
 # Scans the pinned Postgres data-store AND frontend nginx base images for
 # HIGH/CRITICAL CVEs and enforces digest pinning (no floating tags).
-# Postgres: AUT-1749. Frontend nginx: AUT-1740 (CVE-2026-14456 OpenSSL QUIC DoS).
+# Postgres: AUT-1749. Frontend nginx: AUT-1793 (CVE-2026-14456 OpenSSL QUIC DoS).
 
 on:
   pull_request:
