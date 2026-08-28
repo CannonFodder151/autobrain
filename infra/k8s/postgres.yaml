@@ -15,6 +15,12 @@ spec:
         app: autobrain
         component: postgres
     spec:
+      # ponytail: official postgres entrypoint needs root (chown data dir,
+      # gosu drop) — only seccomp applies cleanly; revisit with a
+      # pre-chowned securityContext or a hardened image (e.g. bitnami).
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: postgres
           image: postgres:16-alpine
