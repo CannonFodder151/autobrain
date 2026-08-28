@@ -43,18 +43,31 @@ CVE-2026-56860  # gosu-stdlib: net/url; unreachable
 CVE-2026-56862  # gosu-stdlib: crypto/tls KeyUpdate; gosu does no TLS
 
 # --- AUT-1735 / python base image HIGH CVEs (unused at runtime) ------------------
-# Both findings are pre-installed pip packages shipped in the python:3.13-slim
-# base image (PYTHON_BASE_IMAGE). grep across the repo confirms NEITHER msgpack
-# nor setuptools is imported or invoked by any AutoBrain runtime service
-# (backend/ai/worker/market-data), so neither is reachable.
+# Both findings are pip packages present in the python:3.13-slim base image
+# (PYTHON_BASE_IMAGE). grep across the repo + PyPI metadata confirms NEITHER
+# msgpack nor setuptools is imported or invoked by any AutoBrain runtime service
+# (backend/ai/worker/market-data), so neither is reachable:
+#   * msgpack: no `import msgpack` anywhere; kombu/celery/redis only require it
+#     via OPTIONAL extras that are NOT installed; celery serializer is pinned to
+#     json (backend/app/workers/celery_app.py: task_serializer/accept_content/
+#     result_serializer="json"), so kombu never imports msgpack at runtime.
+#   * setuptools: no runtime `import setuptools`/`PackageIndex`; packages are
+#     installed at build, never fetched via PackageIndex at runtime.
 # python:3.13-slim@sha256:7ce4b6d... is the LATEST 3.13-slim digest (Docker Hub
 # confirmed) — no digest bump carries patched wheels — so suppress per policy
 # ("tolerate when no fixed image exists") until a 3.13-slim respin ships them.
 # Time-boxed: re-check 2026-11-28; drop entries + bump PYTHON_BASE_IMAGE digest
-# once a 3.13-slim ships msgpack>=1.2.1 and setuptools>=78.1.1.
-# Security Officer sign-off requested — see child issue AUT-1844 (sign-off).
-GHSA-6v7p-g79w-8964  # msgpack OOB read: not imported by any runtime service
+# once a 3.13-slim ships msgpack>=1.2.1 and setuptools>=78.1.1. At that re-check,
+# ALSO re-run `grep -rnE 'import msgpack|from msgpack|PackageIndex'` across the
+# repo AND scan the FINAL built images (not just the bare base), so a future
+# reachable msgpack/PackageIndex usage cannot hide behind this ignore.
+# Security Officer sign-off: APPROVED (AUT-1844). Both IDs per advisory are listed
+# below (GHSA + CVE aliases) so a trivy DB refresh that leads with the CVE cannot
+# silently re-break the gate.
+GHSA-6v7p-g79w-8964  # msgpack OOB read/crash on Unpacker reuse: NOT imported; unreachable
+CVE-2026-57585  # msgpack: CVE alias of GHSA-6v7p-g79w-8964 (same advisory); unreachable
 CVE-2025-47273  # setuptools PackageIndex path traversal: build-time only, no runtime install path
+GHSA-5rjg-fvgr-3xxf  # setuptools: GHSA alias of CVE-2025-47273; build-time only
 
 # --- AUT-1793 / python base image OpenSSL QUIC DoS -----------------------------------
 # CVE-2026-14456: OpenSSL DoS via unbounded memory growth in QUIC server, fixed in
