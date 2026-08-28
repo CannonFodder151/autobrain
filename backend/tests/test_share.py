@@ -7,7 +7,7 @@ import os
 
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test-user:test-password@postgres:5432/autobrain")
 os.environ.setdefault("SECRET_KEY", "test-secret")
-os.environ.setdefault("ADMIN_API_KEY", "test-admin-key")
+os.environ.setdefault("ADMIN_API_KEY", "test-admin-key-0123456789-0123456789")
 
 import uuid  # noqa: E402
 
@@ -167,7 +167,7 @@ async def test_delete_user_with_shares() -> None:
 
         resp = await client.delete(
             f"/api/v1/admin-api/users/{invitee_id}",
-            headers={"X-Admin-API-Key": "test-admin-key"},
+            headers={"X-Admin-API-Key": "test-admin-key-0123456789-0123456789"},
         )
         assert resp.status_code == 204, resp.text
 
@@ -207,7 +207,7 @@ async def test_delete_owner_user_with_shares() -> None:
 
         resp = await client.delete(
             f"/api/v1/admin-api/users/{owner_id}",
-            headers={"X-Admin-API-Key": "test-admin-key"},
+            headers={"X-Admin-API-Key": "test-admin-key-0123456789-0123456789"},
         )
         assert resp.status_code == 204, resp.text
 

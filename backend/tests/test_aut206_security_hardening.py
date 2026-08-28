@@ -9,7 +9,7 @@ from httpx import ASGITransport, AsyncClient  # noqa: E402
 from app.api.deps import require_admin_api_key, settings  # noqa: E402
 from app.main import app  # noqa: E402
 
-ADMIN_KEY = "aut206-test-admin-key"
+ADMIN_KEY = "aut206-test-admin-key-0123456789ab"
 
 
 def _req(key: str | None) -> Request:
