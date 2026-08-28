@@ -222,6 +222,42 @@ services:
       default:
         ipv4_address: 172.18.0.15
 
+  dongle-server:
+    image: ghcr.io/cannonfodder151/autobrain-dongle-server:hosted
+    restart: unless-stopped
+    command: ["uvicorn", "dongle_server.main:app", "--host", "0.0.0.0", "--port", "8012"]
+    environment:
+      <<: *core-env
+      AUTOBRIAN_BACKEND_URL: http://backend:8000
+      # AUT-1673: dongle-server internal key + web auth injected via Portainer
+      # stack env (encrypted at rest), matching the HUB_* secret pattern.
+      DONGLE_SERVER_API_KEY: ${DONGLE_SERVER_API_KEY}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_EXTERNAL_ENDPOINT: ${APP_BASE_URL:-https://hosted.autobrainservice.app}
+      MINIO_BUCKET: ${MINIO_BUCKET:-autobrain-assets}
+      MINIO_ACCESS_KEY_FILE: /run/secrets/minio_access_key
+      MINIO_SECRET_KEY_FILE: /run/secrets/minio_secret_key
+      MINIO_SECURE: "true"
+      WEB_UI_BASIC_USER: ${DONGLE_WEB_BASIC_USER}
+      WEB_UI_BASIC_PASSWORD: ${DONGLE_WEB_BASIC_PASSWORD}
+      DATABASE_URL: sqlite+aiosqlite:///./dongle.db
+      ENVIRONMENT: production
+    <<: *secrets
+    volumes:
+      - dongle-server-data:/data
+    expose:
+      - "8012"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8012/health', timeout=3).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      minio:
+        condition: service_healthy
+      backend:
+        condition: service_started
+
   ai:
     image: ghcr.io/cannonfodder151/autobrain-ai:hosted
     restart: unless-stopped
@@ -376,6 +412,7 @@ volumes:
    hub-data:
    9router-data:
      external: true
+   dongle-server-data:
 
 # AUT-372: pin the default network subnet + a static frontend IP. The host-level
 # nginx-proxy-manager (npm) caches the resolved frontend container IP, so a
