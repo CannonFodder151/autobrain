@@ -12,8 +12,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
-
 ## [Unreleased]
+
+### Added
+- Parts: Supercheap Auto parts-guide lookup integrated into market-data container. Users can now extract SCA parts categories by rego+state (via Playwright browser) or manually (plain HTTP). Integration provides clean Inventory-formatted JSON with 9Router tidying. AI suggested services now prefill parts (inventory-first, then SCA secondary). Feature AUT-1792.
 
 ## [0.3.146] - 2026-08-27
 
