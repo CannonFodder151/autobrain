@@ -316,9 +316,14 @@ services:
       timeout: 5s
       retries: 5
 
-  # 9Router AI router (AUT-473). Localhost-bound on :20128 — the admin dashboard
-  # and API are NOT internet-reachable. backend/ai consume it via docker DNS
-  # (http://9router:20128/v1); ops reach the dashboard via SSH tunnel only.
+  # 9Router AI router (AUT-473). Published on `0.0.0.0:20128` so it is reachable
+  # on the host's public interface, but the host firewall (`fw-keeper`) restricts
+  # :20128 to the allow-listed dev egress IP (`122.199.30.128`, see
+  # docs/security.md) plus the internal docker subnet (`172.18.0.0/16`) so the
+  # backend can still reach it via docker DNS (`http://9router:20128/v1`). Without
+  # the internal-subnet allow, the `DOCKER-USER` drop rule would break
+  # backend→9router traffic. Do NOT bind back to `127.0.0.1` unless you also
+  # remove the firewall rule — AUT-1754.
   # Data lives in the external `9router-data` volume (created by the original
   # standalone container) so provider/API-key config persists across recreates.
   9router:
@@ -344,7 +349,7 @@ services:
     volumes:
       - 9router-data:/app/data
     ports:
-      - "127.0.0.1:20128:20128"
+      - "0.0.0.0:20128:20128"
 
 volumes:
    postgres-data:
