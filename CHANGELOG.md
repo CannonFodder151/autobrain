@@ -16,7 +16,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 
-- Backend: service-level Discord webhook URL validation (defense-in-depth) — `_send_discord_webhook` now checks the URL pattern before the outbound HTTP call, rejecting non-Discord URLs even if schema validation was bypassed; consolidated the `DISCORD_WEBHOOK_RE` pattern and removed the redundant `NotificationPreferenceOut` model (AUT-1603 follow-up).
+- Backend: SSRF hardening for Discord webhook URLs (AUT-1603). `discord_webhook_url` now allowlists `https://discord.com/api/webhooks/{id}/{token}` at two layers — a Pydantic `field_validator` on the notification-preference schema rejects non-Discord URLs at input time, and `_send_discord` re-checks the pattern before the outbound `httpx` call as defense-in-depth (rejecting internal/loopback addresses). `NotificationPreferenceOut` response schema restored so the preferences API keeps working.
+
 ## [0.3.147] - 2026-08-28
 
 ### Added

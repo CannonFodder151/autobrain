@@ -28,3 +28,21 @@ class NotificationPreferenceIn(BaseModel):
                 "(https://discord.com/api/webhooks/{id}/{token})"
             )
         return v
+
+
+class NotificationPreferenceOut(BaseModel):
+    id: str
+    vehicle_id: str
+    push_enabled: bool
+    email_enabled: bool
+    discord_enabled: bool
+    service_due_days: int
+    service_due_km: int
+    fuel_gap_km: int
+    discord_webhook_url: str | None
+    fcm_token: str | None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
