@@ -131,7 +131,7 @@ class _PartsScreenState extends State<PartsScreen> {
 
   Future<void> _showScaResults(
       BuildContext context, List<Map<String, dynamic>> parts) async {
-    final selected = <Map<String, dynamic>>{};
+    final selected = <String, Map<String, dynamic>>{};
     await showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
