@@ -24,6 +24,7 @@ from slowapi.util import get_remote_address
 
 from bikesguide import search_bikesguide
 from carsguide import search_carsguide
+from sca import search_sca
 
 app = FastAPI(title="Market Data API", version="1.2.0")
 
@@ -86,5 +87,42 @@ async def search(request: Request, response: Response, req: SearchRequest, x_api
         if vehicle_type in ("motorcycle", "bike", "motorbike"):
             return await search_bikesguide(query, req.year)
         return await search_carsguide(query, req.year)
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"upstream error: {exc}")
+
+
+class SCALookupRequest(BaseModel):
+    rego: str = ""
+    state: str = ""
+    make: str = ""
+    model: str = ""
+    year: int | None = None
+
+
+class SCALookupResponse(BaseModel):
+    source: str
+    vehicle: dict | None = None
+    parts: list[dict] = []
+    categories: list[dict] = []
+    note: str | None = None
+
+
+@app.post("/sca-parts", response_model=SCALookupResponse)
+@limiter.limit(RATE_LIMIT_IP, key_func=_client_ip)
+@limiter.limit(RATE_LIMIT_KEY, key_func=_api_key)
+async def sca_parts(request: Request, response: Response,
+                    req: SCALookupRequest, x_api_key: str | None = Header(None)):
+    if not API_KEY or not hmac.compare_digest(x_api_key or "", API_KEY):
+        raise HTTPException(status_code=401, detail="invalid API key")
+    rego = (req.rego or "").strip()
+    state = (req.state or "").upper()
+    make = (req.make or "").strip()
+    model = (req.model or "").strip()
+    year = req.year
+
+    try:
+        result = await search_sca(rego=rego if rego else None, state=state if state else None,
+                                  make=make, model=model, year=year)
+        return result
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail=f"upstream error: {exc}")

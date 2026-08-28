@@ -54,6 +54,17 @@ class _ServicePredictionScreenState extends State<ServicePredictionScreen> {
   Future<void> _schedule(ServicePrediction p) async {
     try {
       final api = context.read<AuthState>().api;
+      // Prefill parts: inventory first, then Supercheap Auto suggestions.
+      List<dynamic> items = const [];
+      try {
+        final suggest = await api.post(
+          '/vehicles/${widget.vehicleId}/parts/suggest-for-service', {
+          'service_type': p.serviceType,
+        }) as Map<String, dynamic>;
+        items = (suggest['items'] as List? ?? []).toList();
+      } catch (_) {
+        items = const [];
+      }
       await api.post('/vehicles/${widget.vehicleId}/services', {
         'service_date': p.nextDueDate,
         'odometer_km': p.nextDueKm,
@@ -62,7 +73,7 @@ class _ServicePredictionScreenState extends State<ServicePredictionScreen> {
         'status': 'scheduled',
         'description': p.reason,
         'steps': const [],
-        'items': const [],
+        'items': items,
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
