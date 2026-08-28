@@ -7,7 +7,7 @@ or returns an error, each module falls back to a deterministic rule-based
 implementation so AutoBrain never goes down with the router.
 
 Environment variables:
-  AI_ROUTER_URL              e.g. http://your-9router-instance:port/v1
+  AI_ROUTER_URL              e.g. http://10.0.3.17:20128/v1
   AI_ROUTER_API_KEY          optional bearer key
   AI_ROUTER_MODEL            model id served by the router (default General-Use)
   AI_ROUTER_TIMEOUT_SECONDS  per-request timeout
@@ -206,7 +206,7 @@ _SCHEMAS: dict[str, dict[str, tuple]] = {
 
 
 def router_url() -> str:
-    return os.getenv("AI_ROUTER_URL", "http://your-9router-instance:port/v1").rstrip("/")
+    return os.getenv("AI_ROUTER_URL", "http://10.0.3.17:20128/v1").rstrip("/")
 
 
 def router_enabled() -> bool:

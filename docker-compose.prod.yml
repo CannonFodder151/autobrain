@@ -136,7 +136,7 @@ services:
       - /ms-playwright
     env_file: .env
     environment:
-      AI_ROUTER_URL: ${AI_ROUTER_URL}
+      AI_ROUTER_URL: ${AI_ROUTER_URL:-http://10.0.3.17:20128/v1}
       AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:?AI_GATEWAY_API_KEY must be set (prod fails closed)}
       API_KEY: ${MARKET_DATA_API_KEY:-}
     expose:

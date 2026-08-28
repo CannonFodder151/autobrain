@@ -19,7 +19,7 @@ x-backend-base: &backend-base
     # uploads) work; optional passthrough — the script skips cleanly if absent.
     MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-}
     MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-}
-    AI_ROUTER_URL: ${AI_ROUTER_URL:-http://your-9router-instance:port}
+      AI_ROUTER_URL: ${AI_ROUTER_URL:-http://10.0.3.17:20128/v1}
     SOCIAL_FEDERATION_HUB_URL: ${SOCIAL_FEDERATION_HUB_URL:-https://hub.autobrainservice.app}
     SOCIAL_FEDERATION_HOSTED: ${SOCIAL_FEDERATION_HOSTED:-false}
   depends_on:
@@ -108,7 +108,7 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      AI_ROUTER_URL: ${AI_ROUTER_URL:-http://your-9router-instance:port}
+    AI_ROUTER_URL: ${AI_ROUTER_URL:-http://10.0.3.17:20128/v1}
       # AB-INFRA-006: gateway auth stays on in dev; backend sends the shared key.
       AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:?AI_GATEWAY_API_KEY must be set in .env}
     ports:

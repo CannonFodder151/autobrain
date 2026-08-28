@@ -22,7 +22,7 @@ metadata:
   namespace: autobrain
 data:
   environment: "production"
-  ai-router-url: "http://your-9router-instance:port/v1"
+  ai-router-url: "http://10.0.3.17:20128/v1"
   minio-bucket: "autobrain-assets"
   postgres-db: "autobrain"
 ---
