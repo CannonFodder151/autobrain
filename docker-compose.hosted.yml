@@ -170,6 +170,17 @@ services:
       SOCIAL_FEDERATION_HUB_URL: ${SOCIAL_FEDERATION_HUB_URL:-https://hub.autobrainservice.app}
       SOCIAL_FEDERATION_HOSTED: "true"
       SOCIAL_FEDERATION_HOSTED_REGISTRATION_KEY_FILE: /run/secrets/hub_hosted_registration_key
+      # --- CI Triage webhook receiver (AUT-1669 / AUT-1751): POST /api/v1/ci/webhook ---
+      # Bearer secret the GitHub Actions `ci-triage-webhook.yml` fire job presents.
+      # Must match the GitHub repo secret CI_TRIAGE_WEBHOOK_SECRET and the Paperclip
+      # creds below so the receiver can create CI Triage child issues.
+      CI_TRIAGE_WEBHOOK_SECRET: ${CI_TRIAGE_WEBHOOK_SECRET:-}
+      CI_TRIAGE_PARENT_ISSUE_ID: ${CI_TRIAGE_PARENT_ISSUE_ID:-}
+      CI_TRIAGE_GOAL_ID: ${CI_TRIAGE_GOAL_ID:-}
+      CI_TRIAGE_AGENT_ID: ${CI_TRIAGE_AGENT_ID:-acae6bf2}
+      PAPERCLIP_API_URL: ${PAPERCLIP_API_URL:-https://paperclip.nathanmartina.com}
+      PAPERCLIP_API_KEY: ${PAPERCLIP_API_KEY:-}
+      PAPERCLIP_COMPANY_ID: ${PAPERCLIP_COMPANY_ID:-41d8aeaf-0e55-4127-b037-7a6d740be3b6}
       STRIPE_SECRET_KEY_FILE: /run/secrets/stripe_secret_key
       STRIPE_WEBHOOK_SECRET_FILE: /run/secrets/stripe_webhook_secret
       STRIPE_PRICE_ENTHUSIAST_MONTHLY: ${STRIPE_PRICE_ENTHUSIAST_MONTHLY:-}
