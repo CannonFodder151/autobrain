@@ -1,3 +1,4 @@
+# AUT-1798: x64 jobs dispatch to the new vm2 runner (gh-runner-autobrain-2). ARM stays on Oracle VM.
 name: Security — full-resolution dependency scan
 
 on:
@@ -13,7 +14,7 @@ on:
 jobs:
   audit:
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux, x64]
+    runs-on: [self-hosted, linux, x64, vm2]
     steps:
       - name: Checkout repository
         run: |
@@ -68,7 +69,7 @@ jobs:
   # docker-compose.hosted.yml is bumped only after this job goes green.
   image-scan:
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux, x64]
+    runs-on: [self-hosted, linux, x64, vm2]
     steps:
       - name: Checkout repository
         run: |
