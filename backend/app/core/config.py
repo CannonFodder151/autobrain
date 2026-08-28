@@ -73,6 +73,11 @@ class Settings(BaseSettings):
     AI_RATE_WINDOW_SECONDS: int = 60
     AI_DAILY_LIMIT: int = 50
 
+    # Rego lookup rate limit: per-user fixed-window (UTC-hour).
+    # Fail-open: Redis outage logs a warning but allows the request through.
+    REGO_RATE_LIMIT_PER_HOUR: int = 20
+    REGO_RATE_WINDOW_SECONDS: int = 3600
+
     # External providers (optional)
     REGO_LOOKUP_URL: str = ""
     REGO_LOOKUP_API_KEY: str = ""

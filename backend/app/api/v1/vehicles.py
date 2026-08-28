@@ -5,6 +5,7 @@ from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_write
+from app.services.rate_limit import require_rego_rate_limit
 from app.services.ownership import (
     clear_primary,
     effective_feature_owner,
@@ -113,7 +114,7 @@ async def delete_vehicle(
 async def rego_lookup(
     payload: RegoLookupRequest,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rego_rate_limit),
 ) -> RegoLookupResponse:
     """Populate vehicle details from an Australian registration plate + state.
 

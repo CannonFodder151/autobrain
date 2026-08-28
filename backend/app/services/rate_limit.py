@@ -1,11 +1,13 @@
-"""Per-user AI usage caps (AUT-302).
+"""Per-user rate limiting (AUT-302, AUT-1607).
 
-Redis-backed fixed-window counters, shared across backend workers. Two counters
-per user: a burst window (per AI_RATE_WINDOW_SECONDS) and a UTC-day total. Both
-are enforced as a FastAPI dependency before any 9Router spend happens.
+Redis-backed fixed-window counters, shared across backend workers.
 
-Fail-closed: if Redis is unreachable the limiter returns 503 rather than let
-unmetered AI requests through.
+AI limiter (fail-closed): two counters per user — burst (per AI_RATE_WINDOW_SECONDS)
+and UTC-day total. Enforced before any 9Router spend.
+
+Rego limiter (fail-open): single UTC-hour counter per user. Logs a warning on
+Redis failure but allows the request through — rego lookup is not cost-critical
+enough to block users when Redis is down.
 """
 
 import time
@@ -63,5 +65,32 @@ async def require_ai_rate_limit(user: User = Depends(get_current_user)) -> User:
             status_code=429,
             detail="AI request limit reached. Try again later.",
             headers={"Retry-After": str(settings.AI_RATE_WINDOW_SECONDS)},
+        )
+    return user
+
+
+async def require_rego_rate_limit(user: User = Depends(get_current_user)) -> User:
+    """Reject with 429 when the user exceeds the rego-lookup hourly cap.
+
+    Key is per-(user, UTC-hour) so counters are isolated across distinct
+    users and rotate cleanly at the hour boundary.
+
+    Fail-open: if Redis is unreachable the request proceeds with a warning
+    rather than blocking a non-cost-critical lookup.
+    """
+    now = int(time.time())
+    try:
+        count = await _bump(
+            f"rego:hour:{user.id}:{now // settings.REGO_RATE_WINDOW_SECONDS}",
+            settings.REGO_RATE_WINDOW_SECONDS * _bump_ttl_multiplier,
+        )
+    except Exception as exc:
+        logger.warning("rego_rate_limit_unavailable", user_id=str(user.id), error=str(exc))
+        return user
+    if count > settings.REGO_RATE_LIMIT_PER_HOUR:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Rego lookup limit reached ({settings.REGO_RATE_LIMIT_PER_HOUR}/hour). Try again later.",
+            headers={"Retry-After": str(settings.REGO_RATE_WINDOW_SECONDS - (now % settings.REGO_RATE_WINDOW_SECONDS))},
         )
     return user
