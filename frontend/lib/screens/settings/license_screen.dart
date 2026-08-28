@@ -57,11 +57,14 @@ class _LicenseScreenState extends State<LicenseScreen> {
   bool get _hasPending => _licenseStatus == 'pending';
   int get _maxVehicles => (_profile?['max_vehicles'] as int?) ?? 1;
 
-  /// One-time 7-day free trial (AUT-1195): offered by the backend on monthly
-  /// Stripe checkouts while the account has not used its trial yet. The
-  /// /auth/me payload carries the account-specific values.
+  /// One-time 7-day free trial (AUT-1195): the backend offers it on monthly
+  /// plans while the account has not used its trial yet, via the /auth/me
+  /// payload (`trial_available` / `trial_days`). Surfaced for both the Stripe
+  /// checkout path and the store (IAP) path, where the native subscription
+  /// base plan carries the free trial (AUT-1771). Hidden on yearly and once
+  /// the trial was used.
   bool get _trialAvailable =>
-      !_iapMode && !_hasSub && _profile?['trial_available'] == true;
+      !_hasSub && _profile?['trial_available'] == true;
   int get _trialDays =>
       (_profile?['trial_days'] as int?) ?? (_trialAvailable ? 7 : 0);
 
@@ -549,7 +552,9 @@ class _LicenseScreenState extends State<LicenseScreen> {
               child: FilledButton(
                 onPressed: _busy ? null : () => _checkout(key, plan),
                 child: Text(_iapMode
-                    ? 'Buy from Store'
+                    ? (showTrial
+                        ? 'Start your $_trialDays-day free trial'
+                        : 'Buy from Store')
                     : showTrial
                         ? 'Start your $_trialDays-day free trial'
                         : 'Upgrade to $name'),

@@ -1,0 +1,9 @@
+[Unit]
+Description=GitHub Actions runner watchdog (AUT-1720 dockerd wedge guard)
+Wants=docker.service containerd.service
+After=docker.service containerd.service
+
+[Service]
+Type=oneshot
+User=administrator
+ExecStart=/home/administrator/gh-runners/gh-runner-watchdog.sh run
