@@ -36,7 +36,9 @@ Two paid tiers plus a free tier. Prices in AUD (AUT-523); source of truth is `sc
 - `/billing/pricing` exposes `trial_days: {monthly: 7, yearly: 0}` per plan;
   `/auth/me` exposes `trial_days` and `trial_available` (true until the trial
   is consumed). Access during the trial comes from Stripe status `trialing`,
-  already in `ACTIVE_STATUSES`.
+   already in `ACTIVE_STATUSES`.
+- Enforcement lives in `backend/app/services/billing.py` (trial applied/blocked
+  at checkout start) and `backend/app/api/v1/auth.py` (`/auth/me` fields).
 
 ## Billing flow
 
