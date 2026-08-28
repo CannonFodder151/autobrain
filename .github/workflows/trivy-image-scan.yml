@@ -1,4 +1,7 @@
-# AUT-1798: x64 jobs dispatch to the new vm2 runner (gh-runner-autobrain-2). ARM stays on Oracle VM.
+# AUT-1781: x64 image-scan routes to the bare x64 self-hosted runner
+# (gh-runner-autobrain). The vm2 label (AUT-1798) left the job unclaimed
+# because gh-runner-autobrain-2 fails to accept queued jobs (same "Set up job"
+# degradation); the bare x64 runner is the repaired, online target.
 name: Security — base image CVE scan (trivy)
 
 # Scans the pinned Postgres data-store, frontend nginx AND python base images for
@@ -50,7 +53,7 @@ env:
 
 jobs:
   image-scan:
-    runs-on: [self-hosted, linux, x64, vm2]
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
 
