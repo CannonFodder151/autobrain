@@ -193,8 +193,11 @@ async def search_sca(
     """
     if rego and state:
         result = await _browser_search(rego, state.upper())
-        if result is not None:
+        if result and result.get("ok"):
             return result
+        # Browser rego resolution failed (gated/timeout/playwright missing):
+        # fall through to the deterministic HTTP taxonomy so the lookup still
+        # returns categories instead of a hard gate.
 
     try:
         headers = {"User-Agent": USER_AGENT, "Accept-Language": "en-AU,en;q=0.9"}
