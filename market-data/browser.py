@@ -141,13 +141,24 @@ async def scrape_sca(rego: str, state: str) -> dict:
                 "note": "playwright not installed in image"}
 
     async with async_playwright() as p:
+        # AUT-1739: prefer the Chromium sandbox (second layer when parsing
+        # untrusted third-party content). The container now runs as a non-root
+        # user with the SUID sandbox helper enabled; only fall back to
+        # --no-sandbox if the sandboxed launch actually fails.
         try:
             browser = await p.chromium.launch(
                 headless=True,
-                args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"])
-        except Exception as exc:
-            return {"ok": False, "kind": "gated",
-                    "note": f"sca chromium launch failed: {type(exc).__name__}"}
+                args=["--disable-dev-shm-usage", "--disable-gpu"])
+        except Exception:
+            browser = None
+        if browser is None:
+            try:
+                browser = await p.chromium.launch(
+                    headless=True,
+                    args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"])
+            except Exception as exc:
+                return {"ok": False, "kind": "gated",
+                        "note": f"sca chromium launch failed: {type(exc).__name__}"}
         try:
             ctx = await browser.new_context(
                 user_agent=UA, locale="en-AU",
