@@ -128,6 +128,8 @@ services:
       dockerfile: docker/ai/Dockerfile
     image: ${DOCKERHUB_USERNAME:-autobrain}/autobrain-ai:${IMAGE_TAG:-latest}
     restart: unless-stopped
+    # AUT-1739: adequate /dev/shm so Chromium can sandbox as the non-root user.
+    shm_size: "256m"
     read_only: true
     cap_drop:
       - ALL

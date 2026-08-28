@@ -19,6 +19,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- **Security (AUT-1739):** `market-data` + AI image Dockerfiles no longer run as root — Chromium/Playwright now runs as the non-root `autobrain`/`appuser` user, closing the container-shell escape path (CWE-250, trivy DS-0002).
+- **Security (AUT-1739):** Chromium SUID sandbox helper kept root-owned + setuid (`4755`) after browser install so the scraper sandboxes as non-root instead of needing `--no-sandbox`. `shm_size: 256m` added to the `ai` service in `docker-compose.{yml,prod.yml,hosted.yml}` so `/dev/shm` is sized for the sandbox.
+
 ## [0.3.151] - 2026-08-28
 
 ### Added

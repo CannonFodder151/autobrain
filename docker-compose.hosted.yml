@@ -209,6 +209,8 @@ services:
   ai:
     image: ghcr.io/cannonfodder151/autobrain-ai:hosted
     restart: unless-stopped
+    # AUT-1739: adequate /dev/shm so Chromium can sandbox as the non-root user.
+    shm_size: "256m"
     # AUT-1242-C3: image CMD runs entrypoint.sh — AI gateway :8001 + market-data :8000 in one container.
     environment:
       <<: *router-env

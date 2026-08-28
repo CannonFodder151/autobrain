@@ -31,6 +31,14 @@ RUN chmod +x /entrypoint.sh /usr/local/bin/lib-load-secrets.sh
 RUN useradd -m -u 1000 autobrain \
     && chown -R autobrain:autobrain /app \
     && mkdir -p /ms-playwright && chown -R autobrain:autobrain /ms-playwright
+
+# CWE-250 hardening: let Chromium sandbox as the non-root `autobrain` user. The
+# SUID sandbox helper must stay root-owned + setuid (it was just chowned to
+# autobrain above), so Chromium can drop privileges after launch instead of
+# requiring --no-sandbox.
+RUN SB=$(find /ms-playwright -name chrome-sandbox -type f | head -n1); \
+    if [ -n "$SB" ]; then chown root:root "$SB" && chmod 4755 "$SB"; fi
+
 USER autobrain
 
 EXPOSE 8000 8001
