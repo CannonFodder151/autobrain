@@ -134,17 +134,21 @@ class _LicenseScreenState extends State<LicenseScreen> {
                 .toList()
                 .cast<Map<String, dynamic>>();
             if (iapPlans.isNotEmpty) {
-              setState(() {
-                _iapMode = true;
-                _plans = iapPlans;
-              });
-              iapAvailable = true;
               // Initialize native IAP billing for Play Store / App Store purchases.
               if (_iapService == null) {
                 _iapService = IapService(context.read<AuthState>());
                 _iapService!.purchaseStream.listen(_onIapPurchase);
                 final ids = iapPlans.map((p) => p['product_id'] as String).toList();
                 await _iapService!.init(ids);
+              }
+              // Only enter IAP mode if the store actually found the products;
+              // otherwise fall through to the Stripe checkout path.
+              if (_iapService!.available && _iapService!.products.isNotEmpty) {
+                setState(() {
+                  _iapMode = true;
+                  _plans = iapPlans;
+                });
+                iapAvailable = true;
               }
             }
           }
