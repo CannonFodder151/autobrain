@@ -23,11 +23,13 @@ concurrency:
 
 jobs:
   changelog-gate:
-    # AUT-1802: the arm64 runner is reserved for building arm images only, so
-    # this arch-independent git/jq gate runs on the x64 vm2 runner. The amd64
-    # build jobs below also stay on x64 to build natively (no QEMU) — reliable,
-    # fast (Phase 1(c)).
-    runs-on: [self-hosted, linux, x64, vm2]
+    # AUT-1785: route the lightweight (git/jq, ~seconds) merge-gating gate to
+    # bare [self-hosted, linux, x64] instead of the `vm2` label, so GitHub can
+    # dispatch it to the idle legacy x64 runner (gh-runner-autobrain) instead of
+    # queued behind the heavy docker publish pipeline on vm2. AUT-1802: arm64
+    # reserved for arm images only. The gate needs no docker, so the legacy
+    # runner's dockerd-wedge history (AUT-1720) does not apply here.
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -83,9 +85,11 @@ jobs:
           echo "changelog gate OK — CHANGELOG.md iterated with app/docker changes"
 
   pip-audit-gate:
-    # AUT-1802: arch-independent Python scan routed to x64 vm2 (the arm64 runner
-    # is reserved for building arm images only). See changelog-gate note above.
-    runs-on: [self-hosted, linux, x64, vm2]
+    # AUT-1785: route the lightweight (python, ~seconds) scan to bare
+    # [self-hosted, linux, x64] so GitHub can use the idle legacy x64 runner
+    # instead of queuing behind the heavy docker publish on vm2. AUT-1802: the
+    # arm64 runner is reserved for building arm images only.
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
       - name: Install pip-audit
