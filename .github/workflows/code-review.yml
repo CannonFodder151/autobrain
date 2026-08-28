@@ -5,8 +5,8 @@ on:
     types: [opened, synchronize, reopened]
     # Skip the heavy OCR review on changes that are not source (e.g.
     # workflow-only / docs-only PRs like AUT-1691). The run is triggered
-    # only when at least one non-ignored file changes, keeping the arm64
-    # runner busy only for reviews that have real code to scan.
+    # only when at least one non-ignored file changes, keeping the OCR
+    # scan off the scarce arm64 runner (reserved for building arm images).
     paths-ignore:
       - '.github/**'
       - 'docs/**'
@@ -22,9 +22,9 @@ permissions:
 
 jobs:
   ocr-review:
-    # AUT-1802: OCR must NOT run on the ARM64 runner. That runner is reserved
-    # exclusively for building arm64 images (see build-hosted.yml). OCR is a
-    # pure-Node/CPU job, so it runs on the x64 runner (vm2) instead.
+    # AUT-1802: OCR must NOT run on the arm64 runner — that runner is reserved
+    # solely for building arm images. OCR is a pure Node/CPU workload with no
+    # architecture-specific binaries, so it runs on the healthy x64 vm2 runner.
     runs-on: [self-hosted, linux, x64, vm2]
     permissions:
       contents: read

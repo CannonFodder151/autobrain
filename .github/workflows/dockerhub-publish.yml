@@ -1,5 +1,7 @@
 # AUT-1798: x64 jobs dispatch to the new vm2 runner (gh-runner-autobrain-2).
-# Legacy x64 runner is degraded (AUT-1781). ARM64 jobs stay on the Oracle VM.
+# AUT-1802: the arm64 runner is reserved for building arm images ONLY; every
+# other job (OCR, gates, scans) dispatches to the x64 vm2 runner. Legacy x64
+# runner is degraded (AUT-1781).
 name: Publish images to Docker Hub
 
 on:
@@ -21,11 +23,11 @@ concurrency:
 
 jobs:
   changelog-gate:
-    # Routed to the idle arm64 runner (Phase 1(a)): this gate is git/jq only,
-    # arch-independent, and runs on every PR. Moving it off x64 frees capacity
-    # for the PR-check queue. The amd64 build jobs below stay on x64 so they
-    # build natively (no QEMU) — reliable, fast (Phase 1(c)).
-    runs-on: [self-hosted, linux, arm64]
+    # AUT-1802: the arm64 runner is reserved for building arm images only, so
+    # this arch-independent git/jq gate runs on the x64 vm2 runner. The amd64
+    # build jobs below also stay on x64 to build natively (no QEMU) — reliable,
+    # fast (Phase 1(c)).
+    runs-on: [self-hosted, linux, x64, vm2]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -81,9 +83,9 @@ jobs:
           echo "changelog gate OK — CHANGELOG.md iterated with app/docker changes"
 
   pip-audit-gate:
-    # Routed to the idle arm64 runner (Phase 1(a)): arch-independent Python
-    # scan, runs on every PR. See changelog-gate note above.
-    runs-on: [self-hosted, linux, arm64]
+    # AUT-1802: arch-independent Python scan routed to x64 vm2 (the arm64 runner
+    # is reserved for building arm images only). See changelog-gate note above.
+    runs-on: [self-hosted, linux, x64, vm2]
     steps:
       - uses: actions/checkout@v4
       - name: Install pip-audit
