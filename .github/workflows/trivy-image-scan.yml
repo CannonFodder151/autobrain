@@ -1,9 +1,10 @@
 # AUT-1798: x64 jobs dispatch to the new vm2 runner (gh-runner-autobrain-2). ARM stays on Oracle VM.
 name: Security — base image CVE scan (trivy)
 
-# Scans the pinned Postgres data-store AND frontend nginx base images for
+# Scans the pinned Postgres data-store, frontend nginx AND python base images for
 # HIGH/CRITICAL CVEs and enforces digest pinning (no floating tags).
-# Postgres: AUT-1749. Frontend nginx: AUT-1793 (CVE-2026-14456 OpenSSL QUIC DoS).
+# Postgres: AUT-1749. Frontend nginx: AUT-1740 (CVE-2026-14456 OpenSSL QUIC DoS).
+# Python base (backend/ai/worker/market-data): AUT-1735 (perl/SQLite/zlib RCEs).
 
 on:
   pull_request:
@@ -12,6 +13,10 @@ on:
       - 'docker-compose.prod.yml'
       - 'docker-compose.hosted.yml'
       - 'docker/frontend/Dockerfile'
+      - 'docker/backend/Dockerfile'
+      - 'docker/ai/Dockerfile'
+      - 'docker/worker/Dockerfile'
+      - 'market-data/Dockerfile'
       - '.trivyignore'
       - '.github/workflows/trivy-image-scan.yml'
   push:
@@ -21,6 +26,10 @@ on:
       - 'docker-compose.prod.yml'
       - 'docker-compose.hosted.yml'
       - 'docker/frontend/Dockerfile'
+      - 'docker/backend/Dockerfile'
+      - 'docker/ai/Dockerfile'
+      - 'docker/worker/Dockerfile'
+      - 'market-data/Dockerfile'
       - '.trivyignore'
       - '.github/workflows/trivy-image-scan.yml'
   schedule:
@@ -37,6 +46,7 @@ permissions:
 env:
   POSTGRES_IMAGE: 'pgvector/pgvector:pg17@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f'
   NGINX_FRONTEND_IMAGE: 'nginxinc/nginx-unprivileged:stable-alpine@sha256:93722936b82ec8a1178d48448e619226680d2de3706a1640800e186cd5fa7fd3'
+  PYTHON_BASE_IMAGE: 'python:3.13-slim@sha256:7ce4b6dfe35e55397b7cda544f8a13f191b7ae28dc5aad71fe664dbc9bc2623f'
 
 jobs:
   image-scan:
@@ -64,8 +74,25 @@ jobs:
           fi
           echo "OK: frontend nginx image is digest-pinned in Dockerfile."
 
+      - name: Pin guard — python base images must be digest-pinned (AUT-1735)
+        run: |
+          set -euo pipefail
+          # Fail if any python base image is floated across a bare tag (no @sha256).
+          # AUT-1735 requires every FROM python:* to pin a @sha256 digest so the
+          # build is reproducible and the trivy gate below scans a fixed image.
+          FLOATING="$(grep -rnE 'FROM python:[0-9]' \
+            docker/backend/Dockerfile docker/ai/Dockerfile \
+            docker/worker/Dockerfile market-data/Dockerfile || true)"
+          FLOATING="$(printf '%s\n' "$FLOATING" | grep -v '@sha256' || true)"
+          if [ -n "$FLOATING" ]; then
+            echo "::error::floating python base image detected (missing @sha256 digest):"
+            printf '%s\n' "$FLOATING"
+            exit 1
+          fi
+          echo "OK: python base images are digest-pinned across all Dockerfiles."
+
       - name: Scan pinned postgres image (HIGH/CRITICAL, unfixed ignored)
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@0.28.0
         with:
             image-ref: ${{ env.POSTGRES_IMAGE }}
             scanner: vuln
@@ -76,7 +103,7 @@ jobs:
             exit-code: '1'
 
       - name: Scan pinned frontend nginx image (HIGH/CRITICAL, unfixed ignored)
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@0.28.0
         with:
             image-ref: ${{ env.NGINX_FRONTEND_IMAGE }}
             scanner: vuln
@@ -86,6 +113,17 @@ jobs:
             output: 'trivy-nginx-report.txt'
             exit-code: '1'
 
+      - name: Scan pinned python base image (HIGH/CRITICAL, AUT-1735)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.PYTHON_BASE_IMAGE }}
+          scanner: vuln
+          severity: 'HIGH,CRITICAL'
+          ignore-unfixed: true
+          format: 'table'
+          output: 'trivy-python-report.txt'
+          exit-code: '1'
+
       - name: Upload scan reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -94,6 +132,7 @@ jobs:
           path: |
             trivy-postgres-report.txt
             trivy-nginx-report.txt
+            trivy-python-report.txt
 
       - name: Report to Discord #status
         if: always()
@@ -106,4 +145,4 @@ jobs:
           curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
             -H "Content-Type: application/json" \
             -d "$(jq -nc --arg c status --arg t "$TITLE" --arg col "$COLOR" --arg u "$RUN_URL" \
-              '{channel:$c,title:$t,description:"Weekly trivy image scan of digest-pinned postgres:17 and nginx:stable-alpine frontend base images.",color:$col,author:"Security Scan",fields:[{name:"Scope",value:"postgres:17 + nginx frontend",inline:true},{name:"Run",value:$u,inline:true}]}')"
+              '{channel:$c,title:$t,description:"Weekly trivy scan of digest-pinned base images: postgres:17, nginx:stable-alpine frontend, python:3.13-slim (backend/ai/worker/market-data).",color:$col,author:"Security Scan",fields:[{name:"Scope",value:"postgres:17 + nginx frontend + python:3.13-slim",inline:true},{name:"Run",value:$u,inline:true}]}')"
