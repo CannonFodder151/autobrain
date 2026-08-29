@@ -65,3 +65,30 @@ class FuelReceiptResult(BaseModel):
     total_cost: float | None = None
     currency: str = "AUD"
     ai_used: bool = False
+
+
+class FuelPriceQuote(BaseModel):
+    """One 7-Eleven price quote (cents per litre)."""
+
+    fuel_type: str
+    price_cpl: float
+    station: str
+    suburb: str
+    state: str
+    postcode: str
+    lat: float | None = None
+    lng: float | None = None
+    rank: int | None = None  # 1=cheapest, 2/3 for region mode
+    distance_km: float | None = None  # set in nearest mode
+
+
+class SevenElevenPricesOut(BaseModel):
+    """Accurate 7-Eleven fuel prices (projectzerothree.info). Deterministic, no AI."""
+
+    source: str = "projectzerothree"
+    updated: int | None = None  # upstream snapshot timestamp (unix)
+    as_of: str | None = None  # when we fetched/cached (ISO)
+    mode: str  # "cheapest" | "nearest"
+    fuel_type: str
+    region: str | None = None
+    quotes: list[FuelPriceQuote]

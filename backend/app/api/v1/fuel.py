@@ -1,6 +1,6 @@
 """Fuel tracker routes."""
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
@@ -20,9 +20,12 @@ from app.schemas.fuel import (
     FuelLogUpdate,
     FuelReceiptResult,
     FuelStats,
+    FuelPriceQuote,
+    SevenElevenPricesOut,
 )
 from app.services.export import export_fuel_csv, export_zip
 from app.services import fuel as fuel_svc
+from app.services import fuel_prices as fp_svc
 from app.services.odometer import sync_odometer
 from app.services.rate_limit import require_ai_rate_limit
 
@@ -211,4 +214,49 @@ async def upload_fuel_receipt(
         total_cost=parsed.get("total_cost"),
         currency=parsed.get("currency", "AUD"),
         ai_used=bool(ai and parsed),
+    )
+
+
+@router.get("/prices/7eleven", response_model=SevenElevenPricesOut)
+async def seven_eleven_prices(
+    vehicle_id: str,
+    fuel_type: str = Query(default="U91", pattern="^(E10|U91|U95|U98|Diesel|LPG)$"),
+    region: str | None = Query(default=None, description="State/region, e.g. VIC, NSW, QLD, WA, ACT, All"),
+    lat: float | None = Query(default=None, description="If set, returns nearest stores instead of cheapest-by-region"),
+    lng: float | None = Query(default=None),
+    max_results: int = Query(default=5, ge=1, le=25),
+    max_km: float | None = Query(default=None, gt=0),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> SevenElevenPricesOut:
+    """Accurate 7-Eleven fuel prices (projectzerothree.info) for auto-filling a fill-up.
+
+    Two modes (mutually exclusive — lat/lng wins):
+      * cheapest: top-3 prices for `region` + `fuel_type` (default, region=All).
+      * nearest: closest stores to (lat,lng) selling `fuel_type`.
+
+    Deterministic + keyless: no AI, no spend. On upstream failure the service
+    serves its last good cached snapshot; if none, 503 so the client falls back
+    to manual price entry rather than showing a fabricated number.
+    """
+    await get_accessible_vehicle(db, vehicle_id, user)
+    if lat is not None and lng is not None:
+        quotes = await fp_svc.nearest_7eleven(lat, lng, fuel_type, max_results=max_results, max_km=max_km)
+        mode, use_region = "nearest", None
+    else:
+        use_region = (region or "All").upper()
+        quotes = await fp_svc.cheapest_7eleven(use_region, fuel_type)
+        mode = "cheapest"
+    data = await fp_svc.fetch_7eleven_prices()
+    as_of = None
+    if fp_svc._cache["fetched_at"]:
+        as_of = datetime.fromtimestamp(fp_svc._cache["fetched_at"], timezone.utc).isoformat()
+    return SevenElevenPricesOut(
+        source="projectzerothree",
+        updated=data.get("updated"),
+        as_of=as_of,
+        mode=mode,
+        fuel_type=fuel_type,
+        region=use_region,
+        quotes=[FuelPriceQuote(**q) for q in quotes],
     )

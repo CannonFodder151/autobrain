@@ -94,6 +94,7 @@ Completing a scheduled service created from a diagnostic auto-resolves (green-ti
 | GET    | `/stats` | Totals, averages, series |
 | GET    | `/export?fy=` | CSV export per Australian financial year (also accepts `fmt=zip`) |
 | POST   | `/receipt?ai=true\|false` | Fuel receipt photo. `ai=true` OCR-fills litres & price/L then user enters odometer; `ai=false` stores photo only. |
+| GET    | `/prices/7eleven?region=&fuel_type=` | Accurate 7-Eleven prices (projectzerothree.info). Deterministic, no AI. `lat`+`lng` switches to nearest-store mode (`max_results`, `max_km`). |
 
 ## Logbook (`/vehicles/{id}/logbook`) — ATO claiming, non-club-reg vehicles only
 
