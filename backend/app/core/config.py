@@ -84,6 +84,12 @@ class Settings(BaseSettings):
     MARKET_DATA_URL: str = ""
     MARKET_DATA_API_KEY: str = ""
 
+    # 7-Eleven fuel prices (projectzerothree.info). Public, keyless, server-cached
+    # snapshot — no AI involved. Override the URL only for self-hosting a mirror.
+    SEVEN_ELEVEN_API_URL: str = "https://projectzerothree.info/api.php?format=json"
+    SEVEN_ELEVEN_CACHE_TTL_MINUTES: int = 60
+    SEVEN_ELEVEN_USER_AGENT: str = "AutoBrain/1.0 (+https://autobrainservice.app)"
+
     # Bootstrap admin account (created on first boot if missing)
     ADMIN_EMAIL: str = ""
     ADMIN_DISPLAY_NAME: str = "AutoBrain Admin"
