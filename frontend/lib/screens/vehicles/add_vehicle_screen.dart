@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/auth_state.dart';
+import '../../core/fuel_types.dart';
 
 class AddVehicleScreen extends StatefulWidget {
   const AddVehicleScreen({super.key});
@@ -30,6 +31,8 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
   bool _clubReg = false;
   bool _lookingUp = false;
   String? _lookupInfo;
+  String? _fuelType;
+  List<String> _fuelTypes = defaultFuelTypes;
   int? _maxVehicles;
   int? _vehicleCount;
 
@@ -37,6 +40,24 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
   void initState() {
     super.initState();
     _loadQuota();
+    _loadFuelTypes();
+  }
+
+  Future<void> _loadFuelTypes() async {
+    try {
+      final api = context.read<AuthState>().api;
+      final types = await fetchFuelTypes(api);
+      if (mounted) {
+        setState(() {
+          _fuelTypes = types;
+          if (_fuelType != null && !_fuelTypes.contains(_fuelType)) {
+            _fuelTypes = [_fuelType!, ..._fuelTypes];
+          }
+        });
+      }
+    } catch (_) {
+      // Keep the static fallback list already in _fuelTypes.
+    }
   }
 
   Future<void> _loadQuota() async {
@@ -133,6 +154,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
         'vehicle_type': _vehicleType,
         'is_primary': _isPrimary,
         'club_reg': _clubReg,
+        'fuel_type': _fuelType,
       });
       if (mounted) Navigator.pop(context);
     } catch (e) {
@@ -326,6 +348,19 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
               TextFormField(
                 controller: _bodyType,
                 decoration: const InputDecoration(labelText: 'Body type'),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: _fuelType != null && _fuelTypes.contains(_fuelType) ? _fuelType : null,
+                decoration: const InputDecoration(
+                  labelText: 'Fuel type',
+                  hintText: 'Used to pick the default price on map/list',
+                ),
+                items: [
+                  for (final t in _fuelTypes)
+                    DropdownMenuItem(value: t, child: Text(t)),
+                ],
+                onChanged: (v) => setState(() => _fuelType = v),
               ),
               const SizedBox(height: 12),
               CheckboxListTile(
