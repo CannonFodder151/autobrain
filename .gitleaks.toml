@@ -1,0 +1,32 @@
+# AutoBrain gitleaks config (AUT-1746).
+# Extends the official gitleaks v8.18.1 default ruleset (vendored below) and
+# allowlists the repo's known NON-secret fixtures/examples so the gate blocks
+# only on real leaks. Keep the vendored default in sync with the gitleaks
+# version the CI runner uses; the allowlist is path/regex based so it survives
+# the repo's squash-merge workflow (fingerprint baselines would not).
+title = "AutoBrain gitleaks config"
+
+[extend]
+path = ".gitleaks-default.toml"
+
+[allowlist]
+description = "AutoBrain known non-secret fixtures/examples (AUT-1746)."
+# Go's regexp.Match is unanchored, so these match anywhere in the path.
+paths = [
+    # Docs contain example/illustrative tokens in API walkthroughs.
+    '''docs/.*\.md$''',
+    # Test suites + fixtures (dummy keys, fake tokens, example passwords).
+    '''tests?/.*''',
+    # Test scripts (dummy key fixtures).
+    '''scripts/test-.*\.sh$''',
+    # Firmware BLE UUID/topic constants are not secrets.
+    '''firmware/.*\.h$''',
+    # Placeholder k8s config: real secrets injected at runtime, never committed.
+    '''infra/k8s/config\.yaml$''',
+]
+regexes = [
+    # BLE service UUID constant reused across firmware + frontend (not a secret).
+    '''6E400004-B5A3-F393-E0A9-E50E24DCCA9E''',
+    # BLE GATT topic string used in the OBD recorder (not a secret).
+    '''obd\.trip\.pending\.v1''',
+]
