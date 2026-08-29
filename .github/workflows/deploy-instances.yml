@@ -1,13 +1,19 @@
-# AUT-1847: upgrade the Demo → Default → Hosted instances using the documented
-# upgrade path (Portainer stack redeploy via `scripts/upgrade-instances.sh`).
-#
-# Board direction (AUT-1847): deployment is NOT blind/automatic. CI publishes
-# the images (`dockerhub-publish.yml` → Docker Hub `:latest`/`:default`;
+# AUT-1905: orchestrate the "new version deployed" trigger so BOTH release
+# engineers are notified on the same signal. CI publishes the images
+# (`dockerhub-publish.yml` → Docker Hub `:latest`/`:default`;
 # `build-hosted.yml` → GHCR `:hosted`), then this workflow:
-#   1. on image-publish success -> a `notify` job posts a Discord `#ops` embed
+#   1. on image-publish success -> a `trigger-mobile` job dispatches
+#      `sync-mobile.yml` to trigger the Mobile Release Engineer to update +
+#      publish the mobile app (idempotent: sync-mobile no-ops if the tree is
+#      already in sync), AND a `notify` job posts a Discord `#ops` embed
 #      telling the Deployment Lead a new image is published and ready to promote;
 #   2. the Deployment Lead runs the `upgrade` job (workflow_dispatch) which
-#      redeploys Demo → Default → Hosted via the upgrade path and reports health.
+#      redeems Demo -> test -> Default -> test -> Hosted -> test via the upgrade
+#      path and reports health.
+#
+# Board direction (AUT-1847): deployment is NOT blind/automatic. This workflow
+# only *triggers* the engineers to act; the actual promote is the Deployment
+# Lead's manual `upgrade` run, never an unattended redeployment.
 #
 # The promotion order + per-tier health gating live inside the script (AUT-107);
 # a tier that fails health blocks promotion to the next tier.
@@ -35,6 +41,32 @@ permissions:
   contents: read
 
 jobs:
+  # Image published -> trigger the Mobile Release Engineer to update + publish
+  # the mobile app. We dispatch sync-mobile.yml (which mirrors frontend lineage
+  # into autobrain-mobile and fires the mobile release pipeline). Best-effort: a
+  # dispatch failure must never block the Deployment Lead notification below.
+  trigger-mobile:
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: [self-hosted, linux, x64, vm2]
+    timeout-minutes: 10
+    permissions:
+      actions: write
+    continue-on-error: true
+    steps:
+      - name: Trigger mobile release pipeline (Mobile Release Engineer)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # sync-mobile.yml fires on push to main already; this dispatch is the
+          # AUT-1905 "new version deployed" trigger so the Mobile Release
+          # Engineer is triggered off the same signal as the Deployment Lead.
+          # Best-effort: sync-mobile no-ops if the tree is already in sync.
+          echo "==> dispatching sync-mobile.yml (Mobile Release Engineer)"
+          gh workflow run sync-mobile.yml --repo "${{ github.repository }}" || \
+            echo "::warning::mobile sync dispatch failed — Mobile Release Engineer should run sync-mobile.yml manually for ${{ github.ref_name }}"
+
   # Image published -> tell the Deployment Lead a promote is ready. No deploy
   # happens here; the Deployment Lead owns the actual upgrade (AUT-1847).
   notify:
@@ -55,7 +87,7 @@ jobs:
         run: |
           curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
             -H "Content-Type: application/json" \
-            -d "{\"channel\":\"ops\",\"title\":\"AutoBrain image published v${{ steps.ver.outputs.version }} — ready to promote\",\"description\":\"CI published new images. Deployment Lead: run the Upgrade instances workflow to deploy Demo -> Default -> Hosted via the upgrade path (AUT-1847).\",\"color\":\"0x95A5A6\",\"author\":\"Deployment Lead\",\"fields\":[{\"name\":\"Version\",\"value\":\"${{ steps.ver.outputs.version }}\",\"inline\":true},{\"name\":\"Trigger\",\"value\":\"image-publish\",\"inline\":true},{\"name\":\"Deploy\",\"value\":\"https://github.com/${{ github.repository }}/actions/workflows/deploy-instances.yml\",\"inline\":false}]}"
+            -d "{\"channel\":\"ops\",\"title\":\"AutoBrain v${{ steps.ver.outputs.version }} published — promote both engineers\",\"description\":\"New version deployed to registry. Mobile Release Engineer: confirm mobile app updated + published (sync-mobile.yml). Deployment Lead: run Upgrade instances to roll out Demo -> test -> Default -> test -> Hosted -> test (AUT-1847 / AUT-1905).\",\"color\":\"0x95A5A6\",\"author\":\"Deployment Lead\",\"fields\":[{\"name\":\"Version\",\"value\":\"${{ steps.ver.outputs.version }}\",\"inline\":true},{\"name\":\"Mobile\",\"value\":\"sync-mobile.yml dispatched\",\"inline\":true},{\"name\":\"Deploy path\",\"value\":\"Demo→test→Default→test→Hosted→test\",\"inline\":false},{\"name\":\"Upgrade\",\"value\":\"https://github.com/${{ github.repository }}/actions/workflows/deploy-instances.yml\",\"inline\":false}]}"
 
   # Deployment Lead triggers this after the image is published. Runs the upgrade
   # path and reports health to Discord `#status`.
