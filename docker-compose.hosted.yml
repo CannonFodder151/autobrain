@@ -148,6 +148,12 @@ services:
       REGO_LOOKUP_API_KEY_FILE: /run/secrets/rego_lookup_api_key
       MARKET_DATA_URL: ${MARKET_DATA_URL:-http://ai:8000}
       MARKET_DATA_API_KEY_FILE: /run/secrets/market_data_api_key
+      # AUT-1858: petrol price map (AUT-1813) state keys — default/hosted only.
+      # Set in the Portainer stack env (EP5); never in repo. WA FuelWatch = no key.
+      # Plain ${VAR:-} (not *_FILE): optional sources may be absent w/o breaking boot.
+      NSW_FUELCHECK_API_KEY: ${NSW_FUELCHECK_API_KEY:-}
+      QLD_FUEL_PRICES_CONSUMER_TOKEN: ${QLD_FUEL_PRICES_CONSUMER_TOKEN:-}
+      VIC_SERVO_SAVER_API_KEY: ${VIC_SERVO_SAVER_API_KEY:-}
       AI_GATEWAY_API_KEY_FILE: /run/secrets/ai_gateway_api_key
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@autobrain.io}
       ADMIN_DISPLAY_NAME: AutoBrain Admin
@@ -271,6 +277,11 @@ services:
       <<: *router-env
       AI_GATEWAY_API_KEY_FILE: /run/secrets/ai_gateway_api_key
       API_KEY_FILE: /run/secrets/market_data_api_key
+      # AUT-1858: market-data container runs the petrol price normaliser (AUT-1817);
+      # it reads these from env. Default/hosted only (see backend notes).
+      NSW_FUELCHECK_API_KEY: ${NSW_FUELCHECK_API_KEY:-}
+      QLD_FUEL_PRICES_CONSUMER_TOKEN: ${QLD_FUEL_PRICES_CONSUMER_TOKEN:-}
+      VIC_SERVO_SAVER_API_KEY: ${VIC_SERVO_SAVER_API_KEY:-}
     <<: *secrets
     expose:
       - "8000"
@@ -286,6 +297,11 @@ services:
       <<: [*db-env, *core-env, *router-env]
       PYTHONPATH: /app
       SECRET_KEY_FILE: /run/secrets/backend_secret_key
+      # AUT-1858: petrol price map keys — present on all Python service homes so
+      # the normaliser (AUT-1817) can read them wherever it is scheduled.
+      NSW_FUELCHECK_API_KEY: ${NSW_FUELCHECK_API_KEY:-}
+      QLD_FUEL_PRICES_CONSUMER_TOKEN: ${QLD_FUEL_PRICES_CONSUMER_TOKEN:-}
+      VIC_SERVO_SAVER_API_KEY: ${VIC_SERVO_SAVER_API_KEY:-}
     <<: *secrets
     depends_on:
       postgres:
