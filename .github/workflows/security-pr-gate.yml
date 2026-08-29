@@ -1,0 +1,144 @@
+# AUT-1746: x64 jobs (gitleaks, trivy config, pip-audit) dispatch to the bare
+# x64 self-hosted runner; the flutter pub-audit job uses the vm2 x64 runner
+# (AUT-1798/AUT-1802). This is the missing PR/push-time security gate called for
+# in AUT-1746: a pre-merge gate that blocks on findings so the CVEs /
+# misconfigurations from the review cannot recur silently.
+name: Security — PR gate (secrets, IaC, deps, flutter)
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Never let two runs of the same ref race; newest wins (same pattern as the
+# other security workflows).
+concurrency:
+  group: security-pr-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # (2) gitleaks detect on every PR — block on findings (AUT-1746).
+  # Runs gitleaks directly (not the gitleaks-action) so the gate depends only on
+  # the checked-out `.gitleaks.toml` config, not on extra tokens/SARIF perms.
+  gitleaks:
+    name: Gitleaks — secret detection
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -sfL https://github.com/gitleaks/gitleaks/releases/download/v8.18.1/gitleaks_8.18.1_linux_x64.tar.gz \
+            | tar xz -C "$HOME/.local/bin" gitleaks
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Gitleaks detect — fail on any finding
+        run: |
+          set -euo pipefail
+          # Whole-repo scan with the repo-root `.gitleaks.toml` (vendored default
+          # ruleset + AutoBrain allowlist of known non-secret fixtures). Exits
+          # non-zero on any real finding → blocks the PR.
+          gitleaks detect --source=. --config=.gitleaks.toml --redact --exit-code 1
+
+  # (4) trivy config (misconfig) on every Dockerfile build target (AUT-1746).
+  # Fails on HIGH/CRITICAL misconfig. NOTE: trivy 0.74 has no docker-compose
+  # misconfig scanner, and `docker compose config` is stricter than the runtime
+  # (it false-errors on the working dev/hosted stacks), so compose misconfig is
+  # NOT structurally gated here. Compose-referenced images (postgres, minio,
+  # 9router) are still covered by the existing trivy-image-scan.yml +
+  # security-scan.yml pin/image guards. Revisit when trivy ships compose support.
+  trivy-config:
+    name: Trivy config — Dockerfile misconfig
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install trivy
+        run: |
+          # Self-hosted runners may run as a non-root user; /usr/local/bin is
+          # not writable there (trivy-image-scan.yml sidesteps this via the
+          # trivy-action). Install to a user-writable bin and put it on PATH.
+          mkdir -p "$HOME/.local/bin"
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sh -s -- -b "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: trivy config — Dockerfile build targets (HIGH/CRITICAL, exit 1)
+        run: |
+          set -euo pipefail
+          fail=0
+          for f in \
+            docker/frontend/Dockerfile \
+            docker/backend/Dockerfile \
+            docker/ai/Dockerfile \
+            docker/worker/Dockerfile \
+            market-data/Dockerfile; do
+            echo "==> trivy config $f"
+            trivy config --severity HIGH,CRITICAL --exit-code 1 "$f" || fail=1
+          done
+          exit $fail
+
+  # (3) pip-audit on requirements.txt — extend the existing PR-time gate to cover
+  # market-data too (the dockerhub-publish pip-audit-gate only covers backend+ai).
+  pip-audit:
+    name: pip-audit — python dependency CVEs
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pip-audit
+        run: |
+          python3 -m pip --version 2>/dev/null || \
+            curl -sS https://bootstrap.pypa.io/get-pip.py | PIP_BREAK_SYSTEM_PACKAGES=1 python3 -
+          PIP_BREAK_SYSTEM_PACKAGES=1 python3 -m pip install --quiet pip-audit
+      - name: Fail on known-vuln pinned deps
+        run: |
+          set -euo pipefail
+          # backend/ and ai/ share pins (fastapi, pydantic, ...); dedupe so
+          # pip-audit scans each package once (avoid the duplicate-line reject).
+          # market-data is a separate tree and is audited on its own.
+          TMPREQ="$(mktemp)"
+          cat backend/requirements.txt ai/requirements.txt | sort -u > "$TMPREQ"
+          python3 -m pip_audit --disable-pip --no-deps -r "$TMPREQ"
+          rm -f "$TMPREQ"
+          python3 -m pip_audit --disable-pip --no-deps -r market-data/requirements.txt
+
+  # (5) dart pub audit on the frontend (requires the Flutter toolchain).
+  flutter-audit:
+    name: Flutter — pub audit
+    runs-on: [self-hosted, linux, x64, vm2]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: dart pub audit (frontend)
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          flutter pub get
+          # `flutter pub audit` was removed; the canonical Dart/Flutter audit
+          # subcommand is `dart pub audit` (per AUT-1746 recommendation).
+          dart pub audit
+
+  report-status:
+    name: Report gate result to Discord #status
+    if: always()
+    needs: [gitleaks, trivy-config, pip-audit, flutter-audit]
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - name: Report to Discord #status
+        env:
+          RESULT: ${{ needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.flutter-audit.result == 'success' && 'clean' || 'findings' }}
+          COLOR: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.flutter-audit.result == 'success') && '0x57F287' || '0xED4245' }}
+          TITLE: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.flutter-audit.result == 'success') && 'PR security gate clean' || 'PR security gate found issues' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
+            -H "Content-Type: application/json" \
+            -d "$(jq -nc --arg c status --arg t "$TITLE" --arg col "$COLOR" --arg u "$RUN_URL" \
+              '{channel:$c,title:$t,description:"AUT-1746 PR gate: gitleaks + trivy config + pip-audit + flutter pub audit.",color:$col,author:"Security Scan",fields:[{name:"Scope",value:"secrets, IaC, python, flutter",inline:true},{name:"Run",value:$u,inline:true}]}')"
