@@ -1,0 +1,60 @@
+# AUT-1847: automatically upgrade the Demo → Default → Hosted instances using the
+# documented upgrade path (Portainer stack redeploy via `scripts/upgrade-instances.sh`)
+# once the images for a release have been built and published.
+#
+# - `dockerhub-publish.yml` publishes `:latest` (Demo/Default backend/ai) + `:default`
+#   frontend; `build-hosted.yml` publishes `:hosted` (Hosted).
+# - This workflow fires after EITHER completes successfully, so every merged change
+#   reaches all three tiers without a manual redeploy. Manual dispatch available.
+#
+# Promotion order + per-tier health gating is enforced inside the script (AUT-107);
+# a tier that fails health blocks promotion to the next tier.
+name: Upgrade instances (Demo → Default → Hosted)
+
+on:
+  workflow_run:
+    workflows:
+      - Publish images to Docker Hub
+      - Build hosted images (multi-arch)
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: Why (e.g. manual upgrade path test)
+        required: false
+        default: manual dispatch
+
+concurrency:
+  group: upgrade-instances
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  upgrade:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    runs-on: [self-hosted, linux, x64, vm2]
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Upgrade all instances along the upgrade path
+        env:
+          PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+          PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+        run: ./scripts/upgrade-instances.sh
+
+      - name: Report status to Discord
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            COLOR=0x57F287; STATE=Upgraded
+          else
+            COLOR=0xED4245; STATE=FAILED
+          fi
+          curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
+            -H "Content-Type: application/json" \
+            -d "{\"channel\":\"status\",\"title\":\"AutoBrain instances upgrade — $STATE\",\"description\":\"Demo -> Default -> Hosted redeploy via the upgrade path (AUT-1847).\",\"color\":\"$COLOR\",\"author\":\"Deployment Lead\",\"fields\":[{\"name\":\"Trigger\",\"value\":\"${{ github.event_name }}\",\"inline\":true},{\"name\":\"State\",\"value\":\"$STATE\",\"inline\":true},{\"name\":\"Run\",\"value\":\"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\",\"inline\":false}]}"

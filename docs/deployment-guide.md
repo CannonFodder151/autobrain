@@ -113,32 +113,53 @@ Services:
 - AI gateway: http://localhost:8001/docs
 - MinIO console: http://localhost:9001
 
-## Deploy (hosted)
+## Deploy (hosted) — automated via the upgrade path (AUT-1847)
 
-**Always use the GitHub Actions runner on the Oracle VM** — do NOT build
-hosted images on a local machine. The `build-hosted.yml` workflow dispatch
-builds multi-arch images on the self-hosted runners (x64 + ARM64 on the
-Oracle VM) and pushes them to ghcr.io with the `:hosted` tag. The ARM64
-images are built natively on the VM, avoiding cross-architecture pulls.
+**Always use the GitHub Actions runner on the Oracle VM** to build hosted
+images (do NOT build locally). The `build-hosted.yml` workflow (on every merge
+to `main`, or via `workflow_dispatch`) builds multi-arch images on the
+self-hosted runners (x64 + ARM64 on the Oracle VM) and pushes them to ghcr.io
+with the `:hosted` tag. The ARM64 images are built natively on the VM.
 
-1. Trigger `build-hosted.yml` via workflow_dispatch on GitHub:
-   - tag: `hosted`
-   - api_base_url: `https://hosted.autobrainservice.app/api/v1`
-   - ws_base_url: `wss://hosted.autobrainservice.app/ws`
-2. Wait for the workflow to complete (auto-bump → build amd64/arm64 → manifest).
-3. Update the Portainer stack (AutoBrain-Hosted, EP5) via the API to pull the
-   new images (`pullImage:true`). This pulls the freshly built `:hosted` images
-   from ghcr.io and recreates changed services (AUT-372). The frontend has a
-   static IP, so npm keeps working.
+After `build-hosted.yml` (or `dockerhub-publish.yml` for Demo/Default)
+completes, the **`deploy-instances.yml` workflow runs automatically** and pulls
+the new images into every tier through the upgrade path:
+
+1. `scripts/upgrade-instances.sh` redeploys each Portainer stack in promotion
+   order (Demo → Default → Hosted) via `PUT /api/stacks/{id}?endpointId={ep}`
+   with `pullImage`, preserving the stack env and volumes (`Prune: false`).
+2. Each tier is health-checked (`/health`) before the next is promoted; a failed
+   tier stops the rollout (AUT-107).
+3. DB migrations run on backend boot, so a redeploy is a full upgrade.
+4. `scripts/prune-images.sh` drops dangling images on EP2/EP5 after success.
 
 ```bash
-# Or, for local Docker Hub images (demo/default tiers only):
-./scripts/publish-images.sh latest
+# Manual run (any tier ordering / verification override):
+./scripts/upgrade-instances.sh                       # promote all tiers
+UPGRADE_DRY_RUN=1 ./scripts/upgrade-instances.sh     # resolve + health only
+UPGRADE_TIERS="autobrain-hosted|5|https://hosted.autobrainservice.app/health|" \
+  ./scripts/upgrade-instances.sh                     # Hosted only
 ```
 
 Portainer stack updates pull images and recreate changed services (AUT-372).
 This is intended so CI-published images reach the tier, and it is safe for the
 frontend because the stack pins a static IP.
+
+Prerequisites for the Portainer API path to work (verified before relying on the
+automated upgrade):
+
+- The Portainer agent on each endpoint must accept container start operations
+  against the host Docker Engine. **HostED (EP5, Oracle VM) is currently blocked:
+  its agent (2.39.5) sends a request body to `POST /containers/{id}/start` that
+  Docker 29.6.1 rejects, and the agent's `/opt` bind is read-only, so redeploys
+  leave containers in `created` state.** Assign the HostED infra repair to the
+  Deployment team (agent upgrade to a 2.45-compatible version, or fall back to
+  SSH `docker compose up -d` on the Oracle VM) — see AUT-1847.
+- The HostED Portainer stack env must carry the required non-secret vars
+  (`POSTGRES_USER`, `POSTGRES_DB`) and the Paperclip identity
+  (`PAPERCLIP_API_KEY`, `CI_TRIAGE_WEBHOOK_SECRET`). `docker-compose.hosted.yml`
+  now defaults the DB vars so a redeploy never fails at interpolation even if
+  the env is incomplete.
 
 ### Nginx Proxy Manager + the hosted frontend (AUT-372)
 

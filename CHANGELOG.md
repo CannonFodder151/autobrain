@@ -9,6 +9,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
 
+## [Unreleased]
+
+### Added
+- **Auto-upgrade instances via the upgrade path (AUT-1847):** new
+  `scripts/upgrade-instances.sh` redeploys the Demo → Default → Hosted Portainer
+  stacks in promotion order (pullImage, health-gated) so merged builds reach all
+  tiers automatically; `deploy-instances.yml` runs it on image-publish success.
+
+### Fixed
+- **Hosted redeploy could never succeed (AUT-1847):** `docker-compose.hosted.yml`
+  required `POSTGRES_USER`/`POSTGRES_DB` via `${VAR:?...}`; a stack env missing
+  them failed compose interpolation. Now defaulted to `autobrain`, so a redeploy
+  can never fail at interpolation.
+
+
 
 
 

@@ -22,8 +22,11 @@ x-secrets: &secrets
 x-db-env: &db-env
   ENVIRONMENT: production
   POSTGRES_HOST: postgres
-  POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be set}
-  POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB must be set}
+  # Defaults (AUT-1847): the required vars must survive a redeploy even if the
+  # Portainer stack env is incomplete, otherwise compose interpolation fails and
+  # the hosted stack can never update. The secret itself stays a *_FILE bind.
+  POSTGRES_USER: ${POSTGRES_USER:-autobrain}
+  POSTGRES_DB: ${POSTGRES_DB:-autobrain}
   POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
 
 x-core-env: &core-env
