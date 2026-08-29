@@ -69,6 +69,39 @@ async def require_ai_rate_limit(user: User = Depends(get_current_user)) -> User:
     return user
 
 
+async def require_ai_rate_limit_best_effort(
+    user: User = Depends(get_current_user),
+) -> User:
+    """Like ``require_ai_rate_limit`` but fail-OPEN when Redis is unreachable.
+
+    Used by endpoints whose core operation is deterministic (storing an uploaded
+    receipt / running the local tesseract+rule OCR path). A Redis blip must not
+    drop that work — only the 9Router enrichment is AI-spend, and ``enhance``
+    already falls back to the baseline when the router is down. Still returns
+    429 when the user is genuinely over budget (Redis up).
+    """
+    now = int(time.time())
+    try:
+        burst = await _bump(
+            f"ai:burst:{user.id}:{now // settings.AI_RATE_WINDOW_SECONDS}",
+            settings.AI_RATE_WINDOW_SECONDS * _bump_ttl_multiplier,
+        )
+        day = await _bump(
+            f"ai:day:{user.id}:{now // 86400}",
+            86400 * _bump_ttl_multiplier,
+        )
+    except Exception as exc:
+        logger.warning("ai_rate_limit_unavailable_best_effort", error=str(exc))
+        return user
+    if burst > settings.AI_RATE_LIMIT_PER_WINDOW or day > settings.AI_DAILY_LIMIT:
+        raise HTTPException(
+            status_code=429,
+            detail="AI request limit reached. Try again later.",
+            headers={"Retry-After": str(settings.AI_RATE_WINDOW_SECONDS)},
+        )
+    return user
+
+
 async def require_rego_rate_limit(user: User = Depends(get_current_user)) -> User:
     """Reject with 429 when the user exceeds the rego-lookup hourly cap.
 

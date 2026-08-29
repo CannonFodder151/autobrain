@@ -22,6 +22,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- **Shared-vehicle fuel-up "did not save" (AUT-1884):** a best-effort background
+  due-notification task dispatched after a fuel-up save ran via Celery; when the
+  broker (Redis) was momentarily down the dispatch raised AFTER the row was
+  committed and surfaced a 500 to the client — so the fill-up persisted but the
+  app read it as a failed save. The dispatch is now fire-and-forget
+  (`fire_and_forget`) and never masks a committed write. The same safe dispatch
+  is now used for receipt OCR + service-due sweeps everywhere `.delay()` was
+  called directly.
+- **Receipt OCR "did not work" (AUT-1884):** the fuel-receipt upload endpoint
+  gated the entire operation (including deterministic photo storage) behind the
+  AI rate limiter, which fails closed to 503 when Redis is unavailable — so a
+  Redis blip dropped the receipt and skipped OCR entirely. The limiter is now
+  best-effort (fail-open) for the storage/deterministic-OCR path; 9Router
+  enrichment still falls back to the rule-based baseline. Tesseract OCR also
+  now pre-processes receipt photos (grayscale -> 2x upscale -> Otsu threshold)
+  for far more reliable text extraction from phone photos.
+- **Camera did not open on receipt upload (AUT-1884):** the "Scan fuel receipt"
+  button now opens the device camera directly (ImagePicker) with a "Choose from
+  files" gallery option, instead of always launching the file picker.
+
 ## [0.3.167] - 2026-08-29
 
 ## [0.3.166] - 2026-08-29

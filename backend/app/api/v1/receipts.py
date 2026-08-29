@@ -17,7 +17,7 @@ from app.models.receipt import ExtractedItem, Receipt
 from app.models.service import ServiceItem, ServiceRecord
 from app.models.user import User
 from app.schemas.receipt import ApplyToServiceRequest, ReceiptOut
-from app.workers.tasks import process_receipt, queue_embedding
+from app.workers.tasks import fire_and_forget, process_receipt, queue_embedding
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/vehicles/{vehicle_id}/receipts", tags=["receipts"])
@@ -66,7 +66,7 @@ async def upload_receipt(
     db.add(receipt)
     await db.commit()
     await db.refresh(receipt)
-    process_receipt.delay(receipt.id)
+    fire_and_forget(process_receipt, receipt.id)
     return receipt
 
 @router.get("", response_model=list[ReceiptOut])

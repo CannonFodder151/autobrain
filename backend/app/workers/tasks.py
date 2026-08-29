@@ -303,6 +303,21 @@ def queue_embedding(entity_type: str, entity_id: str) -> None:
         logger.exception("embed_queue_failed")
 
 
+def fire_and_forget(task, *args, **kwargs) -> None:
+    """Dispatch a Celery task without ever letting a broker failure (e.g. Redis
+    down during a worker/restart) break or 500 the caller.
+
+    Several write paths commit their work first and then fan out a best-effort
+    background task (due-notifications, async receipt OCR). A broker blip there
+    must not turn a successful write into a 500 that the client reads as a
+    failed save (AUT-1884). The committed row is the source of truth.
+    """
+    try:
+        task.delay(*args, **kwargs)
+    except Exception:
+        logger.exception("celery_dispatch_failed", task=getattr(task, "name", repr(task)))
+
+
 def _pdf_text(data: bytes) -> str:
     """Extract text from a PDF for downstream OCR/AI extraction."""
     try:

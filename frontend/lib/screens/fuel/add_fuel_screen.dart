@@ -1,11 +1,14 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/api_client.dart';
 import '../../core/auth_state.dart';
 import '../../core/download.dart';
 import '../../core/models.dart';
+
+enum _ReceiptSource { camera, files }
 
 class AddFuelScreen extends StatefulWidget {
   const AddFuelScreen({super.key, required this.vehicleId, this.existing});
@@ -69,28 +72,71 @@ class _AddFuelScreenState extends State<AddFuelScreen> {
   }
 
   Future<void> _scanReceipt() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
+    final source = await showModalBottomSheet<_ReceiptSource>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt_outlined),
+              title: const Text('Take a photo'),
+              onTap: () => Navigator.pop(ctx, _ReceiptSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from files'),
+              onTap: () => Navigator.pop(ctx, _ReceiptSource.files),
+            ),
+          ],
+        ),
+      ),
     );
-    if (result == null || result.files.isEmpty) return;
-    final picked = result.files.single;
-    final List<int> bytes;
-    if (picked.bytes != null) {
-      bytes = picked.bytes!;
-    } else if (picked.path != null) {
-      bytes = await readLocalFile(picked.path!);
+    if (source == null) return;
+
+    List<int>? bytes;
+    String? name;
+    String? contentType;
+    if (source == _ReceiptSource.camera) {
+      final photo = await ImagePicker().pickImage(
+        source: ImageSource.camera,
+        imageQuality: 85,
+      );
+      if (photo == null) return;
+      bytes = await photo.readAsBytes();
+      name = photo.name.isNotEmpty
+          ? photo.name
+          : 'receipt_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      contentType = photo.mimeType;
     } else {
-      return;
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
+      );
+      if (result == null || result.files.isEmpty) return;
+      final picked = result.files.single;
+      if (picked.bytes != null) {
+        bytes = picked.bytes!;
+      } else if (picked.path != null) {
+        bytes = await readLocalFile(picked.path!);
+      } else {
+        return;
+      }
+      name = picked.name;
     }
+    if (bytes == null || name == null) return;
+    await _uploadReceipt(bytes, name, contentType);
+  }
+
+  Future<void> _uploadReceipt(List<int> bytes, String name, String? contentType) async {
     setState(() => _scanning = true);
     final api = context.read<AuthState>().api;
     try {
       final data = await api.upload(
         '/vehicles/${widget.vehicleId}/fuel/receipt?ai=true',
         bytes,
-        picked.name,
-        mimeForFile(picked.name),
+        name,
+        contentType ?? mimeForFile(name),
       ) as Map<String, dynamic>;
       final litres = data['litres'];
       final price = data['price_per_litre'];
@@ -102,7 +148,6 @@ class _AddFuelScreenState extends State<AddFuelScreen> {
         if (price != null) _price.text = double.parse(price.toString()).toString();
         if (total != null) _total.text = double.parse(total.toString()).toStringAsFixed(2);
         if (day != null && day.toString().isNotEmpty) _date.text = day.toString().substring(0, 10);
-        if (!_calcTotalAvailable()) {}
       });
       _price.text = double.parse(_price.text.isEmpty ? '0' : _price.text).toString();
       if (mounted) {
@@ -123,8 +168,6 @@ class _AddFuelScreenState extends State<AddFuelScreen> {
       if (mounted) setState(() => _scanning = false);
     }
   }
-
-  bool _calcTotalAvailable() => false; // no-op kept for clarity
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;

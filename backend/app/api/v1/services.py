@@ -195,8 +195,8 @@ async def delete_service(
     await db.delete(record)
     await db.commit()
     if had_due:
-        from app.workers.tasks import check_due_notifications
-        check_due_notifications.delay(vehicle_id)
+        from app.workers.tasks import fire_and_forget, check_due_notifications
+        fire_and_forget(check_due_notifications, vehicle_id)
 
 
 @router.post("/predict", response_model=ServicePredictionResponse)
