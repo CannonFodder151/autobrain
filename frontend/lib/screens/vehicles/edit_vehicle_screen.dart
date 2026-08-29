@@ -42,6 +42,7 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
     final v = widget.vehicle;
     _nickname = TextEditingController(text: v.nickname);
     _rego = TextEditingController(text: v.rego ?? '');
+    _state = v.regoState ?? 'VIC';
     _vin = TextEditingController(text: v.vin ?? '');
     _make = TextEditingController(text: v.make ?? '');
     _model = TextEditingController(text: v.model ?? '');
@@ -108,6 +109,7 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
       await api.patch('/vehicles/${widget.vehicle.id}', {
         'nickname': _nickname.text,
         'rego': _rego.text.isEmpty ? null : _rego.text,
+        'rego_state': _state,
         'vin': _vin.text.isEmpty ? null : _vin.text,
         'make': _make.text.isEmpty ? null : _make.text,
         'model': _model.text.isEmpty ? null : _model.text,

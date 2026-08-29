@@ -28,6 +28,7 @@ class Vehicle(Base):
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), index=True)
     nickname: Mapped[str] = mapped_column(String(120), nullable=False)
     rego: Mapped[str | None] = mapped_column(String(20), index=True)
+    rego_state: Mapped[str | None] = mapped_column(String(8), index=True)
     vin: Mapped[str | None] = mapped_column(String(17))
     make: Mapped[str | None] = mapped_column(String(80))
     model: Mapped[str | None] = mapped_column(String(80))

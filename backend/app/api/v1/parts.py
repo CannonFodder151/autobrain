@@ -160,7 +160,7 @@ async def reorder_suggestions(
     return suggestions
 
 
-@router.get("/sca-lookup", response_model=dict[str, Any])
+@router.post("/sca-lookup", response_model=dict[str, Any])
 async def sca_lookup(
     vehicle_id: str,
     req: SCALookupRequest,
@@ -180,9 +180,15 @@ async def sca_lookup(
     make = req.make or vehicle.make or ""
     model = req.model or vehicle.model or ""
     year = req.year or vehicle.year
+    # AUT-1903: drive the lookup from the selected vehicle's plate + state
+    # instead of a user-typed rego. Caller-supplied values override, but the
+    # vehicle's stored rego_state/rego are the defaults so the lookup is
+    # consistent with the vehicle the user has selected.
+    rego = req.rego or vehicle.rego
+    state = req.state or vehicle.rego_state
 
     result = await parts_guide.lookup_sca_parts(
-        db, rego=req.rego, state=req.state, make=make, model=model,
+        db, rego=rego, state=state, make=make, model=model,
         year=year, vehicle_type=vehicle.vehicle_type, refresh=req.refresh,
     )
     return result

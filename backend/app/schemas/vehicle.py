@@ -33,6 +33,7 @@ class RegoLookupResponse(BaseModel):
 class VehicleCreate(BaseModel):
     nickname: str = Field(min_length=1, max_length=120)
     rego: str | None = None
+    rego_state: str | None = None
     vin: str | None = None
     make: str | None = None
     model: str | None = None
@@ -52,6 +53,7 @@ class VehicleCreate(BaseModel):
 class VehicleUpdate(BaseModel):
     nickname: str | None = None
     rego: str | None = None
+    rego_state: str | None = None
     vin: str | None = None
     make: str | None = None
     model: str | None = None
@@ -72,6 +74,7 @@ class VehicleOut(BaseModel):
     id: str
     nickname: str
     rego: str | None
+    rego_state: str | None = None
     vin: str | None
     make: str | None
     model: str | None
