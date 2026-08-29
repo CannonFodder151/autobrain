@@ -35,12 +35,13 @@ x-backend-base: &backend-base
     # works out of the box. Self-hosters default to hosted=false (pay $20/yr).
     SOCIAL_FEDERATION_HUB_URL: ${SOCIAL_FEDERATION_HUB_URL:-https://hub.autobrainservice.app}
     SOCIAL_FEDERATION_HOSTED: ${SOCIAL_FEDERATION_HOSTED:-false}
-    # AUT-1858: petrol price map (AUT-1813) state API keys — injected for
-    # default/hosted ONLY. Self-hosters bring their own keys (see docs/petrol-price-map.md).
-    # WA FuelWatch needs no key; empty = that state's source is disabled.
-    NSW_FUELCHECK_API_KEY: ${NSW_FUELCHECK_API_KEY:-}
-    QLD_FUEL_PRICES_CONSUMER_TOKEN: ${QLD_FUEL_PRICES_CONSUMER_TOKEN:-}
-    VIC_SERVO_SAVER_API_KEY: ${VIC_SERVO_SAVER_API_KEY:-}
+    # AUT-1858: petrol price map (NSW Fuel API, AUT-1813) — injected for
+    # Default/Hosted ONLY. Self-hosters bring their own keys via .env (see
+    # docs/petrol-price-map.md). WA FuelWatch needs no key; QLD/VIC are planned
+    # phases of AUT-1813. Empty key/secret + FUEL_NSW_ENABLED=false = disabled.
+    FUEL_NSW_API_KEY: ${FUEL_NSW_API_KEY:-}
+    FUEL_NSW_API_SECRET: ${FUEL_NSW_API_SECRET:-}
+    FUEL_NSW_ENABLED: "true"
   depends_on:
     postgres:
       condition: service_healthy
@@ -145,14 +146,9 @@ services:
       - /ms-playwright
     env_file: .env
     environment:
-      AI_ROUTER_URL: ${AI_ROUTER_URL:-http://10.0.3.17:20128/v1}
+      AI_ROUTER_URL: ${AI_ROUTER_URL}
       AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:?AI_GATEWAY_API_KEY must be set (prod fails closed)}
       API_KEY: ${MARKET_DATA_API_KEY:-}
-      # AUT-1858: petrol price map state keys — see backend notes above. The
-      # market-data container runs the normaliser (AUT-1817) that reads these.
-      NSW_FUELCHECK_API_KEY: ${NSW_FUELCHECK_API_KEY:-}
-      QLD_FUEL_PRICES_CONSUMER_TOKEN: ${QLD_FUEL_PRICES_CONSUMER_TOKEN:-}
-      VIC_SERVO_SAVER_API_KEY: ${VIC_SERVO_SAVER_API_KEY:-}
     expose:
       - "8000"
       - "8001"

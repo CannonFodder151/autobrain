@@ -26,8 +26,10 @@ seed() {
             -e 's/^REDIS_PASSWORD$/redis_password/' \
             -e 's/^AI_ROUTER_API_KEY$/ai_router_api_key/' \
             -e 's/^AI_GATEWAY_API_KEY$/ai_gateway_api_key/' \
-            -e 's/^MARKET_DATA_API_KEY$/market_data_api_key/' \
             -e 's/^REGO_LOOKUP_API_KEY$/rego_lookup_api_key/' \
+            -e 's/^MARKET_DATA_API_KEY$/market_data_api_key/' \
+            -e 's/^FUEL_NSW_API_KEY$/fuel_nsw_api_key/' \
+            -e 's/^FUEL_NSW_API_SECRET$/fuel_nsw_api_secret/' \
             -e 's/^ADMIN_INITIAL_PASSWORD$/admin_initial_password/' \
             -e 's/^ADMIN_API_KEY$/admin_api_key/' \
             -e 's/^SMTP_USERNAME$/smtp_username/' \
