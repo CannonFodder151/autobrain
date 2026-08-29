@@ -9,7 +9,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
 
+
 ## [Unreleased]
+
+## [0.3.157] - 2026-08-29
 
 ### Added
 - **Upgrade path for instances (AUT-1847):** new
