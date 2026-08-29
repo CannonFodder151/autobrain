@@ -9,6 +9,7 @@ class Vehicle {
   final String vehicleType;
   final bool isPrimary, clubReg;
   final bool autoSuggestService;
+  final String? fuelType;
   final bool isShared;
   final String? sharedBy;
 
@@ -31,6 +32,7 @@ class Vehicle {
     this.isPrimary = false,
     this.clubReg = false,
     this.autoSuggestService = false,
+    this.fuelType,
     this.isShared = false,
     this.sharedBy,
   });
@@ -93,6 +95,7 @@ class Vehicle {
         isPrimary: (j['is_primary'] as bool?) ?? false,
         clubReg: (j['club_reg'] as bool?) ?? false,
         autoSuggestService: (j['auto_suggest_service'] as bool?) ?? false,
+        fuelType: (j['fuel_type'] as String?),
         isShared: (j['is_shared'] as bool?) ?? false,
         sharedBy: j['shared_by'] as String?,
       );

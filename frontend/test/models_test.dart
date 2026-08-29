@@ -67,6 +67,20 @@ void main() {
     expect(Vehicle.byId([], 'missing'), isNull);
   });
 
+  test('Vehicle.fromJson parses fuel_type (AUT-1819)', () {
+    final v = Vehicle.fromJson(const {
+      'id': 'f1',
+      'nickname': 'The Whip',
+      'fuel_type': '98',
+    });
+    expect(v.fuelType, '98');
+  });
+
+  test('Vehicle.fromJson tolerates missing fuel_type (AUT-1819)', () {
+    final v = Vehicle.fromJson(const {'id': 'f2', 'nickname': 'No Fuel'});
+    expect(v.fuelType, isNull);
+  });
+
   test('Vehicle.fromJson parses share fields', () {
     final v = Vehicle.fromJson(const {
       'id': 's1',
