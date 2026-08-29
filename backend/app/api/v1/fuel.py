@@ -22,6 +22,8 @@ from app.schemas.fuel import (
     FuelStats,
     FuelPriceQuote,
     SevenElevenPricesOut,
+    StationFuelPricesOut,
+    StationFuelPrice,
 )
 from app.services.export import export_fuel_csv, export_zip
 from app.services import fuel as fuel_svc
@@ -260,4 +262,41 @@ async def seven_eleven_prices(
         fuel_type=fuel_type,
         region=use_region,
         quotes=[FuelPriceQuote(**q) for q in quotes],
+    )
+
+
+@router.get("/prices/7eleven/station", response_model=StationFuelPricesOut)
+async def seven_eleven_station_prices(
+    vehicle_id: str,
+    name: str = Query(description="Station name to look up (e.g. '11-Seven Swanston')"),
+    lat: float = Query(description="Device latitude, used to pick the nearest matching store"),
+    lng: float = Query(description="Device longitude"),
+    max_km: float = Query(default=5.0, gt=0, le=50, description="How far a matching store may be from (lat,lng)"),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> StationFuelPricesOut:
+    """All fuel-type prices at one 7-Eleven station (Servo Spy map detail sheet).
+
+    Deterministic + keyless (projectzerothree.info snapshot). On upstream failure
+    the service serves its last good cached snapshot; if none, 503 so the client
+    falls back to the marker's single-fuel-type price rather than inventing data.
+    """
+    await get_accessible_vehicle(db, vehicle_id, user)
+    station = await fp_svc.station_prices(lat, lng, name, max_km=max_km)
+    if station is None:
+        raise HTTPException(status_code=404, detail="No matching 7-Eleven station found near you")
+    as_of = None
+    if fp_svc._cache["fetched_at"]:
+        as_of = datetime.fromtimestamp(fp_svc._cache["fetched_at"], timezone.utc).isoformat()
+    return StationFuelPricesOut(
+        source="projectzerothree",
+        as_of=as_of,
+        station=station["station"],
+        suburb=station["suburb"],
+        state=station["state"],
+        postcode=station["postcode"],
+        address=station["address"],
+        lat=station["lat"],
+        lng=station["lng"],
+        prices=[StationFuelPrice(**p) for p in station["prices"]],
     )

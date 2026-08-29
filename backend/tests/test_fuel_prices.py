@@ -171,3 +171,30 @@ async def test_fetch_raises_when_cache_empty_and_upstream_fails() -> None:
     with mock.patch.object(fp_svc.httpx, "AsyncClient", _BoomClient):
         with pytest.raises(RuntimeError):
             await fp_svc.fetch_7eleven_prices(force=True)
+
+
+@pytest.mark.asyncio
+async def test_station_prices_groups_all_fuel_types(stub_fetch) -> None:
+    # "11-Seven Swanston" carries both U91 and E10 in the fixture; search from
+    # its own coords so it is the nearest match.
+    out = await fp_svc.station_prices(-37.8136, 144.9631, "11-Seven Swanston")
+    assert out is not None
+    types = {p["fuel_type"] for p in out["prices"]}
+    assert types == {"U91", "E10"}
+    by_type = {p["fuel_type"]: p["price_cpl"] for p in out["prices"]}
+    assert by_type["U91"] == 189.9
+    assert by_type["E10"] == 165.3
+    assert out["suburb"] == "Melbourne"
+
+
+@pytest.mark.asyncio
+async def test_station_prices_none_when_too_far(stub_fetch) -> None:
+    # Searching from Sydney for a Melbourne store with a 1km cap finds nothing.
+    out = await fp_svc.station_prices(-33.8688, 151.2093, "11-Seven Swanston", max_km=1.0)
+    assert out is None
+
+
+@pytest.mark.asyncio
+async def test_station_prices_none_on_unknown_name(stub_fetch) -> None:
+    out = await fp_svc.station_prices(-37.8136, 144.9631, "Nowhere Store")
+    assert out is None

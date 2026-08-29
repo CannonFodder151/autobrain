@@ -26,6 +26,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- **Servo Spy map (AUT-1820):** new "Servo Spy" feature tile showing nearby 7-Eleven stations on a map (theme-aware OSM/CartoDB tiles). Markers show the brand price for the selected fuel type, the cheapest station is highlighted green, and the device location is shown as a blue dot with permission handling (falls back to region-cheapest when location is off). Tapping a station opens a bottom sheet with its address, **all** fuel-type prices, and a **Navigate** button that opens the device maps app. Backend adds `GET /vehicles/{id}/fuel/prices/7eleven/station` returning every fuel type at a station (deterministic, no AI).
+
 ### Changed
 - Parts lookup (AUT-1903): the Supercheap Auto lookup is now driven by the selected vehicle's stored rego state + plate instead of a free-text rego field — users no longer type a rego. Tapping the lookup action opens a dedicated results page listing all parts sorted and normalised by AI (deterministic fallback first, 9Router tidy), with the option to jump to "Add part" pre-filled or bulk-add selected parts to inventory. Vehicles gain a `rego_state` field (persisted at add/edit) backing this. Backend `POST /vehicles/{id}/parts/sca-lookup` now prefers the caller-supplied state and falls back to the vehicle's `rego_state`/plate.
 

@@ -171,3 +171,53 @@ async def nearest_7eleven(
             scored.append(_quote(p, distance_km=d))
     scored.sort(key=lambda q: q["distance_km"])
     return scored[:max_results]
+
+
+async def station_prices(
+    lat: float, lng: float, name: str, max_km: float = 5.0
+) -> dict | None:
+    """All fuel-type prices at the 7-Eleven station nearest (lat,lng) whose name
+    matches `name`. Returns None when no station matches within `max_km`.
+
+    Deterministic: indexes the 'All' region block (every store's best price per
+    fuel type) and groups by store. No AI, no network beyond the cached snapshot.
+    """
+    data = await fetch_7eleven_prices()
+    block = _region_block(data, "All") or _region_block(data, "VIC")
+    if not block:
+        return None
+    needle = name.strip().lower()
+    best: dict | None = None
+    best_d = float("inf")
+    for p in block.get("prices", []):
+        if (p.get("name") or "").strip().lower() != needle:
+            continue
+        try:
+            plat, plng = float(p["lat"]), float(p["lng"])
+        except (TypeError, ValueError, KeyError):
+            continue
+        d = _haversine_km(lat, lng, plat, plng)
+        if d > max_km:
+            continue
+        if best is None or d < best_d:
+            best = {
+                "station": str(p.get("name", "")),
+                "suburb": str(p.get("suburb", "")),
+                "state": str(p.get("state", "")),
+                "postcode": str(p.get("postcode", "")),
+                "lat": plat,
+                "lng": plng,
+                "prices": {},
+            }
+            best_d = d
+        if best is not None and d == best_d:
+            best["prices"][str(p.get("type", ""))] = _normalise_price(p.get("price"))
+    if best is None:
+        return None
+    best["address"] = f"{best['suburb']} {best['state']} {best['postcode']}".strip()
+    best["prices"] = [
+        {"fuel_type": ft, "price_cpl": best["prices"][ft]}
+        for ft in FUEL_TYPES
+        if ft in best["prices"]
+    ]
+    return best

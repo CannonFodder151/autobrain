@@ -92,3 +92,29 @@ class SevenElevenPricesOut(BaseModel):
     fuel_type: str
     region: str | None = None
     quotes: list[FuelPriceQuote]
+
+
+class StationFuelPrice(BaseModel):
+    """One fuel type's price at a station (cents per litre)."""
+
+    fuel_type: str
+    price_cpl: float | None
+
+
+class StationFuelPricesOut(BaseModel):
+    """All fuel-type prices at a single 7-Eleven station (map detail sheet).
+
+    Deterministic, no AI: the upstream snapshot already carries every store's
+    best price per fuel type, so we just index into it by station name + coords.
+    """
+
+    source: str = "projectzerothree"
+    as_of: str | None = None  # when we fetched/cached (ISO)
+    station: str
+    suburb: str
+    state: str
+    postcode: str
+    address: str
+    lat: float | None = None
+    lng: float | None = None
+    prices: list[StationFuelPrice]

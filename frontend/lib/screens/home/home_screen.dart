@@ -12,6 +12,7 @@ import '../analytics/analytics_screen.dart';
 import '../../community_garage/community_garage_screen.dart';
 import '../diagnostics/diagnostics_screen.dart';
 import '../fuel/fuel_screen.dart';
+import '../fuel/servo_spy_map_screen.dart';
 import '../logbook/logbook_screen.dart';
 import '../mods/mods_screen.dart';
 import '../notifications/notifications_screen.dart';
@@ -317,6 +318,8 @@ class _FeatureGrid extends StatelessWidget {
           ServiceListScreen(vehicleId: vehicle.id)),
       _Feature('Fuel', Icons.local_gas_station, const Color(0xFF16A34A),
           FuelScreen(vehicleId: vehicle.id)),
+      _Feature('Servo Spy', Icons.map, const Color(0xFF0EA5E9),
+          ServoSpyMapScreen(vehicleId: vehicle.id)),
       if (!vehicle.clubReg)
         _Feature('Logbook', Icons.book, const Color(0xFF0D9488),
             LogbookScreen(vehicleId: vehicle.id)),

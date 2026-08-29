@@ -26,6 +26,23 @@ curl "$API/v1/vehicles/$VID/fuel/prices/7eleven?region=VIC&fuel_type=U91"
 curl "$API/v1/vehicles/$VID/fuel/prices/7eleven?lat=-37.81&lng=144.96&fuel_type=U91&max_km=50"
 ```
 
+### Station detail (Servo Spy map sheet)
+
+`GET /api/v1/vehicles/{vehicle_id}/fuel/prices/7eleven/station`
+
+Returns **every** fuel type's price at the single 7-Eleven station nearest
+`(lat,lng)` whose `name` matches. Used by the Servo Spy map bottom sheet so a
+tapped marker can show all prices, not just the one fuel type of the marker.
+
+| Param | Meaning |
+|-------|---------|
+| `name` | Station name to look up (e.g. `11-Seven Swanston`). |
+| `lat`, `lng` | Device location, used to pick the nearest matching store. |
+| `max_km` | How far a matching store may be from `(lat,lng)` (default 5, ≤50). |
+
+`404` when no station matches within `max_km`; `503` when the snapshot is
+unavailable and uncached (client falls back to the marker's single price).
+
 The frontend calls this when a user selects *fuel at 7-Eleven* and pre-fills
 `price_per_litre` from the returned `price_cpl` (cents per litre).
 
@@ -50,5 +67,5 @@ The frontend calls this when a user selects *fuel at 7-Eleven* and pre-fills
 
 - `backend/app/services/fuel_prices.py` — client, parse, haversine, cache.
 - `backend/app/schemas/fuel.py` — `FuelPriceQuote`, `SevenElevenPricesOut`.
-- `backend/app/api/v1/fuel.py` — `/prices/7eleven` route.
+- `backend/app/api/v1/fuel.py` — `/prices/7eleven` + `/prices/7eleven/station` routes.
 - `backend/tests/test_fuel_prices.py` — offline parse/geo tests (no network).
