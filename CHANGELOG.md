@@ -24,7 +24,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.172] - 2026-08-29
 
 ### Changed
 - **Stack/docker-compose (AUT-1763):** added a changelog entry for app/docker compose changes merged to `main` without one (changelog-gate now passes on push-triggered publishes). Covered compose changes since `55a0d98`: PostgreSQL bumped pg16→pg17 (digest-pinned) + trivy image gate; MinIO image pinned by digest + trivy scan; Redis auth now required in `docker-compose.prod.yml`; `AI_ROUTER_URL` canonicalized to `http://10.0.3.17:20128/v1`; market-data/AI Chromium runs non-root with sandbox + `shm_size`; 9Router `:20128` exposed on `0.0.0.0` with host-firewall allow-list; `init-minio.sh` no longer crash-loops backend when MinIO creds are absent; `autobrain-dongle-server` added to the hosted stack; CI triage receiver `CI_TRIAGE_*`/`PAPERCLIP_*` env wired in; petrol-price map keys scoped to default/hosted only; redeploy now pulls images with a Deployment-Lead-owned upgrade path.
