@@ -105,7 +105,10 @@ jobs:
           rm -f "$TMPREQ"
           python3 -m pip_audit --disable-pip --no-deps -r market-data/requirements.txt
 
-  # (5) dart pub audit on the frontend (requires the Flutter toolchain).
+  # (5) Dependency vulnerability audit on the frontend (requires the Flutter
+  #     toolchain). `flutter pub audit` / `dart pub audit` were removed from the
+  #     Dart stable SDK (Dart 3.13 / Flutter 3.47), so we audit pubspec.lock with
+  #     Google's OSV-Scanner instead (AUT-1746 follow-up, AUT-1859 PR gate).
   flutter-audit:
     name: Flutter — pub audit
     runs-on: [self-hosted, linux, x64, vm2]
@@ -116,14 +119,21 @@ jobs:
         with:
           channel: stable
           cache: true
-      - name: dart pub audit (frontend)
+      - name: Resolve dependencies
+        working-directory: frontend
+        run: flutter pub get
+      - name: Install OSV-Scanner
+        run: |
+          set -euo pipefail
+          OSV_VER="1.9.2"
+          curl -sfL "https://github.com/google/osv-scanner/releases/download/v${OSV_VER}/osv-scanner_linux_amd64" \
+            -o /usr/local/bin/osv-scanner
+          chmod +x /usr/local/bin/osv-scanner
+      - name: OSV-Scanner dependency audit (frontend)
         working-directory: frontend
         run: |
           set -euo pipefail
-          flutter pub get
-          # `flutter pub audit` was removed; the canonical Dart/Flutter audit
-          # subcommand is `dart pub audit` (per AUT-1746 recommendation).
-          dart pub audit
+          osv-scanner --format=table pubspec.lock
 
   report-status:
     name: Report gate result to Discord #status
@@ -141,4 +151,4 @@ jobs:
           curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
             -H "Content-Type: application/json" \
             -d "$(jq -nc --arg c status --arg t "$TITLE" --arg col "$COLOR" --arg u "$RUN_URL" \
-              '{channel:$c,title:$t,description:"AUT-1746 PR gate: gitleaks + trivy config + pip-audit + flutter pub audit.",color:$col,author:"Security Scan",fields:[{name:"Scope",value:"secrets, IaC, python, flutter",inline:true},{name:"Run",value:$u,inline:true}]}')"
+              '{channel:$c,title:$t,description:"AUT-1746 PR gate: gitleaks + trivy config + pip-audit + flutter deps (osv-scanner).",color:$col,author:"Security Scan",fields:[{name:"Scope",value:"secrets, IaC, python, flutter",inline:true},{name:"Run",value:$u,inline:true}]}')"

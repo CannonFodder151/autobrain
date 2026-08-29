@@ -116,6 +116,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 - **Servo Spy filter safety (AUT-1821 follow-up):** the fuel-type dropdown now seeds with the static defaults before the `GET /fuel/types` response lands, so the filter sheet remains valid if the vehicle list request fails first — no empty-dropdown crash.
+- **CI (AUT-1859 / PR #345):** `Security — PR gate` Flutter audit step no longer hard-fails with `Could not find a subcommand named "audit"`. `flutter pub audit` / `dart pub audit` were removed from the Dart stable SDK (Dart 3.13 / Flutter 3.47), so the step now audits `frontend/pubspec.lock` with Google's OSV-Scanner (installed from its GitHub release, matching the existing gitleaks download pattern). Fails on real vulnerabilities, passes when none are found.
 
 ## [0.3.177] - 2026-08-29
 
