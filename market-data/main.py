@@ -12,6 +12,7 @@ and its own mace-windu channel; reaching it is tracked as a follow-up.
 """
 
 import hmac
+import ipaddress
 import os
 
 import httpx
@@ -38,11 +39,37 @@ RATE_LIMIT_IP = os.getenv("RATE_LIMIT_IP", "30/minute")
 RATE_LIMIT_KEY = os.getenv("RATE_LIMIT_KEY", "120/minute")
 
 
-# AUT-1326: rate-limit on socket remote address only. This service is
-# internal-only (compose `expose`, no reverse proxy in front), so any
-# X-Forwarded-For header is caller-controlled and spoofable; never trust it
-# as a limit key. If a trusted proxy is ever added, key off its connection
-# address explicitly instead of re-introducing an XFF branch here.
+# X-Forwarded-For is trusted only when the direct socket peer is in this
+# allowlist (comma-separated IPs/CIDRs, e.g. the reverse-proxy docker subnet).
+# Unset/empty (the default): the socket address is always used and client XFF
+# headers are ignored, so the per-IP limit cannot be evaded by spoofing.
+# Mirrors the rego-lookup-api pattern (AUT-1741).
+TRUSTED_NETWORKS = [
+    ipaddress.ip_network(p.strip(), strict=False)
+    for p in os.getenv("TRUSTED_PROXIES", "").split(",")
+    if p.strip()
+]
+
+
+def _client_ip(request: Request) -> str:
+    peer = get_remote_address(request)
+    fwd = request.headers.get("x-forwarded-for")
+    if TRUSTED_NETWORKS and fwd:
+        try:
+            peer_ip = ipaddress.ip_address(peer)
+        except ValueError:
+            return peer
+        if any(peer_ip in net for net in TRUSTED_NETWORKS):
+            # Rightmost non-trusted hop is the real client; proxies overwrite
+            # rather than strip, so walk the chain backwards.
+            for hop in reversed([h.strip() for h in fwd.split(",")]):
+                try:
+                    hop_ip = ipaddress.ip_address(hop)
+                except ValueError:
+                    return hop
+                if not any(hop_ip in net for net in TRUSTED_NETWORKS):
+                    return hop
+    return peer
 
 
 def _api_key(request: Request) -> str:
@@ -74,7 +101,7 @@ def health():
 
 
 @app.post("/search", response_model=SearchResponse)
-@limiter.limit(RATE_LIMIT_IP, key_func=get_remote_address)
+@limiter.limit(RATE_LIMIT_IP, key_func=_client_ip)
 @limiter.limit(RATE_LIMIT_KEY, key_func=_api_key)
 async def search(request: Request, response: Response, req: SearchRequest, x_api_key: str | None = Header(None)):
     if not API_KEY or not hmac.compare_digest(x_api_key or "", API_KEY):
@@ -108,7 +135,7 @@ class SCALookupResponse(BaseModel):
 
 
 @app.post("/sca-parts", response_model=SCALookupResponse)
-@limiter.limit(RATE_LIMIT_IP, key_func=get_remote_address)
+@limiter.limit(RATE_LIMIT_IP, key_func=_client_ip)
 @limiter.limit(RATE_LIMIT_KEY, key_func=_api_key)
 async def sca_parts(request: Request, response: Response,
                     req: SCALookupRequest, x_api_key: str | None = Header(None)):
