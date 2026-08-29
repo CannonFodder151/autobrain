@@ -74,13 +74,20 @@ fetch_stack() {
 # $3=json body file with {StackFileContent, Env, Prune}.
 redeploy() {
   local id="$1" ep="$2" body="$3"
-  curl -sk -X PUT "${AUTH[@]}" -H "Content-Type: application/json" \
-    --data-binary "@$body" \
-    "$API/stacks/$id?endpointId=$ep" \
-    | python3 -c "import sys,json
-d=json.load(sys.stdin) if sys.stdin.read().strip() else {}
-print('ok' if (isinstance(d,dict) and (d.get('Status') in (1,2,3,4,5) or 'Id' in d)) else ('ERR '+str(d)[:300]))" 2>/dev/null \
-    || echo "unknown-response"
+  local resp
+  resp="$(curl -sk -X PUT "${AUTH[@]}" -H "Content-Type: application/json" --data-binary "@$body" "$API/stacks/$id?endpointId=$ep")"
+  printf '%s' "$resp" | python3 -c "import sys,json
+raw=sys.stdin.read().strip()
+try:
+  d=json.loads(raw)
+except Exception:
+  print('ERR non-json: '+raw[:200])
+else:
+  s=d.get('Status') if isinstance(d,dict) else None
+  if isinstance(d,dict) and (s in (1,2,3,4,5,6) or 'Id' in d):
+    print('ok (status=%s)' % s)
+  else:
+    print('ERR '+str(d)[:200])"
 }
 
 wait_health() {
