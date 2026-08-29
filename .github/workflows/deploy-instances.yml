@@ -1,18 +1,21 @@
-# AUT-1847: upgrade the Demo → Default → Hosted instances using the documented
-# upgrade path (Portainer stack redeploy via `scripts/upgrade-instances.sh`).
+# AUT-1905: fully-automated deployment on a new version.
 #
-# Board direction (AUT-1847): deployment is NOT blind/automatic. CI publishes
-# the images (`dockerhub-publish.yml` → Docker Hub `:latest`/`:default`;
-# `build-hosted.yml` → GHCR `:hosted`), then this workflow:
-#   1. on image-publish success -> a `notify` job posts a Discord `#ops` embed
-#      telling the Deployment Lead a new image is published and ready to promote;
-#   2. the Deployment Lead runs the `upgrade` job (workflow_dispatch) which
-#      redeploys Demo → Default → Hosted via the upgrade path and reports health.
+# Board direction (AUT-1847) previously required the Deployment Lead to manually
+# dispatch the upgrade after an image publish. AUT-1905 flips that: when a new
+# version is deployed (images published), BOTH release tracks fire automatically:
+#   1. Mobile Release Engineer track — the `trigger-mobile` job below dispatches
+#      sync-mobile.yml on image-publish success; sync-mobile.yml mirrors
+#      frontend -> autobrain-mobile and dispatches release-mobile.yml to publish
+#      the store build. The mobile app is updated + published hands-free.
+#   2. Deployment Engineer track (this file) — on image-publish success, redeploy
+#      Demo -> test -> Default -> test -> Hosted -> test via scripts/upgrade-instances.sh,
+#      health-gating every tier so a failed tier blocks promotion (no blind roll).
 #
-# The promotion order + per-tier health gating live inside the script (AUT-107);
-# a tier that fails health blocks promotion to the next tier.
+# Safety: the staged upgrade is still gated by per-tier health checks; a tier that
+# fails health stops the whole chain rather than promoting. `workflow_dispatch`
+# remains as a manual escape hatch (re-run / partial promote).
 
-name: Upgrade instances (Demo → Default → Hosted)
+name: Upgrade instances (Demo -> Default -> Hosted)
 
 on:
   workflow_run:
@@ -23,7 +26,7 @@ on:
   workflow_dispatch:
     inputs:
       reason:
-        description: Why (e.g. manual upgrade-path run by the Deployment Lead)
+        description: Why (manual re-run of the upgrade path; auto path is default)
         required: false
         default: manual dispatch
 
@@ -35,13 +38,18 @@ permissions:
   contents: read
 
 jobs:
-  # Image published -> tell the Deployment Lead a promote is ready. No deploy
-  # happens here; the Deployment Lead owns the actual upgrade (AUT-1847).
-  notify:
+  # Auto path: image published -> trigger the Deployment Engineer's staged rollout
+  # and report it. Manual path (workflow_dispatch) reuses the exact same job.
+  upgrade:
     if: >-
-      github.event_name == 'workflow_run' &&
-      github.event.workflow_run.conclusion == 'success'
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     runs-on: [self-hosted, linux, x64, vm2]
+    timeout-minutes: 90
+    env:
+      PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+      PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+      APP_VERSION: ""
     steps:
       - uses: actions/checkout@v4
 
@@ -50,26 +58,16 @@ jobs:
         run: |
           V="$(grep -E 'APP_VERSION: str' backend/app/core/config.py | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/')"
           echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "APP_VERSION=$V" >> "$GITHUB_ENV"
 
-      - name: Notify Deployment Lead (image published, promote via upgrade path)
+      - name: Notify Deployment Engineer (auto-upgrade triggered)
+        if: github.event_name == 'workflow_run'
         run: |
           curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
             -H "Content-Type: application/json" \
-            -d "{\"channel\":\"ops\",\"title\":\"AutoBrain image published v${{ steps.ver.outputs.version }} — ready to promote\",\"description\":\"CI published new images. Deployment Lead: run the Upgrade instances workflow to deploy Demo -> Default -> Hosted via the upgrade path (AUT-1847).\",\"color\":\"0x95A5A6\",\"author\":\"Deployment Lead\",\"fields\":[{\"name\":\"Version\",\"value\":\"${{ steps.ver.outputs.version }}\",\"inline\":true},{\"name\":\"Trigger\",\"value\":\"image-publish\",\"inline\":true},{\"name\":\"Deploy\",\"value\":\"https://github.com/${{ github.repository }}/actions/workflows/deploy-instances.yml\",\"inline\":false}]}"
+            -d "{\"channel\":\"ops\",\"title\":\"AutoBrain v${{ steps.ver.outputs.version }} published — auto-deploying Demo -> Default -> Hosted\",\"description\":\"Image published. Deployment Engineer track triggered automatically (AUT-1905). Mobile track (sync-mobile.yml -> release-mobile.yml) runs in parallel. Per-tier health gate blocks promotion on failure.\",\"color\":\"0x95A5A6\",\"author\":\"Deployment Engineer\",\"fields\":[{\"name\":\"Version\",\"value\":\"${{ steps.ver.outputs.version }}\",\"inline\":true},{\"name\":\"Trigger\",\"value\":\"image-publish\",\"inline\":true},{\"name\":\"Mobile\",\"value\":\"auto (sync-mobile)\",\"inline\":true}]}"
 
-  # Deployment Lead triggers this after the image is published. Runs the upgrade
-  # path and reports health to Discord `#status`.
-  upgrade:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: [self-hosted, linux, x64, vm2]
-    timeout-minutes: 90
-    env:
-      PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
-      PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Upgrade all instances along the upgrade path
+      - name: Upgrade all instances along the upgrade path (Demo -> test -> Default -> test -> Hosted -> test)
         run: ./scripts/upgrade-instances.sh
 
       - name: Report status to Discord
@@ -82,4 +80,57 @@ jobs:
           fi
           curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
             -H "Content-Type: application/json" \
-            -d "{\"channel\":\"status\",\"title\":\"AutoBrain instances upgrade — $STATE\",\"description\":\"Demo -> Default -> Hosted redeploy via the upgrade path (AUT-1847).\",\"color\":\"$COLOR\",\"author\":\"Deployment Lead\",\"fields\":[{\"name\":\"Trigger\",\"value\":\"${{ github.event_name }}\",\"inline\":true},{\"name\":\"State\",\"value\":\"$STATE\",\"inline\":true},{\"name\":\"Run\",\"value\":\"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\",\"inline\":false}]}"
+            -d "{\"channel\":\"status\",\"title\":\"AutoBrain instances upgrade — $STATE (AUT-1905)\",\"description\":\"Demo -> Default -> Hosted redeploy via the upgrade path with per-tier health gating.\",\"color\":\"$COLOR\",\"author\":\"Deployment Engineer\",\"fields\":[{\"name\":\"Trigger\",\"value\":\"${{ github.event_name }}\",\"inline\":true},{\"name\":\"State\",\"value\":\"$STATE\",\"inline\":true},{\"name\":\"Run\",\"value\":\"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\",\"inline\":false}]}"
+
+  # Mobile Release Engineer track (AUT-1907): image published -> dispatch the
+  # mobile sync + release pipeline. Runs in parallel with the Deployment
+  # Engineer `upgrade` job (independent tracks). sync-mobile.yml mirrors
+  # frontend/lib + assets + version into autobrain-mobile, health-gates the
+  # synced tree with `flutter analyze`, then dispatches release-mobile.yml to
+  # publish the store build. The mobile app is updated + published hands-free.
+  #
+  # Concurrency: deploy-instances.yml fires once per image-publish workflow
+  # (Docker Hub + hosted), so two trigger-mobile runs can start near-simultaneously.
+  # Serialize with cancel-in-progress: false so the second waits for the first to
+  # finish and finds the mobile tree already synced (no-op dispatch, no double
+  # release) instead of cancelling a sync mid-push/release.
+  trigger-mobile:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    runs-on: [self-hosted, linux, x64, vm2]
+    timeout-minutes: 10
+    concurrency:
+      group: trigger-mobile
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ secrets.MOBILE_SYNC_TOKEN }}
+    steps:
+      - name: Checkout autobrain repo
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: ver
+        run: |
+          V="$(grep -E 'APP_VERSION: str' backend/app/core/config.py | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/')"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      - name: Notify Mobile Release Engineer (auto mobile-sync triggered)
+        if: github.event_name == 'workflow_run'
+        run: |
+          curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
+            -H "Content-Type: application/json" \
+            -d "{\"channel\":\"ops\",\"title\":\"AutoBrain v${{ steps.ver.outputs.version }} published — triggering mobile sync + release\",\"description\":\"Image published. Mobile Release Engineer track fired automatically (AUT-1907): deploy-instances.yml dispatches sync-mobile.yml, which syncs frontend -> autobrain-mobile and dispatches release-mobile.yml. Deployment Engineer track runs in parallel.\",\"color\":\"0x5865F2\",\"author\":\"Mobile Release Engineer\",\"fields\":[{\"name\":\"Version\",\"value\":\"${{ steps.ver.outputs.version }}\",\"inline\":true},{\"name\":\"Trigger\",\"value\":\"image-publish\",\"inline\":true},{\"name\":\"Mobile\",\"value\":\"sync-mobile -> release-mobile\",\"inline\":true}]}"
+
+      - name: Dispatch sync-mobile.yml (Mobile Release Engineer track)
+        run: |
+          set -euo pipefail
+          # sync-mobile.yml already serializes its own runs via the
+          # sync-mobile-${{ github.ref }} concurrency group, so a re-dispatch
+          # here is safe: the survivor always syncs main's latest lineage and
+          # produces a valid, analyzable tree (AUT-1099 / AUT-633).
+          gh workflow run sync-mobile.yml --repo "${{ github.repository }}" \
+            --ref "$(git rev-parse --abbrev-ref HEAD)"
+          echo "dispatched sync-mobile.yml for v${{ steps.ver.outputs.version }}"

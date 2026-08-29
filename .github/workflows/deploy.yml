@@ -1,0 +1,90 @@
+name: Deploy to instances (upgrade path)
+
+on:
+  workflow_call:
+    outputs:
+      deploy_status:
+        description: Overall deployment status
+    secrets:
+      PORTAINER_API_KEY:
+        required: true
+
+env:
+  PORTAINER_URL: https://portainer.nathanmartina.com
+  PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+
+jobs:
+  deploy-demo:
+    runs-on: ubuntu-latest
+    outputs:
+      status: ${{ job.status }}
+    steps:
+      - name: Update Demo stack (ID 73, EP 2)
+        run: |
+          set -euo pipefail
+          echo "Updating Demo stack..."
+          curl -sf -X PUT "$PORTAINER_URL/api/stacks/73?endpointId=2" \
+            -H "X-API-Key: $PORTAINER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d @/dev/stdin << 'EOF'
+          {"StackFileContent":"# AutoBrain DEMO stack - DO NOT EDIT MANUALLY - AUTO-DEPLOY\n$(curl -sf https://portainer.nathanmartina.com/api/stacks/73/file -H X-API-Key:$PORTAINER_API_KEY | jq -r '.StackFileContent' | sed 's/\\\\/\\/g')","Env":[],"Option":{"Prune":true},"AutoUpdate":{"type":1,"interval":"300s","forcePullImage":true,"forceRedeploy":true,"rollback":false}}
+          EOF
+          echo "Demo update triggered"
+
+  deploy-default:
+    runs-on: ubuntu-latest
+    needs: deploy-demo
+    outputs:
+      status: ${{ job.status }}
+    steps:
+      - name: Wait for Demo health check
+        run: |
+          set -euo pipefail
+          echo "Waiting for Demo to stabilize..."
+          for i in 1 2 3 4 5; do
+            if curl -sf https://demo.autobrainservice.app/health -o /dev/null 2>&1; then
+              echo "Demo healthy"
+              exit 0
+            fi
+            echo "Waiting..."
+            sleep 30
+          done
+          echo "Demo health check timed out - proceeding anyway"
+      - name: Update Default stack (ID 68, EP 2)
+        run: |
+          set -euo pipefail
+          echo "Updating Default stack..."
+          curl -sf -X PUT "$PORTAINER_URL/api/stacks/68?endpointId=2" \
+            -H "X-API-Key: $PORTAINER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"StackFileContent":"","Env":[],"Option":{"Prune":true}}'
+          echo "Default update triggered"
+
+  deploy-hosted:
+    runs-on: ubuntu-latest
+    needs: deploy-default
+    outputs:
+      status: ${{ job.status }}
+    steps:
+      - name: Wait for Default health check
+        run: |
+          set -euo pipefail
+          echo "Waiting for Default to stabilize..."
+          for i in 1 2 3 4 5; do
+            if curl -sf https://default.autobrainservice.app/health -o /dev/null 2>&1; then
+              echo "Default healthy"
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "Default health check timed out - proceeding anyway"
+      - name: Update Hosted stack (ID 83, EP 5)
+        if: env.HOSTED_SECRETS_READY == 'true'
+        run: |
+          set -euo pipefail
+          echo "Updating Hosted stack..."
+          curl -sf -X PUT "$PORTAINER_URL/api/stacks/83?endpointId=5" \
+            -H "X-API-Key: $PORTAINER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"StackFileContent":"","Env":[],"Option":{"Prune":true}}'
+          echo "Hosted update triggered"

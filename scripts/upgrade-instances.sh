@@ -40,6 +40,10 @@ HEALTH_TIMEOUT_SEC="${HEALTH_TIMEOUT_SEC:-600}"
 SCRATCH="${PAPERCLIP_RUN_SCRATCH_DIR:-${TMPDIR:-/tmp}}"
 mkdir -p "$SCRATCH"
 
+# Version for Discord reporting (best-effort; never fatal if unreadable).
+APP_VERSION="${APP_VERSION:-$(grep -E 'APP_VERSION: str' backend/app/core/config.py 2>/dev/null \
+  | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/' || true)}"
+
 AUTH=(-H "X-API-Key: $PORTAINER_API_KEY")
 API="$PORTAINER_URL/api"
 
@@ -54,6 +58,27 @@ TIERS="${UPGRADE_TIERS:-$DEFAULT_TIERS}"
 
 log() { echo "$(date -u +%FT%TZ) [upgrade] $*"; }
 fail() { echo "$(date -u +%FT%TZ) [upgrade] ERROR: $*" >&2; }
+
+# Per-tier test result reporting (AUT-1905). $1=tier $2=state $3=endpoint
+discord_report() {
+  local tier="$1" state="$2" ep="$3" color
+  case "$state" in
+    promoted) color=0x57F287 ;;
+    unhealthy) color=0xED4245 ;;
+    skipped)   color=0xFEE75C ;;
+    *)         color=0x95A5A6 ;;
+  esac
+  curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
+    -H "Content-Type: application/json" --data "{
+      \"channel\":\"status\",\"title\":\"AutoBrain v${APP_VERSION:-(unknown)} — ${tier} ${state}\",
+      \"description\":\"Per-tier health gate (Demo -> Default -> Hosted upgrade path, AUT-1905).\",\"color\":\"${color}\",
+      \"author\":\"Deployment Engineer\",
+      \"fields\":[
+        {\"name\":\"Tier\",\"value\":\"${tier}\",\"inline\":true},
+        {\"name\":\"Endpoint\",\"value\":\"${ep}\",\"inline\":true},
+        {\"name\":\"State\",\"value\":\"${state}\",\"inline\":true}
+      ]}" >/dev/null 2>&1 || true
+}
 
 # Resolve a stack id + endpoint by exact name (Portainer 2.45 ignores ?name=).
 resolve_stack() {
@@ -118,7 +143,7 @@ while IFS= read -r line; do
 
   if [ "$DRY_RUN" = "1" ]; then
     log "   dry-run: skip redeploy"
-    if wait_health "$health"; then log "   healthy ($health)"; else fail "   UNHEALTHY ($health)"; OVERALL=1; fi
+    if wait_health "$health"; then log "   healthy ($health)"; discord_report "$name" promoted "$health"; else fail "   UNHEALTHY ($health)"; discord_report "$name" unhealthy "$health"; OVERALL=1; fi
     continue
   fi
 
@@ -149,8 +174,10 @@ PY
 
   if wait_health "$health"; then
     log "   healthy ($health) — promote"
+    discord_report "$name" promoted "$health"
   else
     fail "   UNHEALTHY ($health) after redeploy — STOPPING promotion"
+    discord_report "$name" unhealthy "$health"
     OVERALL=1
     break
   fi
