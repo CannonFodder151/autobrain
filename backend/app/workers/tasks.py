@@ -295,6 +295,48 @@ def backfill_entity_embeddings() -> None:
 
     _run(_backfill())
 
+
+@shared_task
+def poll_nsw_fuel_prices() -> None:
+    """Daily NSW Fuel API poll (AUT-1813).
+
+    Honours Nathan's constraint: poll once per day per instance (enforced via
+    the per-instance poll-state row), never the API quota (2500/month → ~81/day
+    headroom at one/day/instance). Falls back silently to the existing cache
+    on any transport/HTTP error — the map keeps serving cached prices.
+    """
+    from datetime import datetime, timezone
+
+    from app.core.config import settings
+    from app.services import fuel_prices as fuel_svc
+
+    async def _poll():
+        if not fuel_svc.enabled():
+            logger.info("nsw_fuel_poll_skipped", reason="disabled_or_unconfigured")
+            return
+        instance_id = settings.INSTANCE_ID or _hostname()
+        async with SessionLocal() as db:
+            if not await fuel_svc.should_poll(db, instance_id, "NSW"):
+                logger.info("nsw_fuel_poll_skipped", reason="already_polled_today", instance_id=instance_id)
+                return
+            try:
+                records = await fuel_svc.fetch_nsw_prices()
+            except Exception:
+                logger.exception("nsw_fuel_poll_failed", instance_id=instance_id)
+                return
+            count = await fuel_svc.store_nsw_prices(db, records)
+            await fuel_svc.mark_polled(db, instance_id, "NSW")
+            logger.info("nsw_fuel_poll_done", count=count, instance_id=instance_id)
+
+    _run(_poll())
+
+
+def _hostname() -> str:
+    import socket
+
+    return socket.gethostname()
+
+
 def queue_embedding(entity_type: str, entity_id: str) -> None:
     """Best-effort async embed trigger; a broker hiccup never breaks write paths."""
     try:

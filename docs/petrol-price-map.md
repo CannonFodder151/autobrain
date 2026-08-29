@@ -6,6 +6,17 @@ feed, normalises the responses into one schema (deterministic-first, no AI), and
 caches them; the frontend plots them. State feeds are enabled per-source and only
 poll when a key is configured (silent fallback to the last cached snapshot).
 
+## Status
+
+- Implemented: NSW. Source: Transport for NSW Fuel API (v2/fuel/prices),
+  Basic-auth key/secret (2500 calls/month quota).
+- Recorded: Nathan supplied the NSW key (2026-08-29). The live key is stored in
+  Outline (AutoBrain collection) and wired into the hosted stack via a secret
+  file mount. Never committed to the repo.
+
+Viability: 95/100 for NSW. Other states tracked below as "coming soon" pending a
+free feed.
+
 ## State feeds
 
 | State | Feed | Auth | Env var(s) |
@@ -18,6 +29,16 @@ poll when a key is configured (silent fallback to the last cached snapshot).
 WA needs no key. NSW is the only implemented source. QLD/VIC are planned phases
 of AUT-1813 — when wired, their keys follow the same `FUEL_<STATE>_*` convention
 and the same env-scoping rule below.
+
+## How it works (deterministic-first)
+
+- `backend/app/services/fuel_prices.py` polls the NSW feed and upserts one row
+  per (state, station_code, fuel_type) into `fuel_prices`.
+- `poll_nsw_fuel_prices` (celery beat, every 24h) is gated by
+  `fuel_price_poll_state` keyed by instance id -> at most one successful poll
+  per day per instance (Nathan's quota guard).
+- `GET /api/v1/fuel-prices?state=NSW` serves the cached snapshot (offline-safe;
+  serves the last good cache if a poll fails). No AI anywhere in this path.
 
 ## Canonical env var names (shared with the normaliser, AUT-1817)
 
@@ -54,6 +75,21 @@ repo: on Hosted they land in `/opt/autobrain/secrets` via
 `scripts/seed-secrets.sh` (which now maps `FUEL_NSW_API_KEY`/`FUEL_NSW_API_SECRET`),
 not in the compose file.
 
+## Credential handling (security)
+
+- FUEL_NSW_API_KEY / FUEL_NSW_API_SECRET are optional; FUEL_NSW_ENABLED
+  defaults to false so self-hosted instances never poll an external feed unless
+  they bring their own key.
+- Hosted stack scopes the key via the secret-file pattern (/opt/autobrain/secrets,
+  mounted read-only). See docs/security.md ("Secret-file pattern").
+- The live key is recorded in Outline; do not paste it into this file or a commit.
+
+## Storage schema
+
+fuel_prices: id, state, station_code, station_name, brand, address, lat, lon,
+fuel_type, price, currency(AUD), updated_at, fetched_at.
+fuel_price_poll_state: instance_id, state, last_poll_at (per-instance gate).
+
 ## Self-hosting: obtain + set the keys
 
 1. **WA** — nothing to do; FuelWatch is public.
@@ -80,3 +116,24 @@ and the default dev/EP6 stack, then runs `scripts/seed-secrets.sh <stack-env>`
 so they become `fuel_nsw_api_key` / `fuel_nsw_api_secret` under
 `/opt/autobrain/secrets`. The compose files reference them via `*_FILE`; they
 never appear in git or `docker inspect`.
+
+## Roadmap by state (free feed availability)
+
+| State | Free feed | Status |
+|-------|-----------|--------|
+| NSW | Yes (Fuel API, keyed) | Live |
+| WA | Yes (FuelWatch) | Planned |
+| QLD | Yes (QLD Gov) | Planned |
+| ACT | Yes (ACT fuel data) | Planned |
+| VIC | Servo Saver (pending) | Coming soon |
+| SA | No free feed | Blocked |
+| TAS | No free feed | Blocked |
+| NT | No free feed | Blocked |
+
+Marketing "coming soon" page (CMO, AUT-1857) lists NSW/WA/QLD/ACT as supported
+and SA/TAS/NT as coming soon.
+
+## Confidence
+
+95/100 for NSW. VIC depends on Servo Saver access; SA/TAS/NT need a paid feed
+before viability improves.

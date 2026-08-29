@@ -90,6 +90,18 @@ class Settings(BaseSettings):
     SEVEN_ELEVEN_CACHE_TTL_MINUTES: int = 60
     SEVEN_ELEVEN_USER_AGENT: str = "AutoBrain/1.0 (+https://autobrainservice.app)"
 
+    # Petrol price map (AUT-1813): NSW Fuel API (Transport for NSW).
+    # Disabled by default so self-hosted instances don't poll an external feed
+    # unless they bring their own key (hosted stack scopes keys to secret files).
+    FUEL_NSW_API_KEY: str = ""
+    FUEL_NSW_API_SECRET: str = ""
+    FUEL_NSW_API_URL: str = "https://api.transport.nsw.gov.au/v2/fuel/prices"
+    FUEL_NSW_ENABLED: bool = False
+    # Nathan: poll once per day per instance to stay inside the API quota.
+    FUEL_NSW_POLL_HOURS: int = 24
+    # Per-instance id so multiple AutoBrain instances each poll at most once/day.
+    INSTANCE_ID: str = ""
+
     # Bootstrap admin account (created on first boot if missing)
     ADMIN_EMAIL: str = ""
     ADMIN_DISPLAY_NAME: str = "AutoBrain Admin"

@@ -92,3 +92,21 @@ class SevenElevenPricesOut(BaseModel):
     fuel_type: str
     region: str | None = None
     quotes: list[FuelPriceQuote]
+
+
+class FuelPriceOut(BaseModel):
+    """A cached petrol price feed row, served to the price-map frontend."""
+
+    state: str
+    station_code: str
+    station_name: str | None = None
+    brand: str | None = None
+    address: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    fuel_type: str
+    price: float | None = None
+    currency: str = "AUD"
+    updated_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
