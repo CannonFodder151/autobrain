@@ -24,6 +24,7 @@ import '../settings/settings_screen.dart';
 import '../valuation/valuation_screen.dart';
 import '../vehicles/vehicle_list_screen.dart';
 import '../vehicles/vehicle_timeline_screen.dart';
+import '../servo_spy/servo_spy_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -337,6 +338,8 @@ class _FeatureGrid extends StatelessWidget {
       if (!kIsWeb)
         _Feature('OBD', Icons.settings_input_component, const Color(0xFF334155),
             ObdScreen(vehicleId: vehicle.id)),
+      const _Feature('Servo Spy', Icons.local_gas_station, Color(0xFFF59E0B),
+          ServoSpyScreen()),
       const _Feature('Community Garage', Icons.groups, Color(0xFF0D9488),
           CommunityGarageScreen()),
     ];
