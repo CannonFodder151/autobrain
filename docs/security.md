@@ -129,7 +129,17 @@ secrets exfiltration). It is restricted by source at the host firewall:
 - If the Portainer server egress IP ever changes, update the source in the
   `fw-keeper` container command and re-apply.
 
-### `9Router` AI router `:20128` (AUT-473, AUT-1754)
+### `9Router` AI router `:20128` (AUT-473, AUT-1754) — NOT internet-exposed
+
+**Classification: source-restricted, NOT internet-accessible.** This port is
+reachable only from the dev egress IP `122.199.30.128/32` and the internal
+docker subnet `172.18.0.0/16`. Every other source is dropped at the host
+firewall. Any security scan that reports `:20128` as "accessible from the
+internet" is a **false positive** — it is almost always because the scan was
+launched from `122.199.30.128` (the allow-listed dev egress IP / Portainer
+server egress), which is *supposed* to reach the port. "Open from the scanning
+host's public IP" ≠ "open from the internet." Do not file or escalate this as an
+internet-exposure finding; treat it as the intended allow-listed egress path.
 
 Unlike `:9001`, `:20128` is also consumed **internally** by the `backend`
 (`AI_ROUTER_URL=http://9router:20128/v1`), so the firewall must additionally
@@ -137,7 +147,8 @@ allow the internal docker subnet — a blanket `:20128` drop on `DOCKER-USER`
 silently breaks `backend → 9router` (SYN times out across the bridge).
 
 - Published `0.0.0.0:20128` (was `127.0.0.1`). Dev reaches
-  `http://152.69.188.133:20128/v1` from the allow-listed `122.199.30.128`.
+  `http://152.69.188.133:20128/v1` **only** from the allow-listed
+  `122.199.30.128`. From any other internet source the connection is dropped.
 - `DOCKER-USER` (forward/DNAT path), in this order:
   1. `--dport 20128 -s 172.18.0.0/16 -j ACCEPT` (internal docker subnet — required)
   2. `--dport 20128 -s 122.199.30.128 -j ACCEPT` (dev egress IP)
@@ -147,10 +158,18 @@ silently breaks `backend → 9router` (SYN times out across the bridge).
 - All four rules live in the `fw-keeper` container command (canonical rule
   source), re-asserted every 60s; they survive in kernel netfilter across a
   `fw-keeper` restart and are re-applied on host boot.
-- Verification note: the dev egress IP is the only *external* allow-source; the
-  internal subnet is allow-listed only so the docker-bridge traffic that
-  `DOCKER-USER` sees is not dropped. OCI-level `:20128` ingress restriction is
-  pending (same as `:9001`).
+- Verification: probe `:20128` from **multiple, non-allow-listed** external
+  nodes (e.g. check-host.net probe nodes, like the `:9001` check below). They
+  must time out / refuse — proving the port is not internet-reachable. A probe
+  from `122.199.30.128` answers (by design); that single allow-listed success is
+  what a naive single-source scanner mislabels as "internet-accessible". The dev
+  egress IP is the only *external* allow-source; the internal subnet is
+  allow-listed only so the docker-bridge traffic that `DOCKER-USER` sees is not
+  dropped.
+- Defense-in-depth pending: OCI-level Security List ingress rule to restrict
+  `tcp/20128` to `122.199.30.128/32` (and the internal subnet) at the VCN layer
+  (same as `:9001`). Needs OCI console access; the host `fw-keeper` rule above
+  is the current enforcement.
 
 ## Data protection
 
