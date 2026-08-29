@@ -39,5 +39,9 @@ celery_app.conf.update(
             "task": "app.workers.tasks.purge_stale_pending_accounts",
             "schedule": 60 * 60 * 6,
         },
+        "ingest-fuel-prices": {
+            "task": "app.workers.tasks.ingest_fuel_prices",
+            "schedule": 60 * 60 * 6,
+        },
     },
 )

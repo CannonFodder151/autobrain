@@ -90,6 +90,20 @@ class Settings(BaseSettings):
     SEVEN_ELEVEN_CACHE_TTL_MINUTES: int = 60
     SEVEN_ELEVEN_USER_AGENT: str = "AutoBrain/1.0 (+https://autobrainservice.app)"
 
+    # Servo Spy fuel-price pipeline (AUT-1817): deterministic ingest of public
+    # open-data feeds. WA FuelWatch = public, no key. NSW FuelCheck = free API key
+    # from api.transport.nsw.gov.au (injected via FUEL_NSW_API_KEY_FILE in prod).
+    # QLD Fuel Prices = public open data. VIC/SA/TAS/NT need a paid aggregator
+    # (Informed Sources / MotorMouth) — later premium enhancement, not MVP.
+    FUEL_NSW_API_KEY: str = ""
+    FUEL_NSW_API_SECRET: str = ""
+    FUEL_NSW_ENABLED: bool = False
+    FUEL_QLD_API_URL: str = "https://www.fuelpricesqld.com.au/"
+    FUEL_WA_SITES_URL: str = "https://industryprd.fuelwatch.wa.gov.au/api/sites"
+    FUEL_WA_PRICES_URL: str = "https://industryprd.fuelwatch.wa.gov.au/api/report/weekly-retail-prices"
+    FUEL_NSW_URL: str = "https://api.transport.nsw.gov.au/v1/fuel"
+    FUEL_INGEST_USER_AGENT: str = "AutoBrain Servo Spy (+https://autobrainservice.app)"
+
     # Bootstrap admin account (created on first boot if missing)
     ADMIN_EMAIL: str = ""
     ADMIN_DISPLAY_NAME: str = "AutoBrain Admin"
