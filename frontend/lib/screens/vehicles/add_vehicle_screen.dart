@@ -119,6 +119,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
       await api.post('/vehicles', {
         'nickname': _nickname.text,
         'rego': _rego.text.isEmpty ? null : _rego.text,
+        'rego_state': _state,
         'vin': _vin.text.isEmpty ? null : _vin.text,
         'make': _make.text.isEmpty ? null : _make.text,
         'model': _model.text.isEmpty ? null : _model.text,

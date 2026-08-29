@@ -4,10 +4,11 @@ import 'package:provider/provider.dart';
 import '../../core/auth_state.dart';
 import '../../core/models.dart';
 import 'add_part_screen.dart';
+import 'sca_lookup_results_screen.dart';
 
 class PartsScreen extends StatefulWidget {
-  const PartsScreen({super.key, required this.vehicleId});
-  final String vehicleId;
+  const PartsScreen({super.key, required this.vehicle});
+  final Vehicle vehicle;
 
   @override
   State<PartsScreen> createState() => _PartsScreenState();
@@ -16,8 +17,6 @@ class PartsScreen extends StatefulWidget {
 class _PartsScreenState extends State<PartsScreen> {
   List<Part> _parts = const [];
   bool _loading = true;
-  final _regoCtrl = TextEditingController();
-  final _stateCtrl = TextEditingController(text: 'VIC');
 
   @override
   void initState() {
@@ -27,8 +26,6 @@ class _PartsScreenState extends State<PartsScreen> {
 
   @override
   void dispose() {
-    _regoCtrl.dispose();
-    _stateCtrl.dispose();
     super.dispose();
   }
 
@@ -37,7 +34,7 @@ class _PartsScreenState extends State<PartsScreen> {
     setState(() => _loading = true);
     try {
       final data =
-          await api.get('/vehicles/${widget.vehicleId}/parts') as List;
+          await api.get('/vehicles/${widget.vehicle.id}/parts') as List;
       _parts = data
           .map((e) => Part.fromJson(e as Map<String, dynamic>))
           .toList();
@@ -49,7 +46,7 @@ class _PartsScreenState extends State<PartsScreen> {
     final api = context.read<AuthState>().api;
     try {
       await api.post(
-          '/vehicles/${widget.vehicleId}/parts/${p.id}/movement', {
+          '/vehicles/${widget.vehicle.id}/parts/${p.id}/movement', {
         'delta': delta,
         'reason': delta > 0 ? 'purchase' : 'service',
       });
@@ -63,146 +60,29 @@ class _PartsScreenState extends State<PartsScreen> {
   }
 
   Future<void> _lookupSca(BuildContext context) async {
-    if (_regoCtrl.text.trim().isEmpty) {
-      await showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Supercheap Auto parts lookup'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _regoCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Registration number (rego)',
-                  hintText: 'e.g. ABC123',
-                ),
-                textCapitalization: TextCapitalization.characters,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _stateCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'State',
-                  hintText: 'e.g. VIC',
-                ),
-                textCapitalization: TextCapitalization.characters,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx),
-                       child: const Text('Cancel')),
-            FilledButton(
-              onPressed: _regoCtrl.text.trim().isEmpty
-                  ? null
-                  : () => Navigator.pop(ctx),
-              child: const Text('Lookup'),
-            ),
-          ],
-        ),
-      );
-      if (_regoCtrl.text.trim().isEmpty) return;
-    }
-
-    final rego = _regoCtrl.text.trim();
-    final state = _stateCtrl.text.toUpperCase();
-    setState(() => _loading = true);
-    try {
-      final api = context.read<AuthState>().api;
-      final data = await api.post(
-        '/vehicles/${widget.vehicleId}/parts/sca-lookup', {
-        'rego': rego,
-        'state': state,
-      }) as Map<String, dynamic>;
-      final parts = (data['parts'] as List? ?? [])
-          .map((e) => Map<String, dynamic>.from(e as Map))
-          .toList();
-      if (mounted) await _showScaResults(context, parts);
-    } catch (e) {
+    // AUT-1903: drive the lookup from the selected vehicle's plate + state
+    // rather than letting the user type a rego.
+    final rego = (widget.vehicle.rego ?? '').trim();
+    if (rego.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$e')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Add a rego to this vehicle to look up parts.'),
+        ));
       }
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      return;
     }
-  }
-
-  Future<void> _showScaResults(
-      BuildContext context, List<Map<String, dynamic>> parts) async {
-    final selected = <String, Map<String, dynamic>>{};
-    await showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSt) => AlertDialog(
-          title: const Text('Supercheap Auto parts'),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: parts.isEmpty
-                ? const Text('No parts returned.')
-                : ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: parts.length,
-                    itemBuilder: (_, i) {
-                      final part = parts[i];
-                      final key = part['sku'] as String? ?? part['name'];
-                      final isSel = selected.containsKey(key);
-                      return CheckboxListTile(
-                        value: isSel,
-                        onChanged: (v) => setSt(() {
-                          if (v == true) {
-                            selected[key!] = part;
-                          } else {
-                            selected.remove(key);
-                          }
-                        }),
-                        title: Text(part['name'] ?? 'Part'),
-                        subtitle: Text(part['category'] ?? ''),
-                      );
-                    },
-                  ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Close'),
-            ),
-            FilledButton(
-              onPressed: selected.isEmpty
-                  ? null
-                  : () async {
-                      final api = context.read<AuthState>().api;
-                      var added = 0;
-                      for (final part in selected.values) {
-                        try {
-                          await api.post(
-                              '/vehicles/${widget.vehicleId}/parts', {
-                            'name': part['name'],
-                            'sku': part['sku'],
-                            'category': part['category'],
-                            'quantity': 0,
-                            'min_quantity': 1,
-                            'supplier': part['supplier'],
-                            'notes': part['description'],
-                          });
-                          added++;
-                        } catch (_) {}
-                      }
-                      if (mounted) Navigator.pop(ctx);
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Added $added part(s) to inventory')),
-                        );
-                      }
-                      _load();
-                    },
-              child: const Text('Add selected to inventory'),
-            ),
-          ],
+    final state = (widget.vehicle.regoState ?? 'VIC').toUpperCase();
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ScaLookupResultsScreen(
+          vehicleId: widget.vehicle.id,
+          rego: rego,
+          state: state,
         ),
       ),
     );
+    if (mounted) _load();
   }
 
   @override
@@ -223,7 +103,7 @@ class _PartsScreenState extends State<PartsScreen> {
         onPressed: () async {
           await Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) => AddPartScreen(vehicleId: widget.vehicleId),
+              builder: (_) => AddPartScreen(vehicleId: widget.vehicle.id),
             ),
           );
           _load();

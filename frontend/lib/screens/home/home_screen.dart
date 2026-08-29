@@ -327,7 +327,7 @@ class _FeatureGrid extends StatelessWidget {
       _Feature('Receipts', Icons.receipt_long, const Color(0xFFDB2777),
           ReceiptsScreen(vehicleId: vehicle.id)),
       _Feature('Parts', Icons.inventory_2, const Color(0xFF0891B2),
-          PartsScreen(vehicleId: vehicle.id)),
+          PartsScreen(vehicle: vehicle)),
       _Feature('Valuation', Icons.sell, const Color(0xFF059669),
           ValuationScreen(vehicleId: vehicle.id)),
       _Feature('Analytics', Icons.insights, const Color(0xFFCA8A04),

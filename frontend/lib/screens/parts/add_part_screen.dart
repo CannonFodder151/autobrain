@@ -4,8 +4,9 @@ import 'package:provider/provider.dart';
 import '../../core/auth_state.dart';
 
 class AddPartScreen extends StatefulWidget {
-  const AddPartScreen({super.key, required this.vehicleId});
+  const AddPartScreen({super.key, required this.vehicleId, this.prefill});
   final String vehicleId;
+  final Map<String, dynamic>? prefill;
 
   @override
   State<AddPartScreen> createState() => _AddPartScreenState();
@@ -20,6 +21,18 @@ class _AddPartScreenState extends State<AddPartScreen> {
   final _cost = TextEditingController();
   final _supplier = TextEditingController();
   bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final p = widget.prefill;
+    if (p != null) {
+      _name.text = (p['name'] as String?) ?? '';
+      _sku.text = (p['sku'] as String?) ?? '';
+      _minQty.text = (p['min_quantity'] as int? ?? 1).toString();
+      _supplier.text = (p['supplier'] as String?) ?? '';
+    }
+  }
 
   @override
   void dispose() {

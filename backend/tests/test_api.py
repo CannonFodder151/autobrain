@@ -15,8 +15,9 @@ from app.api.deps import require_ai, require_write  # noqa: E402
 from app.core.security import create_access_token, hash_password, verify_password  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.user import User  # noqa: E402
+from app.models.vehicle import Vehicle  # noqa: E402
 from app.schemas.auth import AdminUserUpdate, UserCreate  # noqa: E402
-from app.schemas.vehicle import VehicleCreate  # noqa: E402
+from app.schemas.vehicle import VehicleCreate, VehicleOut, VehicleUpdate  # noqa: E402
 
 
 def test_password_hashing() -> None:
@@ -74,6 +75,19 @@ def test_user_pending_defaults_and_admin_out() -> None:
 
 def test_vehicle_schema_accepts_limit() -> None:
     assert VehicleCreate(nickname="R34").is_primary is False
+
+
+def test_vehicle_rego_state_field_wiring() -> None:
+    """AUT-1903: rego state is a first-class, nullable vehicle attribute."""
+    assert "rego_state" in Vehicle.__table__.columns
+    assert "rego_state" in VehicleCreate.model_fields
+    assert "rego_state" in VehicleUpdate.model_fields
+    assert "rego_state" in VehicleOut.model_fields
+    # Round-trips through create + update + output (nullable default None).
+    assert VehicleCreate(nickname="C").rego_state is None
+    assert VehicleCreate(nickname="C", rego_state="NSW").rego_state == "NSW"
+    assert VehicleUpdate().rego_state is None
+    assert VehicleUpdate(rego_state="VIC").rego_state == "VIC"
 
 
 @pytest.mark.asyncio

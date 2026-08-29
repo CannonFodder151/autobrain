@@ -3,7 +3,7 @@ part of models;
 class Vehicle {
   final String id;
   final String nickname;
-  final String? rego, vin, make, model, colour, bodyType, engine, transmission;
+  final String? rego, regoState, vin, make, model, colour, bodyType, engine, transmission;
   final int? year, odometerKm;
   final String condition;
   final String vehicleType;
@@ -16,6 +16,7 @@ class Vehicle {
     required this.id,
     required this.nickname,
     this.rego,
+    this.regoState,
     this.vin,
     this.make,
     this.model,
@@ -77,6 +78,7 @@ class Vehicle {
         id: j['id'] as String,
         nickname: j['nickname'] as String,
         rego: j['rego'] as String?,
+        regoState: j['rego_state'] as String?,
         vin: j['vin'] as String?,
         make: j['make'] as String?,
         model: j['model'] as String?,

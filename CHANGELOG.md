@@ -26,6 +26,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+- Parts lookup (AUT-1903): the Supercheap Auto lookup is now driven by the selected vehicle's stored rego state + plate instead of a free-text rego field — users no longer type a rego. Tapping the lookup action opens a dedicated results page listing all parts sorted and normalised by AI (deterministic fallback first, 9Router tidy), with the option to jump to "Add part" pre-filled or bulk-add selected parts to inventory. Vehicles gain a `rego_state` field (persisted at add/edit) backing this. Backend `POST /vehicles/{id}/parts/sca-lookup` now prefers the caller-supplied state and falls back to the vehicle's `rego_state`/plate.
+
 ## [0.3.171] - 2026-08-29
 
 ## [0.3.170] - 2026-08-29
