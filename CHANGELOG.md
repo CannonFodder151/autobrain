@@ -28,6 +28,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security
+- **market-data container healthcheck (AUT-1742, CWE-693):** `market-data/Dockerfile` now declares a `HEALTHCHECK` hitting `/health` on port 8000 (same interval/timeout/start-period/retries as `docker/backend`). Uses Python stdlib so no `curl`/extra attack surface is added. Proactively closes trivy DS-0026 (no HEALTHCHECK) and lets Docker/Portainer restart a hung browser-automation subprocess (undetected-chromedriver) instead of degrading silently.
+
 ## [0.3.173] - 2026-08-29
 
 ## [0.3.172] - 2026-08-29
@@ -98,9 +101,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 - Backend: full-DB JSON backup now emits strict RFC-8259 JSON — non-finite Postgres `FLOAT` values (NaN/`Infinity` from `0/0` or divide-by-zero) are coerced to `null` instead of writing the invalid `NaN`/`Infinity` tokens that off-box backup agents reject (the "failed backup jobs for hosted" failure, AUT-1854). `scheduled_backup` also honours `BACKUP_ENABLED`.
-
-### Security
-- **market-data container healthcheck (AUT-1742, CWE-693):** `market-data/Dockerfile` now declares a `HEALTHCHECK` hitting `/health` on port 8000 (same interval/timeout/start-period/retries as `docker/backend`). Uses Python stdlib so no `curl`/extra attack surface is added. Proactively closes trivy DS-0026 (no HEALTHCHECK) and lets Docker/Portainer restart a hung browser-automation subprocess (undetected-chromedriver) instead of degrading silently.
 
 ## [0.3.158] - 2026-08-29
 
