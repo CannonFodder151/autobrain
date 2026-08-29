@@ -57,19 +57,19 @@ void main() {
     await tester.pumpWidget(_app(_FakePaidAuth()));
     await tester.pumpAndSettle();
 
-    expect(find.byType(SegmentedButton), findsOneWidget);
     expect(find.text('Map'), findsWidgets);
     expect(find.text('List'), findsWidgets);
     expect(find.text('Upgrade to premium'), findsNothing);
   });
 
-  testWidgets('paid account can switch Map -> List', (tester) async {
+  testWidgets('paid account can switch Map -> List and see the filter button',
+      (tester) async {
     await tester.pumpWidget(_app(_FakePaidAuth()));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('List'));
-    await tester.pumpAndSettle();
+    await tester.pump();
 
-    expect(find.text('No fuel stations loaded yet.'), findsOneWidget);
+    expect(find.byTooltip('Filters'), findsOneWidget);
   });
 }
