@@ -28,6 +28,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- Servo Spy — NSW petrol price map feed (AUT-1813): free NSW FuelCheck ingest (`GET /fuel-prices?state=NSW`), per-station `FuelPrice` model + alembic migration, and day-over-day `price_delta_pct` on map markers. Foundation for the Servo Spy favourites + price-move alerts (AUT-1859).
+
 ## [0.3.173] - 2026-08-29
 
 ## [0.3.172] - 2026-08-29
@@ -224,6 +227,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 - Backend: SSRF hardening for Discord webhook URLs (AUT-1603). `discord_webhook_url` now allowlists `https://discord.com/api/webhooks/{id}/{token}` at two layers — a Pydantic `field_validator` on the notification-preference schema rejects non-Discord URLs at input time, and `_send_discord` re-checks the pattern before the outbound `httpx` call as defense-in-depth (rejecting internal/loopback addresses). `NotificationPreferenceOut` response schema restored so the preferences API keeps working.
+
 
 ### Added
 - Parts: Supercheap Auto parts-guide lookup integrated into market-data container. Users can now extract SCA parts categories by rego+state (via Playwright browser) or manually (plain HTTP). Integration provides clean Inventory-formatted JSON with 9Router tidying. AI suggested services now prefill parts (inventory-first, then SCA secondary). Feature AUT-1792.
