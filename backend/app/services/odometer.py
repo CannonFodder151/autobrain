@@ -213,6 +213,6 @@ async def suggest_due_service(db: AsyncSession, vehicle: Vehicle) -> None:
         )
         triggered = True
     if triggered:
-        from app.workers.tasks import check_due_notifications
+        from app.workers.tasks import fire_and_forget, check_due_notifications
 
-        check_due_notifications.delay(vehicle.id)
+        fire_and_forget(check_due_notifications, vehicle.id)

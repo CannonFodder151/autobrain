@@ -27,7 +27,7 @@ from app.services.export import export_fuel_csv, export_zip
 from app.services import fuel as fuel_svc
 from app.services import fuel_prices as fp_svc
 from app.services.odometer import sync_odometer
-from app.services.rate_limit import require_ai_rate_limit
+from app.services.rate_limit import require_ai_rate_limit_best_effort
 
 router = APIRouter(prefix="/vehicles/{vehicle_id}/fuel", tags=["fuel"])
 
@@ -83,8 +83,8 @@ async def add_fuel(
     )
     await db.commit()
     await db.refresh(log)
-    from app.workers.tasks import check_due_notifications
-    check_due_notifications.delay(vehicle_id)
+    from app.workers.tasks import fire_and_forget, check_due_notifications
+    fire_and_forget(check_due_notifications, vehicle_id)
     return log
 
 
@@ -193,13 +193,14 @@ async def upload_fuel_receipt(
     ai: bool = Query(default=True),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_write),
-    _: User = Depends(require_ai_rate_limit),
+    _: User = Depends(require_ai_rate_limit_best_effort),
 ) -> FuelReceiptResult:
     """Upload a fuel receipt photo.
 
-    With ai=true (paid accounts) the receipt is OCR'd to fill litres and
-    price-per-litre. ai=false just stores the photo — the user fills the
-    values manually.
+    Storing the photo and running the deterministic (tesseract + rule) OCR path
+    must always succeed; only the 9Router enrichment is AI-spend, so the rate
+    limiter fails OPEN here — a Redis blip must never drop a receipt upload
+    (AUT-1884: "receipt OCR did not work").
     """
     await get_accessible_vehicle(db, vehicle_id, user)
     data = await file.read()

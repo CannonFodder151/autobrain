@@ -127,8 +127,8 @@ async def finalize_service_side_effects(
 async def queue_due_notification(db: AsyncSession, vehicle_id: str, record: ServiceRecord) -> None:
     """Send the due-soon notification sweep when a service carries a due marker."""
     if record.next_due_km or record.next_due_date:
-        from app.workers.tasks import check_due_notifications
-        check_due_notifications.delay(vehicle_id)
+        from app.workers.tasks import fire_and_forget, check_due_notifications
+        fire_and_forget(check_due_notifications, vehicle_id)
 
 
 async def list_completed_services(db: AsyncSession, vehicle_id: str) -> list[ServiceRecord]:
