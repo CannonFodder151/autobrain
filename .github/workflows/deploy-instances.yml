@@ -1,14 +1,17 @@
-# AUT-1847: automatically upgrade the Demo → Default → Hosted instances using the
-# documented upgrade path (Portainer stack redeploy via `scripts/upgrade-instances.sh`)
-# once the images for a release have been built and published.
+# AUT-1847: upgrade the Demo → Default → Hosted instances using the documented
+# upgrade path (Portainer stack redeploy via `scripts/upgrade-instances.sh`).
 #
-# - `dockerhub-publish.yml` publishes `:latest` (Demo/Default backend/ai) + `:default`
-#   frontend; `build-hosted.yml` publishes `:hosted` (Hosted).
-# - This workflow fires after EITHER completes successfully, so every merged change
-#   reaches all three tiers without a manual redeploy. Manual dispatch available.
+# Board direction (AUT-1847): deployment is NOT blind/automatic. CI publishes
+# the images (`dockerhub-publish.yml` → Docker Hub `:latest`/`:default`;
+# `build-hosted.yml` → GHCR `:hosted`), then this workflow:
+#   1. on image-publish success -> a `notify` job posts a Discord `#ops` embed
+#      telling the Deployment Lead a new image is published and ready to promote;
+#   2. the Deployment Lead runs the `upgrade` job (workflow_dispatch) which
+#      redeploys Demo → Default → Hosted via the upgrade path and reports health.
 #
-# Promotion order + per-tier health gating is enforced inside the script (AUT-107);
+# The promotion order + per-tier health gating live inside the script (AUT-107);
 # a tier that fails health blocks promotion to the next tier.
+
 name: Upgrade instances (Demo → Default → Hosted)
 
 on:
@@ -20,7 +23,7 @@ on:
   workflow_dispatch:
     inputs:
       reason:
-        description: Why (e.g. manual upgrade path test)
+        description: Why (e.g. manual upgrade-path run by the Deployment Lead)
         required: false
         default: manual dispatch
 
@@ -32,19 +35,41 @@ permissions:
   contents: read
 
 jobs:
-  upgrade:
+  # Image published -> tell the Deployment Lead a promote is ready. No deploy
+  # happens here; the Deployment Lead owns the actual upgrade (AUT-1847).
+  notify:
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: [self-hosted, linux, x64, vm2]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: ver
+        run: |
+          V="$(grep -E 'APP_VERSION: str' backend/app/core/config.py | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/')"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      - name: Notify Deployment Lead (image published, promote via upgrade path)
+        run: |
+          curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
+            -H "Content-Type: application/json" \
+            -d "{\"channel\":\"ops\",\"title\":\"AutoBrain image published v${{ steps.ver.outputs.version }} — ready to promote\",\"description\":\"CI published new images. Deployment Lead: run the Upgrade instances workflow to deploy Demo -> Default -> Hosted via the upgrade path (AUT-1847).\",\"color\":\"0x95A5A6\",\"author\":\"Deployment Lead\",\"fields\":[{\"name\":\"Version\",\"value\":\"${{ steps.ver.outputs.version }}\",\"inline\":true},{\"name\":\"Trigger\",\"value\":\"image-publish\",\"inline\":true},{\"name\":\"Deploy\",\"value\":\"https://github.com/${{ github.repository }}/actions/workflows/deploy-instances.yml\",\"inline\":false}]}"
+
+  # Deployment Lead triggers this after the image is published. Runs the upgrade
+  # path and reports health to Discord `#status`.
+  upgrade:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: [self-hosted, linux, x64, vm2]
     timeout-minutes: 90
+    env:
+      PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+      PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Upgrade all instances along the upgrade path
-        env:
-          PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
-          PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
         run: ./scripts/upgrade-instances.sh
 
       - name: Report status to Discord

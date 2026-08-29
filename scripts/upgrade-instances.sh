@@ -1,24 +1,27 @@
 #!/usr/bin/env bash
-# Upgrade AutoBrain instances automatically using the documented upgrade path.
+# Upgrade AutoBrain instances using the documented upgrade path (AUT-1847).
 #
-# Root cause (AUT-1847): instances were never auto-updated. CI builds/publishes
-# the images (`build-hosted.yml`, `dockerhub-publish.yml`) but nothing pulled
-# them into the running Portainer stacks. A Watchtower attempt existed on
-# Portainer-Host (`watchtower-noaccess`, no registry credentials) and Hosted
-# had none at all, so both halves silently never recreated containers. There is
-# also no redeploy automation, and the Hosted stack's Portainer env is missing
-# the required `POSTGRES_USER`/`POSTGRES_DB` (`docker-compose.hosted.yml` uses
-# `${POSTGRES_USER:?...}`), so its last manual redeploy FAILED at compose
-# interpolation — it literally cannot update until the env is repopulated.
+# Root cause: instances were never updated. CI builds/publishes the images
+# (`build-hosted.yml`, `dockerhub-publish.yml`) but nothing pulled them into the
+# running Portainer stacks. A Watchtower attempt on Portainer-Host had no
+# registry credentials (`watchtower-noaccess`) and Hosted had none at all, so
+# redeploy was always manual — and the Hosted stack's Portainer env was missing
+# the required `POSTGRES_USER`/`POSTGRES_DB`, so its last manual redeploy FAILED
+# at compose interpolation (`docker-compose.hosted.yml` used `${VAR:?...}`) and
+# it could not update until the env was repopulated.
 #
-# Fix: this script IS the upgrade path. It redeploys each Portainer stack via
-# the Portainer API in the mandated promotion order (Demo → Default → Hosted,
-# AUT-107) with `pullImage`, health-gates every tier, and refuses to promote to
-# the next tier if the current one is unhealthy. The backend pulls + applies DB
-# migrations on boot (docs/container-architecture.md), so a redeploy is a
-# complete upgrade.
+# Ownership (board direction, AUT-1847): deployment is NOT blind/automatic.
+# CI publishes an image → a Discord notification asks the Deployment Lead to
+# run the upgrade path → the Deployment Lead triggers `deploy-instances.yml`
+# (workflow_dispatch), which runs THIS script. The script redeploys each
+# Portainer stack via the API in the mandated promotion order (Demo →
+# Default → Hosted, AUT-107) with `pullImage` so the freshly built images are
+# pulled and changed services recreated, health-gates every tier, and refuses to
+# promote to the next tier if the current one is unhealthy. The backend pulls
+# + applies DB migrations on boot (docs/container-architecture.md), so a
+# redeploy is a complete upgrade.
 #
-# Usage:
+# Usage (Deployment Lead, after an image is published):
 #   PORTAINER_API_KEY=... PORTAINER_URL=... ./scripts/upgrade-instances.sh
 #
 # Environment overrides (sane defaults for the three AutoBrain tiers):
@@ -70,12 +73,15 @@ fetch_stack() {
   curl -sk "${AUTH[@]}" "$API/stacks/$id/file"
 }
 
-# Re-apply a stack (pull images + recreate changed services). $1=id $2=endpoint
-# $3=json body file with {StackFileContent, Env, Prune}.
+# Re-apply a stack, pulling the freshly published image and recreating changed
+# services. $1=id $2=endpoint $3=json body file with {StackFileContent, Env, Prune}.
+# `pullImage=true` is the load-bearing query param (AUT-1847): without it Portainer
+# re-applies the same compose WITHOUT pulling, so the container keeps the old digest
+# and the instance silently never updates — the exact bug this script fixes.
 redeploy() {
   local id="$1" ep="$2" body="$3"
   local resp
-  resp="$(curl -sk -X PUT "${AUTH[@]}" -H "Content-Type: application/json" --data-binary "@$body" "$API/stacks/$id?endpointId=$ep")"
+  resp="$(curl -sk -X PUT "${AUTH[@]}" -H "Content-Type: application/json" --data-binary "@$body" "$API/stacks/$id?endpointId=$ep&pullImage=true")"
   printf '%s' "$resp" | python3 -c "import sys,json
 raw=sys.stdin.read().strip()
 try:
