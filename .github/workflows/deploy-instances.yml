@@ -1,13 +1,17 @@
-# AUT-1847: upgrade the Demo → Default → Hosted instances using the documented
-# upgrade path (Portainer stack redeploy via `scripts/upgrade-instances.sh`).
+# AUT-1905 (Auto deployment) + AUT-1911 (wire the agent trigger):
 #
-# Board direction (AUT-1847): deployment is NOT blind/automatic. CI publishes
-# the images (`dockerhub-publish.yml` → Docker Hub `:latest`/`:default`;
-# `build-hosted.yml` → GHCR `:hosted`), then this workflow:
-#   1. on image-publish success -> a `notify` job posts a Discord `#ops` embed
-#      telling the Deployment Lead a new image is published and ready to promote;
-#   2. the Deployment Lead runs the `upgrade` job (workflow_dispatch) which
-#      redeploys Demo → Default → Hosted via the upgrade path and reports health.
+# On a new-version deploy (images published to the registry by
+# `dockerhub-publish.yml` / `build-hosted.yml`), CI must TRIGGER THE AGENTS —
+# never run a git deploy job and never merely post a Discord embed. The `notify`
+# job emits a one-line deploy signal to the n8n bridge:
+#   deploy-instances.yml -> webhook/autobrain-deploy-trigger -> Paperclip API
+# which raises the two AutoBrain issues that wake the release engineers:
+#   - AUT-1907 -> Mobile Release Engineer (update + publish the mobile app)
+#   - AUT-1908 -> Deployment Engineer (Demo->test->Default->test->Hosted->test)
+#
+# Agent-triggering logic lives in n8n (idempotent per APP_VERSION); git only
+# emits the signal. The manual `upgrade` job (workflow_dispatch) remains as the
+# AUT-1847 board-sanctioned operator fallback.
 #
 # The promotion order + per-tier health gating live inside the script (AUT-107);
 # a tier that fails health blocks promotion to the next tier.
@@ -51,11 +55,32 @@ jobs:
           V="$(grep -E 'APP_VERSION: str' backend/app/core/config.py | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/')"
           echo "version=$V" >> "$GITHUB_OUTPUT"
 
-      - name: Notify Deployment Lead (image published, promote via upgrade path)
+      # Emit a one-line deploy signal. n8n dedupes by APP_VERSION so a re-run
+      # of the same version never raises duplicate agent issues. Best-effort:
+      # if the bridge is offline the publish still succeeds and we report it.
+      - name: Emit deploy signal to n8n (wakes AUT-1907 + AUT-1908)
+        id: signal
+        continue-on-error: true
+        env:
+          DEPLOY_VERSION: ${{ steps.ver.outputs.version }}
         run: |
+          printf -v payload '{"event":"image-published","version":"%s","repo":"%s","run_id":"%s"}' "$DEPLOY_VERSION" "${{ github.repository }}" "${{ github.run_id }}"
+          code="$(curl -s -o /tmp/signal_resp -w "%{http_code}" -X POST https://n8n.nathanmartina.com/webhook/autobrain-deploy-trigger \
+            -H "Content-Type: application/json" -d "$payload")"
+          echo "http_code=$code" >> "$GITHUB_OUTPUT"
+          [ -s /tmp/signal_resp ] && cat /tmp/signal_resp >&2 || true
+
+      - name: Report signal result to #ops
+        if: always()
+        run: |
+          if [ "${{ steps.signal.outcome }}" = "success" ] && [ "${{ steps.signal.outputs.http_code }}" = "200" ]; then
+            COLOR=0x57F287; STATE=signaled
+          else
+            COLOR=0xED4245; STATE=failed
+          fi
           curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
             -H "Content-Type: application/json" \
-            -d "{\"channel\":\"ops\",\"title\":\"AutoBrain image published v${{ steps.ver.outputs.version }} — ready to promote\",\"description\":\"CI published new images. Deployment Lead: run the Upgrade instances workflow to deploy Demo -> Default -> Hosted via the upgrade path (AUT-1847).\",\"color\":\"0x95A5A6\",\"author\":\"Deployment Lead\",\"fields\":[{\"name\":\"Version\",\"value\":\"${{ steps.ver.outputs.version }}\",\"inline\":true},{\"name\":\"Trigger\",\"value\":\"image-publish\",\"inline\":true},{\"name\":\"Deploy\",\"value\":\"https://github.com/${{ github.repository }}/actions/workflows/deploy-instances.yml\",\"inline\":false}]}"
+            -d "{\"channel\":\"ops\",\"title\":\"AutoBrain v${{ steps.ver.outputs.version }} deploy signal\",\"description\":\"Image published; n8n bridge raised AUT-1907 (Mobile Release Engineer) + AUT-1908 (Deployment Engineer).\",\"color\":\"$COLOR\",\"author\":\"Deployment Lead\",\"fields\":[{\"name\":\"Version\",\"value\":\"${{ steps.ver.outputs.version }}\",\"inline\":true},{\"name\":\"Signal\",\"value\":\"$STATE\",\"inline\":true},{\"name\":\"Issues\",\"value\":\"AUT-1907, AUT-1908\",\"inline\":true}]}"
 
   # Deployment Lead triggers this after the image is published. Runs the upgrade
   # path and reports health to Discord `#status`.
