@@ -9,6 +9,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
 
+## [Unreleased]
+
+### Added
+- **Upgrade path for instances (AUT-1847):** new
+  `scripts/upgrade-instances.sh` redeploys the Demo → Default → Hosted Portainer
+  stacks in promotion order (pullImage, health-gated). Owned by the Deployment
+  Lead: CI publishes an image, posts a Discord `#ops` notify, and the Deployment
+  Lead triggers `deploy-instances.yml` (workflow_dispatch) to run the upgrade
+  path — no blind/automatic deploy (board direction).
+- **Real redeploy fix (AUT-1847):** the Portainer stack update now passes
+  `pullImage=true`, so the freshly published image is actually pulled and changed
+  services recreated. Without it the compose re-applied with the same digest and
+  instances silently never updated.
+
+### Fixed
+- **Hosted redeploy could never succeed (AUT-1847):** `docker-compose.hosted.yml`
+  required `POSTGRES_USER`/`POSTGRES_DB` via `${VAR:?...}`; a stack env missing
+  them failed compose interpolation. Now defaulted to `autobrain`, so a redeploy
+  can never fail at interpolation.
+
+
 
 
 

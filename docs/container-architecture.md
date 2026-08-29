@@ -78,7 +78,44 @@ Semantic search uses pgvector columns, installed by migrations
 - Postgres image in hosted/dev/prod is `pgvector/pgvector:pg16` so the
   extension is available at migration time.
 
-## Upgrade path
+## Upgrade path (AUT-1847)
 
-- Deploys are run manually from the repo: `docker compose -f docker-compose.prod.yml build && up -d`, or via `scripts/deploy.sh`. `docker compose up -d` is zero-downtime for backend/ai since nginx routes to running containers.
-- DB migrations run inside the backend container on boot (`app.db.bootstrap`) in all topologies, including hosted.
+Instances (Demo, Default, Hosted) are upgraded via the **upgrade path** — a
+deterministic, Portainer-API redeploy of each tier's stack in the mandated
+promotion order (Demo → Default → Hosted, per AUT-107), with `pullImage` so the
+freshly built images are actually pulled and changed services are recreated.
+Health is verified per tier before promoting to the next.
+
+Deployment is **not** blind/automatic (board direction, AUT-1847): CI publishes
+the images; the `deploy-instances.yml` workflow then posts a Discord `#ops`
+notification and **stops** — the Deployment Lead must trigger the actual upgrade
+(`workflow_dispatch`) after confirming an image was published. The triggered job
+runs `scripts/upgrade-instances.sh`.
+
+1. CI publishes images on every merge to `main`:
+   - `dockerhub-publish.yml` → Docker Hub `:latest` (Demo/Default backend/ai) +
+     `:default` frontend.
+   - `build-hosted.yml` → GHCR `:hosted` (Hosted).
+2. On completion, the `notify` job of `deploy-instances.yml` posts to Discord
+   `#ops` (author "Deployment Lead") that an image is published and ready to
+   promote, with a link to the workflow dispatch. The `upgrade` job (Deployment
+   Lead-triggered) then runs `scripts/upgrade-instances.sh`, which redeploys each
+   stack via `PUT /api/stacks/{id}?endpointId={ep}&pullImage=true`
+   (Portainer 2.45 — the `/redeem` sub-route does not exist here) with the
+   stack's own compose + env and `Prune: false`, preserving volumes and config.
+3. DB migrations run inside the backend container on boot
+   (`python -m app.db.bootstrap` / Alembic), so a redeploy is a complete upgrade
+   — no separate migration step.
+4. After all tiers are healthy, `scripts/prune-images.sh` drops dangling
+   build-layer images on EP2/EP5 (AUT-350).
+
+Root cause that this fixes: previously CI only *built* images — nothing pulled
+them, a Watchtower attempt on Portainer-Host had no registry credentials
+(`watchtower-noaccess`) and Hosted had none at all, so redeploys were manual and
+were missed. The Hosted stack also failed redeploys because its Portainer stack
+env was missing the required `POSTGRES_USER`/`POSTGRES_DB`
+(`docker-compose.hosted.yml` used `${VAR:?...}`); the compose now defaults those
+non-secret vars so a redeploy can never fail at interpolation again. The earlier
+auto-redeploy also omitted `pullImage`, so it re-applied the compose with the same
+image digest and never actually pulled the new image — instances silently never
+updated.
