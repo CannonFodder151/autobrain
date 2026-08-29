@@ -222,10 +222,15 @@ def purge_stale_pending_accounts() -> None:
 @shared_task
 def scheduled_backup() -> None:
     """Daily full-DB snapshot stored to MinIO. Admin backup safety-net."""
+    from app.core.config import settings
+
+    if not settings.BACKUP_ENABLED:
+        logger.info("scheduled_backup_skipped", reason="BACKUP_ENABLED is False")
+        return
+
     import io as _io
     from datetime import datetime, timezone
 
-    from app.core.config import settings
     from app.core.storage import get_minio
     from app.services.backup import dump_backup, serialize_all
 

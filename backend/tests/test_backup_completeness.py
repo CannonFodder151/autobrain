@@ -13,6 +13,8 @@ Run (sqlite, no Postgres needed):
 
 import os
 
+import json
+
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:////tmp/autobrain-backup-test.db"
 os.environ["SECRET_KEY"] = "test-secret"
 os.environ["POSTGRES_USER"] = "autobrain"
@@ -255,3 +257,36 @@ async def test_full_schema_roundtrip_preserves_all_data() -> None:
                 assert expect == got, (
                     f"{name}.{key} mismatch: {value!r} != {got!r}"
                 )
+
+
+def test_non_finite_floats_serialize_to_strict_json() -> None:
+    """Backup must stay RFC-8259 JSON even when a Postgres FLOAT holds NaN/inf.
+
+    Degenerate computations (0/0, x/0, empty range) yield non-finite floats.
+    The default json emitter would write the ``NaN``/``Infinity`` tokens that
+    strict off-box backup agents reject — which is exactly the AUT-1854
+    "failed backup jobs for hosted" failure. They must coerce to null.
+    """
+    from app.services.backup import _jsonable, dump_backup
+
+    assert _jsonable(float("nan")) is None
+    assert _jsonable(float("inf")) is None
+    assert _jsonable(float("-inf")) is None
+    assert _jsonable(3.14) == 3.14
+
+    data = {
+        "app": "autobrain",
+        "kind": "backup",
+        "version": 1,
+        "created_at": "2026-08-29T00:00:00+00:00",
+        "data": {
+            "service_records": [
+                {"id": "1", "cost_per_km": _jsonable(float("nan")),
+                 "l_per_100km": _jsonable(float("inf"))},
+            ]
+        },
+    }
+    raw = dump_backup(data).decode()
+    assert "NaN" not in raw and "Infinity" not in raw
+    # Round-trips through a strict JSON parser.
+    assert json.loads(raw)["data"]["service_records"][0]["cost_per_km"] is None
