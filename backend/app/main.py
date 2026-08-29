@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import authenticate_ws
 from app.api.v1 import api_router
+from app.api.v1.fuel_servo import router as fuel_servo_router
 from app.core.config import settings
 from app.core.logging import get_logger, setup_logging
 from app.core.storage import ensure_bucket
@@ -51,6 +52,9 @@ app.add_middleware(
 app.add_middleware(RateLimitMiddleware)
 
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
+# Servo Spy fuel map: premium-gated, mounted at /api/fuel (not /api/v1) per the
+# AUT-1813 feature contract.
+app.include_router(fuel_servo_router, prefix="/api")
 
 
 @app.get("/health")

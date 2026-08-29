@@ -96,6 +96,21 @@ Completing a scheduled service created from a diagnostic auto-resolves (green-ti
 | POST   | `/receipt?ai=true\|false` | Fuel receipt photo. `ai=true` OCR-fills litres & price/L then user enters odometer; `ai=false` stores photo only. |
 | GET    | `/prices/7eleven?region=&fuel_type=` | Accurate 7-Eleven prices (projectzerothree.info). Deterministic, no AI. `lat`+`lng` switches to nearest-store mode (`max_results`, `max_km`). |
 
+## Servo Spy fuel map (`/api/fuel`) — PREMIUM ONLY
+
+Deterministic, no-AI. All routes require a premium account; free accounts get
+`403 "Fuel prices are a premium feature. Upgrade to enable it."`. Every response
+carries `X-Fuel-Data-Attribution`. Data comes from the Celery `ingest_fuel_prices`
+task (WA FuelWatch + NSW FuelCheck + QLD Fuel Prices). See [fuel-servo-spy.md](fuel-servo-spy.md).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | `/fuel/types` | Data-driven catalogue of observed fuel types (91/95/98/E10/Diesel/LPG) |
+| GET    | `/fuel/brands` | Brand list for station logos |
+| GET    | `/fuel/stations?lat=&lon=&radiusKm=&fuelType=` | Stations within `radiusKm` of `(lat,lon)`, each with prices for `fuelType` |
+| GET    | `/fuel/station/{id}/prices` | All fuel prices at a station (detail sheet) |
+| GET    | `/fuel/attribution` | Open-data attribution for the aggregated feeds |
+
 ## Logbook (`/vehicles/{id}/logbook`) — ATO claiming, non-club-reg vehicles only
 
 Product rule [PR-1](product-rules.md#pr-1--club-reg-disables-the-digital-logbook-victoria): club-reg vehicles return `403` on every logbook route (create, list, stats, update, export, odometer-photo); only `DELETE` stays open for cleanup.
