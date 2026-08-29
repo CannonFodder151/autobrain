@@ -10,6 +10,7 @@ import asyncio
 import hashlib
 import hmac
 import json
+import math
 import os
 import tempfile
 from datetime import date, datetime, timezone
@@ -41,6 +42,14 @@ def _backup_order() -> list[str]:
 
 
 def _jsonable(value):
+    # Non-finite floats (NaN/inf) come back from Postgres FLOAT columns when a
+    # computation produced a degenerate value (0/0, x/0, an empty range). The
+    # default json emitter writes the non-standard ``NaN``/``Infinity`` tokens
+    # (forbidden by RFC 8259); strict backup agents reject the snapshot and
+    # report a failed job (AUT-1854). Coerce them to null so the backup is
+    # always strict-JSON regardless of real-world data.
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
     if isinstance(value, (datetime,)):
         return value.isoformat()
     if hasattr(value, "isoformat"):
@@ -92,7 +101,10 @@ def dump_backup(data: dict) -> bytes:
     """Serialize a backup dict to JSON bytes, appending an integrity checksum."""
     payload = {k: v for k, v in data.items() if k != "checksum"}
     payload["checksum"] = _compute_checksum(payload)
-    return json.dumps(payload, indent=2).encode("utf-8")
+    # allow_nan=False ensures a genuine ValueError rather than silently emitting
+    # the non-standard NaN/Infinity tokens (RFC 8259) — backups must stay strict
+    # JSON so off-box agents can parse them (AUT-1854).
+    return json.dumps(payload, indent=2, allow_nan=False).encode("utf-8")
 
 
 # Expected schema version for backup files
@@ -103,7 +115,9 @@ def _compute_checksum(data: dict) -> str:
     """Compute SHA-256 checksum of the backup data (excluding the checksum field)."""
     # Create a copy without the checksum field for verification
     verify_data = {k: v for k, v in data.items() if k != "checksum"}
-    serialized = json.dumps(verify_data, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    serialized = json.dumps(
+        verify_data, sort_keys=True, separators=(",", ":"), allow_nan=False
+    ).encode("utf-8")
     return hashlib.sha256(serialized).hexdigest()
 
 
