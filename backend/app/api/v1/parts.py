@@ -160,7 +160,7 @@ async def reorder_suggestions(
     return suggestions
 
 
-@router.get("/sca-lookup", response_model=dict[str, Any])
+@router.post("/sca-lookup", response_model=dict[str, Any])
 async def sca_lookup(
     vehicle_id: str,
     req: SCALookupRequest,
