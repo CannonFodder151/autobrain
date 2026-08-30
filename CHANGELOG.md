@@ -8,7 +8,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > user-facing change ships with an entry here under `[Unreleased]` — see
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
+
 ## [Unreleased]
+
+## [0.3.185] - 2026-08-30
 
 ### Servo Spy map view (AUT-1820)
 - Map view now renders live station markers with brand logos and the current
