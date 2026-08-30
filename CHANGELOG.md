@@ -85,8 +85,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
-## [Unreleased]
-- fix(ci): use GHCR_PAT secret for GHCR authentication in build-hosted.yml (AUT-1937). The `github_pat` secret name was invalid (GitHub blocks `github_*` prefix), causing 403 Forbidden on multi-arch image push, which broke the auto-update and deploy pipeline.
 
 ## [0.3.184] - 2026-08-30
 
@@ -221,8 +219,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
-## [Unreleased]
-- fix(ci): use GHCR_PAT secret for GHCR authentication in build-hosted.yml (AUT-1937). The `github_pat` secret name was invalid (GitHub blocks `github_*` prefix), causing 403 Forbidden on multi-arch image push, which broke the auto-update and deploy pipeline.
 
 ## [0.3.156] - 2026-08-29
 
@@ -351,8 +347,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - CI: wired `CI_TRIAGE_WEBHOOK_SECRET`, `CI_TRIAGE_PARENT_ISSUE_ID`, `CI_TRIAGE_GOAL_ID`, `CI_TRIAGE_AGENT_ID`, and `PAPERCLIP_*` env into the AutoBrain-Hosted backend service in `docker-compose.hosted.yml`, so the merged CI triage webhook receiver (`backend/app/api/v1/ci.py`) is configured and reachable and can relay GitHub Actions CI failures into Paperclip (AUT-1751).
 
 
-## [Unreleased]
-- fix(ci): use GHCR_PAT secret for GHCR authentication in build-hosted.yml (AUT-1937). The `github_pat` secret name was invalid (GitHub blocks `github_*` prefix), causing 403 Forbidden on multi-arch image push, which broke the auto-update and deploy pipeline.
 
 ### Added
 - CI: added CI triage webhook receiver at `POST /api/v1/ci/webhook` with bearer auth, fail-closed PAPERCLIP config validation, and `repo`/`ref` payload validation to create Paperclip issues from GitHub Actions CI failures, replacing the broken n8n webhook (AUT-1669).
