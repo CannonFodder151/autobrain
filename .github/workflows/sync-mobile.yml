@@ -40,12 +40,8 @@ jobs:
       - name: Checkout autobrain repo
         run: |
           set -euo pipefail
-          if [ -d autobrain/.git ]; then
-            cd autobrain && git fetch origin && git checkout -f main && git reset --hard origin/main
-          else
-            rm -rf autobrain
-            git clone --branch main "https://github.com/${{ github.repository }}.git" autobrain
-          fi
+          rm -rf autobrain
+          git clone --depth 1 --branch main "https://github.com/${{ github.repository }}.git" autobrain
 
       - name: Checkout mobile repo
         run: |
