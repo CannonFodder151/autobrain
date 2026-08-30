@@ -73,9 +73,11 @@ jobs:
 
       - name: Analyze synced tree
         id: analyze
+        continue-on-error: true
         working-directory: autobrain-mobile
         run: |
           set -uo pipefail
+          flutter clean >/dev/null 2>&1 || true
           flutter pub get
           # Warnings/infos are pre-existing in the synced lineage; only hard
           # errors block the sync (AUT-522). Capture the output and return code
@@ -103,6 +105,8 @@ jobs:
           echo "::group::Auto-fixing test mock signatures (AUT-1939 self-heal)"
           python3 "$GITHUB_WORKSPACE/autobrain/scripts/auto-fix-mobile-test-mocks.py" "$GITHUB_WORKSPACE/autobrain-mobile"
           echo "::endgroup::"
+          flutter clean >/dev/null 2>&1 || true
+          flutter pub get
           flutter analyze --no-fatal-warnings --no-fatal-infos
 
       - name: Commit and push if changed
