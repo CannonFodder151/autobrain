@@ -35,7 +35,7 @@ USER autobrain
 # `celerybeat-schedule` (stale file = wedged scheduler loop, e.g. the 100% CPU
 # busy-loop from AUT-601); otherwise it falls back to `inspect ping`.
 HEALTHCHECK --interval=30s --timeout=15s --start-period=30s --retries=3 \
-    CMD sh -c 'c=$(tr "\0" " " < /proc/1/cmdline); case "$c" in *" beat "*|*" -B "*) [ -f celerybeat-schedule ] || exit 1; [ -z "$(find celerybeat-schedule -mmin -30 2>/dev/null)" ] && exit 1; exit 0 ;; *) celery -A app.workers.celery_app:celery_app inspect ping -t 8 -d "celery@$(hostname)" ;; esac'
+    CMD sh -c 'c=$(tr "\0" " " < /proc/1/cmdline); case "$c" in *beat*|* -B *) [ -f celerybeat-schedule ] || exit 1; [ -z "$(find celerybeat-schedule -mmin -30 2>/dev/null)" ] && exit 1; exit 0 ;; *) celery -A app.workers.celery_app:celery_app inspect ping -t 8 -d "celery@$(hostname)" ;; esac'
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
