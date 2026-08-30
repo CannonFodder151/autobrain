@@ -129,9 +129,12 @@ triggers the `deploy-instances.yml` workflow (`workflow_dispatch`), which runs
 the upgrade path:
 
 1. `scripts/upgrade-instances.sh` redeploys each Portainer stack in promotion
-   order (Demo → Default → Hosted) via
-   `PUT /api/stacks/{id}?endpointId={ep}&pullImage=true`, preserving the stack
-   env and volumes (`Prune: false`).
+   order (Demo → Default → Hosted) via an **explicit pre-pull** of each image
+   (`POST /endpoints/{ep}/docker/images/create?fromImage=...&tag=...`) followed by
+   `PUT /api/stacks/{id}?endpointId={ep}`. The `pullImage=true` query param is a
+   no-op for floating tags (`:hosted`, `:latest`) and does NOT pull; explicit pull
+   guarantees the freshly published digest is present so the container gets recreated.
+   The stack env is preserved and `Prune: false` is retained.
 2. Each tier is health-checked (`/health`) before the next is promoted; a failed
    tier stops the rollout (AUT-107).
 3. DB migrations run on backend boot, so a redeploy is a full upgrade.
@@ -143,14 +146,19 @@ the upgrade path:
 UPGRADE_DRY_RUN=1 ./scripts/upgrade-instances.sh     # resolve + health only
 UPGRADE_TIERS="autobrain-hosted|5|https://hosted.autobrainservice.app/health|" \
   ./scripts/upgrade-instances.sh                     # Hosted only
+# Pin app images to an immutable multi-arch build so a later auto-bump to
+# :hosted can never drift the running stack (AUT-1872 #4):
+PIN_IMAGE_TAG=hosted-sha-<commit> ./scripts/upgrade-instances.sh
 ```
 Run it from the repo checkout on a host that can reach Portainer (the
 `deploy-instances.yml` `upgrade` job does exactly this, with the
 `PORTAINER_API_KEY`/`PORTAINER_URL` repo secrets injected by GitHub).
 
-Portainer stack updates pull images (`pullImage=true`) and recreate changed
-services (AUT-372). This is intended so CI-published images reach the tier, and
-it is safe for the frontend because the stack pins a static IP.
+`build-hosted.yml` publishes each app image as **both** `:hosted` (floating) and
+`hosted-sha-<commit>` (immutable manifest list). Prefer `PIN_IMAGE_TAG=hosted-sha-<commit>`
+for the promote so the deployed stack is pinned to the exact build you tested —
+`docker-compose.hosted.yml` must NOT be edited to hardcode a floating `:hosted`
+for the app images (AUT-1872 #1/#4).
 
 Prerequisites for the Portainer API path to work (verified before relying on the
 upgrade path):
@@ -165,8 +173,17 @@ upgrade path):
 - The HostED Portainer stack env must carry the required non-secret vars
   (`POSTGRES_USER`, `POSTGRES_DB`) and the Paperclip identity
   (`PAPERCLIP_API_KEY`, `CI_TRIAGE_WEBHOOK_SECRET`). `docker-compose.hosted.yml`
-  now defaults the DB vars so a redeploy never fails at interpolation even if
-  the env is incomplete.
+  now defaults the DB vars (`${POSTGRES_USER:-autobrain}` /
+  `${POSTGRES_DB:-autobrain}`, AUT-1872 #3) so a redeploy never fails at
+  interpolation even if the env is incomplete, AND `upgrade-instances.sh` injects
+  `POSTGRES_USER=autobrain` / `POSTGRES_DB=autobrain` on every Hosted redeploy
+  (idempotent: only fills gaps, never overwrites). The upgrade script is the
+  source of truth for these vars — do not rely on a manually-seeded env alone.
+- `docker-compose.hosted.yml` MUST contain exactly **one** `dongle-server`
+  service. A prior duplicate of that service silently overrode it and broke
+  `docker compose config` on redeploy (taking Hosted down, AUT-1872 #2); the
+  duplicate has been removed and the retained block carries a `/health`
+  healthcheck on `:8000` (matching `DONGLE_SERVER_URL` in the backend env).
 
 ### Nginx Proxy Manager + the hosted frontend (AUT-372)
 

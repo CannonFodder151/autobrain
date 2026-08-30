@@ -34,6 +34,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Deployment / Hosted stack hardening (AUT-1872)
+- `scripts/upgrade-instances.sh`: replaced the no-op `pullImage=true` redeploy
+  with an **explicit per-image pull** (`POST /endpoints/{ep}/docker/images/create`)
+  before redeploy, so CI-published `:hosted`/`:latest` digests actually reach the
+  running containers (AUT-1872 #1).
+- `scripts/upgrade-instances.sh`: added `PIN_IMAGE_TAG` to rewrite the four app
+  images (`backend`/`worker`/`ai`/`frontend`) to an immutable `hosted-sha-<commit>`
+  manifest before redeploy, killing the floating-tag race + cross-registry drift
+  (AUT-1872 #4). Demo/Default/Hosted should be promoted with
+  `PIN_IMAGE_TAG=hosted-sha-<commit>`.
+- `docker-compose.hosted.yml`: removed a duplicate `dongle-server` service whose
+  second definition broke `docker compose config` on redeploy and took Hosted
+  down (AUT-1872 #2); the retained block gains a `/health` check on `:8000`.
+- `docker-compose.hosted.yml`: `postgres` now defaults `POSTGRES_USER`/`POSTGRES_DB`
+  to `autobrain` (`${VAR:-autobrain}`) instead of `:?`, so an incomplete stack env
+  self-heals instead of 502-ing the whole stack (AUT-1872 #3).
+
 ## [0.3.179] - 2026-08-30
 
 ## [0.3.178] - 2026-08-30
