@@ -78,8 +78,41 @@ fetch_stack() {
 # `pullImage=true` is the load-bearing query param (AUT-1847): without it Portainer
 # re-applies the same compose WITHOUT pulling, so the container keeps the old digest
 # and the instance silently never updates — the exact bug this script fixes.
+# AUT-1872: pullImage=true is a no-op for floating tags (:hosted/:latest). The
+# reliable fix is to explicitly POST /endpoints/{ep}/docker/images/create per
+# image BEFORE redeploy, so the new digest lands on the host and compose up
+# recreates changed services.
+pull_images() {
+  local ep="$1" content="$2"
+  echo "$content" | PORTAINER_API_KEY="$PORTAINER_API_KEY" API="$API" EP="$ep" python3 <<'PY_PULL'
+import sys, re, subprocess, os
+content = sys.stdin.read()
+api = os.environ['API']
+key = os.environ['PORTAINER_API_KEY']
+ep = os.environ['EP']
+images = re.findall(r'image:\s*([^\s#]+)', content)
+for img in images:
+    if '@sha256:' in img:
+        continue  # immutable digest — no need to pull
+    from_image = img
+    cmd = ['curl', '-sk', '-X', 'POST',
+           '-H', 'X-API-Key: ' + key,
+           f'{api}/endpoints/{ep}/docker/images/create?fromImage={from_image}']
+    print('==> Pulling ' + from_image + ' on EP' + ep, file=sys.stderr)
+    res = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    if res.returncode != 0:
+        print('WARN: pull failed for ' + from_image + ': ' + res.stderr[:200], file=sys.stderr)
+    else:
+        print('   pulled ' + from_image, file=sys.stderr)
+PY_PULL
+}
+
 redeploy() {
   local id="$1" ep="$2" body="$3"
+  # AUT-1872: Explicitly pull images first (pullImage=true is no-op for :hosted).
+  local content
+  content="$(cat "$body" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('StackFileContent',''))")"
+  pull_images "$ep" "$content"
   local resp
   resp="$(curl -sk -X PUT "${AUTH[@]}" -H "Content-Type: application/json" --data-binary "@$body" "$API/stacks/$id?endpointId=$ep&pullImage=true")"
   printf '%s' "$resp" | python3 -c "import sys,json
