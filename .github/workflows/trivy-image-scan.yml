@@ -1,0 +1,151 @@
+# AUT-1781: x64 image-scan routes to the bare x64 self-hosted runner
+# (gh-runner-autobrain). The vm2 label (AUT-1798) left the job unclaimed
+# because gh-runner-autobrain-2 fails to accept queued jobs (same "Set up job"
+# degradation); the bare x64 runner is the repaired, online target.
+name: Security — base image CVE scan (trivy)
+
+# Scans the pinned Postgres data-store, frontend nginx AND python base images for
+# HIGH/CRITICAL CVEs and enforces digest pinning (no floating tags).
+# Postgres: AUT-1749. Frontend nginx: AUT-1740 (CVE-2026-14456 OpenSSL QUIC DoS).
+# Python base (backend/ai/worker/market-data): AUT-1735 (perl/SQLite/zlib RCEs).
+
+on:
+  pull_request:
+    paths:
+      - 'docker-compose.yml'
+      - 'docker-compose.prod.yml'
+      - 'docker-compose.hosted.yml'
+      - 'docker/frontend/Dockerfile'
+      - 'docker/backend/Dockerfile'
+      - 'docker/ai/Dockerfile'
+      - 'docker/worker/Dockerfile'
+      - 'market-data/Dockerfile'
+      - '.trivyignore'
+      - '.github/workflows/trivy-image-scan.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'docker-compose.yml'
+      - 'docker-compose.prod.yml'
+      - 'docker-compose.hosted.yml'
+      - 'docker/frontend/Dockerfile'
+      - 'docker/backend/Dockerfile'
+      - 'docker/ai/Dockerfile'
+      - 'docker/worker/Dockerfile'
+      - 'market-data/Dockerfile'
+      - '.trivyignore'
+      - '.github/workflows/trivy-image-scan.yml'
+  schedule:
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: trivy-image-scan-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  POSTGRES_IMAGE: 'pgvector/pgvector:pg17@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f'
+  NGINX_FRONTEND_IMAGE: 'nginxinc/nginx-unprivileged:stable-alpine@sha256:93722936b82ec8a1178d48448e619226680d2de3706a1640800e186cd5fa7fd3'
+  PYTHON_BASE_IMAGE: 'python:3.13-slim@sha256:7ce4b6dfe35e55397b7cda544f8a13f191b7ae28dc5aad71fe664dbc9bc2623f'
+
+jobs:
+  image-scan:
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pin guard — postgres image must be digest-pinned
+        run: |
+          set -euo pipefail
+          if grep -rqE 'image:[[:space:]]*pgvector/pgvector:pg1[0-9][[:space:]]*$' \
+              docker-compose.yml docker-compose.prod.yml docker-compose.hosted.yml; then
+            echo "::error::postgres image is floatably tagged — pin by @sha256 digest (AUT-1749)."
+            exit 1
+          fi
+          echo "OK: postgres image is digest-pinned across all compose files."
+
+      - name: Pin guard — frontend nginx image must be digest-pinned
+        run: |
+          set -euo pipefail
+          if grep -qE '^FROM nginxinc/nginx-unprivileged:(stable-alpine|mainline-alpine)$' \
+              docker/frontend/Dockerfile; then
+            echo "::error::frontend nginx image is floatably tagged — pin by @sha256 digest (AUT-1740)."
+            exit 1
+          fi
+          echo "OK: frontend nginx image is digest-pinned in Dockerfile."
+
+      - name: Pin guard — python base images must be digest-pinned (AUT-1735)
+        run: |
+          set -euo pipefail
+          # Fail if any python base image is floated across a bare tag (no @sha256).
+          # AUT-1735 requires every FROM python:* to pin a @sha256 digest so the
+          # build is reproducible and the trivy gate below scans a fixed image.
+          FLOATING="$(grep -rnE 'FROM python:[0-9]' \
+            docker/backend/Dockerfile docker/ai/Dockerfile \
+            docker/worker/Dockerfile market-data/Dockerfile || true)"
+          FLOATING="$(printf '%s\n' "$FLOATING" | grep -v '@sha256' || true)"
+          if [ -n "$FLOATING" ]; then
+            echo "::error::floating python base image detected (missing @sha256 digest):"
+            printf '%s\n' "$FLOATING"
+            exit 1
+          fi
+          echo "OK: python base images are digest-pinned across all Dockerfiles."
+
+      - name: Scan pinned postgres image (HIGH/CRITICAL, unfixed ignored)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+            image-ref: ${{ env.POSTGRES_IMAGE }}
+            scanner: vuln
+            severity: 'HIGH,CRITICAL'
+            ignore-unfixed: true
+            format: 'table'
+            output: 'trivy-postgres-report.txt'
+            exit-code: '1'
+
+      - name: Scan pinned frontend nginx image (HIGH/CRITICAL, unfixed ignored)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+            image-ref: ${{ env.NGINX_FRONTEND_IMAGE }}
+            scanner: vuln
+            severity: 'HIGH,CRITICAL'
+            ignore-unfixed: true
+            format: 'table'
+            output: 'trivy-nginx-report.txt'
+            exit-code: '1'
+
+      - name: Scan pinned python base image (HIGH/CRITICAL, AUT-1735)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.PYTHON_BASE_IMAGE }}
+          scanner: vuln
+          severity: 'HIGH,CRITICAL'
+          ignore-unfixed: true
+          format: 'table'
+          output: 'trivy-python-report.txt'
+          exit-code: '1'
+
+      - name: Upload scan reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-scan-reports
+          path: |
+            trivy-postgres-report.txt
+            trivy-nginx-report.txt
+            trivy-python-report.txt
+
+      - name: Report to Discord #status
+        if: always()
+        env:
+          RESULT: ${{ job.status }}
+          COLOR: ${{ job.status == 'success' && '0x57F287' || '0xED4245' }}
+          TITLE: ${{ job.status == 'success' && 'Base image scans clean' || 'Base image scan found HIGH/CRITICAL CVEs' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
+            -H "Content-Type: application/json" \
+            -d "$(jq -nc --arg c status --arg t "$TITLE" --arg col "$COLOR" --arg u "$RUN_URL" \
+              '{channel:$c,title:$t,description:"Weekly trivy scan of digest-pinned base images: postgres:17, nginx:stable-alpine frontend, python:3.13-slim (backend/ai/worker/market-data).",color:$col,author:"Security Scan",fields:[{name:"Scope",value:"postgres:17 + nginx frontend + python:3.13-slim",inline:true},{name:"Run",value:$u,inline:true}]}')"

@@ -1,0 +1,51 @@
+# AUT-1720: auto-free queued runs that are stuck on a deleted/merged branch.
+# A run left `queued` after its head branch disappears becomes an un-cancellable
+# GitHub zombie that makes the pipeline look frozen. This guard cancels such runs
+# before they linger, so the x64 runner queue never appears wedged again.
+name: CI Queue Guard
+
+on:
+  schedule:
+    - cron: "*/10 * * * *" # every 10 minutes
+  workflow_dispatch:
+
+permissions:
+  actions: write # required to cancel workflow runs
+
+concurrency:
+  group: ci-queue-guard
+  cancel-in-progress: false
+
+jobs:
+  cancel-orphaned-runs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      # The AutoBrain self-hosted runner fleet lives under one owner.
+      matrix:
+        repo: [autobrain, autobrainservice-website, rego-lookup-api]
+    steps:
+      - name: Cancel queued runs whose head branch no longer exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          repo="${{ matrix.repo }}"
+          ids=$(gh api "repos/CannonFodder151/$repo/actions/runs?status=queued&per_page=100" \
+                  --jq '.workflow_runs[] | "\(.id)\t\(.head_branch)"')
+          [ -z "$ids" ] && { echo "no queued runs in $repo"; exit 0; }
+          while IFS=$'\t' read -r id branch; do
+            [ -z "$id" ] && continue
+            # `push`/`pull_request` runs reference a head branch. If that ref has
+            # been merged/force-deleted, the run can never start and will zombie.
+            if git ls-remote --heads --exit-code \
+                 "https://github.com/CannonFodder151/$repo.git" "$branch" >/dev/null 2>&1; then
+              echo "run $id ($branch): branch still exists — leave queued"
+              continue
+            fi
+            echo "run $id ($branch): head branch gone — cancelling"
+            gh api -X POST "repos/CannonFodder151/$repo/actions/runs/$id/cancel" \
+              >/dev/null 2>&1 && echo "  cancelled" \
+              || echo "  cancel unavailable (GH zombie) — will retry next tick"
+          done <<< "$ids"

@@ -1,0 +1,183 @@
+# AutoBrain production stack.
+# Builds from source, tags images as ${DOCKERHUB_USERNAME}/autobrain-*.
+# Runs: postgres, redis, minio, backend (API + Celery worker+beat), ai, frontend.
+# Nginx frontend container serves Flutter web + proxies /api, /ws, /ai.
+# No ports exposed except frontend :80. All internal services exposed only via Compose network.
+#
+# First time:
+#   cp .env.example .env           # fill in values, especially SECRET_KEY
+#   docker compose -f docker-compose.prod.yml up -d --build
+# Updates:
+#   ./scripts/deploy.sh user@host
+
+x-core-env: &core-env
+  ENVIRONMENT: production
+  PYTHONPATH: /app
+  REDIS_URL: "redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379/0"
+  MINIO_ENDPOINT: minio:9000
+  # AUT-1786: explicit passthrough for init-minio.sh and runtime uploads.
+  MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-}
+  MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-}
+  AI_LOCAL_BASE_URL: http://ai:8001
+  AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:?AI_GATEWAY_API_KEY must be set (prod fails closed)}
+
+x-backend-base: &backend-base
+  build:
+    context: .
+    dockerfile: docker/backend/Dockerfile
+  image: ${DOCKERHUB_USERNAME:-autobrain}/autobrain-backend:${IMAGE_TAG:-latest}
+  restart: unless-stopped
+  env_file: .env
+  environment:
+    POSTGRES_HOST: postgres
+    <<: *core-env
+    # Community Garage federation hub (AUT-532): needed so /admin/social/register
+    # works out of the box. Self-hosters default to hosted=false (pay $20/yr).
+    SOCIAL_FEDERATION_HUB_URL: ${SOCIAL_FEDERATION_HUB_URL:-https://hub.autobrainservice.app}
+    SOCIAL_FEDERATION_HOSTED: ${SOCIAL_FEDERATION_HOSTED:-false}
+    # AUT-1858: petrol price map (NSW Fuel API, AUT-1813) — injected for
+    # Default/Hosted ONLY. Self-hosters bring their own keys via .env (see
+    # docs/petrol-price-map.md). WA FuelWatch needs no key; QLD/VIC are planned
+    # phases of AUT-1813. Empty key/secret + FUEL_NSW_ENABLED=false = disabled.
+    FUEL_NSW_API_KEY: ${FUEL_NSW_API_KEY:-}
+    FUEL_NSW_API_SECRET: ${FUEL_NSW_API_SECRET:-}
+    FUEL_NSW_ENABLED: "true"
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    minio:
+      condition: service_healthy
+  expose:
+    - "8000"
+
+services:
+  # ── Datastores ──────────────────────────────────────────────
+  postgres:
+    # Major bump pg16 → pg17 (AUT-1749). Pinned by manifest-list digest so the
+    # multi-arch image (amd64 + arm64) is immutable across Demo/Default/Hosted
+    # (Hosted = arm64 Oracle VM; dev box = x64). Bump deliberately: verify
+    # release notes, then update this digest.
+    image: pgvector/pgvector:pg17@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp
+      - /var/run/postgresql
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}"]
+    read_only: true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    # Pinned to immutable release (AUT-322). digest sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    # AUT-1737: pinned BY DIGEST to harden against Supply-chain base image CVEs.
+    # Docker Hub has no minio release newer than RELEASE.2025-09-07T16-13-09Z in this
+    # environment; upgrade to a patched image is blocked until upstream publishes it.
+    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── App services ───────────────────────────────────────────
+  backend:
+    <<: *backend-base
+    read_only: true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp
+      - /app/tmp
+
+  ai:
+    build:
+      context: .
+      dockerfile: docker/ai/Dockerfile
+    image: ${DOCKERHUB_USERNAME:-autobrain}/autobrain-ai:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    # AUT-1739: adequate /dev/shm for Chromium (market-data scraper).
+    shm_size: "256m"
+    tmpfs:
+      - /tmp
+      - /ms-playwright
+    env_file: .env
+    environment:
+      AI_ROUTER_URL: ${AI_ROUTER_URL}
+      AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:?AI_GATEWAY_API_KEY must be set (prod fails closed)}
+      API_KEY: ${MARKET_DATA_API_KEY:-}
+    expose:
+      - "8000"
+      - "8001"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend/Dockerfile
+      args:
+        API_BASE_URL: ${API_BASE_URL:-http://localhost:8000/api/v1}
+        WS_BASE_URL: ${WS_BASE_URL:-ws://localhost:8000/ws}
+    image: ${DOCKERHUB_USERNAME:-autobrain}/autobrain-frontend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
+    # Host :80 preserved; container runs nginx-unprivileged on :8080 (non-root).
+    ports:
+      - "80:8080"
+    depends_on:
+      - backend
+      - ai
+
+# ── Persistent volumes ──────────────────────────────────────
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:

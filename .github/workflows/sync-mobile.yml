@@ -1,0 +1,201 @@
+# AUT-1798: x64 jobs dispatch to the new vm2 runner (gh-runner-autobrain-2). ARM stays on Oracle VM.
+name: Sync mobile app
+
+# Keeps CannonFodder151/autobrain-mobile in lockstep with the server build:
+# on every push to main that touches the shared Flutter lineage or the version,
+# mirror frontend/lib + assets + CHANGELOG into autobrain-mobile, bump its
+# version to match APP_VERSION, and trigger the mobile release pipeline.
+# Manual dispatch always available: gh workflow run sync-mobile.yml.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/lib/**'
+      - 'frontend/assets/**'
+      - 'frontend/pubspec.yaml'
+      - 'CHANGELOG.md'
+      - 'scripts/bump-version.sh'
+      - 'scripts/sync-mobile.sh'
+      - 'scripts/auto-fix-mobile-test-mocks.py'
+  workflow_dispatch:
+
+# Concurrent sync runs (merge push + auto-bump push) raced the push to
+# autobrain-mobile and exhausted the retry loop (AUT-1099). Serialize: only
+# one sync per ref at a time, newest wins. Safe to cancel — every run syncs
+# main's latest lineage, so the survivor always produces the valid tree.
+concurrency:
+  group: sync-mobile-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: github.event_name != 'pull_request'
+    runs-on: [self-hosted, linux, x64, vm2]
+    timeout-minutes: 20
+    steps:
+      - name: Checkout autobrain repo
+        run: |
+          set -euo pipefail
+          if [ -d autobrain/.git ]; then
+            cd autobrain && git fetch origin && git checkout -f main && git reset --hard origin/main
+          else
+            rm -rf autobrain
+            git clone --branch main "https://github.com/${{ github.repository }}.git" autobrain
+          fi
+
+      - name: Checkout mobile repo
+        run: |
+          set -euo pipefail
+          if [ -d autobrain-mobile/.git ]; then
+            cd autobrain-mobile && git fetch origin && git checkout -f main && git reset --hard origin/main
+          else
+            git clone "https://x-access-token:${MOBILE_SYNC_TOKEN}@github.com/CannonFodder151/autobrain-mobile.git" autobrain-mobile
+          fi
+        env:
+          MOBILE_SYNC_TOKEN: ${{ secrets.MOBILE_SYNC_TOKEN }}
+
+      - name: Sync lineage + version into autobrain-mobile
+        working-directory: autobrain
+        run: ./scripts/sync-mobile.sh "$GITHUB_WORKSPACE/autobrain-mobile"
+
+      - name: Compile-guard the synced tree before committing
+        # A stale mobile-only delta (e.g. auth_state.dart) can silently miss
+        # getters the synced screens now use — never commit or release a tree
+        # that does not analyze clean (AUT-522).
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Analyze synced tree
+        id: analyze
+        continue-on-error: true
+        working-directory: autobrain-mobile
+        run: |
+          set -uo pipefail
+          flutter clean >/dev/null 2>&1 || true
+          flutter pub get
+          # Warnings/infos are pre-existing in the synced lineage; only hard
+          # errors block the sync (AUT-522). Capture the output and return code
+          # so the self-heal step can inspect failures.
+          set +e
+          flutter analyze --no-fatal-warnings --no-fatal-infos 2>&1 | tee /tmp/analyze_log.txt
+          RC=$?
+          set -e
+          echo "analyze_rc=$RC" >> "$GITHUB_OUTPUT"
+          [ "$RC" -eq 0 ]
+
+      - name: Self-heal — auto-fix mock signatures if analyze failed
+        # When flutter analyze fails with invalid_override errors (e.g. ApiClient
+        # method signature changed but test mock not updated), auto-align the
+        # mock signatures and re-run analyze. Other error types still fail.
+        if: steps.analyze.outputs.analyze_rc != '0'
+        working-directory: autobrain-mobile
+        run: |
+          set -euo pipefail
+          if ! grep -q "invalid_override" /tmp/analyze_log.txt; then
+            echo "::error::flutter analyze failed with non-invalid_override errors:"
+            cat /tmp/analyze_log.txt
+            exit 1
+          fi
+          echo "::group::Auto-fixing test mock signatures (AUT-1939 self-heal)"
+          python3 "$GITHUB_WORKSPACE/autobrain/scripts/auto-fix-mobile-test-mocks.py" "$GITHUB_WORKSPACE/autobrain-mobile"
+          echo "::endgroup::"
+          flutter clean >/dev/null 2>&1 || true
+          flutter pub get
+          flutter analyze --no-fatal-warnings --no-fatal-infos
+
+      - name: Commit and push if changed
+        id: commit
+        working-directory: autobrain-mobile
+        run: |
+          set -euo pipefail
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "mobile already in sync — nothing to push"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          version="$(grep -E '^version: ' pubspec.yaml | head -1 | awk '{print $2}')"
+          git config user.name "AutoBrain Release Bot"
+          git config user.email "release@autobrainservice.app"
+          git add -A
+          git commit -m "chore: sync frontend lineage + version to $version from autobrain (auto)"
+          # Concurrent sync runs (merge push + auto-bump push) can race the
+          # push; rebase onto the latest remote main and retry instead of
+          # reddening the whole run (AUT-633). A rebase that conflicts (e.g.
+          # two syncs bumping from the same version leave unmerged files in
+          # pubspec.yaml/CHANGELOG.md) must be aborted before the next attempt
+          # or every retry fails instantly (AUT-1099).
+          for attempt in 1 2 3; do
+            if git pull --rebase origin main; then
+              if git push origin main; then
+                echo "changed=true" >> "$GITHUB_OUTPUT"
+                echo "version=$version" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+            else
+              echo "pull/rebase conflicted (attempt $attempt/3) — aborting and retrying"
+              git rebase --abort 2>/dev/null || true
+            fi
+            echo "push rejected (attempt $attempt/3) — retrying after rebase"
+          done
+          echo "::error::mobile sync push failed after 3 attempts (non-fast-forward)"
+          exit 1
+
+      - name: Tag version and trigger mobile release pipeline
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.MOBILE_SYNC_TOKEN }}
+        working-directory: autobrain-mobile
+        run: |
+          set -euo pipefail
+          tag="v${{ steps.commit.outputs.version }}"
+          # workflow_dispatch only accepts a branch or tag ref (raw SHAs are
+          # rejected), and the release runner checks out that ref. Pin the
+          # dispatch to a version tag so rapid sync bursts cannot build a newer
+          # main against an older version input (version-mismatch failures).
+          git tag -f "$tag" HEAD
+          git push -f origin "$tag"
+          # Check API rate limit before dispatching — MOBILE_SYNC_TOKEN is a PAT
+          # with 5000 req/hour shared across all uses. If exhausted, defer the
+          # dispatch to avoid a403; the next push to main will re-sync and
+          # retry (AUT-1639).
+          remaining="$(gh api rate_limit --jq '.resources.core.remaining' 2>/dev/null || echo 5000)"
+          if [ "$remaining" -lt 100 ]; then
+            echo "::warning::GitHub API rate limit nearly exhausted (${remaining}/5000 remaining) — deferring mobile release dispatch for $tag. Next push to main will re-sync and dispatch."
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "deferred=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # A freshly pushed tag can lag GitHub's ref lookup (eventual
+          # consistency); dispatch then 422s "No ref found". Poll with
+          # linear backoff (5–60s per retry, up to 12 retries) before giving
+          # up so the pinned tag is released (AUT-451, AUT-1652).
+          for attempt in $(seq 1 12); do
+            if out="$(gh workflow run release-mobile.yml --repo CannonFodder151/autobrain-mobile \
+                --ref "$tag" -f "version=$tag" 2>&1)"; then
+              echo "dispatched mobile release $tag"
+              exit 0
+            fi
+            echo "dispatch attempt $attempt/12 failed: $out"
+            # Rate limit (403) — wait for window to reset then retry
+            if printf '%s' "$out" | grep -qi 'rate limit'; then
+              echo "::warning::rate limit hit during dispatch — waiting for reset (attempt $attempt/12)"
+              sleep $(( attempt * 5 ))
+              continue
+            fi
+            # 422 "No ref found" — tag not yet visible (eventual consistency)
+            if printf '%s' "$out" | grep -qi 'No ref found'; then
+              sleep 5
+              continue
+            fi
+            # Any other error is unexpected — fail fast
+            echo "::error::$out"
+            exit 1
+          done
+          echo "::error::could not dispatch mobile release $tag — retries exhausted"
+          exit 1

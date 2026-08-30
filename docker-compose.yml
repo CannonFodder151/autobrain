@@ -1,0 +1,139 @@
+# AutoBrain local development stack.
+# Usage: cp .env.example .env && docker compose up --build
+# Runs: postgres, redis, minio, backend (API + Celery worker+beat), ai (reload), frontend.
+# All services bind to localhost — connects to 9Router at AI_ROUTER_URL.
+
+# Backend service factory — reused by dev and test overrides.
+x-backend-base: &backend-base
+  build:
+    context: .
+    dockerfile: docker/backend/Dockerfile
+  image: autobrain-backend:latest
+  restart: unless-stopped
+  env_file: .env
+  environment:
+    POSTGRES_HOST: postgres
+    REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379/0
+    MINIO_ENDPOINT: minio:9000
+    # AUT-1786: explicitly propagate MinIO creds so init-minio.sh (and runtime
+    # uploads) work; optional passthrough — the script skips cleanly if absent.
+    MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-}
+    MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-}
+      AI_ROUTER_URL: ${AI_ROUTER_URL:-http://10.0.3.17:20128/v1}
+    SOCIAL_FEDERATION_HUB_URL: ${SOCIAL_FEDERATION_HUB_URL:-https://hub.autobrainservice.app}
+    SOCIAL_FEDERATION_HOSTED: ${SOCIAL_FEDERATION_HOSTED:-false}
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    minio:
+      condition: service_healthy
+
+services:
+  # ── Datastores ──────────────────────────────────────────────
+  postgres:
+    # Major bump pg16 → pg17 (AUT-1749). Pinned by manifest-list digest so the
+    # multi-arch image (amd64 + arm64) is immutable across Demo/Default/Hosted
+    # (Hosted = arm64 Oracle VM; dev box = x64). Bump deliberately: verify
+    # release notes, then update this digest.
+    image: pgvector/pgvector:pg17@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be set in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB must be set in .env}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # AB-INFRA-004: require auth even in dev — an open Celery broker is RCE.
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    # Pinned to immutable release (AUT-322). digest sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    # AUT-1737: pinned BY DIGEST to harden against Supply-chain base image CVEs.
+    # Docker Hub has no minio release newer than RELEASE.2025-09-07T16-13-09Z in this
+    # environment; upgrade to a patched image is blocked until upstream publishes it.
+    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY must be set in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY must be set in .env}
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── App services ───────────────────────────────────────────
+  backend:
+    <<: *backend-base
+    ports:
+      - "8000:8000"
+    command: ["sh", "-c", "alembic upgrade head && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"]
+    volumes:
+      - ./backend:/app
+
+  ai:
+    build:
+      context: .
+      dockerfile: docker/ai/Dockerfile
+    restart: unless-stopped
+    # AUT-1739: adequate /dev/shm for Chromium (market-data scraper).
+    shm_size: "256m"
+    env_file: .env
+    environment:
+    AI_ROUTER_URL: ${AI_ROUTER_URL:-http://10.0.3.17:20128/v1}
+      # AB-INFRA-006: gateway auth stays on in dev; backend sends the shared key.
+      AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:?AI_GATEWAY_API_KEY must be set in .env}
+    ports:
+      - "127.0.0.1:8001:8001"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+    volumes:
+      - ./ai:/app
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend/Dockerfile
+      args:
+        API_BASE_URL: ${API_BASE_URL:-http://localhost:8000/api/v1}
+        WS_BASE_URL: ${WS_BASE_URL:-ws://localhost:8000/ws}
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+# ── Persistent volumes ──────────────────────────────────────
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:

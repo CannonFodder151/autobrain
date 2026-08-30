@@ -1,0 +1,248 @@
+# Security Considerations
+
+## Authentication & sessions
+
+- Passwords hashed with bcrypt (`passlib`), pinned `bcrypt==4.0.1` for compatibility.
+- JWT access tokens (30-minute default; configurable) + refresh tokens (30 days).
+- Access and refresh tokens carry a `ver` claim = the user's `token_version` at
+  issue time. Bumping `token_version` (logout, password change) instantly revokes
+  every outstanding token. Old tokens without a `ver` claim still validate
+  (they decode as version 0), so the rollout is backwards compatible.
+- Refresh tokens rotate on every `/auth/refresh`: the used token's `jti` is
+  denylisted, so a replayed/stolen token is rejected.
+- All `/api/v1/*` routes except auth require a bearer token.
+
+## Multi-factor authentication (MFA)
+
+- TOTP (RFC 6238) via `pyotp`; setup returns a secret + QR (data URL).
+- Login with MFA enabled returns `{mfa_required, mfa_token}`; the full session is only issued after `/auth/mfa/verify` with a valid 6-digit code.
+- MFA tokens are short-lived (5 min) and type-flagged; they cannot be exchanged for access tokens alone.
+
+## Roles & provisioning
+
+- Three roles: `admin`, `user` and `demo` (demo accounts are seeded and
+  read-only; only `admin`/`user` are admin-creatable).
+- **Admin-only provisioning** — `/auth/register` and `/admin/users` require the
+  admin role (403 otherwise; anonymous → 401). Self-service **free signup**
+  (`/auth/signup`) is enabled on the hosted instance only
+  (`SELF_SIGNUP_ENABLED=true`), otherwise signup 403s.
+- The bootstrap admin is created from `ADMIN_EMAIL` / `ADMIN_INITIAL_PASSWORD` on first boot; rotate after first login.
+- Deleting the last admin or your own account is blocked.
+
+## Environment & secrets
+
+- `.env` never committed (`.gitignore`). Template at `.env.example` has
+  placeholder values only.
+- `SECRET_KEY` must be a long random string in production.
+- Kubernetes secrets (`infra/k8s/config.yaml`) contain placeholders only —
+  replace at install, never commit real values.
+
+## Git operations (credential-safe cloning)
+
+The GitHub `github_pat` (classic PAT, full access) is injected as the env var
+`GITHUB_TOKEN` (or fetched via the Paperclip secrets API). It is used ONLY for
+agent-side `gh` API operations (PR/release automation) — the deployed server
+runtime makes NO authenticated GitHub calls and holds no token (AUT-461).
+
+Private-repo CLONES use **SSH read-only deploy keys**, not a PAT (AUT-461):
+- Read-only deploy keys (`agent-deploy-key-readonly`) are registered on
+  `autobrain-mobile`, `autobrainservice-website`, `rego-lookup-api`.
+- Per-repo keypairs live in `~/.ssh/autobrain_{mobile,website,rego}_deploy`;
+  `~/.ssh/config` maps alias hosts (`github-ab-mobile`, `github-ab-website`,
+  `github-ab-rego`) to github.com with `IdentitiesOnly yes`.
+- `git config --global url.…insteadOf` rewrites the plain HTTPS URLs of the
+  three private repos to those SSH aliases, so cloning with the plain HTTPS URL
+  still works and needs no token.
+- Public repos (e.g. `autobrain`) clone over plain HTTPS without any auth.
+
+All git operations MUST follow this procedure:
+
+- **Clone with the plain HTTPS URL only** — never embed the token:
+  `git clone https://github.com/CannonFodder151/<repo>.git`. Private repos are
+  transparently routed to SSH deploy keys via the `insteadOf` rewrite above.
+- `gh` API operations authenticate via the injected `GITHUB_TOKEN` env
+  (gh credential helper) — the token never appears in any URL.
+- **Never** use `https://<user>:<token>@github.com/...` — git persists the
+  remote URL (token included) into `<repo>/.git/config`, leaking the secret to
+  disk (see [AUT-323](/AUT/issues/AUT-323)).
+- Purge scratch clones with `rm -rf` when done; never leave clones in `/tmp`.
+
+**Recovery (if a token already leaked into a clone):**
+
+1. Replace every credential-bearing URL/remote value with the plain HTTPS URL:
+   `git remote set-url origin https://github.com/CannonFodder151/<repo>.git`.
+   This includes `[branch "..."]` blocks whose `remote` line holds a full URL.
+2. Expire reflogs so the token is not persisted under `.git/logs`:
+   `git reflog expire --expire=now --all`.
+3. Regression-check all workspace clones — this must return nothing:
+   `grep -rnE '@github\.com' /paperclip/instances/default/workspaces/*/*/.git/config /paperclip/instances/default/projects/*/*/*/.git/config`
+4. If the leaked token was still live at exposure time, rotate it (exposed-on-disk
+   equals compromised); see [AUT-474](/AUT/issues/AUT-474).
+
+## AI router
+
+- `AI_ROUTER_API_KEY` (optional) is sent as a bearer token to the router.
+- Router payloads never include credentials or raw receipt images by default
+  (the OCR module receives file metadata/preview, not secrets).
+
+## AI gateway auth
+
+- The AI gateway's `/v1/*` endpoints require the shared `AI_GATEWAY_API_KEY`
+  (Bearer token, same value the backend sends via `ai_client.py`). This **fails
+  closed** — with the key unset the gateway returns 401 on `/v1/*` unless an
+  explicit opt-out is set (`AI_ENV=development` or `AI_GATEWAY_AUTH_DISABLED=1`;
+  the dev compose no longer sets it — AB-INFRA-006).
+- All compose files (dev, prod, hosted) refuse to start without it
+  (`${AI_GATEWAY_API_KEY:?...}`). Set the same strong random value for the
+  backend and `ai` services (Portainer stack env on the hosted instance).
+
+## Network
+
+- Prod runs behind nginx; only :80 exposed. Internal services are not
+  published.
+- CORS is locked to configured origins in production (empty = same-origin).
+- Hosted instance enforces MFA, rate-limits auth endpoints (`LOGIN_MAX_ATTEMPTS=5`, `LOGIN_WINDOW_SECONDS=10800`), and runs behind a Cloudflare-reverse-proxied domain.
+
+### Hosted host: Portainer agent exposure (AUT-472)
+
+The Portainer agent on the Oracle VM (`152.69.188.133:9001`) must never be
+reachable from the public internet (full Docker control = container escape /
+secrets exfiltration). It is restricted by source at the host firewall:
+
+- Allowed source for `tcp/9001`: the Portainer server egress IP
+  `122.199.30.128/32` (dev box / Portainer-Host network). Everything else is
+  dropped.
+- Enforced by the `fw-keeper` container (image `autobrain-fw-keeper:1`,
+  `network_mode: host`, `privileged`, `restart: unless-stopped`) on the hosted
+  host. It re-applies the rules every 60s at boot/restart because Ubuntu Core's
+  `/etc` is read-only (no iptables-persistent). The container's `cmd` is the
+  canonical rule source; the image has no other purpose.
+- Rules applied: `iptables -I INPUT 1 -p tcp --dport 9001 ! -s 122.199.30.128 -j DROP`
+  (docker-proxy/local socket path) and
+  `iptables -I DOCKER-USER 1 -p tcp --dport 9001 ! -s 122.199.30.128 -j DROP`
+  (DNAT forward path).
+- Verification (2026-08-13, AUT-472): 25/25 external check-host.net nodes
+  timed out on `:9001`; Portainer EP5 management still works from the allowed
+  source; `GET /ping` answers `204` only from the allowlisted IP.
+- Defense-in-depth pending: OCI security list rule to restrict `tcp/9001`
+  ingress to `122.199.30.128/32` at the VCN level (needs OCI console access).
+- If the Portainer server egress IP ever changes, update the source in the
+  `fw-keeper` container command and re-apply.
+
+### `9Router` AI router `:20128` (AUT-473, AUT-1754) — NOT internet-exposed
+
+**Classification: source-restricted, NOT internet-accessible.** This port is
+reachable only from the dev egress IP `122.199.30.128/32` and the internal
+docker subnet `172.18.0.0/16`. Every other source is dropped at the host
+firewall. Any security scan that reports `:20128` as "accessible from the
+internet" is a **false positive** — it is almost always because the scan was
+launched from `122.199.30.128` (the allow-listed dev egress IP / Portainer
+server egress), which is *supposed* to reach the port. "Open from the scanning
+host's public IP" ≠ "open from the internet." Do not file or escalate this as an
+internet-exposure finding; treat it as the intended allow-listed egress path.
+
+Unlike `:9001`, `:20128` is also consumed **internally** by the `backend`
+(`AI_ROUTER_URL=http://9router:20128/v1`), so the firewall must additionally
+allow the internal docker subnet — a blanket `:20128` drop on `DOCKER-USER`
+silently breaks `backend → 9router` (SYN times out across the bridge).
+
+- Published `0.0.0.0:20128` (was `127.0.0.1`). Dev reaches
+  `http://152.69.188.133:20128/v1` **only** from the allow-listed
+  `122.199.30.128`. From any other internet source the connection is dropped.
+- `DOCKER-USER` (forward/DNAT path), in this order:
+  1. `--dport 20128 -s 172.18.0.0/16 -j ACCEPT` (internal docker subnet — required)
+  2. `--dport 20128 -s 122.199.30.128 -j ACCEPT` (dev egress IP)
+  3. `--dport 20128 -j DROP` (everything else)
+- `INPUT` (docker-proxy/local path for the published port):
+  `--dport 20128 ! -s 122.199.30.128 -j DROP`.
+- All four rules live in the `fw-keeper` container command (canonical rule
+  source), re-asserted every 60s; they survive in kernel netfilter across a
+  `fw-keeper` restart and are re-applied on host boot.
+- Verification: probe `:20128` from **multiple, non-allow-listed** external
+  nodes (e.g. check-host.net probe nodes, like the `:9001` check below). They
+  must time out / refuse — proving the port is not internet-reachable. A probe
+  from `122.199.30.128` answers (by design); that single allow-listed success is
+  what a naive single-source scanner mislabels as "internet-accessible". The dev
+  egress IP is the only *external* allow-source; the internal subnet is
+  allow-listed only so the docker-bridge traffic that `DOCKER-USER` sees is not
+  dropped.
+- Defense-in-depth pending: OCI-level Security List ingress rule to restrict
+  `tcp/20128` to `122.199.30.128/32` (and the internal subnet) at the VCN layer
+  (same as `:9001`). Needs OCI console access; the host `fw-keeper` rule above
+  is the current enforcement.
+
+## Data protection
+
+- Receipts/photos stored in MinIO; keys are random per upload.
+- Consider S3 server-side encryption in production.
+- Backups contain PII — encrypt backup artifacts at rest.
+
+## Secret-file pattern & broker auth (AUT-1533)
+
+Stack-config hardening from the AUT-1486/AUT-1498 audit. Applies to
+`docker-compose.hosted.yml` (AutoBrain-Hosted EP5 and the dev box stack).
+
+### How it works
+
+- Secret-class values live in `/opt/autobrain/secrets/<name>` on the host
+  (`root:1000`, mode `0640`). The dir is bind-mounted read-only at
+  `/run/secrets` into `backend`, `worker`, `ai`; postgres/redis/minio mount
+  only the files they need. The bind source honours `${SECRETS_DIR}` — set it
+  in the stack env when the host rootfs is read-only (Oracle VM runs Ubuntu
+  Core; hosted uses `/data/autobrain/secrets`, AUT-1535).
+- At container start, `docker/lib-load-secrets.sh` exports each `FOO_FILE`
+  var's file content as `FOO`, and derives authenticated
+  `REDIS_URL`/`CELERY_*_URL` from `/run/secrets/redis_password`
+  (AB-INFRA-004: an open Celery broker is RCE). Values never appear in
+  `docker inspect` or `/proc/*/environ`.
+- Redis starts with `--requirepass "$(cat /run/secrets/redis_password)"`;
+  its healthcheck authenticates the same way. Postgres/MinIO use their
+  images' native `*_FILE` support.
+- Non-secret config stays in the Portainer stack env as before.
+
+### Deploy / rotation runbook
+
+1. Dump the current stack env to a temp file, then seed:
+   `sudo ./scripts/seed-secrets.sh /tmp/stack-env.txt` — writes all mapped
+   secret files, generating a broker password if none exists.
+2. Shred the dump: `shred -u /tmp/stack-env.txt`.
+3. Update the Portainer stack from `docker-compose.hosted.yml` (secret-class
+   keys can be dropped from the stack env) and redeploy.
+4. Verify: `docker inspect <svc>` shows no plain secrets; every service
+   healthy; `redis-cli -a $(sudo cat /opt/autobrain/secrets/redis_password)
+   ping` → PONG; unauthenticated `redis-cli ping` → NOAUTH.
+5. Rotate any secret by rewriting its file and restarting the consuming
+   services (broker rotation restarts redis + backend + worker).
+
+### Image tag policy
+
+`:hosted` is a rolling tag for auto-deploys. CI also publishes immutable
+`hosted-sha-<commit>` tags — pin prod/dev to distinct digests when drift
+matters (audit finding F4), e.g. `image: ...:hosted-sha-<sha>` or
+`...@sha256:<digest>`. `decolua/9router` is digest-pinned in the compose;
+bump deliberately.
+
+### Known residuals
+
+- `hub` (private repo) still takes plain env until its image gains `*_FILE`
+  support; `rego-lookup-api` likewise in its own repo/deployment.
+- Post-redeploy, the hosted frontend port mapping aligns 8086→8080 (the
+  running container's stale 8086→80 was latent: npm proxies via static IP).
+- Secrets remain readable by root/host users — accepted residual.
+
+## Vulnerability reporting
+
+See [SECURITY.md](../../SECURITY.md) for the reporting policy.
+
+## Hardening checklist
+
+- [ ] Rotate all default credentials (postgres, minio, SECRET_KEY).
+- [x] Redis `requirepass` on every stack incl. hosted + dev (AB-INFRA-004, AUT-1533).
+- [x] Secret-class env migrated to `_FILE` files (AUT-1533) — hub/rego-lookup pending.
+- [ ] Set a real `AI_ROUTER_URL` and key in prod.
+- [ ] Set a real `AI_GATEWAY_API_KEY` (same value for backend + ai services).
+- [ ] Restrict CORS origins.
+- [ ] Enable HTTPS (TLS termination on nginx or a load balancer).
+- [ ] Restrict SSH (key-only auth).
+- [x] Restrict Portainer agent (`tcp/9001`) to Portainer server IP via `fw-keeper` (AUT-472).
+- [ ] Backups encrypted + off-site.

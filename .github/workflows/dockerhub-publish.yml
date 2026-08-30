@@ -1,0 +1,320 @@
+# AUT-1798: x64 jobs dispatch to the new vm2 runner (gh-runner-autobrain-2).
+# AUT-1802: the arm64 runner is reserved for building arm images ONLY; every
+# other job (OCR, gates, scans) dispatches to the x64 vm2 runner. Legacy x64
+# runner is degraded (AUT-1781).
+name: Publish images to Docker Hub
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Only one publish pipeline per branch at a time, but do NOT cancel an
+# in-flight run. The publish/buildx steps take many minutes; a newer push to
+# main (PR merge or auto-bump) arriving mid-publish would otherwise cancel it
+# and starve the latest commit (AUT-967, AUT-1756). Queue the newer run behind
+# the in-flight one so every push to main still publishes. The auto-bump commit
+# is tagged [skip ci] (scripts/auto-bump.sh) so it never re-triggers this
+# workflow and the in-flight publish is never cancelled by its own version cut.
+concurrency:
+  group: dockerhub-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  changelog-gate:
+    # AUT-1785: route the lightweight (git/jq, ~seconds) merge-gating gate to
+    # bare [self-hosted, linux, x64] instead of the `vm2` label, so GitHub can
+    # dispatch it to the idle legacy x64 runner (gh-runner-autobrain) instead of
+    # queued behind the heavy docker publish pipeline on vm2. AUT-1802: arm64
+    # reserved for arm images only. The gate needs no docker, so the legacy
+    # runner's dockerd-wedge history (AUT-1720) does not apply here.
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require changelog iteration on app/docker changes (AUT-168)
+        run: |
+          set -euo pipefail
+          # PRs: diff against the merge-base (AUT-633). Pushes to main: diff
+          # against the previous head so a changelog-less app/docker merge can
+          # never ship — the failing gate blocks auto-bump + publish, which
+          # would otherwise cut/redeploy under a stale version (AUT-1141).
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # Dependabot bumps never touch CHANGELOG.md; forcing it reds every
+            # dependency PR forever (AUT-540).
+            if [ "${{ github.actor }}" = "dependabot[bot]" ]; then
+              echo "dependabot PR — skipping changelog gate"
+              exit 0
+            fi
+            BASE="${{ github.event.pull_request.base.sha }}"
+            if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+              echo "no usable base SHA — skipping changelog gate"
+              exit 0
+            fi
+            # Diff against the merge-base, not base.sha: base.sha is the live
+            # tip of the target branch, so on a stale PR it drags in unrelated
+            # main changes — false-failing docs-only PRs and, worse, masking a
+            # missing CHANGELOG.md entry when main happened to move one (AUT-633).
+            MB="$(git merge-base "$BASE" "$GITHUB_SHA")"
+            if [ -z "$MB" ]; then
+              echo "no merge-base with base SHA — skipping changelog gate"
+              exit 0
+            fi
+            CHANGED="$(git diff --name-only "$MB" "$GITHUB_SHA")"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            BEFORE="$(git rev-parse "${{ github.event.before }}" 2>/dev/null || echo '')"
+            if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+              echo "no usable before SHA — skipping changelog gate"
+              exit 0
+            fi
+            # Auto-bump release cuts always touch CHANGELOG.md (unreleased ->
+            # versioned), so they pass the gate. A plain merge without a
+            # CHANGELOG.md entry fails here — that is the point (AUT-1141).
+            CHANGED="$(git diff --name-only "$BEFORE" "$GITHUB_SHA")"
+          else
+            echo "changelog gate skipped (AUT-451)"
+            exit 0
+          fi
+          APP_CHANGED="$(printf '%s\n' "$CHANGED" | grep -E '^(backend/|ai/|frontend/|docker/|docker-compose)' || true)"
+          if [ -n "$APP_CHANGED" ] && ! printf '%s\n' "$CHANGED" | grep -qx 'CHANGELOG.md'; then
+            echo "::error::App/docker files changed but CHANGELOG.md was not updated. Add an entry under [Unreleased] (see CONTRIBUTING.md) before merging."
+            exit 1
+          fi
+          echo "changelog gate OK — CHANGELOG.md iterated with app/docker changes"
+
+  pip-audit-gate:
+    # AUT-1785: route the lightweight (python, ~seconds) scan to bare
+    # [self-hosted, linux, x64] so GitHub can use the idle legacy x64 runner
+    # instead of queuing behind the heavy docker publish on vm2. AUT-1802: the
+    # arm64 runner is reserved for building arm images only.
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pip-audit
+        run: |
+          # Self-hosted runners may lack pip entirely (minimal images). Bootstrap
+          # it if missing, then install pip-audit with PEP 668 bypass.
+          python3 -m pip --version 2>/dev/null || \
+            curl -sS https://bootstrap.pypa.io/get-pip.py | PIP_BREAK_SYSTEM_PACKAGES=1 python3 -
+          PIP_BREAK_SYSTEM_PACKAGES=1 python3 -m pip install --quiet pip-audit
+      - name: Fail on known-vuln pinned deps (AUT-781)
+        run: |
+          set -euo pipefail
+          # backend/ and ai/requirements.txt duplicate several identical pins
+          # (fastapi, pydantic, httpx, …). The latest pip-audit rejects duplicate
+          # requirement lines across combined -r inputs — a latent failure that
+          # surfaced when the gate moved to a fresh arm64 runner (AUT-1761);
+          # the x64 runner only passed because a stale cached pip-audit tolerated
+          # it. Audit one deduplicated pin list so every package is still scanned
+          # exactly once.
+          TMPREQ="$(mktemp)"
+          cat backend/requirements.txt ai/requirements.txt | sort -u > "$TMPREQ"
+          python3 -m pip_audit --disable-pip --no-deps -r "$TMPREQ"
+          rm -f "$TMPREQ"
+
+  auto-bump:
+    needs: changelog-gate
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, linux, x64, vm2]
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
+          fetch-depth: 0
+      - name: Cut a release if [Unreleased] has content (AUT-240)
+        run: |
+          set -euo pipefail
+          git config user.name "AutoBrain Release Bot"
+          git config user.email "release@autobrainservice.app"
+          ./scripts/auto-bump.sh
+          # Concurrent workflow runs can race the auto-bump push; rebase onto
+          # the latest main and retry instead of failing the run (AUT-451).
+          for attempt in 1 2 3; do
+            if git push origin main; then
+              echo "==> auto-bump done"
+              exit 0
+            fi
+            echo "push rejected (attempt $attempt/3) — rebasing onto latest main"
+            git pull --rebase origin main
+          done
+          echo "::error::auto-bump push failed after 3 attempts (non-fast-forward)"
+          exit 1
+
+  publish:
+    needs: auto-bump
+    if: github.event_name != 'pull_request'
+    runs-on: [self-hosted, linux, x64, vm2]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Skip publish when the push only cut a version (AUT-240)
+        id: version_only
+        run: |
+          BEFORE="${{ github.event.before }}"
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          CHANGED="$(git diff --name-only "$BEFORE" "$GITHUB_SHA" || true)"
+          NONVERSION="$(printf '%s\n' "$CHANGED" | grep -vE '^(CHANGELOG\.md|backend/app/core/config\.py|ai/app/main\.py|frontend/pubspec\.yaml|scripts/bump-version\.sh|scripts/auto-bump\.sh)$' || true)"
+          if [ -n "$CHANGED" ] && [ -z "$NONVERSION" ]; then
+            echo "version-only push (auto-bump) — skipping image publish"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: docker/setup-buildx-action@v3
+        if: steps.version_only.outputs.skip != 'true'
+
+      - uses: docker/login-action@v3
+        if: steps.version_only.outputs.skip != 'true'
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push images (linux/amd64)
+        if: steps.version_only.outputs.skip != 'true'
+        env:
+          API_BASE_URL: https://hosted.autobrainservice.app/api/v1
+          WS_BASE_URL: wss://hosted.autobrainservice.app/ws
+        run: |
+          set -euo pipefail
+          VERSION="$(grep -E 'APP_VERSION: str' backend/app/core/config.py | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/')"
+          echo "==> building images tagged with version $VERSION (linux/amd64)"
+          for svc in backend worker ai frontend; do
+            case "$svc" in
+              backend)  ctx=.;        df=docker/backend/Dockerfile;   args="";;
+              worker)   ctx=.;        df=docker/worker/Dockerfile;     args="";;
+              ai)       ctx=.;        df=docker/ai/Dockerfile;         args="";;
+              frontend) ctx=.;        df=docker/frontend/Dockerfile;   args="--build-arg API_BASE_URL=${API_BASE_URL} --build-arg WS_BASE_URL=${WS_BASE_URL}";;
+            esac
+            for tag in latest hosted "$VERSION"; do
+              echo "==> building autobrain-${svc}:${tag}-amd64"
+              docker buildx build --platform linux/amd64 --push \
+                -t "cannonfodder151/autobrain-${svc}:${tag}-amd64" \
+                ${args} -f "${df}" "${ctx}"
+            done
+          done
+
+      - name: Build and push default-tier frontend image (linux/amd64)
+        if: steps.version_only.outputs.skip != 'true'
+        env:
+          API_BASE_URL: https://default.autobrainservice.app/api/v1
+          WS_BASE_URL: wss://default.autobrainservice.app/ws
+        run: |
+          set -euo pipefail
+          echo "==> building autobrain-frontend:default-amd64"
+          docker buildx build --platform linux/amd64 --push \
+            -t "cannonfodder151/autobrain-frontend:default-amd64" \
+            --build-arg API_BASE_URL=${API_BASE_URL} --build-arg WS_BASE_URL=${WS_BASE_URL} \
+            -f docker/frontend/Dockerfile .
+
+  publish-manifest:
+    # Tag the amd64 images as the default platform manifest (AUT-967).
+    # Multi-arch manifests (amd64+arm64) are built by build-hosted.yml when
+    # the arm64 runner is available.
+    needs: publish
+    if: github.event_name != 'pull_request'
+    runs-on: [self-hosted, linux, x64, vm2]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Skip publish when the push only cut a version (AUT-240)
+        id: version_only
+        run: |
+          BEFORE="${{ github.event.before }}"
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          CHANGED="$(git diff --name-only "$BEFORE" "$GITHUB_SHA" || true)"
+          NONVERSION="$(printf '%s\n' "$CHANGED" | grep -vE '^(CHANGELOG\.md|backend/app/core/config\.py|ai/app/main\.py|frontend/pubspec\.yaml|scripts/bump-version\.sh|scripts/auto-bump\.sh)$' || true)"
+          if [ -n "$CHANGED" ] && [ -z "$NONVERSION" ]; then
+            echo "version-only push (auto-bump) — skipping image publish"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: docker/login-action@v3
+        if: steps.version_only.outputs.skip != 'true'
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Assemble amd64 manifest tags
+        if: steps.version_only.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          VERSION="$(grep -E 'APP_VERSION: str' backend/app/core/config.py | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/')"
+          echo "==> tagging amd64 images as default platform manifests (version $VERSION)"
+          for svc in backend worker ai frontend; do
+            for tag in latest hosted "$VERSION"; do
+              echo "==> manifest autobrain-${svc}:${tag}"
+              docker buildx imagetools create \
+                -t "cannonfodder151/autobrain-${svc}:${tag}" \
+                "cannonfodder151/autobrain-${svc}:${tag}-amd64"
+            done
+          done
+          echo "==> manifest autobrain-frontend:default"
+          docker buildx imagetools create \
+            -t "cannonfodder151/autobrain-frontend:default" \
+            "cannonfodder151/autobrain-frontend:default-amd64"
+
+  sync-changelog:
+    needs: publish-manifest
+    if: github.event_name != 'pull_request'
+    runs-on: [self-hosted, linux, x64, vm2]
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout autobrain repo
+        run: |
+          set -euo pipefail
+          if [ -d app/.git ]; then
+            cd app && git fetch origin && git checkout -f main && git reset --hard origin/main
+          else
+            rm -rf app
+            git clone --branch main "https://github.com/${{ github.repository }}.git" app
+          fi
+      - name: Checkout website repository
+        run: |
+          set -euo pipefail
+          if [ -d website/.git ]; then
+            cd website && git fetch origin && git checkout -f main && git reset --hard origin/main
+          else
+            git clone --depth=1 "https://x-access-token:${WEBSITE_SYNC_TOKEN}@github.com/CannonFodder151/autobrainservice-website.git" website
+          fi
+        env:
+          WEBSITE_SYNC_TOKEN: ${{ secrets.WEBSITE_SYNC_TOKEN }}
+      - name: Sync CHANGELOG.md to the marketing site
+        working-directory: website
+        run: |
+          set -euo pipefail
+          cp ../app/CHANGELOG.md CHANGELOG.md
+          if git diff --quiet CHANGELOG.md; then
+            echo "changelog unchanged — nothing to sync"
+            exit 0
+          fi
+          git config user.name "AutoBrain Release Bot"
+          git config user.email "release@autobrainservice.app"
+          git add CHANGELOG.md
+          git commit -m "Changelog: sync release notes from autobrain"
+          git push

@@ -1,0 +1,67 @@
+"""User account model."""
+
+import uuid
+from datetime import datetime
+
+from sqlalchemy import DateTime, Integer, String, Text, func
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.db.session import Base
+
+
+def _uuid() -> str:
+    return str(uuid.uuid4())
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
+    display_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[str] = mapped_column(String(20), default="user", nullable=False)  # admin/user
+    # Moderation: banned users cannot write social content (issues, comments,
+    # flags, builds). Their existing posts stay visible but admin-hidden when
+    # banned (see admin moderation hub, AUT-832).
+    social_banned: Mapped[bool] = mapped_column(default=False)
+    max_vehicles: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    is_active: Mapped[bool] = mapped_column(default=True)
+    # Invited/self-signed-up but never completed registration (set a password).
+    # Cleared when the invite token is consumed; purged after retention window.
+    pending: Mapped[bool] = mapped_column(default=False)
+    free_account: Mapped[bool] = mapped_column(default=False)  # disables AI and rego lookup
+    obd_enabled: Mapped[bool] = mapped_column(default=False)  # admin-granted OBD access
+    obd_auto_connect: Mapped[bool] = mapped_column(default=False)  # auto-connect Bluetooth OBD
+    # Token lifecycle: bump to revoke ALL outstanding access + refresh tokens
+    # (logout, password change). Tokens carry `ver` = version at issue time.
+    token_version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    mfa_secret: Mapped[str | None] = mapped_column(String(64))
+    mfa_enabled: Mapped[bool] = mapped_column(default=False)
+    # Stripe billing (hosted subscriptions). Populated by the billing webhook.
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String(64))
+    stripe_subscription_status: Mapped[str | None] = mapped_column(String(32))
+    stripe_price_id: Mapped[str | None] = mapped_column(String(64))
+    # One-time 7-day free trial (AUT-1195/1196). Set True on the first
+    # checkout.session.completed; repeat trial checkouts are rejected.
+    has_had_trial: Mapped[bool] = mapped_column(default=False)
+    # Store-native IAP (AUT-610/617): Apple App Store / Google Play licences for
+    # the store builds of the mobile app. Recorded server-side and durable so
+    # the licence survives reinstall/re-login. iap_status is the last-known
+    # state ("active"/"expired"/"revoked"); effective status also considers
+    # iap_expires_at (see billing.iap_status).
+    iap_platform: Mapped[str | None] = mapped_column(String(16), index=True)  # android | ios
+    iap_product_id: Mapped[str | None] = mapped_column(String(128))
+    iap_transaction_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    iap_original_transaction_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    iap_purchase_token: Mapped[str | None] = mapped_column(Text)  # Play token / iOS signedTransaction JWS
+    iap_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    iap_status: Mapped[str | None] = mapped_column(String(16))
+    iap_refreshed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # last store re-validation
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )

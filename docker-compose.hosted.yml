@@ -1,0 +1,440 @@
+# AutoBrain HOSTED stack — Portainer stack "autobrain-hosted" (EP5, Oracle Cloud 152.69.188.133)
+# Restored to match the actual running services (AUT-101). Project name: autobrain-hosted.
+# App images from ghcr.io (multi-arch: the Oracle host is arm64 and Docker Hub :hosted tags are
+# amd64-only since AUT-967; ghcr :hosted carries amd64+arm64, AUT-1114).
+# Non-secret config interpolates from the Portainer stack env; secret-class
+# values come from /opt/autobrain/secrets via the *_FILE pattern (AUT-1533).
+# Env must stay applied via the stack so redeploys never revert SMTP2GO/SMTP_* (see AUT-97/AUT-101).
+
+# Secret-file pattern (AUT-1533): secret-class values are bind-mounted from
+# /opt/autobrain/secrets (root:1000, 0640) and loaded into process env at
+# container start by docker/lib-load-secrets.sh. They never appear in
+# `docker inspect`. Seed with scripts/seed-secrets.sh BEFORE deploying this
+# file; see docs/security.md ("Secret-file pattern & broker auth").
+
+x-secrets: &secrets
+  volumes:
+    - type: bind
+      source: ${SECRETS_DIR:-/opt/autobrain/secrets}
+      target: /run/secrets
+      read_only: true
+
+x-db-env: &db-env
+  ENVIRONMENT: production
+  POSTGRES_HOST: postgres
+  # Defaults (AUT-1847): the required vars must survive a redeploy even if the
+  # Portainer stack env is incomplete, otherwise compose interpolation fails and
+  # the hosted stack can never update. The secret itself stays a *_FILE bind.
+  POSTGRES_USER: ${POSTGRES_USER:-autobrain}
+  POSTGRES_DB: ${POSTGRES_DB:-autobrain}
+  POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+
+x-core-env: &core-env
+  MINIO_ENDPOINT: minio:9000
+  MINIO_BUCKET: ${MINIO_BUCKET:-autobrain-assets}
+  MINIO_ACCESS_KEY_FILE: /run/secrets/minio_access_key
+  MINIO_SECRET_KEY_FILE: /run/secrets/minio_secret_key
+  # AB-INFRA-004: broker requires a password; lib-load-secrets derives the
+  # authenticated REDIS_URL / CELERY_*_URL from this file at startup.
+  REDIS_PASSWORD_FILE: /run/secrets/redis_password
+  AI_LOCAL_BASE_URL: http://ai:8001
+
+x-router-env: &router-env
+  # Keep the STACK-LOCAL 9router (reachable via docker DNS on the Oracle VM).
+  # The corporate 9Router at http://10.0.3.17:20128/v1 is on the on-prem LAN and
+  # is NOT reachable from Oracle Cloud, so pointing this stack at it would leave
+  # OCR/AI with no reachable router (silently degrading to rule-based fallback).
+  # Dev/demo stacks use 10.0.3.17:20128/v1 via .env — do NOT "fix" this to match.
+  AI_ROUTER_URL: ${AI_ROUTER_URL:-http://9router:20128/v1}
+  AI_ROUTER_API_KEY_FILE: /run/secrets/ai_router_api_key
+  AI_ROUTER_MODEL: ${AI_ROUTER_MODEL:-General-Use}
+
+services:
+  postgres:
+    # Major bump pg16 → pg17 (AUT-1749). Pinned by manifest-list digest so the
+    # multi-arch image (amd64 + arm64) is immutable across Demo/Default/Hosted
+    # (Hosted = arm64 Oracle VM; dev box = x64). Bump deliberately: verify
+    # release notes, then update this digest.
+    image: pgvector/pgvector:pg17@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be set}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB must be set}
+      # Native *_FILE support in the postgres entrypoint (AUT-1533).
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - type: bind
+        source: ${SECRETS_DIR:-/opt/autobrain/secrets}/postgres_password
+        target: /run/secrets/postgres_password
+        read_only: true
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # AB-INFRA-004: an open Celery broker is RCE — requirepass in prod and dev.
+    # The password is read from the secret file at start; it never enters env.
+    command: ["/bin/sh", "-c", "exec redis-server --requirepass \"$$(cat /run/secrets/redis_password)\""]
+    volumes:
+      - redis-data:/data
+      - type: bind
+        source: ${SECRETS_DIR:-/opt/autobrain/secrets}/redis_password
+        target: /run/secrets/redis_password
+        read_only: true
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$(cat /run/secrets/redis_password)\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    # Pinned to immutable release (AUT-322). digest sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    # AUT-1737: pinned BY DIGEST to harden against Supply-chain base image CVEs.
+    # Docker Hub has no minio release newer than RELEASE.2025-09-07T16-13-09Z in this
+    # environment; upgrade to a patched image is blocked until upstream publishes it.
+    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    restart: unless-stopped
+    # AUT-1242-C2: bucket init folded into the server entrypoint to drop the
+    # one-shot minio-init sidecar. Start minio in the background, wait for it
+    # to accept connections (mc alias set retries until healthcheck passes),
+    # then create/privatise the bucket idempotently and block on the server.
+    entrypoint: >
+      /bin/sh -c "
+      minio server /data --console-address ':9001' &
+      MINIO_PID=$$!;
+      trap 'kill -TERM $${MINIO_PID} 2>/dev/null' TERM INT;
+      until mc alias set local http://localhost:9000 "$$(cat /run/secrets/minio_access_key)" "$$(cat /run/secrets/minio_secret_key)" >/dev/null 2>&1 && mc ready local >/dev/null 2>&1; do sleep 2; done;
+      mc mb -p local/${MINIO_BUCKET:-autobrain-assets} 2>/dev/null || true;
+      mc anonymous set none local/${MINIO_BUCKET:-autobrain-assets} 2>/dev/null || true;
+      echo '[minio] bucket init complete';
+      trap - TERM INT;
+      wait $${MINIO_PID}
+      "
+    environment:
+      # Native *_FILE support in the MinIO image (AUT-1533).
+      MINIO_ROOT_USER_FILE: /run/secrets/minio_access_key
+      MINIO_ROOT_PASSWORD_FILE: /run/secrets/minio_secret_key
+    volumes:
+      - minio-data:/data
+      - type: bind
+        source: ${SECRETS_DIR:-/opt/autobrain/secrets}/minio_access_key
+        target: /run/secrets/minio_access_key
+        read_only: true
+      - type: bind
+        source: ${SECRETS_DIR:-/opt/autobrain/secrets}/minio_secret_key
+        target: /run/secrets/minio_secret_key
+        read_only: true
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    image: ghcr.io/cannonfodder151/autobrain-backend:hosted
+    restart: unless-stopped
+    command: sh -c "python -m app.db.bootstrap && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    environment:
+      <<: [*db-env, *core-env, *router-env]
+      SECRET_KEY_FILE: /run/secrets/backend_secret_key
+      MINIO_PUBLIC_ENDPOINT: ${APP_BASE_URL:-https://hosted.autobrainservice.app}
+      AI_ROUTER_TIMEOUT_SECONDS: 120
+      REGO_LOOKUP_URL: ${REGO_LOOKUP_URL:-}
+      REGO_LOOKUP_API_KEY_FILE: /run/secrets/rego_lookup_api_key
+      MARKET_DATA_URL: ${MARKET_DATA_URL:-http://ai:8000}
+      MARKET_DATA_API_KEY_FILE: /run/secrets/market_data_api_key
+      # AUT-1858: petrol price map (NSW Fuel API, AUT-1813) — Hosted/Default only.
+      # Keys arrive via secret files (AUT-1533, see scripts/seed-secrets.sh);
+      # enabled for the managed tiers. WA FuelWatch = no key; QLD/VIC planned.
+      FUEL_NSW_API_KEY_FILE: /run/secrets/fuel_nsw_api_key
+      FUEL_NSW_API_SECRET_FILE: /run/secrets/fuel_nsw_api_secret
+      FUEL_NSW_ENABLED: "true"
+      AI_GATEWAY_API_KEY_FILE: /run/secrets/ai_gateway_api_key
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@autobrain.io}
+      ADMIN_DISPLAY_NAME: AutoBrain Admin
+      ADMIN_INITIAL_PASSWORD_FILE: /run/secrets/admin_initial_password
+      DEMO_MODE: "false"
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
+      SMTP_USERNAME_FILE: /run/secrets/smtp_username
+      SMTP_PASSWORD_FILE: /run/secrets/smtp_password
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-no-reply@autobrainservice.app}
+      SMTP_FROM_NAME: AutoBrain
+      APP_BASE_URL: ${APP_BASE_URL:-https://hosted.autobrainservice.app}
+      MFA_ENFORCED: "true"
+      LOGIN_MAX_ATTEMPTS: 5
+      LOGIN_WINDOW_SECONDS: 10800
+      ADMIN_API_KEY_FILE: /run/secrets/admin_api_key
+      SELF_SIGNUP_ENABLED: ${SELF_SIGNUP_ENABLED:-true}
+      LICENSE_ENABLED: "true"
+      # Community Garage federation hub (AUT-532): the hub is a sibling service
+      # in this stack. Wire the URL so /admin/social/register works (was 502
+      # "hub not configured"); AutoBrain-Hosted registers hosted=true (free).
+      SOCIAL_FEDERATION_HUB_URL: ${SOCIAL_FEDERATION_HUB_URL:-https://hub.autobrainservice.app}
+      SOCIAL_FEDERATION_HOSTED: "true"
+      SOCIAL_FEDERATION_HOSTED_REGISTRATION_KEY_FILE: /run/secrets/hub_hosted_registration_key
+      # --- CI Triage webhook receiver (AUT-1669 / AUT-1751): POST /api/v1/ci/webhook ---
+      # Bearer secret the GitHub Actions `ci-triage-webhook.yml` fire job presents.
+      # Must match the GitHub repo secret CI_TRIAGE_WEBHOOK_SECRET and the Paperclip
+      # creds below so the receiver can create CI Triage child issues.
+      CI_TRIAGE_WEBHOOK_SECRET: ${CI_TRIAGE_WEBHOOK_SECRET:-}
+      CI_TRIAGE_PARENT_ISSUE_ID: ${CI_TRIAGE_PARENT_ISSUE_ID:-}
+      CI_TRIAGE_GOAL_ID: ${CI_TRIAGE_GOAL_ID:-}
+      CI_TRIAGE_AGENT_ID: ${CI_TRIAGE_AGENT_ID:-acae6bf2}
+      PAPERCLIP_API_URL: ${PAPERCLIP_API_URL:-https://paperclip.nathanmartina.com}
+      PAPERCLIP_API_KEY: ${PAPERCLIP_API_KEY:-}
+      PAPERCLIP_COMPANY_ID: ${PAPERCLIP_COMPANY_ID:-41d8aeaf-0e55-4127-b037-7a6d740be3b6}
+      STRIPE_SECRET_KEY_FILE: /run/secrets/stripe_secret_key
+      STRIPE_WEBHOOK_SECRET_FILE: /run/secrets/stripe_webhook_secret
+      STRIPE_PRICE_ENTHUSIAST_MONTHLY: ${STRIPE_PRICE_ENTHUSIAST_MONTHLY:-}
+      STRIPE_PRICE_ENTHUSIAST_YEARLY: ${STRIPE_PRICE_ENTHUSIAST_YEARLY:-}
+      STRIPE_PRICE_GARAGE_MONTHLY: ${STRIPE_PRICE_GARAGE_MONTHLY:-}
+      STRIPE_PRICE_GARAGE_YEARLY: ${STRIPE_PRICE_GARAGE_YEARLY:-}
+      STRIPE_PROMO_EARLY_ADOPTER: ${STRIPE_PROMO_EARLY_ADOPTER:-}
+      STRIPE_PROMO_EARLY_ADOPTER_CODE: ${STRIPE_PROMO_EARLY_ADOPTER_CODE:-EARLY40}
+      STRIPE_SALE_ENDS_AT: ${STRIPE_SALE_ENDS_AT:-}
+      # AUT-1673: dongle-server backchannel. The backend and the dongle-server
+      # share DONGLE_SERVER_API_KEY as X-Internal-Api-Key; the backend calls
+      # the dongle-server to upsert the serial whitelist, and the dongle-server
+      # calls the backend's /devices/verify to check paid status at the edge.
+      DONGLE_SERVER_API_KEY_FILE: /run/secrets/dongle_server_api_key
+      DONGLE_SERVER_URL: http://dongle-server:8000
+      # Store-native IAP (AUT-610/617): empty = disabled (mobile falls back to
+      # the Stripe browser path). Credentials are Paperclip secrets.
+      IAP_GOOGLE_SERVICE_ACCOUNT_JSON_FILE: /run/secrets/iap_google_service_account_json
+      IAP_GOOGLE_PACKAGE_NAME: ${IAP_GOOGLE_PACKAGE_NAME:-com.autobrainservice.app}
+      IAP_APPLE_ISSUER_ID: ${IAP_APPLE_ISSUER_ID:-}
+      IAP_APPLE_KEY_ID: ${IAP_APPLE_KEY_ID:-}
+      IAP_APPLE_PRIVATE_KEY_FILE: /run/secrets/iap_apple_private_key
+      IAP_APPLE_BUNDLE_ID: ${IAP_APPLE_BUNDLE_ID:-com.autobrainservice.app}
+      IAP_REFRESH_WINDOW_DAYS: ${IAP_REFRESH_WINDOW_DAYS:-2}
+      IAP_GOOGLE_PUBSUB_AUDIENCE: ${IAP_GOOGLE_PUBSUB_AUDIENCE:-}
+    <<: *secrets
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    expose:
+      - "8000"
+    # Backend pinned to .15 (AUT-439): the frontend's static .14 was being
+    # grabbed by the recreated backend during redeploys, stalling the stack.
+    networks:
+      default:
+        ipv4_address: 172.18.0.15
+
+  dongle-server:
+    image: ghcr.io/cannonfodder151/autobrain-dongle-server:hosted
+    restart: unless-stopped
+    command: ["uvicorn", "dongle_server.main:app", "--host", "0.0.0.0", "--port", "8012"]
+    environment:
+      <<: *core-env
+      AUTOBRIAN_BACKEND_URL: http://backend:8000
+      # AUT-1673: dongle-server internal key + web auth injected via Portainer
+      # stack env (encrypted at rest), matching the HUB_* secret pattern.
+      DONGLE_SERVER_API_KEY: ${DONGLE_SERVER_API_KEY}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_EXTERNAL_ENDPOINT: ${APP_BASE_URL:-https://hosted.autobrainservice.app}
+      MINIO_BUCKET: ${MINIO_BUCKET:-autobrain-assets}
+      MINIO_ACCESS_KEY_FILE: /run/secrets/minio_access_key
+      MINIO_SECRET_KEY_FILE: /run/secrets/minio_secret_key
+      MINIO_SECURE: "true"
+      WEB_UI_BASIC_USER: ${DONGLE_WEB_BASIC_USER}
+      WEB_UI_BASIC_PASSWORD: ${DONGLE_WEB_BASIC_PASSWORD}
+      DATABASE_URL: sqlite+aiosqlite:///./dongle.db
+      ENVIRONMENT: production
+    <<: *secrets
+    volumes:
+      - dongle-server-data:/data
+    expose:
+      - "8012"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8012/health', timeout=3).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      minio:
+        condition: service_healthy
+      backend:
+        condition: service_started
+
+  ai:
+    image: ghcr.io/cannonfodder151/autobrain-ai:hosted
+    restart: unless-stopped
+    # AUT-1739: adequate /dev/shm for Chromium (market-data scraper).
+    shm_size: "256m"
+    # AUT-1242-C3: image CMD runs entrypoint.sh — AI gateway :8001 + market-data :8000 in one container.
+    environment:
+      <<: *router-env
+      AI_GATEWAY_API_KEY_FILE: /run/secrets/ai_gateway_api_key
+      API_KEY_FILE: /run/secrets/market_data_api_key
+    <<: *secrets
+    expose:
+      - "8000"
+      - "8001"
+
+  worker:
+    image: ghcr.io/cannonfodder151/autobrain-worker:hosted
+    restart: unless-stopped
+    # AUT-1242/C1: beat scheduler embedded in the worker (-B), matching the dev
+    # compose. Removes the separate beat container.
+    command: celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2
+    environment:
+      <<: [*db-env, *core-env, *router-env]
+      PYTHONPATH: /app
+      SECRET_KEY_FILE: /run/secrets/backend_secret_key
+      # AUT-1858: the daily NSW Fuel API poll (AUT-1813) runs as a Celery task
+      # in this worker; it reads the keys from the secret files like the backend.
+      FUEL_NSW_API_KEY_FILE: /run/secrets/fuel_nsw_api_key
+      FUEL_NSW_API_SECRET_FILE: /run/secrets/fuel_nsw_api_secret
+      FUEL_NSW_ENABLED: "true"
+    <<: *secrets
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # AUT-1673: firmware release + distribution service for OBD ESP32 dongles.
+  # Owns firmware manifests, MinIO signed blob URLs, the serial-number
+  # whitelist (paid-account gate), and the ops web GUI. Shares the hosted
+  # stack's MinIO and Postgres where applicable (SQLite in the local compose).
+  dongle-server:
+    image: ghcr.io/cannonfodder151/autobrain-dongle-server:hosted
+    restart: unless-stopped
+    environment:
+      <<: *core-env
+      AUTOBRIAN_BACKEND_URL: http://backend:8000
+      DONGLE_SERVER_API_KEY_FILE: /run/secrets/dongle_server_api_key
+      MINIO_ENDPOINT: minio:9000
+      MINIO_EXTERNAL_ENDPOINT: ${MINIO_EXTERNAL_ENDPOINT:-}
+      MINIO_BUCKET: ${MINIO_BUCKET:-autobrain-assets}
+      MINIO_ACCESS_KEY_FILE: /run/secrets/minio_access_key
+      MINIO_SECRET_KEY_FILE: /run/secrets/minio_secret_key
+      MINIO_SECURE: ${MINIO_SECURE:-false}
+      WEB_UI_BASIC_USER: ${WEB_UI_BASIC_USER:-admin}
+      WEB_UI_BASIC_PASSWORD_FILE: /run/secrets/dongle_web_basic_password
+      FIRMWARE_BUCKET_PREFIX: dongle_firmware
+      SIGNED_URL_TTL_SECONDS: 900
+      MAX_FIRMWARE_BYTES: 16777216
+    <<: *secrets
+    depends_on:
+      - backend
+    expose:
+      - "8000"
+
+  frontend:
+    image: ghcr.io/cannonfodder151/autobrain-frontend:hosted
+    restart: unless-stopped
+    # AUT-473: localhost-bound. External clients reach the app via Cloudflare ->
+    # npm (:443), which proxies to the frontend over the docker network. Never
+    # re-expose 8086 to 0.0.0.0 (origin bypasses Cloudflare/WAF).
+    # AUT-1188: container now runs nginx-unprivileged on :8080 (non-root).
+    # AUT-1533/F5: the running EP5 container still maps 8086->80 (stale,
+    # pre-AUT-1188 deploy; traffic flows via npm -> static IP :8080 so the
+    # mismatch is latent). Next redeploy from this file aligns the mapping.
+    read_only: true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
+    ports:
+      - "127.0.0.1:8086:8080"
+    networks:
+      default:
+        ipv4_address: 172.18.0.14
+    depends_on:
+      - backend
+      - ai
+
+  hub:
+    # Community Garage federation hub (AUT-333) — deploy config only.
+    # Hub internals live in the PRIVATE repo autobrain-federation-hub
+    # (board rev 8): private code, private GHCR image. Nothing here is hub code.
+    # AUT-1533: HUB_* secrets remain plain env until the hub image gains
+    # *_FILE support (follow-up in autobrain-federation-hub).
+    image: ghcr.io/cannonfodder151/autobrain-federation-hub:hosted
+    restart: unless-stopped
+    environment:
+      DATABASE_PATH: /data/hub.db
+      HUB_PUBLIC_BASE_URL: ${HUB_PUBLIC_BASE_URL:-https://hub.autobrainservice.app}
+      HUB_STRIPE_SECRET_KEY: ${HUB_STRIPE_SECRET_KEY:-}
+      HUB_STRIPE_WEBHOOK_SECRET: ${HUB_STRIPE_WEBHOOK_SECRET:-}
+      HUB_STRIPE_PRICE_FEDERATION_YEAR: ${HUB_STRIPE_PRICE_FEDERATION_YEAR:-}
+      HUB_ADMIN_KEY: ${HUB_ADMIN_KEY:-}
+      HUB_HOSTED_REGISTRATION_KEY: ${HUB_HOSTED_REGISTRATION_KEY:-}
+    volumes:
+      - hub-data:/data
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health', timeout=3).status==200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # 9Router AI router (AUT-473). Published on `0.0.0.0:20128` so it is reachable
+  # on the host's public interface, but the host firewall (`fw-keeper`) restricts
+  # :20128 to the allow-listed dev egress IP (`122.199.30.128`, see
+  # docs/security.md) plus the internal docker subnet (`172.18.0.0/16`) so the
+  # backend can still reach it via docker DNS (`http://9router:20128/v1`). Without
+  # the internal-subnet allow, the `DOCKER-USER` drop rule would break
+  # backend→9router traffic. Do NOT bind back to `127.0.0.1` unless you also
+  # remove the firewall rule — AUT-1754.
+  # Data lives in the external `9router-data` volume (created by the original
+  # standalone container) so provider/API-key config persists across recreates.
+  9router:
+    # AUT-1533: pinned by digest (was floating :latest — supply-chain surface).
+    # Bump deliberately: verify release notes, then update this digest.
+    # AUT-1738: 0.5.55 is the current latest published tag (digest f00fe389…,
+    # 2026-08-14). It still carries 11 CVEs (incl. CVE-2026-59873 tar DoS and
+    # CVE-2026-48815 sigstore). No patched upstream image exists yet — do NOT
+    # float :latest (re-introduces AUT-1533 supply-chain risk). Bump this digest
+    # only once decolua ships a tagged fix; the weekly image-scan job in
+    # .github/workflows/security-scan.yml will fail on any CRITICAL/HIGH so a
+    # patched tag is caught and the pin is updated promptly.
+    image: decolua/9router:0.5.55@sha256:f00fe389ef41a1999dd0d0275ad0c2955d13d176f7c4c5cb844b2f88c293c471
+    restart: unless-stopped
+    entrypoint: ["/entrypoint.sh"]
+    command: ["node", "custom-server.js"]
+    environment:
+      NODE_ENV: production
+      PORT: 20128
+      HOSTNAME: 0.0.0.0
+      NEXT_TELEMETRY_DISABLED: "1"
+      DATA_DIR: /app/data
+    volumes:
+      - 9router-data:/app/data
+    ports:
+      - "0.0.0.0:20128:20128"
+
+volumes:
+   postgres-data:
+   redis-data:
+   minio-data:
+   hub-data:
+   9router-data:
+     external: true
+   dongle-server-data:
+
+# AUT-372: pin the default network subnet + a static frontend IP. The host-level
+# nginx-proxy-manager (npm) caches the resolved frontend container IP, so a
+# changing IP = 502 until npm is restarted; a static IP keeps the cached value
+# permanently correct across container recreates.
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.18.0.0/16
+          gateway: 172.18.0.1

@@ -1,0 +1,154 @@
+name: Build hosted images (multi-arch)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Image tag
+        required: true
+        default: hosted
+      api_base_url:
+        description: Frontend API base URL
+        required: true
+        default: https://hosted.autobrainservice.app/api/v1
+      ws_base_url:
+        description: Frontend WS base URL
+        required: true
+        default: wss://hosted.autobrainservice.app/ws
+
+# Only one pipeline per ref at a time, but do NOT cancel an in-flight build.
+# The multi-arch release build takes ~20 min; a newer push to main (PR merge or
+# auto-bump) arriving mid-build would otherwise cancel it and leave main with no
+# :hosted image (AUT-1756, root cause AUT-1762). Queue the newer run behind the
+# in-flight one so every push to main still produces a published manifest. The
+# auto-bump commit is tagged [skip ci] (scripts/auto-bump.sh) so it never
+# re-triggers this workflow and the in-flight build is never cancelled by its
+# own version cut.
+concurrency:
+  group: build-hosted-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  auto-bump:
+    # x64 jobs run on the new vm2 runner (gh-runner-autobrain-2). The legacy
+    # x64 runner (gh-runner-autobrain) is currently degraded (AUT-1781); routing
+    # on `vm2` guarantees dispatch to the healthy new runner. Re-balance across
+    # legacy+new again by dropping `vm2` once AUT-1781 is repaired. ARM builds
+    # stay pinned to the Oracle VM arm64 runner below.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, linux, x64, vm2]
+    permissions:
+      contents: write
+    steps:
+      # Use actions/checkout so the GITHUB_TOKEN is persisted by the
+      # credential helper (the manual git init did not authenticate pushes,
+      # crashing the auto-bump and blocking multi-arch arm64 image builds —
+      # AUT-1114).
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Cut a release if [Unreleased] has content (AUT-240)
+        run: |
+          set -euo pipefail
+          git config user.name "AutoBrain Release Bot"
+          git config user.email "release@autobrainservice.app"
+          ./scripts/auto-bump.sh
+          # Only push when auto-bump actually committed a release cut; an
+          # empty push fails on the credential helper and blocks the build
+          # (AUT-1114).
+          if ! git diff --quiet origin/main --; then
+            for i in 1 2 3; do
+              git push origin main && break
+              echo "==> push raced with main updates — rebasing and retrying (attempt $i/3)"
+              git pull --rebase origin main
+            done
+          else
+            echo "==> nothing to bump — no push needed"
+          fi
+          echo "==> auto-bump done"
+
+  build:
+    needs: auto-bump
+    if: github.event_name != 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runs_on: [self-hosted, linux, x64, vm2]
+          # arm64 builds stay on the Oracle VM arm64 runner (gh-runner-autobrain-arm64).
+          - arch: arm64
+            runs_on: [self-hosted, linux, ARM64]
+    runs-on: ${{ matrix.runs_on }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push images (linux/${{ matrix.arch }})
+        env:
+          TAG: ${{ github.event.inputs.tag || 'hosted' }}
+          ARCH: ${{ matrix.arch }}
+          API_BASE_URL: ${{ github.event.inputs.api_base_url || 'https://hosted.autobrainservice.app/api/v1' }}
+          WS_BASE_URL: ${{ github.event.inputs.ws_base_url || 'wss://hosted.autobrainservice.app/ws' }}
+        run: |
+          set -euo pipefail
+          for svc in backend worker ai frontend; do
+            case "$svc" in
+              backend)  ctx=.;        df=docker/backend/Dockerfile;   args="";;
+              worker)   ctx=.;        df=docker/worker/Dockerfile;     args="";;
+              ai)       ctx=.;        df=docker/ai/Dockerfile;         args="";;
+              frontend) ctx=.;        df=docker/frontend/Dockerfile;   args="--build-arg API_BASE_URL=${API_BASE_URL} --build-arg WS_BASE_URL=${WS_BASE_URL}";;
+            esac
+            echo "==> building autobrain-${svc}:${TAG}-${ARCH} for linux/${ARCH}"
+            docker buildx build --platform linux/${ARCH} --push \
+              -t "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}-${ARCH}" \
+              ${args} -f "${df}" "${ctx}"
+          done
+
+  build-manifest:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: [self-hosted, linux, x64, vm2]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Assemble multi-arch manifests
+        env:
+          TAG: ${{ github.event.inputs.tag || 'hosted' }}
+          SHA_TAG: hosted-sha-${{ github.sha }}
+        run: |
+          set -euo pipefail
+          for svc in backend worker ai frontend; do
+            echo "==> manifest autobrain-${svc}:${TAG}"
+            # AUT-1533/F4: every build also publishes an immutable per-commit
+            # tag so prod/dev can pin distinct digests instead of drifting on
+            # the same floating :hosted ref.
+            docker buildx imagetools create \
+              -t "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}" \
+              -t "ghcr.io/cannonfodder151/autobrain-${svc}:${SHA_TAG}" \
+              "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}-amd64" \
+              "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}-arm64"
+          done

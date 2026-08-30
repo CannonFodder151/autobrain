@@ -1,0 +1,31 @@
+# AB-INFRA-003: no credentials in the repo. Create autobrain-secrets
+# out-of-band before applying any Deployment (see infra/k8s/README.md), e.g.:
+#   kubectl -n autobrain create secret generic autobrain-secrets \
+#     --from-literal=secret-key="$(openssl rand -hex 32)" \
+#     --from-literal=postgres-user=... --from-literal=postgres-password=... \
+#     --from-literal=minio-access-key=... --from-literal=minio-secret-key=... \
+#     --from-literal=redis-password="$(openssl rand -hex 24)"
+# redis-password must be URL-encoded for REDIS_URL (alphanumeric = safe).
+# For GitOps, manage this Secret with SealedSecrets or external-secrets.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: autobrain-config
+  namespace: autobrain
+data:
+  environment: "production"
+  ai-router-url: "http://10.0.3.17:20128/v1"
+  minio-bucket: "autobrain-assets"
+  postgres-db: "autobrain"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: autobrain-postgres-pvc
+  namespace: autobrain
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi

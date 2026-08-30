@@ -1,0 +1,129 @@
+# AUT-1798: x64 jobs dispatch to the new vm2 runner (gh-runner-autobrain-2). ARM stays on Oracle VM.
+name: Security — full-resolution dependency scan
+
+on:
+  schedule:
+    # Weekly, Monday 06:00 UTC. A full-resolution (transitive) audit catches
+    # CVEs in the resolved tree that the PR-time `--no-deps` pip-audit gate in
+    # dockerhub-publish.yml cannot see (AUT-794). Covers backend, ai and the
+    # market-data service (AUT-1019); rego-lookup-api has its own weekly scan
+    # (separate repo).
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+jobs:
+  audit:
+    if: github.event_name != 'pull_request'
+    runs-on: [self-hosted, linux, x64, vm2]
+    steps:
+      - name: Checkout repository
+        run: |
+          set -euo pipefail
+          if [ -d .git ]; then
+            git fetch origin
+          else
+            git init && git remote add origin "https://github.com/${{ github.repository }}.git" || true
+            git fetch origin
+          fi
+          git checkout -f main
+          git reset --hard origin/main
+
+      - name: Install pip-audit
+        run: |
+          python3 -m pip --version 2>/dev/null || \
+            curl -sS https://bootstrap.pypa.io/get-pip.py | PIP_BREAK_SYSTEM_PACKAGES=1 python3 -
+          PIP_BREAK_SYSTEM_PACKAGES=1 python3 -m pip install --quiet pip-audit
+
+      - name: Fail on known vulns in the resolved tree
+        id: audit
+        run: |
+          set -euo pipefail
+          # Each service resolves its own tree: backend (fastapi 0.133.x) and
+          # ai/market-data (fastapi 0.115.x) pin different major versions and
+          # cannot coexist in one env (AUT-1019).
+          for req in backend/requirements.txt ai/requirements.txt market-data/requirements.txt; do
+            python3 -m pip_audit -r "$req"
+          done
+          echo "result=clean" >> "$GITHUB_OUTPUT"
+
+      - name: Report to Discord #status
+        if: always()
+        env:
+          RESULT: ${{ steps.audit.outputs.result }}
+          COLOR: ${{ steps.audit.outputs.result == 'clean' && '0x57F287' || '0xED4245' }}
+          TITLE: ${{ steps.audit.outputs.result == 'clean' && 'Dependency scan clean' || 'Dependency scan found known CVEs' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
+            -H "Content-Type: application/json" \
+            -d "$(jq -nc --arg c status --arg t "$TITLE" --arg col "$COLOR" --arg u "$RUN_URL" \
+              '{channel:$c,title:$t,description:"Weekly full-resolution pip-audit of backend + ai + market-data requirements.",color:$col,author:"Security Scan",fields:[{name:"Scan",value:"full-resolution (transitive)",inline:true},{name:"Run",value:$u,inline:true}]}')"
+
+  # AUT-1738: node/image CVE audit for the external 9Router AI-gateway image.
+  # 9Router ships a Node.js image (decolua/9router) not covered by the Python
+  # pip-audit gate above. Trivy scans CRITICAL/HIGH CVEs across its OS + npm
+  # library tree. As of 0.5.55 (= latest published tag, == pinned digest) 11 CVEs
+  # remain unfixed upstream, so this job is EXPECTED TO BE RED until decolua
+  # publishes a patched tag — that red weekly state is the intended tracking
+  # signal, reported to #status every run. The pinned 9router digest in
+  # docker-compose.hosted.yml is bumped only after this job goes green.
+  image-scan:
+    if: github.event_name != 'pull_request'
+    runs-on: [self-hosted, linux, x64, vm2]
+    steps:
+      - name: Checkout repository
+        run: |
+          set -euo pipefail
+          if [ -d .git ]; then
+            git fetch origin
+          else
+            git init && git remote add origin "https://github.com/${{ github.repository }}.git" || true
+            git fetch origin
+          fi
+          git checkout -f main
+          git reset --hard origin/main
+
+      - name: Install trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+
+      - name: Scan 9Router image for CRITICAL/HIGH CVEs
+        id: scan
+        run: |
+          set -uo pipefail
+          trivy image --severity CRITICAL,HIGH --exit-code 1 --format table decolua/9router:0.5.55
+          CODE=$?
+          if [ "$CODE" -ne 0 ]; then
+            echo "result=vulns" >> "$GITHUB_OUTPUT"
+            exit "$CODE"
+          fi
+          echo "result=clean" >> "$GITHUB_OUTPUT"
+
+      - name: Scan MinIO image for CRITICAL/HIGH CVEs (AUT-1737)
+        id: scan-minio
+        # AUT-1737: MinIO base image ships Go stdlib CVEs. Pinned by digest in
+        # compose for immutability; this scan is EXPECTED RED until minio publishes
+        # a patched image, mirroring the 9router tracking pattern above.
+        run: |
+          set -uo pipefail
+          MINIO_IMG="minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e"
+          trivy image --severity CRITICAL,HIGH --exit-code 1 --format table "$MINIO_IMG"
+          CODE=$?
+          if [ "$CODE" -ne 0 ]; then
+            echo "result=vulns" >> "$GITHUB_OUTPUT"
+            exit "$CODE"
+          fi
+          echo "result=clean" >> "$GITHUB_OUTPUT"
+
+      - name: Report MinIO scan to Discord #status
+        if: always()
+        env:
+          RESULT: ${{ steps.scan-minio.outputs.result }}
+          COLOR: ${{ steps.scan-minio.outputs.result == 'clean' && '0x57F287' || '0xED4245' }}
+          TITLE: ${{ steps.scan-minio.outputs.result == 'clean' && 'MinIO image scan clean' || 'MinIO image scan found CRITICAL/HIGH CVEs' }}
+          RUN_URL: ${{ github.server_url }}${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
+            -H "Content-Type: application/json" \
+            -d "$(jq -nc --arg c status --arg t "$TITLE" --arg col "$COLOR" --arg u "$RUN_URL" \
+              '{channel:$c,title:$t,description:"Weekly trivy scan of minio/minio pinned to RELEASE.2025-09-07T16-13-09Z digest. AUT-1737.",color:$col,author:"Security Scan",fields:[{name:"Scan",value:"trivy CRITICAL/HIGH",inline:true},{name:"Run",value:$u,inline:true}]}')"
