@@ -4,16 +4,19 @@
 /// any map/list data (gating requirement from AUT-1813). Paid accounts get a
 /// theme-aware Map/List segmented view.
 ///
-/// ponytail: live station markers + list rows are intentionally absent — they
-/// depend on the backend fuel-price API (AUT-1817), still blocked. Wire
-/// `/api/fuel/stations` into [_ServoSpyMap]/[_ServoSpyList] once that ships.
+/// The map view (AUT-1820) renders live station markers with brand logos and
+/// the current vehicle's fuel-type price, highlights the cheapest, and offers
+/// a detail bottom sheet with all fuel prices + one-tap navigate.
 
 library;
+
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url.dart';
 
 import '../../community_garage/widgets/premium_gate.dart';
 import '../../core/api_client.dart';
@@ -76,66 +79,568 @@ class _ServoSpyScreenState extends State<ServoSpyScreen> {
   }
 }
 
-/// Theme-aware basemap (CARTO light/dark) — no station markers yet (AUT-1817).
-class _ServoSpyMap extends StatelessWidget {
+/// Servo Spy map view — live station markers, cheapest highlight, detail sheet (AUT-1820).
+class _ServoSpyMap extends StatefulWidget {
   const _ServoSpyMap();
+
+  @override
+  State<_ServoSpyMap> createState() => _ServoSpyMapState();
+}
+
+class _FuelPriceEntry {
+  final String fuelType;
+  final double? priceCents; // null = no price
+
+  const _FuelPriceEntry({required this.fuelType, this.priceCents});
+}
+
+class _MapStation {
+  final String id;
+  final String? brand;
+  final String? name;
+  final String? address;
+  final String? logoUrl;
+  final double? lat;
+  final double? lon;
+  final double? distanceKm;
+  final List<_FuelPriceEntry> prices;
+
+  const _MapStation({
+    required this.id,
+    this.brand,
+    this.name,
+    this.address,
+    this.logoUrl,
+    this.lat,
+    this.lon,
+    this.distanceKm,
+    required this.prices,
+  });
+
+  factory _MapStation.fromApi(Map<String, dynamic> m) {
+    final rawPrices = (m['prices'] as List? ?? []) as List;
+    return _MapStation(
+      id: m['id'] as String? ?? '',
+      brand: m['brand'] as String?,
+      name: m['name'] as String? ?? 'Unknown',
+      address: m['address'] as String?,
+      logoUrl: m['logo'] as String?,
+      lat: (m['lat'] as num?)?.toDouble(),
+      lon: (m['lon'] as num?)?.toDouble(),
+      distanceKm: (m['distance_km'] as num?)?.toDouble(),
+      prices: rawPrices
+          .map((p) => _FuelPriceEntry(
+                fuelType: p['fuel_type'] as String? ?? '',
+                priceCents: p['price'] != null ? (p['price'] as num).toDouble() : null,
+              ))
+          .toList(),
+    );
+  }
+
+  double? priceFor(String fuelType) {
+    final p = prices.firstWhere(
+      (p) => p.fuelType == fuelType,
+      orElse: () => const _FuelPriceEntry(fuelType: ''),
+    );
+    return p.priceCents;
+  }
+}
+
+class _ServoSpyMapState extends State<_ServoSpyMap> {
+  bool _loading = true;
+  String? _error;
+  LatLng? _userLoc;
+  bool _locationDenied = false;
+  List<_MapStation> _stations = const [];
+  List<String> _fuelTypes = List<String>.from(defaultFuelTypes);
+  String? _selectedFuelType;
+  double _maxDistanceKm = 25;
+  final MapController _mapController = MapController();
+
+  @override
+  void initState() {
+    super.initState();
+    _bootstrap();
+  }
+
+  Future<void> _bootstrap() async {
+    setState(() => _loading = true);
+    _error = null;
+
+    final pos = await getCurrentPosition();
+    if (pos != null) {
+      _userLoc = LatLng(pos['latitude']!, pos['longitude']!);
+      _locationDenied = false;
+    } else {
+      _locationDenied = true;
+    }
+
+    if (!mounted) return;
+
+    if (_userLoc == null) {
+      setState(() {
+        _loading = false;
+        _error = 'Enable location to find nearby stations.';
+      });
+      return;
+    }
+
+    try {
+      final api = context.read<AuthState>().api;
+      final vData = await api.get('/vehicles') as List;
+      final vehicles = vData
+          .map((e) => Vehicle.fromJson(e as Map<String, dynamic>))
+          .toList();
+      final current = Vehicle.resolveSelection(vehicles, null);
+      _selectedFuelType = current?.fuelType;
+
+      _fuelTypes = await fetchFuelTypes(api);
+      if (_selectedFuelType == null || !_fuelTypes.contains(_selectedFuelType)) {
+        _selectedFuelType = _fuelTypes.isNotEmpty ? _fuelTypes.first : null;
+      }
+
+      await _fetchStations();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _error = 'Could not reach the server (${e.statusCode}).');
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error = 'Could not load data. Check your connection.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _fetchStations() async {
+    if (_userLoc == null) return;
+    setState(() => _loading = true);
+    try {
+      final api = context.read<AuthState>().api;
+      final params = <String, String>{
+        'lat': _userLoc!.latitude.toStringAsFixed(6),
+        'lon': _userLoc!.longitude.toStringAsFixed(6),
+        'radius_km': _maxDistanceKm.toInt().toString(),
+        'limit': '50',
+      };
+      final qs = params.entries
+          .map((e) => '${e.key}=${Uri.encodeComponent(e.value)}')
+          .join('&');
+      final data = await api.get('/fuel/stations?$qs') as List;
+      final rows = data
+          .map((e) => _MapStation.fromApi(e as Map<String, dynamic>))
+          .toList();
+      if (!mounted) return;
+      setState(() {
+        _stations = rows;
+        _loading = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _error = 'Failed to load stations (${e.statusCode}).');
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error = 'Failed to load stations.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  double? get _cheapestPrice {
+    if (_selectedFuelType == null) return null;
+    final prices = _stations
+        .map((s) => s.priceFor(_selectedFuelType!))
+        .where((p) => p != null)
+        .cast<double>();
+    if (prices.isEmpty) return null;
+    return prices.reduce((a, b) => a < b ? a : b);
+  }
+
+  void _openStation(_MapStation s) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _StationSheet(station: s, userLoc: _userLoc),
+    );
+  }
+
+  void _openFilter() {
+    String fuel = _selectedFuelType ?? (_fuelTypes.isNotEmpty ? _fuelTypes.first : '91');
+    double dist = _maxDistanceKm;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) => Padding(
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Filters', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: fuel,
+                decoration: const InputDecoration(
+                  labelText: 'Fuel type',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                items: _fuelTypes
+                    .map((f) => DropdownMenuItem(value: f, child: Text(f)))
+                    .toList(),
+                onChanged: (v) => setSheet(() => fuel = v ?? fuel),
+              ),
+              const SizedBox(height: 20),
+              Text('Max distance: ${dist.toInt()} km'),
+              Slider(
+                value: dist,
+                min: 5,
+                max: 200,
+                divisions: 39,
+                label: '${dist.toInt()} km',
+                onChanged: (v) => setSheet(() => dist = v),
+              ),
+              const SizedBox(height: 16),
+              Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: FilledButton(
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    setState(() {
+                      _selectedFuelType = fuel;
+                      _maxDistanceKm = dist;
+                    });
+                    _fetchStations();
+                  },
+                  child: const Text('Apply'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   static const _auCenter = LatLng(-25.2744, 133.7751);
 
   @override
   Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final tileUrl = dark
-        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
-        : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png';
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final scheme = Theme.of(context).colorScheme;
-    return Stack(
-      children: [
-        FlutterMap(
-          options: const MapOptions(
-            initialCenter: _auCenter,
-            initialZoom: 4,
-            interactionOptions: InteractionOptions(
-              flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+    final LatLng center = _userLoc ?? _auCenter;
+    final markers = <Marker>[
+      for (final s in _stations)
+        if (s.lat != null && s.lon != null)
+          Marker(
+            point: LatLng(s.lat!, s.lon!),
+            width: 72,
+            height: 48,
+            alignment: Alignment.topCenter,
+            child: _StationMarker(
+              station: s,
+              selectedFuelType: _selectedFuelType,
+              isCheapest: _cheapestPrice != null && s.priceFor(_selectedFuelType!) == _cheapestPrice,
+              onTap: () => _openStation(s),
             ),
           ),
-          children: [
-            TileLayer(
-              urlTemplate: tileUrl,
-              subdomains: ['a', 'b', 'c', 'd'],
-              userAgentPackageName: 'com.autobrain',
-            ),
-          ],
-        ),
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: 0,
+      if (_userLoc != null)
+        Marker(
+          point: _userLoc!,
+          width: 22,
+          height: 22,
+          alignment: Alignment.center,
           child: Container(
-            color: scheme.scrim.withValues(alpha: 0.6),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            child: const Text(
-              '© OpenStreetMap contributors © CARTO',
-              style: TextStyle(color: Colors.white, fontSize: 11),
-            ),
-          ),
-        ),
-        Center(
-          child: Container(
-            margin: const EdgeInsets.all(24),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: scheme.surface.withValues(alpha: 0.92),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              'Station markers appear once the live price feed is connected.',
-              style: TextStyle(color: scheme.onSurfaceVariant),
-              textAlign: TextAlign.center,
+              color: Colors.blue,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white, width: 3),
+              boxShadow: const [
+                BoxShadow(color: Colors.black38, blurRadius: 4),
+              ],
             ),
           ),
         ),
-      ],
+    ];
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Servo Spy'),
+        actions: [
+          if (_locationDenied)
+            IconButton(
+              tooltip: 'Enable location',
+              icon: const Icon(Icons.location_disabled),
+              onPressed: _bootstrap,
+            ),
+          IconButton(
+            tooltip: 'Refresh',
+            icon: const Icon(Icons.refresh),
+            onPressed: _bootstrap,
+          ),
+          IconButton(
+            tooltip: 'Filters',
+            icon: const Icon(Icons.filter_alt_outlined),
+            onPressed: _openFilter,
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          if (_locationDenied)
+            Container(
+              width: double.infinity,
+              color: Colors.amber.withValues(alpha: 0.15),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: const Text(
+                'Location off — showing stations in the selected region. '
+                'Enable location for nearby results.',
+                style: TextStyle(fontSize: 12),
+              ),
+            ),
+          // Fuel type chip bar
+          if (_selectedFuelType != null)
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: Row(
+                children: [
+                  for (final ft in _fuelTypes)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label: Text(ft),
+                        selected: ft == _selectedFuelType,
+                        onSelected: (_) {
+                          setState(() => _selectedFuelType = ft);
+                          _fetchStations();
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          Expanded(
+            child: Stack(
+              children: [
+                FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    initialCenter: center,
+                    initialZoom: _userLoc != null ? 12 : 11,
+                    interactionOptions: InteractionOptions(
+                      flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+                    ),
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate: isDark
+                          ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+                          : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+                      subdomains: isDark ? const ['a', 'b', 'c', 'd'] : const ['a', 'b', 'c', 'd'],
+                      userAgentPackageName: 'com.autobrain',
+                    ),
+                    MarkerLayer(markers: markers),
+                  ],
+                ),
+                if (_loading)
+                  const Positioned.fill(
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                if (_error != null && !_loading)
+                  Positioned(
+                    left: 16,
+                    right: 16,
+                    bottom: 16,
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: scheme.error.withValues(alpha: 0.9),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text('Prices unavailable: $_error',
+                          style: TextStyle(color: scheme.onError)),
+                    ),
+                  ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    color: scheme.scrim.withValues(alpha: 0.6),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    child: const Text(
+                      '© OpenStreetMap contributors © CARTO',
+                      style: TextStyle(color: Colors.white, fontSize: 11),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StationMarker extends StatelessWidget {
+  const _StationMarker({
+    required this.station,
+    required this.selectedFuelType,
+    required this.isCheapest,
+    required this.onTap,
+  });
+  final _MapStation station;
+  final String? selectedFuelType;
+  final bool isCheapest;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final priceCents = selectedFuelType != null ? station.priceFor(selectedFuelType!) : null;
+    final priceStr = priceCents != null && priceCents > 0
+        ? '\$${(priceCents / 100).toStringAsFixed(1)}'
+        : '—';
+    final color = isCheapest
+        ? const Color(0xFF57F287)
+        : const Color(0xFF008C45);
+
+    Widget? logo;
+    if (station.logoUrl != null) {
+      logo = ClipOval(
+        child: Image.network(
+          station.logoUrl!,
+          width: 20,
+          height: 20,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Icon(Icons.local_gas_station, size: 16, color: Colors.white),
+        ),
+      );
+    } else {
+      logo = Icon(Icons.local_gas_station, size: 16, color: Colors.white);
+    }
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.white, width: 1.5),
+              boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 3)],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                logo,
+                const SizedBox(width: 4),
+                Text(
+                  priceStr,
+                  style: const TextStyle(
+                    color: Colors.black,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          CustomPaint(
+            size: const Size(12, 8),
+            painter: _TrianglePainter(color),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TrianglePainter extends CustomPainter {
+  const _TrianglePainter(this.color);
+  final Color color;
+  @override
+  void paint(ui.Canvas canvas, ui.Size size) {
+    final paint = ui.Paint()..color = color;
+    canvas.drawPath(
+      ui.Path()
+        ..moveTo(0, 0)
+        ..lineTo(size.width, 0)
+        ..lineTo(size.width / 2, size.height)
+        ..close(),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter old) => false;
+}
+
+class _StationSheet extends StatelessWidget {
+  const _StationSheet({required this.station, this.userLoc});
+  final _MapStation station;
+  final LatLng? userLoc;
+
+  Future<void> _navigate(BuildContext context) async {
+    if (station.lat == null || station.lon == null) return;
+    final uri = Uri.https('www.google.com', '/maps/dir/', {
+      if (userLoc != null) 'origin': '${userLoc!.latitude},${userLoc!.longitude}',
+      'destination': '${station.lat},${station.lon}',
+    });
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      await launchUrl(uri);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final sortedPrices = [...station.prices]..sort((a, b) =>
+        (a.priceCents ?? double.infinity).compareTo(b.priceCents ?? double.infinity));
+    return DraggableScrollableSheet(
+      initialChildSize: 0.5,
+      maxChildSize: 0.85,
+      expand: false,
+      builder: (_, scroll) => ListView(
+        controller: scroll,
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text(station.name ?? 'Station',
+              style: Theme.of(context).textTheme.titleLarge),
+          if (station.address != null) ...[
+            const SizedBox(height: 4),
+            Text(station.address!,
+                style: Theme.of(context).textTheme.bodyMedium),
+          ],
+          const SizedBox(height: 16),
+          Text('Fuel prices', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          for (final p in sortedPrices)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.local_gas_station, color: scheme.primary),
+              title: Text(p.fuelType),
+              trailing: Text(
+                p.priceCents == null
+                    ? '—'
+                    : '\$${(p.priceCents! / 100).toStringAsFixed(3)}',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: () => _navigate(context),
+              icon: const Icon(Icons.navigation),
+              label: const Text('Navigate'),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
