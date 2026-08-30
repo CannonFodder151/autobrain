@@ -152,7 +152,7 @@ class _ServoSpyListState extends State<_ServoSpyList> {
   bool _loading = true;
   String? _error;
   List<ServoStationRow> _stations = const [];
-  List<String> _fuelTypes = const [];
+  List<String> _fuelTypes = List<String>.from(defaultFuelTypes);
   String? _selectedFuelType;
   double _maxDistanceKm = 25;
   ServoSortMetric _sortMetric = ServoSortMetric.price;

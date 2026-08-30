@@ -41,6 +41,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Added
 - **Servo Spy list view with filters (AUT-1821):** the List view now shows nearby fuel stations sorted by price (cheapest first) using the current vehicle's fuel type by default. A filter sheet lets you change fuel type, set a max-distance radius (5–200 km slider), and toggle the sort metric between price and distance. Each row displays the station name, brand initial/avatar, distance, and current fuel price.
 
+### Fixed
+- **Servo Spy filter safety (AUT-1821 follow-up):** the fuel-type dropdown now seeds with the static defaults before the `GET /fuel/types` response lands, so the filter sheet remains valid if the vehicle list request fails first — no empty-dropdown crash.
+
 ## [0.3.177] - 2026-08-29
 
 ## [0.3.176] - 2026-08-29
