@@ -24,6 +24,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- **VIC Servo Saver fuel feed deployment (AUT-1932):** added `FUEL_VIC_API_KEY` / `FUEL_VIC_ENABLED` to `docker-compose.prod.yml` (Default tier) and `FUEL_VIC_API_KEY_FILE` / `FUEL_VIC_ENABLED` to `docker-compose.hosted.yml` (Hosted tier); added `fuel_vic_api_key` mapping to `scripts/seed-secrets.sh`; documented in `docs/petrol-price-map.md`.
+
 ## [0.3.169] - 2026-08-29
 
 ## [0.3.168] - 2026-08-29

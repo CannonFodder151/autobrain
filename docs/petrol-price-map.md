@@ -13,7 +13,7 @@ poll when a key is configured (silent fallback to the last cached snapshot).
 | WA | FuelWatch | none (public) | — |
 | NSW | Transport for NSW Fuel API | HTTP Basic `key:secret` | `FUEL_NSW_API_KEY`, `FUEL_NSW_API_SECRET` |
 | QLD | Fuel Prices | consumer token | *planned* (`FUEL_QLD_*`, AUT-1813 phase) |
-| VIC | Servo Saver | approved partner key | *planned* (`FUEL_VIC_*`, AUT-1813 phase) |
+| VIC | Servo Saver | approved partner key | (`FUEL_VIC_API_KEY`, AUT-1813 phase — now deployed) |
 
 WA needs no key. NSW is the only implemented source. QLD/VIC are planned phases
 of AUT-1813 — when wired, their keys follow the same `FUEL_<STATE>_*` convention
