@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+- fix(ci): GHCR push uses PAT (github_pat) when GITHUB_TOKEN lacks packages:write on self-hosted runners.
+
 ## [0.3.185] - 2026-08-30
 
 ### Servo Spy map view (AUT-1820)
