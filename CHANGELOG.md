@@ -11,7 +11,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.188] - 2026-08-30
 
 - fix(backend): register fuel_servo router — Servo Spy API was dead code (AUT-1817).
 
