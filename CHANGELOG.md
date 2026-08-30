@@ -34,7 +34,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.182] - 2026-08-30
 
 ## [0.3.181] - 2026-08-30
 
