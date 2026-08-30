@@ -78,6 +78,7 @@ jobs:
         run: |
           set -uo pipefail
           flutter clean >/dev/null 2>&1 || true
+          dart pub cache clean --force 2>/dev/null || true
           flutter pub get
           # Warnings/infos are pre-existing in the synced lineage; only hard
           # errors block the sync (AUT-522). Capture the output and return code
@@ -106,6 +107,7 @@ jobs:
           python3 "$GITHUB_WORKSPACE/autobrain/scripts/auto-fix-mobile-test-mocks.py" "$GITHUB_WORKSPACE/autobrain-mobile"
           echo "::endgroup::"
           flutter clean >/dev/null 2>&1 || true
+          dart pub cache clean --force 2>/dev/null || true
           flutter pub get
           flutter analyze --no-fatal-warnings --no-fatal-infos
 
