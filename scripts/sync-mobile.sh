@@ -50,9 +50,18 @@ git checkout -- lib/core/auth_state.dart lib/core/config.dart \
   lib/services/car/car_kit_trip_monitor.dart \
   lib/services/car/car_kit_service.dart 2>/dev/null || true
 cp -a "$FRONT/assets/." assets/ 2>/dev/null || true
-cp "$ROOT/CHANGELOG.md" CHANGELOG.md
+  cp "$ROOT/CHANGELOG.md" CHANGELOG.md
 
-# --- Dependency guard ---------------------------------------------------------
+  # --- API compatibility guard --------------------------------------------------
+  # The frontend lib/ sync can change ApiClient method signatures (e.g. adding an
+  # optional named parameter to get()). Mock classes in test/ that extend ApiClient
+  # must match those signatures or flutter analyze fails with invalid_override,
+  # blocking the entire sync+release pipeline. Auto-align the mocks before analyze.
+  if command -v python3 >/dev/null 2>&1; then
+    python3 "$ROOT/scripts/auto-fix-mobile-test-mocks.py" "$MOBILE" 2>&1 || true
+  fi
+
+  # --- Dependency guard ---------------------------------------------------------
 # lib/ sync can pull in new `package:` imports whose deps are not declared in
 # the mobile pubspec.yaml (AUT-455: trip_route_map.dart -> flutter_map/
 # latlong2/geolocator). pubspec.lock only resolves packages reachable from the

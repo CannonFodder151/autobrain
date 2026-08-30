@@ -17,6 +17,7 @@ on:
       - 'CHANGELOG.md'
       - 'scripts/bump-version.sh'
       - 'scripts/sync-mobile.sh'
+      - 'scripts/auto-fix-mobile-test-mocks.py'
   workflow_dispatch:
 
 # Concurrent sync runs (merge push + auto-bump push) raced the push to
@@ -71,12 +72,37 @@ jobs:
           cache: true
 
       - name: Analyze synced tree
+        id: analyze
+        working-directory: autobrain-mobile
+        run: |
+          set -uo pipefail
+          flutter pub get
+          # Warnings/infos are pre-existing in the synced lineage; only hard
+          # errors block the sync (AUT-522). Capture the output and return code
+          # so the self-heal step can inspect failures.
+          set +e
+          flutter analyze --no-fatal-warnings --no-fatal-infos 2>&1 | tee /tmp/analyze_log.txt
+          RC=$?
+          set -e
+          echo "analyze_rc=$RC" >> "$GITHUB_OUTPUT"
+          [ "$RC" -eq 0 ]
+
+      - name: Self-heal — auto-fix mock signatures if analyze failed
+        # When flutter analyze fails with invalid_override errors (e.g. ApiClient
+        # method signature changed but test mock not updated), auto-align the
+        # mock signatures and re-run analyze. Other error types still fail.
+        if: steps.analyze.outputs.analyze_rc != '0'
         working-directory: autobrain-mobile
         run: |
           set -euo pipefail
-          flutter pub get
-          # Warnings/infos are pre-existing in the synced lineage; only hard
-          # errors block the sync (AUT-522).
+          if ! grep -q "invalid_override" /tmp/analyze_log.txt; then
+            echo "::error::flutter analyze failed with non-invalid_override errors:"
+            cat /tmp/analyze_log.txt
+            exit 1
+          fi
+          echo "::group::Auto-fixing test mock signatures (AUT-1939 self-heal)"
+          python3 "$GITHUB_WORKSPACE/autobrain/scripts/auto-fix-mobile-test-mocks.py" "$GITHUB_WORKSPACE/autobrain-mobile"
+          echo "::endgroup::"
           flutter analyze --no-fatal-warnings --no-fatal-infos
 
       - name: Commit and push if changed
