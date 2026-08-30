@@ -166,7 +166,7 @@ jobs:
           # with 5000 req/hour shared across all uses. If exhausted, defer the
           # dispatch to avoid a403; the next push to main will re-sync and
           # retry (AUT-1639).
-          remaining="$(gh api rate_limit --jq '.resources.core.remaining' 2>/dev/null || echo 5000)"
+          remaining=$(curl -s -H "Authorization: token $GH_TOKEN" https://api.github.com/rate_limit 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['resources']['core']['remaining'])" 2>/dev/null || echo 5000)
           if [ "$remaining" -lt 100 ]; then
             echo "::warning::GitHub API rate limit nearly exhausted (${remaining}/5000 remaining) — deferring mobile release dispatch for $tag. Next push to main will re-sync and dispatch."
             echo "changed=true" >> "$GITHUB_OUTPUT"
@@ -178,20 +178,25 @@ jobs:
           # linear backoff (5–60s per retry, up to 12 retries) before giving
           # up so the pinned tag is released (AUT-451, AUT-1652).
           for attempt in $(seq 1 12); do
-            if out="$(gh workflow run release-mobile.yml --repo CannonFodder151/autobrain-mobile \
-                --ref "$tag" -f "version=$tag" 2>&1)"; then
+            http_code=$(curl -s -o /tmp/dispatch_resp.txt -w '%{http_code}' -X POST \
+              -H "Authorization: token $GH_TOKEN" \
+              -H "Accept: application/vnd.github.v3+json" \
+              https://api.github.com/repos/CannonFodder151/autobrain-mobile/actions/workflows/release-mobile.yml/dispatches \
+              -d "{\"ref\":\"$tag\",\"inputs\":{\"version\":\"$tag\"}}" 2>&1)
+            out=$(cat /tmp/dispatch_resp.txt 2>/dev/null || echo "")
+            if [ "$http_code" = "204" ]; then
               echo "dispatched mobile release $tag"
               exit 0
             fi
-            echo "dispatch attempt $attempt/12 failed: $out"
+            echo "dispatch attempt $attempt/12 failed (HTTP $http_code): $out"
             # Rate limit (403) — wait for window to reset then retry
-            if printf '%s' "$out" | grep -qi 'rate limit'; then
+            if echo "$out" | grep -qi 'rate limit'; then
               echo "::warning::rate limit hit during dispatch — waiting for reset (attempt $attempt/12)"
               sleep $(( attempt * 5 ))
               continue
             fi
             # 422 "No ref found" — tag not yet visible (eventual consistency)
-            if printf '%s' "$out" | grep -qi 'No ref found'; then
+            if echo "$out" | grep -qi 'No ref found'; then
               sleep 5
               continue
             fi
