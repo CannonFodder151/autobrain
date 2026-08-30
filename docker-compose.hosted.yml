@@ -199,12 +199,10 @@ services:
       STRIPE_PROMO_EARLY_ADOPTER: ${STRIPE_PROMO_EARLY_ADOPTER:-}
       STRIPE_PROMO_EARLY_ADOPTER_CODE: ${STRIPE_PROMO_EARLY_ADOPTER_CODE:-EARLY40}
       STRIPE_SALE_ENDS_AT: ${STRIPE_SALE_ENDS_AT:-}
-      # AUT-1673: dongle-server backchannel. The backend and the dongle-server
-      # share DONGLE_SERVER_API_KEY as X-Internal-Api-Key; the backend calls
-      # the dongle-server to upsert the serial whitelist, and the dongle-server
-      # calls the backend's /devices/verify to check paid status at the edge.
+      # AUT-1673: dongle-server backchannel (AUT-1872: disabled — dongle-server
+      # image not published by build-hosted.yml; service removed from hosted stack).
       DONGLE_SERVER_API_KEY_FILE: /run/secrets/dongle_server_api_key
-      DONGLE_SERVER_URL: http://dongle-server:8000
+      # DONGLE_SERVER_URL: http://dongle-server:8000
       # Store-native IAP (AUT-610/617): empty = disabled (mobile falls back to
       # the Stripe browser path). Credentials are Paperclip secrets.
       IAP_GOOGLE_SERVICE_ACCOUNT_JSON_FILE: /run/secrets/iap_google_service_account_json
@@ -230,42 +228,6 @@ services:
     networks:
       default:
         ipv4_address: 172.18.0.15
-
-  dongle-server:
-    image: ghcr.io/cannonfodder151/autobrain-dongle-server:hosted
-    restart: unless-stopped
-    command: ["uvicorn", "dongle_server.main:app", "--host", "0.0.0.0", "--port", "8012"]
-    environment:
-      <<: *core-env
-      AUTOBRIAN_BACKEND_URL: http://backend:8000
-      # AUT-1673: dongle-server internal key + web auth injected via Portainer
-      # stack env (encrypted at rest), matching the HUB_* secret pattern.
-      DONGLE_SERVER_API_KEY: ${DONGLE_SERVER_API_KEY}
-      MINIO_ENDPOINT: minio:9000
-      MINIO_EXTERNAL_ENDPOINT: ${APP_BASE_URL:-https://hosted.autobrainservice.app}
-      MINIO_BUCKET: ${MINIO_BUCKET:-autobrain-assets}
-      MINIO_ACCESS_KEY_FILE: /run/secrets/minio_access_key
-      MINIO_SECRET_KEY_FILE: /run/secrets/minio_secret_key
-      MINIO_SECURE: "true"
-      WEB_UI_BASIC_USER: ${DONGLE_WEB_BASIC_USER}
-      WEB_UI_BASIC_PASSWORD: ${DONGLE_WEB_BASIC_PASSWORD}
-      DATABASE_URL: sqlite+aiosqlite:///./dongle.db
-      ENVIRONMENT: production
-    <<: *secrets
-    volumes:
-      - dongle-server-data:/data
-    expose:
-      - "8012"
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8012/health', timeout=3).status==200 else 1)"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-    depends_on:
-      minio:
-        condition: service_healthy
-      backend:
-        condition: service_started
 
   ai:
     image: ghcr.io/cannonfodder151/autobrain-ai:hosted
@@ -304,34 +266,6 @@ services:
       redis:
         condition: service_healthy
 
-  # AUT-1673: firmware release + distribution service for OBD ESP32 dongles.
-  # Owns firmware manifests, MinIO signed blob URLs, the serial-number
-  # whitelist (paid-account gate), and the ops web GUI. Shares the hosted
-  # stack's MinIO and Postgres where applicable (SQLite in the local compose).
-  dongle-server:
-    image: ghcr.io/cannonfodder151/autobrain-dongle-server:hosted
-    restart: unless-stopped
-    environment:
-      <<: *core-env
-      AUTOBRIAN_BACKEND_URL: http://backend:8000
-      DONGLE_SERVER_API_KEY_FILE: /run/secrets/dongle_server_api_key
-      MINIO_ENDPOINT: minio:9000
-      MINIO_EXTERNAL_ENDPOINT: ${MINIO_EXTERNAL_ENDPOINT:-}
-      MINIO_BUCKET: ${MINIO_BUCKET:-autobrain-assets}
-      MINIO_ACCESS_KEY_FILE: /run/secrets/minio_access_key
-      MINIO_SECRET_KEY_FILE: /run/secrets/minio_secret_key
-      MINIO_SECURE: ${MINIO_SECURE:-false}
-      WEB_UI_BASIC_USER: ${WEB_UI_BASIC_USER:-admin}
-      WEB_UI_BASIC_PASSWORD_FILE: /run/secrets/dongle_web_basic_password
-      FIRMWARE_BUCKET_PREFIX: dongle_firmware
-      SIGNED_URL_TTL_SECONDS: 900
-      MAX_FIRMWARE_BYTES: 16777216
-    <<: *secrets
-    depends_on:
-      - backend
-    expose:
-      - "8000"
-
   frontend:
     image: ghcr.io/cannonfodder151/autobrain-frontend:hosted
     restart: unless-stopped
@@ -357,32 +291,6 @@ services:
     depends_on:
       - backend
       - ai
-
-  hub:
-    # Community Garage federation hub (AUT-333) — deploy config only.
-    # Hub internals live in the PRIVATE repo autobrain-federation-hub
-    # (board rev 8): private code, private GHCR image. Nothing here is hub code.
-    # AUT-1533: HUB_* secrets remain plain env until the hub image gains
-    # *_FILE support (follow-up in autobrain-federation-hub).
-    image: ghcr.io/cannonfodder151/autobrain-federation-hub:hosted
-    restart: unless-stopped
-    environment:
-      DATABASE_PATH: /data/hub.db
-      HUB_PUBLIC_BASE_URL: ${HUB_PUBLIC_BASE_URL:-https://hub.autobrainservice.app}
-      HUB_STRIPE_SECRET_KEY: ${HUB_STRIPE_SECRET_KEY:-}
-      HUB_STRIPE_WEBHOOK_SECRET: ${HUB_STRIPE_WEBHOOK_SECRET:-}
-      HUB_STRIPE_PRICE_FEDERATION_YEAR: ${HUB_STRIPE_PRICE_FEDERATION_YEAR:-}
-      HUB_ADMIN_KEY: ${HUB_ADMIN_KEY:-}
-      HUB_HOSTED_REGISTRATION_KEY: ${HUB_HOSTED_REGISTRATION_KEY:-}
-    volumes:
-      - hub-data:/data
-    expose:
-      - "8000"
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health', timeout=3).status==200 else 1)"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
 
   # 9Router AI router (AUT-473). Published on `0.0.0.0:20128` so it is reachable
   # on the host's public interface, but the host firewall (`fw-keeper`) restricts
@@ -423,10 +331,8 @@ volumes:
    postgres-data:
    redis-data:
    minio-data:
-   hub-data:
    9router-data:
      external: true
-   dongle-server-data:
 
 # AUT-372: pin the default network subnet + a static frontend IP. The host-level
 # nginx-proxy-manager (npm) caches the resolved frontend container IP, so a
