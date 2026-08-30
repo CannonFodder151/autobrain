@@ -12,6 +12,7 @@ from app.core.config import settings
 from app.core.logging import get_logger, setup_logging
 from app.core.storage import ensure_bucket
 from app.db.session import get_db, init_db
+from app.middleware.rate_limit import RateLimitMiddleware
 from app.ws.manager import manager
 
 logger = get_logger(__name__)
@@ -40,6 +41,9 @@ app = FastAPI(
     redoc_url=None,
 )
 
+# Rate limiter is added first so CORSMiddleware (added second) wraps it
+# and CORS headers still apply to 429 responses.
+app.add_middleware(RateLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ALLOWED_ORIGINS,

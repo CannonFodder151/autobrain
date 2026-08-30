@@ -18,6 +18,12 @@ from app.schemas.auth import AdminUserUpdate, UserAdminOut, UserCreate, UserPage
 from app.services import email as mail
 from app.services.backup import dump_backup, load_backup, restore_all, serialize_all
 
+
+def escape_like(value: str) -> str:
+    r"""Escape LIKE wildcards (% _) and the escape char itself so user input is
+    matched literally (AUT-1187 AB-07: `%%` previously forced a full scan)."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/admin/users", tags=["admin"], dependencies=[Depends(require_admin)])
@@ -51,16 +57,44 @@ async def restore_backup(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Wipe and restore the whole database from an uploaded backup. DANGEROUS."""
-    raw = await file.read()
-    if len(raw) > 100 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="Backup file too large")
+    """Wipe and restore the whole database from an uploaded backup. DANGEROUS.
+
+    Validation (schema + SHA-256 checksum) happens before any destructive
+    action; the destructive restore is wrapped in a transaction so a
+    mid-restore failure rolls back (AB-09).
+    """
+    import tempfile
+    from pathlib import Path
+
+    _CAP = 100 * 1024 * 1024
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".json")
     try:
-        data = load_backup(raw)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    await restore_all(db, data)
-    return {"message": "Restore complete", "restored_at": data.get("created_at")}
+        total = 0
+        while chunk := await file.read(1 << 20):
+            total += len(chunk)
+            if total > _CAP:
+                raise HTTPException(status_code=413, detail="Backup file too large")
+            tmp.write(chunk)
+        tmp.flush()
+        tmp.close()
+        raw = Path(tmp.name).read_bytes()
+        if total == 0:
+            raise HTTPException(status_code=400, detail="Empty backup file")
+        try:
+            data = load_backup(raw)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        await restore_all(db, data)
+        return {"message": "Restore complete", "restored_at": data.get("created_at")}
+    finally:
+        try:
+            tmp.close()
+        except OSError:
+            pass
+        try:
+            Path(tmp.name).unlink()
+        except OSError:
+            pass
 
 
 
@@ -73,8 +107,8 @@ async def list_users(
     """Search users by display name or email, alphabetical, 15 per page."""
     stmt = select(User)
     if q:
-        like = f"%{q.lower()}%"
-        stmt = stmt.where(User.email.ilike(like) | User.display_name.ilike(like))
+        like = f"%{escape_like(q.lower())}%"
+        stmt = stmt.where(User.email.ilike(like, escape="\\") | User.display_name.ilike(like, escape="\\"))
     total = (await db.scalar(
         select(func.count()).select_from(stmt.subquery())
     )) or 0
@@ -229,9 +263,17 @@ async def restore_user(
     if len(raw) > 100 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="File too large")
     try:
-        data = _json.loads(raw.decode("utf-8"))
+        envelope = _json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, _json.JSONDecodeError):
         raise HTTPException(status_code=400, detail="Not a valid AutoBrain export file")
+    if isinstance(envelope, dict) and "sha256" in envelope and "payload" in envelope:
+        import hashlib
+        computed = hashlib.sha256(_json.dumps(envelope["payload"], sort_keys=True).encode("utf-8")).hexdigest()
+        if envelope["sha256"] != computed:
+            raise HTTPException(status_code=400, detail="Profile checksum mismatch — file is corrupted or tampered with")
+        data = envelope["payload"]
+    else:
+        data = envelope
     if data.get("app") != "autobrain" or data.get("kind") != "profile":
         raise HTTPException(status_code=400, detail="Not an AutoBrain profile export file")
     try:

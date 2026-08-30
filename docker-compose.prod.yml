@@ -89,6 +89,10 @@ services:
   # ── App services ───────────────────────────────────────────
   backend:
     <<: *backend-base
+    environment:
+      # VIC Fuel API (Servo Saver) — same pattern as AUT-1813.
+      FUEL_VIC_API_KEY: ${FUEL_VIC_API_KEY:-}
+      FUEL_VIC_ENABLED: "true"
 
   ai:
     build:

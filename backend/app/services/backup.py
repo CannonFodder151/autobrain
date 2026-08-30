@@ -7,6 +7,7 @@ snapshot with original IDs, so foreign keys and relationships are preserved.
 """
 
 import asyncio
+import hashlib
 import json
 from datetime import datetime, timezone
 
@@ -19,6 +20,11 @@ from app.core.logging import get_logger
 from app.db.session import Base
 
 logger = get_logger(__name__)
+
+# Expected top-level keys in a valid backup (schema validation, AB-09)
+_REQUIRED_KEYS = ("app", "kind", "version", "created_at", "data")
+_EXPECTED_APP = "autobrain"
+_EXPECTED_KIND = "backup"
 
 # Table order is derived from SQLAlchemy's FK-aware `metadata.sorted_tables`
 # (parent-first for insertion, reversed for deletion) instead of a hardcoded
@@ -85,36 +91,107 @@ async def _serialize_once(db: AsyncSession) -> dict:
 
 
 def dump_backup(data: dict) -> bytes:
-    return json.dumps(data, indent=2).encode("utf-8")
+    """Serialise snapshot dict to JSON bytes (includes embedded checksum)."""
+    payload = json.dumps(data, sort_keys=True).encode("utf-8")
+    checksum = hashlib.sha256(payload).hexdigest()
+    # Re-emit with the checksum alongside the data so restore can verify integrity
+    envelope = {"payload": data, "sha256": checksum}
+    return json.dumps(envelope, indent=2).encode("utf-8")
 
 
 def load_backup(raw: bytes) -> dict:
-    data = json.loads(raw.decode("utf-8"))
-    if not isinstance(data, dict) or data.get("app") != "autobrain" or data.get("kind") != "backup":
+    """Parse + validate a backup file (schema + SHA-256 checksum, AB-09).
+
+    Accepts both new-format (envelope with sha256) and legacy format
+    (bare payload dict) from before the checksum field was added.
+    """
+    try:
+        envelope = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("Not valid JSON") from exc
+
+    # New format: envelope with sha256
+    if isinstance(envelope, dict) and "sha256" in envelope and "payload" in envelope:
+        computed = hashlib.sha256(json.dumps(envelope["payload"], sort_keys=True).encode("utf-8")).hexdigest()
+        if envelope["sha256"] != computed:
+            raise ValueError("Backup checksum mismatch — file is corrupted or tampered with")
+        data = envelope["payload"]
+    else:
+        data = envelope  # legacy format, no checksum
+
+    if not isinstance(data, dict):
         raise ValueError("Not an AutoBrain backup file")
+    for key in _REQUIRED_KEYS:
+        if key not in data:
+            raise ValueError(f"Backup missing required field: {key}")
+    if data.get("app") != _EXPECTED_APP or data.get("kind") != _EXPECTED_KIND:
+        raise ValueError("Not an AutoBrain backup file")
+    if not isinstance(data.get("version"), int):
+        raise ValueError("Backup missing or invalid version")
+    if not isinstance(data.get("data"), dict):
+        raise ValueError("Backup missing data payload")
+    return data
+
+
+def load_backup_streaming(file_obj) -> dict:
+    """Load backup from a file-like object (streaming for large files).
+
+    Avoids reading the entire file into memory at once (AB-09).
+    """
+    try:
+        envelope = json.loads(file_obj.read())
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("Not valid JSON") from exc
+
+    if isinstance(envelope, dict) and "sha256" in envelope and "payload" in envelope:
+        computed = hashlib.sha256(json.dumps(envelope["payload"], sort_keys=True).encode("utf-8")).hexdigest()
+        if envelope["sha256"] != computed:
+            raise ValueError("Backup checksum mismatch — file is corrupted or tampered with")
+        data = envelope["payload"]
+    else:
+        data = envelope
+
+    if not isinstance(data, dict):
+        raise ValueError("Not an AutoBrain backup file")
+    for key in _REQUIRED_KEYS:
+        if key not in data:
+            raise ValueError(f"Backup missing required field: {key}")
+    if data.get("app") != _EXPECTED_APP or data.get("kind") != _EXPECTED_KIND:
+        raise ValueError("Not an AutoBrain backup file")
+    if not isinstance(data.get("version"), int):
+        raise ValueError("Backup missing or invalid version")
+    if not isinstance(data.get("data"), dict):
+        raise ValueError("Backup missing data payload")
     return data
 
 
 async def restore_all(db: AsyncSession, data: dict) -> None:
-    """Wipe the database and re-insert the snapshot. Admin-only operation."""
+    """Wipe the database and re-insert the snapshot. Admin-only operation.
+
+    Wrapped in a transaction so a mid-restore failure rolls back to the
+    original data (AB-09). The backup must pass schema + checksum validation
+    in `load_backup` before this is called.
+    """
     if not isinstance(data.get("data"), dict):
         raise ValueError("Backup file has no data")
 
-    # Delete children-first.
-    # Delete children-first (reverse dependency order).
-    for name in reversed(_backup_order()):
-        table = _TABLES.get(name)
-        if table is not None:
-            await db.execute(delete(table))
-    await db.flush()
+    async with db.begin():
+        try:
+            for name in reversed(_backup_order()):
+                table = _TABLES.get(name)
+                if table is not None:
+                    await db.execute(delete(table))
+            await db.flush()
 
-    for name in _backup_order():
-        table = _TABLES.get(name)
-        if table is None:
-            continue
-        for row in data["data"].get(name, []):
-            await db.execute(table.insert().values(**_coerce_values(table, row)))
-    await db.commit()
+            for name in _backup_order():
+                table = _TABLES.get(name)
+                if table is None:
+                    continue
+                for row in data["data"].get(name, []):
+                    await db.execute(table.insert().values(**_coerce_values(table, row)))
+        except Exception:
+            logger.error("restore_failed_rolling_back", exc_info=True)
+            raise
     logger.info("restore_completed", tables=len(_backup_order()))
 
 

@@ -23,6 +23,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Infrastructure (AUT-1932)
+- VIC Servo Saver fuel price API deployed to both default (prod) and hosted stacks: `docker-compose.prod.yml` gets `FUEL_VIC_API_KEY` + `FUEL_VIC_ENABLED=true`; `docker-compose.hosted.yml` gets `FUEL_VIC_API_KEY_FILE` (secret file) + `FUEL_VIC_ENABLED=true`; `.env.example` adds defaults for self-hosters; `scripts/seed-secrets.sh` maps the key to `fuel_vic_api_key`.
+
+### Security (AUT-1187)
+- Global per-IP rate limiting middleware added (AB-06): default 120 req/min,
+  with tight per-route overrides (signup 5/min, password-reset 3/min).
+- ILIKE wildcard escape on user search (AB-07): `%` and `_` now escaped in
+  admin and admin-api user listings; admin-api list_users now paginated.
+- Backup restore integrity (AB-09): SHA-256 checksum embedded in dump,
+  schema validation before destructive restore, transaction-wrapped rollback
+  on failure. Legacy backups still accepted.
+- Asset restore streaming (AB-14): uploads streamed to temp file, 1 GB cap,
+  no 5 GB in-memory buffer.
+- Signup enumeration blocked (AB-10): uniform 201 response whether email
+  exists or not; 409 removed from /auth/signup.
+
 ## [0.3.111] - 2026-08-20
 
 ### Fixed

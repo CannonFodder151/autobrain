@@ -89,6 +89,33 @@ class Settings(BaseSettings):
     LOGIN_MAX_ATTEMPTS: int = 5  # failed logins allowed per IP before lockout
     LOGIN_WINDOW_SECONDS: int = 3 * 60 * 60  # lockout window (3 hours)
 
+    # Global API rate limiting (per-IP fixed window, Redis-backed). Per-route
+    # overrides are exact-path matches on the route pattern (e.g.
+    # "/api/v1/auth/signup": "5"). Values are "<requests>/<window_seconds>".
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_DEFAULT_PER_MINUTE: int = 120
+    RATE_LIMIT_OVERRIDES_RAW: str = (
+        '{"signup": "5/60", "password-reset/request": "3/60"}'
+    )
+
+    @property
+    def RATE_LIMIT_OVERRIDES(self) -> dict[str, tuple[int, int]]:
+        """Parsed per-route limits: path-suffix -> (max_requests, window_seconds)."""
+        import json
+
+        try:
+            raw = json.loads(self.RATE_LIMIT_OVERRIDES_RAW)
+        except (ValueError, TypeError):
+            return {}
+        out: dict[str, tuple[int, int]] = {}
+        for suffix, spec in raw.items():
+            try:
+                count, _, window = str(spec).partition("/")
+                out[suffix] = (int(count), int(window or 60))
+            except ValueError:
+                continue
+        return out
+
     # Push notifications (Firebase Cloud Messaging). Optional — push alerts are
     # skipped when unset; email/discord still work.
     FCM_SERVER_KEY: str = ""

@@ -31,6 +31,15 @@ from app.services.backup import dump_backup, load_backup, restore_all, serialize
 
 router = APIRouter(prefix="/admin-api", tags=["admin-api"], dependencies=[Depends(require_admin_api_key)])
 
+# --- limits (AUT-1187 AB-06) ---
+_SIGNUP_LIMIT = 200
+_RESTORE_LIMIT = 100
+
+
+def escape_like(value: str) -> str:
+    r"""Escape LIKE wildcards (% _) and the escape char itself for literal match."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
 
 @router.get("/backup")
 async def download_backup(db: AsyncSession = Depends(get_db)) -> Response:
@@ -76,12 +85,50 @@ def _file_chunks(path: Path, size: int = 1 << 20):
 async def restore_assets_endpoint(
     file: UploadFile = File(...),
 ) -> dict:
-    """Wipe MINIO_BUCKET and restore its objects from an uploaded tar.gz. DANGEROUS."""
-    raw = await file.read()
-    if len(raw) > 5 * 1024 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="Image archive too large")
-    count = await asyncio.to_thread(restore_assets, get_minio(), raw)
-    return {"message": "Assets restore complete", "objects": count}
+    """Wipe MINIO_BUCKET and restore its objects from an uploaded tar.gz. DANGEROUS.
+
+    Streamed to a temp file so a 5GB upload never buffers in memory (AB-14).
+    Server cap is 1GB per remediation (large MinIO exports go via the backup
+    agent, not this upload endpoint).
+    """
+    _ASSET_RESTORE_CAP = 1 * 1024 * 1024 * 1024
+    tmp = tempfile.NamedTemporaryFile(prefix="restore-assets-", suffix=".tar.gz", delete=False)
+    try:
+        total = 0
+        async for chunk in _stream_upload(file, cap=_ASSET_RESTORE_CAP, label="Image archive"):
+            tmp.write(chunk)
+            total += len(chunk)
+        tmp.flush()
+        tmp_path = Path(tmp.name)
+        tmp.close()
+        count = await asyncio.to_thread(restore_assets, get_minio(), _read_tmp(tmp_path))
+        return {"message": "Assets restore complete", "objects": count}
+    finally:
+        try:
+            tmp.close()
+        except OSError:
+            pass
+        for p in [Path(tmp.name)]:
+            try:
+                p.unlink()
+            except OSError:
+                pass
+
+
+async def _stream_upload(file: UploadFile, *, cap: int, label: str):
+    total = 0
+    while chunk := await file.read(1 << 20):
+        total += len(chunk)
+        if total > cap:
+            raise HTTPException(status_code=413, detail=f"{label} too large")
+        yield chunk
+    if total == 0:
+        raise HTTPException(status_code=400, detail=f"Empty {label.lower()}")
+
+
+def _read_tmp(path: Path) -> bytes:
+    with path.open("rb") as f:
+        return f.read()
 
 
 @router.post("/restore")
@@ -89,28 +136,56 @@ async def restore_backup(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Wipe and restore the whole database from an uploaded backup. DANGEROUS."""
-    raw = await file.read()
-    if len(raw) > 100 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="Backup file too large")
+    """Wipe and restore the whole database from an uploaded backup. DANGEROUS.
+
+    Streams to a temp file so large uploads don't OOM, validates schema +
+    checksum before any destructive action, wraps restore in a transaction
+    so failures roll back (AB-09).
+    """
+    _CAP = 100 * 1024 * 1024
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".json")
     try:
-        data = load_backup(raw)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    await restore_all(db, data)
-    return {"message": "Restore complete", "restored_at": data.get("created_at")}
+        total = 0
+        while chunk := await file.read(1 << 20):
+            total += len(chunk)
+            if total > _CAP:
+                raise HTTPException(status_code=413, detail="Backup file too large")
+            tmp.write(chunk)
+        tmp.flush()
+        tmp.close()
+        raw = Path(tmp.name).read_bytes()
+        if total == 0:
+            raise HTTPException(status_code=400, detail="Empty backup file")
+        try:
+            data = load_backup(raw)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        await restore_all(db, data)
+        return {"message": "Restore complete", "restored_at": data.get("created_at")}
+    finally:
+        try:
+            tmp.close()
+        except OSError:
+            pass
+        try:
+            Path(tmp.name).unlink()
+        except OSError:
+            pass
 
 
 
 @router.get("/users", response_model=list[UserAdminOut])
 async def list_users(
     q: str | None = Query(default=None, max_length=255),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=100, ge=1, le=_SIGNUP_LIMIT),
     db: AsyncSession = Depends(get_db),
 ) -> list[User]:
     stmt = select(User).order_by(User.created_at.desc())
     if q:
-        like = f"%{q.lower()}%"
-        stmt = stmt.where(User.email.ilike(like) | User.display_name.ilike(like))
+        like = f"%{escape_like(q.lower())}%"
+        stmt = stmt.where(User.email.ilike(like, escape="\\") | User.display_name.ilike(like, escape="\\"))
+    stmt = stmt.offset((page - 1) * page_size).limit(page_size)
     return list((await db.scalars(stmt)).all())
 
 

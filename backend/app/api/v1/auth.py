@@ -412,7 +412,13 @@ async def public_signup(
         )
     existing = await db.scalar(select(User).where(User.email == payload.email.lower()))
     if existing:
-        raise HTTPException(status_code=409, detail="Email already registered")
+        # Uniform response (AB-10): do not reveal account existence via 409.
+        # Always return the same message so enumeration via signup is blocked.
+        # The existing user is not modified.
+        return {
+            "message": "Account created — check your email to finish setting it up.",
+            "email": payload.email.lower(),
+        }
     name_taken = await db.scalar(
         select(User).where(func.lower(User.display_name) == payload.display_name.lower())
     )
@@ -476,9 +482,18 @@ async def import_profile(
     if len(raw) > 100 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="File too large")
     try:
-        data = _json.loads(raw.decode("utf-8"))
+        envelope = _json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, _json.JSONDecodeError):
         raise HTTPException(status_code=400, detail="Not a valid AutoBrain export file")
+    # Accept both new envelope format (with sha256) and legacy bare payload
+    if isinstance(envelope, dict) and "sha256" in envelope and "payload" in envelope:
+        import hashlib
+        computed = hashlib.sha256(_json.dumps(envelope["payload"], sort_keys=True).encode("utf-8")).hexdigest()
+        if envelope["sha256"] != computed:
+            raise HTTPException(status_code=400, detail="Profile checksum mismatch — file is corrupted or tampered with")
+        data = envelope["payload"]
+    else:
+        data = envelope
     if data.get("app") != "autobrain" or data.get("kind") != "profile":
         raise HTTPException(status_code=400, detail="Not an AutoBrain profile export file")
     try:
