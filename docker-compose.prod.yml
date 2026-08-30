@@ -42,6 +42,9 @@ x-backend-base: &backend-base
     FUEL_NSW_API_KEY: ${FUEL_NSW_API_KEY:-}
     FUEL_NSW_API_SECRET: ${FUEL_NSW_API_SECRET:-}
     FUEL_NSW_ENABLED: "true"
+    # AUT-1813 phase: VIC Servo Saver — approved partner key, same scoping.
+    FUEL_VIC_API_KEY: ${FUEL_VIC_API_KEY:-}
+    FUEL_VIC_ENABLED: "true"
   depends_on:
     postgres:
       condition: service_healthy

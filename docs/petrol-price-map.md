@@ -13,10 +13,10 @@ poll when a key is configured (silent fallback to the last cached snapshot).
 | WA | FuelWatch | none (public) | — |
 | NSW | Transport for NSW Fuel API | HTTP Basic `key:secret` | `FUEL_NSW_API_KEY`, `FUEL_NSW_API_SECRET` |
 | QLD | Fuel Prices | consumer token | *planned* (`FUEL_QLD_*`, AUT-1813 phase) |
-| VIC | Servo Saver | approved partner key | *planned* (`FUEL_VIC_*`, AUT-1813 phase) |
+| VIC | Servo Saver | approved partner key | `FUEL_VIC_API_KEY` |
 
-WA needs no key. NSW is the only implemented source. QLD/VIC are planned phases
-of AUT-1813 — when wired, their keys follow the same `FUEL_<STATE>_*` convention
+WA is public (no key). NSW and VIC are implemented. QLD is a planned phase of
+AUT-1813 — when wired, its keys follow the same `FUEL_<STATE>_*` convention
 and the same env-scoping rule below.
 
 ## Canonical env var names (shared with the normaliser, AUT-1817)
@@ -31,6 +31,13 @@ FUEL_NSW_API_URL        # optional override (defaults to the official endpoint)
 FUEL_NSW_POLL_HOURS     # optional override (default 24)
 ```
 
+VIC (implemented):
+
+```
+FUEL_VIC_API_KEY        # Servo Saver approved partner key
+FUEL_VIC_ENABLED        # "true" to poll; "false"/empty disables
+```
+
 The normaliser (`backend/app/services/fuel_prices.py`) reads these from the
 process environment via `app.core.config` settings. There are **no baked-in
 keys** — if `FUEL_NSW_API_KEY`/`FUEL_NSW_API_SECRET` are absent the source is
@@ -42,11 +49,13 @@ polls an external feed (AUT-1858 / AUT-1817).
 These keys are injected **only** for the AutoBrain-managed tiers:
 
 - `docker-compose.prod.yml` (Default tier) — backend service (`FUEL_NSW_API_KEY`,
-  `FUEL_NSW_API_SECRET`, `FUEL_NSW_ENABLED=true`, `${VAR:-}` empty defaults).
+  `FUEL_NSW_API_SECRET`, `FUEL_NSW_ENABLED=true`, `${VAR:-}` empty defaults) +
+  VIC (`FUEL_VIC_API_KEY`, `FUEL_VIC_ENABLED=true`).
 - `docker-compose.hosted.yml` (Hosted / Oracle Cloud, EP5) — backend + worker
   services, via the secret-file pattern (`FUEL_NSW_API_KEY_FILE` /
   `FUEL_NSW_API_SECRET_FILE` under `/run/secrets`, exported at container start by
-  `docker/lib-load-secrets.sh`); `FUEL_NSW_ENABLED=true`.
+  `docker/lib-load-secrets.sh`; `FUEL_NSW_ENABLED=true`) + VIC
+  (`FUEL_VIC_API_KEY_FILE`, `FUEL_VIC_ENABLED=true`).
 
 They are **not** present in `docker-compose.yml` (self-host). Self-hosted users
 opt in by setting their own keys (below). Real keys are never committed to the
@@ -60,7 +69,9 @@ not in the compose file.
 2. **NSW Fuel API** — register an application at the
    [Transport for NSW Fuel API](https://api.transport.nsw.gov.au). Use the issued
    key + secret as HTTP Basic credentials in `FUEL_NSW_API_KEY` / `FUEL_NSW_API_SECRET`.
-3. **QLD / VIC** — not yet wired; set their env vars once AUT-1813 ships them.
+3. **VIC Servo Saver** — obtain an approved partner key and set
+   `FUEL_VIC_API_KEY`. See the Servo Saver documentation for registration.
+4. **QLD** — not yet wired; set env vars once AUT-1813 ships the QLD feed.
 
 Set them in your `.env` (copy of `.env.example`):
 

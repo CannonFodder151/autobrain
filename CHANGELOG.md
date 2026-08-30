@@ -16,6 +16,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+- deploy: VIC Servo Saver fuel feed deployed to Default + Hosted (AUT-1932).
+
 ## [0.3.190] - 2026-08-30
 
 ## [0.3.189] - 2026-08-30
