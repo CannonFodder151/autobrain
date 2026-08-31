@@ -15,6 +15,7 @@ Output: image_base64 (PNG), width, height, format, model.
 
 import base64
 import io
+from urllib.parse import quote
 
 import httpx
 from PIL import Image, ImageDraw, ImageFont
@@ -101,9 +102,11 @@ def render_card(
 
 async def _ai_image(prompt: str, width: int, height: int) -> bytes | None:
     """Free Pollinations text-to-image. Returns PNG bytes or None on any failure."""
+    if len(prompt) > 500:
+        prompt = prompt[:500]
     url = (
         "https://image.pollinations.ai/prompt/"
-        + prompt.replace(" ", "%20").replace(",", "%2C")
+        + quote(prompt, safe="")
         + f"?width={width}&height={height}&nologo=true"
     )
     try:
