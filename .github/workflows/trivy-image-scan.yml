@@ -101,6 +101,7 @@ jobs:
             scanner: vuln
             severity: 'HIGH,CRITICAL'
             ignore-unfixed: true
+            trivyignores: '.trivyignore'
             format: 'table'
             output: 'trivy-postgres-report.txt'
             exit-code: '1'
@@ -112,6 +113,7 @@ jobs:
             scanner: vuln
             severity: 'HIGH,CRITICAL'
             ignore-unfixed: true
+            trivyignores: '.trivyignore'
             format: 'table'
             output: 'trivy-nginx-report.txt'
             exit-code: '1'
@@ -123,6 +125,7 @@ jobs:
           scanner: vuln
           severity: 'HIGH,CRITICAL'
           ignore-unfixed: true
+          trivyignores: '.trivyignore'
           format: 'table'
           output: 'trivy-python-report.txt'
           exit-code: '1'
