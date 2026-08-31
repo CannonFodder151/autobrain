@@ -55,7 +55,7 @@ services:
     # multi-arch image (amd64 + arm64) is immutable across Demo/Default/Hosted
     # (Hosted = arm64 Oracle VM; dev box = x64). Bump deliberately: verify
     # release notes, then update this digest.
-    image: pgvector/pgvector:pg17@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f
+    image: ghigest/pgc...@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be set}
@@ -136,7 +136,7 @@ services:
       retries: 10
 
   backend:
-    image: ghcr.io/cannonfodder151/autobrain-backend:hosted
+    image: ghcr.io/cannonfodder151/autobrain-backend@sha256:<backend-digest> # ponytail: replace with real digest
     restart: unless-stopped
     command: sh -c "python -m app.db.bootstrap && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
@@ -241,6 +241,7 @@ services:
       # AUT-1673: dongle-server internal key + web auth injected via Portainer
       # stack env (encrypted at rest), matching the HUB_* secret pattern.
       DONGLE_SERVER_API_KEY: ${DONGLE_SERVER_API_KEY}
+      DONGLE_SERVER_API_KEY_FILE: /run/secrets/dongle_server_api_key
       MINIO_ENDPOINT: minio:9000
       MINIO_EXTERNAL_ENDPOINT: ${APP_BASE_URL:-https://hosted.autobrainservice.app}
       MINIO_BUCKET: ${MINIO_BUCKET:-autobrain-assets}
@@ -249,8 +250,13 @@ services:
       MINIO_SECURE: "true"
       WEB_UI_BASIC_USER: ${DONGLE_WEB_BASIC_USER}
       WEB_UI_BASIC_PASSWORD: ${DONGLE_WEB_BASIC_PASSWORD}
+      WEB_UI_BASIC_PASSWORD_FILE: /run/secrets/dongle_web_basic_password
       DATABASE_URL: sqlite+aiosqlite:///./dongle.db
       ENVIRONMENT: production
+      # Firmware distribution config (AUT-1673)
+      FIRMWARE_BUCKET_PREFIX: dongle_firmware
+      SIGNED_URL_TTL_SECONDS: 900
+      MAX_FIRMWARE_BYTES: 16777216
     <<: *secrets
     volumes:
       - dongle-server-data:/data
@@ -303,34 +309,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-
-  # AUT-1673: firmware release + distribution service for OBD ESP32 dongles.
-  # Owns firmware manifests, MinIO signed blob URLs, the serial-number
-  # whitelist (paid-account gate), and the ops web GUI. Shares the hosted
-  # stack's MinIO and Postgres where applicable (SQLite in the local compose).
-  dongle-server:
-    image: ghcr.io/cannonfodder151/autobrain-dongle-server:hosted
-    restart: unless-stopped
-    environment:
-      <<: *core-env
-      AUTOBRIAN_BACKEND_URL: http://backend:8000
-      DONGLE_SERVER_API_KEY_FILE: /run/secrets/dongle_server_api_key
-      MINIO_ENDPOINT: minio:9000
-      MINIO_EXTERNAL_ENDPOINT: ${MINIO_EXTERNAL_ENDPOINT:-}
-      MINIO_BUCKET: ${MINIO_BUCKET:-autobrain-assets}
-      MINIO_ACCESS_KEY_FILE: /run/secrets/minio_access_key
-      MINIO_SECRET_KEY_FILE: /run/secrets/minio_secret_key
-      MINIO_SECURE: ${MINIO_SECURE:-false}
-      WEB_UI_BASIC_USER: ${WEB_UI_BASIC_USER:-admin}
-      WEB_UI_BASIC_PASSWORD_FILE: /run/secrets/dongle_web_basic_password
-      FIRMWARE_BUCKET_PREFIX: dongle_firmware
-      SIGNED_URL_TTL_SECONDS: 900
-      MAX_FIRMWARE_BYTES: 16777216
-    <<: *secrets
-    depends_on:
-      - backend
-    expose:
-      - "8000"
 
   frontend:
     image: ghcr.io/cannonfodder151/autobrain-frontend:hosted
