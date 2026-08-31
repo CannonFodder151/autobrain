@@ -21,6 +21,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+- fix(backup): add retry logic for MinIO put_object in scheduled_backup task (AUT-1958). Backup jobs on hosted stack were failing due to transient MinIO network issues without retry — now retries 3x with backoff before reporting failure.
+- fix(backup): improved pruning logging to report number of backups removed
 
 ## [0.3.196] - 2026-08-30
 
