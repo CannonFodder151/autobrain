@@ -154,6 +154,11 @@ services:
       FUEL_NSW_API_KEY_FILE: /run/secrets/fuel_nsw_api_key
       FUEL_NSW_API_SECRET_FILE: /run/secrets/fuel_nsw_api_secret
       FUEL_NSW_ENABLED: "true"
+      # AUT-1932: VIC Servo Saver — approved partner key (AUT-1813 phase).
+      # Enable with FUEL_VIC_ENABLED=true once key/secret are provisioned.
+      FUEL_VIC_API_KEY_FILE: /run/secrets/fuel_vic_api_key
+      FUEL_VIC_API_SECRET_FILE: /run/secrets/fuel_vic_api_secret
+      FUEL_VIC_ENABLED: "false"
       AI_GATEWAY_API_KEY_FILE: /run/secrets/ai_gateway_api_key
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@autobrain.io}
       ADMIN_DISPLAY_NAME: AutoBrain Admin
@@ -297,6 +302,10 @@ services:
       FUEL_NSW_API_KEY_FILE: /run/secrets/fuel_nsw_api_key
       FUEL_NSW_API_SECRET_FILE: /run/secrets/fuel_nsw_api_secret
       FUEL_NSW_ENABLED: "true"
+      # AUT-1932: VIC Servo Saver — approved partner key (AUT-1813 phase).
+      FUEL_VIC_API_KEY_FILE: /run/secrets/fuel_vic_api_key
+      FUEL_VIC_API_SECRET_FILE: /run/secrets/fuel_vic_api_secret
+      FUEL_VIC_ENABLED: "false"
     <<: *secrets
     depends_on:
       postgres:
