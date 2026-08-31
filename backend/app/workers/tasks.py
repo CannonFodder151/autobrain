@@ -219,6 +219,28 @@ def purge_stale_pending_accounts() -> None:
     _run(_purge())
 
 
+_MINIO_PUT_ATTEMPTS = 3
+_MINIO_PUT_BACKOFF = 0.5
+
+
+def _minio_put_with_retry(client, bucket: str, key: str, data: bytes, content_type: str) -> None:
+    """Upload to MinIO with retries on transient failures."""
+    import io as _io
+
+    for attempt in range(_MINIO_PUT_ATTEMPTS):
+        try:
+            client.put_object(
+                bucket, key, _io.BytesIO(data), length=len(data), content_type=content_type
+            )
+            return
+        except Exception as exc:
+            if attempt == _MINIO_PUT_ATTEMPTS - 1:
+                raise
+            logger.warning("minio_put_retry", attempt=attempt + 1, key=key, error=str(exc))
+            import time
+            time.sleep(_MINIO_PUT_BACKOFF * (attempt + 1))
+
+
 @shared_task
 def scheduled_backup() -> None:
     """Daily full-DB snapshot stored to MinIO. Admin backup safety-net."""
@@ -240,12 +262,9 @@ def scheduled_backup() -> None:
             stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
             key = f"backups/autobrain-backup-{stamp}.json"
             payload = dump_backup(data)
-            get_minio().put_object(
-                settings.MINIO_BUCKET, key, _io.BytesIO(payload),
-                length=len(payload), content_type="application/json",
-            )
+            _minio_put_with_retry(get_minio(), settings.MINIO_BUCKET, key, payload, "application/json")
             await _prune_backups()
-            logger.info("scheduled_backup_done", key=key)
+            logger.info("scheduled_backup_done", key=key, size=len(payload))
 
     async def _prune_backups():
         from datetime import timedelta
@@ -255,12 +274,16 @@ def scheduled_backup() -> None:
 
         client = get_minio()
         cutoff = datetime.now(timezone.utc) - timedelta(days=settings.BACKUP_RETENTION_DAYS)
+        pruned = 0
         try:
             for obj in client.list_objects(settings.MINIO_BUCKET, prefix="backups/"):
                 if obj.last_modified and obj.last_modified.replace(tzinfo=timezone.utc) < cutoff:
                     client.remove_object(settings.MINIO_BUCKET, obj.object_name)
+                    pruned += 1
         except Exception:
             logger.exception("backup_prune_failed")
+        if pruned:
+            logger.info("backup_prune_done", count=pruned)
 
     _run(_do())
 
