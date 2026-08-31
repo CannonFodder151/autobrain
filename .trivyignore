@@ -42,16 +42,6 @@ CVE-2026-56859  # gosu-stdlib: encoding/xml; unreachable
 CVE-2026-56860  # gosu-stdlib: net/url; unreachable
 CVE-2026-56862  # gosu-stdlib: crypto/tls KeyUpdate; gosu does no TLS
 
-# --- AUT-1793: nginx-unprivileged QUIC DoS (CVE-2026-14456) -----------------------
-# CVE-2026-14456: OpenSSL QUIC server DoS via unbounded memory growth.
-# nginx.conf only listens on port 8080 (HTTP, no TLS). No QUIC/HTTP3 listener
-# is configured. OpenSSL QUIC code path is never invoked, making this CVE not
-# exploitable in our deployment.
-# Time-boxed: re-check 2026-09-27 (or when nginx-unprivileged republishes a
-# stable-alpine digest shipping OpenSSL >= 3.5.8-r0) and drop this entry + bump
-# the pinned digest in docker/frontend/Dockerfile.
-CVE-2026-14456  # QUIC DoS: no QUIC listener in frontend nginx
-
 # --- AUT-1735 / python base image HIGH CVEs (unused at runtime) ------------------
 # Both findings are pre-installed pip packages shipped in the python:3.13-slim
 # base image (PYTHON_BASE_IMAGE). grep across the repo confirms NEITHER msgpack
