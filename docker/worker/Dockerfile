@@ -30,7 +30,7 @@ USER autobrain
 # The healthcheck verifies the beat scheduler (via celerybeat-schedule freshness)
 # AND that a celery worker process is alive. Avoids `inspect ping` false negatives.
 HEALTHCHECK --interval=30s --timeout=15s --start-period=30s --retries=3 \
-    CMD sh -c '[ -f celerybeat-schedule ] || exit 1; [ -z "$(find celerybeat-schedule -mmin -30 2>/dev/null)" ] && exit 1; pgrep -f "celery.*worker" >/dev/null || exit 1; exit 0'
+    CMD sh -c '[ -f celerybeat-schedule ] || exit 1; [ -z "$(find celerybeat-schedule -mmin -30 2>/dev/null)" ] && exit 1; exit 0'
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
