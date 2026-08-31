@@ -184,12 +184,15 @@ Stack-config hardening from the AUT-1486/AUT-1498 audit. Applies to
 
 ### How it works
 
-- Secret-class values live in `/opt/autobrain/secrets/<name>` on the host
+- Secret-class values live in `/data/autobrain/secrets/<name>` on the host
   (`root:1000`, mode `0640`). The dir is bind-mounted read-only at
   `/run/secrets` into `backend`, `worker`, `ai`; postgres/redis/minio mount
   only the files they need. The bind source honours `${SECRETS_DIR}` — set it
   in the stack env when the host rootfs is read-only (Oracle VM runs Ubuntu
-  Core; hosted uses `/data/autobrain/secrets`, AUT-1535).
+  Core; hosted uses `/data/autobrain/secrets`, AUT-1535/1853). The snap Docker
+  daemon masks `/opt` from its read-only core24 squashfs, so the default
+  SECRETS_DIR moved from `/opt/autobrain/secrets` to `/data/autobrain/secrets`
+  (AUT-1853).
 - At container start, `docker/lib-load-secrets.sh` exports each `FOO_FILE`
   var's file content as `FOO`, and derives authenticated
   `REDIS_URL`/`CELERY_*_URL` from `/run/secrets/redis_password`
@@ -209,7 +212,7 @@ Stack-config hardening from the AUT-1486/AUT-1498 audit. Applies to
 3. Update the Portainer stack from `docker-compose.hosted.yml` (secret-class
    keys can be dropped from the stack env) and redeploy.
 4. Verify: `docker inspect <svc>` shows no plain secrets; every service
-   healthy; `redis-cli -a $(sudo cat /opt/autobrain/secrets/redis_password)
+    healthy; `redis-cli -a $(sudo cat /data/autobrain/secrets/redis_password)
    ping` → PONG; unauthenticated `redis-cli ping` → NOAUTH.
 5. Rotate any secret by rewriting its file and restarting the consuming
    services (broker rotation restarts redis + backend + worker).

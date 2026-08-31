@@ -1,13 +1,13 @@
 #!/bin/sh
-# AUT-1533: seed /opt/autobrain/secrets from a Portainer-stack env dump.
-# Usage: sudo ./scripts/seed-secrets.sh stack-env.txt [/opt/autobrain/secrets]
+# AUT-1533/1853: seed /data/autobrain/secrets (or SECRETS_DIR env) from a Portainer-stack env dump.
+# Usage: sudo ./scripts/seed-secrets.sh stack-env.txt [/data/autobrain/secrets]
 #   stack-env.txt is KEY=VALUE lines (the current hosted stack env). Values are
 #   written one-per-file, mode 0640 group 1000 (containers run uid 1000), then
 #   the input file should be shredded. Idempotent; empty values -> empty file.
 set -eu
 
 ENV_FILE="${1:?usage: seed-secrets.sh <stack-env-file> [secrets-dir]}"
-DIR="${2:-/opt/autobrain/secrets}"
+DIR="${2:-${SECRETS_DIR:-/data/autobrain/secrets}}"
 
 # KEY in stack env -> secret file name. Keys not listed here are non-secret
 # config and stay in the Portainer stack env.

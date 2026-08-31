@@ -5,6 +5,8 @@ set -euo pipefail
 
 USER_NAME="${1:-$(whoami)}"
 REMOTE_DIR="/opt/autobrain"
+# AUT-1853: Hosted stack uses /data/autobrain/secrets (snap Docker masks /opt)
+SECRETS_DIR="/data/autobrain/secrets"
 
 echo "==> Installing docker if missing"
 if ! command -v docker >/dev/null 2>&1; then
@@ -20,6 +22,7 @@ docker compose version >/dev/null 2>&1 || {
 
 echo "==> Creating app directory"
 mkdir -p "$REMOTE_DIR"
+mkdir -p "$SECRETS_DIR"
 
 echo "==> Adding user $USER_NAME to docker group"
 usermod -aG docker "$USER_NAME" || true

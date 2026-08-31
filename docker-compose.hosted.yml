@@ -3,11 +3,11 @@
 # App images from ghcr.io (multi-arch: the Oracle host is arm64 and Docker Hub :hosted tags are
 # amd64-only since AUT-967; ghcr :hosted carries amd64+arm64, AUT-1114).
 # Non-secret config interpolates from the Portainer stack env; secret-class
-# values come from /opt/autobrain/secrets via the *_FILE pattern (AUT-1533).
+# values come from /data/autobrain/secrets via the *_FILE pattern (AUT-1533/1853).
 # Env must stay applied via the stack so redeploys never revert SMTP2GO/SMTP_* (see AUT-97/AUT-101).
 
 # Secret-file pattern (AUT-1533): secret-class values are bind-mounted from
-# /opt/autobrain/secrets (root:1000, 0640) and loaded into process env at
+# /data/autobrain/secrets (root:1000, 0640) and loaded into process env at
 # container start by docker/lib-load-secrets.sh. They never appear in
 # `docker inspect`. Seed with scripts/seed-secrets.sh BEFORE deploying this
 # file; see docs/security.md ("Secret-file pattern & broker auth").
@@ -15,7 +15,7 @@
 x-secrets: &secrets
   volumes:
     - type: bind
-      source: ${SECRETS_DIR:-/opt/autobrain/secrets}
+      source: ${SECRETS_DIR:-/data/autobrain/secrets}
       target: /run/secrets
       read_only: true
 
@@ -65,7 +65,7 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - type: bind
-        source: ${SECRETS_DIR:-/opt/autobrain/secrets}/postgres_password
+        source: ${SECRETS_DIR:-/data/autobrain/secrets}/postgres_password
         target: /run/secrets/postgres_password
         read_only: true
     healthcheck:
@@ -83,7 +83,7 @@ services:
     volumes:
       - redis-data:/data
       - type: bind
-        source: ${SECRETS_DIR:-/opt/autobrain/secrets}/redis_password
+        source: ${SECRETS_DIR:-/data/autobrain/secrets}/redis_password
         target: /run/secrets/redis_password
         read_only: true
     healthcheck:
@@ -122,11 +122,11 @@ services:
     volumes:
       - minio-data:/data
       - type: bind
-        source: ${SECRETS_DIR:-/opt/autobrain/secrets}/minio_access_key
+        source: ${SECRETS_DIR:-/data/autobrain/secrets}/minio_access_key
         target: /run/secrets/minio_access_key
         read_only: true
       - type: bind
-        source: ${SECRETS_DIR:-/opt/autobrain/secrets}/minio_secret_key
+        source: ${SECRETS_DIR:-/data/autobrain/secrets}/minio_secret_key
         target: /run/secrets/minio_secret_key
         read_only: true
     healthcheck:

@@ -50,7 +50,7 @@ These keys are injected **only** for the AutoBrain-managed tiers:
 
 They are **not** present in `docker-compose.yml` (self-host). Self-hosted users
 opt in by setting their own keys (below). Real keys are never committed to the
-repo: on Hosted they land in `/opt/autobrain/secrets` via
+repo: on Hosted they land in `/data/autobrain/secrets` via
 `scripts/seed-secrets.sh` (which now maps `FUEL_NSW_API_KEY`/`FUEL_NSW_API_SECRET`),
 not in the compose file.
 
