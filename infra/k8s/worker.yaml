@@ -49,15 +49,15 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
-          # AB-INFRA-012: worker liveness via Celery ping.
+          # AB-INFRA-012: worker liveness via process check (deterministic; no AMQP round-trip).
           readinessProbe:
             exec:
-              command: ["sh", "-c", "celery -A app.workers.celery_app:celery_app inspect ping -d celery@$HOSTNAME"]
+              command: ["sh", "-c", "pgrep -f 'celery.*worker' >/dev/null 2>&1"]
             initialDelaySeconds: 20
             periodSeconds: 30
           livenessProbe:
             exec:
-              command: ["sh", "-c", "celery -A app.workers.celery_app:celery_app inspect ping -d celery@$HOSTNAME"]
+              command: ["sh", "-c", "pgrep -f 'celery.*worker' >/dev/null 2>&1"]
             initialDelaySeconds: 60
             periodSeconds: 60
             timeoutSeconds: 15
