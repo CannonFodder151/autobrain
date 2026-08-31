@@ -360,6 +360,27 @@ def fire_and_forget(task, *args, **kwargs) -> None:
         logger.exception("celery_dispatch_failed", task=getattr(task, "name", repr(task)))
 
 
+@shared_task
+def ingest_fuel_prices() -> None:
+    """Scheduled fuel-price pipeline (Servo Spy, AUT-1817).
+
+    Pulls WA FuelWatch, NSW FuelCheck and QLD Fuel Prices into Postgres. Each
+    feed is independent — a single feed's failure is logged and does not abort
+    the others (see ``app.services.fuel_feeds.ingest_all_fuel``). Deterministic,
+    no AI, no spend.
+    """
+    from app.services.fuel_feeds import ingest_all_fuel
+
+    async def _ingest():
+        async with SessionLocal() as db:
+            summary = await ingest_all_fuel(db)
+            for source, res in summary.items():
+                logger.info("fuel_ingest_summary", source=source, **res)
+            await db.commit()
+
+    _run(_ingest())
+
+
 def _pdf_text(data: bytes) -> str:
     """Extract text from a PDF for downstream OCR/AI extraction."""
     try:

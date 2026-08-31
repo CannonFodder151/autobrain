@@ -26,16 +26,17 @@ RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/lib-load-secrets.sh
 
 USER autobrain
 
-# AUT-601 / AUT-1286: this image runs BOTH the worker and the beat scheduler.
-# `celery inspect ping` only proves a worker answers on the control bus, so it
-# does not prove the embedded beat scheduler is healthy — and under AI-task
-# load it also false-negatives for the worker itself. The check is command-
-# aware: when PID 1 embeds beat (separate `beat`, or hosted `worker -B` from
-# AUT-1242/C1), it validates that the PersistentScheduler keeps writing
-# `celerybeat-schedule` (stale file = wedged scheduler loop, e.g. the 100% CPU
-# busy-loop from AUT-601); otherwise it falls back to `inspect ping`.
+# AUT-601 / AUT-1286 / AUT-1878: this image runs BOTH the worker and the beat
+# scheduler. `celery inspect ping` is unreliable (fails under load, false-
+# negatives on the control bus). The check is command-aware:
+# - When PID 1 embeds beat (`worker -B` or separate `beat`), it validates that
+#   the PersistentScheduler keeps writing `celerybeat-schedule` (stale file =
+#   wedged scheduler loop, e.g. the 100% CPU busy-loop from AUT-601).
+# - Worker-only: `pgrep` for the celery worker process (deterministic; no AMQP
+#   round-trip). AUT-1878: `inspect ping` exits 1 on a healthy worker in the
+#   hosted stack — process check is more reliable.
 HEALTHCHECK --interval=30s --timeout=15s --start-period=30s --retries=3 \
-    CMD sh -c 'c=$(tr "\0" " " < /proc/1/cmdline); case "$c" in *" beat "*|*" -B "*) [ -f celerybeat-schedule ] || exit 1; [ -z "$(find celerybeat-schedule -mmin -30 2>/dev/null)" ] && exit 1; exit 0 ;; *) celery -A app.workers.celery_app:celery_app inspect ping -t 8 -d "celery@$(hostname)" ;; esac'
+    CMD sh -c 'c=$(tr "\0" " " < /proc/1/cmdline); case "$c" in *beat*|* -B *) [ -f celerybeat-schedule ] || exit 1; [ -z "$(find celerybeat-schedule -mmin -30 2>/dev/null)" ] && exit 1; exit 0 ;; *) pgrep -f "celery.*worker" >/dev/null 2>&1 ;; esac'
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 

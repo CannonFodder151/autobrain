@@ -14,6 +14,7 @@ below are mirrors kept in-repo for offline reading and PR review.
 | [database-schema.md](database-schema.md) | PostgreSQL schema |
 | [market-data.md](market-data.md) | CarsGuide/CarSales market data + stable valuations (AUT-287) |
 | [fuel-pricing.md](fuel-pricing.md) | 7-Eleven fuel prices via projectzerothree.info (deterministic, no AI) |
+| [fuel-servo-spy.md](fuel-servo-spy.md) | Servo Spy fuel price map — WA FuelWatch + NSW FuelCheck + QLD Fuel Prices ingest (deterministic, no AI, premium-gated) |
 | [product-rules.md](product-rules.md) | Board/product rules that constrain app behaviour (PR-1: club reg disables digital logbook) |
 | [ai-models.md](ai-models.md) | AI module descriptions |
 | [module-breakdown.md](module-breakdown.md) | AI gateway — per-module breakdown (deterministic-first) |

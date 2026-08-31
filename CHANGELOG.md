@@ -20,16 +20,106 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
-
-
-
-
-
-
 ## [Unreleased]
 
+## [0.3.196] - 2026-08-30
+
+## [0.3.195] - 2026-08-30
+- fix(ci): use GHCR_PAT secret for GHCR authentication in build-hosted.yml (AUT-1937). The `github_pat` secret name was invalid (GitHub blocks `github_*` prefix), causing 403 Forbidden on multi-arch image push, which broke the auto-update and deploy pipeline.
+
+## [0.3.194] - 2026-08-30
+
+## [0.3.193] - 2026-08-30
+
+## [0.3.192] - 2026-08-30
+
+## [0.3.191] - 2026-08-30
+
+## [0.3.190] - 2026-08-30
+
+## [0.3.189] - 2026-08-30
+
+## [0.3.188] - 2026-08-30
+
+- fix(backend): register fuel_servo router — Servo Spy API was dead code (AUT-1817).
+
+## [0.3.187] - 2026-08-30
+
+## [0.3.186] - 2026-08-30
+
+- fix(ci): GHCR push uses PAT (github_pat) when GITHUB_TOKEN lacks packages:write on self-hosted runners.
+
+## [0.3.185] - 2026-08-30
+
+### Servo Spy map view (AUT-1820)
+- Map view now renders live station markers with brand logos and the current
+  vehicle's fuel-type price, highlights the cheapest station, and shows a
+  bottom sheet with all fuel-type prices + one-tap Navigate (Google Maps).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## [0.3.184] - 2026-08-30
+
+## [0.3.183] - 2026-08-30
+
+## [0.3.182] - 2026-08-30
+
+## [0.3.181] - 2026-08-30
+
+## [0.3.180] - 2026-08-30
+
+## [0.3.179] - 2026-08-30
+
+## [0.3.178] - 2026-08-30
+
 ### Added
-- Servo Spy — NSW petrol price map feed (AUT-1813): free NSW FuelCheck ingest (`GET /fuel-prices?state=NSW`), per-station `FuelPrice` model + alembic migration, and day-over-day `price_delta_pct` on map markers. Foundation for the Servo Spy favourites + price-move alerts (AUT-1859).
+- **Servo Spy list view with filters (AUT-1821):** the List view now shows nearby fuel stations sorted by price (cheapest first) using the current vehicle's fuel type by default. A filter sheet lets you change fuel type, set a max-distance radius (5–200 km slider), and toggle the sort metric between price and distance. Each row displays the station name, brand initial/avatar, distance, and current fuel price.
+
+### Fixed
+- **Servo Spy filter safety (AUT-1821 follow-up):** the fuel-type dropdown now seeds with the static defaults before the `GET /fuel/types` response lands, so the filter sheet remains valid if the vehicle list request fails first — no empty-dropdown crash.
+
+## [0.3.177] - 2026-08-29
+
+## [0.3.176] - 2026-08-29
+
+### Added
+- **Vehicle fuel-type dropdown (AUT-1819):** the vehicle edit/add screen now has a data-driven `Fuel type` dropdown sourced from `GET /api/fuel/types` (canonical tokens E10/91/95/98/Diesel/LPG), falling back to a static list when the API is unavailable or premium-gated. The selection persists on `vehicles.fuel_type` and is exposed on the vehicle record for the map/list default-price behaviour. Backend adds the `fuel_type` column (migration `aut1819_fuel_type`, which also merges the six outstanding alembic heads so `alembic upgrade head` stays single-headed).
+- **Servo Spy tab shell + Map/List selector (AUT-1818):** new premium-gated `Servo Spy` entry in the home feature grid opening a screen with a `Map`/`List` segmented control. The map is theme-aware (CARTO light basemap in light mode, dark basemap in dark mode) and follows the app light/dark theme. Free-tier accounts are shown the shared `PremiumGate` paywall and never see map or list data (gating requirement from AUT-1813). Live station markers/list rows are deferred to the backend fuel-price API (AUT-1817).
+
+## [0.3.175] - 2026-08-29
+
+## [0.3.174] - 2026-08-29
+
+### Added
+- **Servo Spy fuel-price pipeline (AUT-1817):** deterministic, no-AI ingest of public open-data feeds — WA FuelWatch, NSW FuelCheck, QLD Fuel Prices — into new `fuel_stations` / `fuel_prices` Postgres tables (Alembic migration `f0a1b2c3d4e5`), with a Celery beat task (`ingest_fuel_prices`, every 6h). Premium-gated read API at `/api/fuel/*` (`/types`, `/brands`, `/stations?lat&lon&radiusKm&fuelType`, `/station/{id}/prices`, `/attribution`) — free accounts get 403 "Fuel prices are a premium feature. Upgrade to enable it." Open-data attribution is attached to every response (`X-Fuel-Data-Attribution`).
 
 ## [0.3.173] - 2026-08-29
 
@@ -129,7 +219,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
-## [Unreleased]
 
 ## [0.3.156] - 2026-08-29
 
@@ -259,7 +348,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - CI: wired `CI_TRIAGE_WEBHOOK_SECRET`, `CI_TRIAGE_PARENT_ISSUE_ID`, `CI_TRIAGE_GOAL_ID`, `CI_TRIAGE_AGENT_ID`, and `PAPERCLIP_*` env into the AutoBrain-Hosted backend service in `docker-compose.hosted.yml`, so the merged CI triage webhook receiver (`backend/app/api/v1/ci.py`) is configured and reachable and can relay GitHub Actions CI failures into Paperclip (AUT-1751).
 
 
-## [Unreleased]
 
 ### Added
 - CI: added CI triage webhook receiver at `POST /api/v1/ci/webhook` with bearer auth, fail-closed PAPERCLIP config validation, and `repo`/`ref` payload validation to create Paperclip issues from GitHub Actions CI failures, replacing the broken n8n webhook (AUT-1669).

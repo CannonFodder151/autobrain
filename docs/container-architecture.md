@@ -53,8 +53,8 @@ reads configuration exclusively from environment variables.
 
 - backend: `curl -fsS /health`
 - ai: `curl -fsS http://localhost:8001/health && curl -fsS http://localhost:8000/health`
-- worker: `celery inspect ping`; beat-aware branch checks `celerybeat-schedule`
-  freshness (AUT-601).
+- worker: beat-aware branch checks `celerybeat-schedule` freshness (AUT-601);
+  worker-only branch uses `pgrep` for process check (AUT-1878).
 - hub: python `urllib` GET `/health`
 - postgres/redis/minio: native probes (see compose)
 

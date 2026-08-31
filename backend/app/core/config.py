@@ -90,17 +90,19 @@ class Settings(BaseSettings):
     SEVEN_ELEVEN_CACHE_TTL_MINUTES: int = 60
     SEVEN_ELEVEN_USER_AGENT: str = "AutoBrain/1.0 (+https://autobrainservice.app)"
 
-    # Petrol price map (AUT-1813): NSW Fuel API (Transport for NSW).
-    # Disabled by default so self-hosted instances don't poll an external feed
-    # unless they bring their own key (hosted stack scopes keys to secret files).
+    # Servo Spy fuel-price pipeline (AUT-1817): deterministic ingest of public
+    # open-data feeds. WA FuelWatch = public, no key. NSW FuelCheck = free API key
+    # from api.transport.nsw.gov.au (injected via FUEL_NSW_API_KEY_FILE in prod).
+    # QLD Fuel Prices = public open data. VIC/SA/TAS/NT need a paid aggregator
+    # (Informed Sources / MotorMouth) — later premium enhancement, not MVP.
     FUEL_NSW_API_KEY: str = ""
     FUEL_NSW_API_SECRET: str = ""
-    FUEL_NSW_API_URL: str = "https://api.transport.nsw.gov.au/v2/fuel/prices"
     FUEL_NSW_ENABLED: bool = False
-    # Nathan: poll once per day per instance to stay inside the API quota.
-    FUEL_NSW_POLL_HOURS: int = 24
-    # Per-instance id so multiple AutoBrain instances each poll at most once/day.
-    INSTANCE_ID: str = ""
+    FUEL_QLD_API_URL: str = "https://www.fuelpricesqld.com.au/"
+    FUEL_WA_SITES_URL: str = "https://industryprd.fuelwatch.wa.gov.au/api/sites"
+    FUEL_WA_PRICES_URL: str = "https://industryprd.fuelwatch.wa.gov.au/api/report/weekly-retail-prices"
+    FUEL_NSW_URL: str = "https://api.transport.nsw.gov.au/v1/fuel"
+    FUEL_INGEST_USER_AGENT: str = "AutoBrain Servo Spy (+https://autobrainservice.app)"
 
     # Bootstrap admin account (created on first boot if missing)
     ADMIN_EMAIL: str = ""
@@ -147,7 +149,7 @@ class Settings(BaseSettings):
     APP_BASE_URL: str = "http://localhost:8000"
 
     # Versioning (local only; the GitHub update check was removed — AUT-461)
-    APP_VERSION: str = "0.3.173"  # mirror frontend/pubspec.yaml version
+    APP_VERSION: str = "0.3.196"  # mirror frontend/pubspec.yaml version
 
     # Scheduled backup (daily). When set, beats stores a full JSON snapshot to MinIO.
     BACKUP_ENABLED: bool = True
