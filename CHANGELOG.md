@@ -23,6 +23,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security
+- **Docker (market-data):** added a `HEALTHCHECK` hitting `/health` (port 8000), matching the `docker/backend`/`docker/ai` pattern (interval/timeout/retries). Without it a hung browser subprocess is invisible to Docker/Portainer orchestration (trivy DS-0026 LOW, CWE-693, AUT-1742). The `rego-lookup-api` repo carries the matching change.
+
 ## [0.3.197] - 2026-09-01
 
 ### Fixed
