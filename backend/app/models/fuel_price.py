@@ -26,9 +26,9 @@ def _uuid() -> str:
     return str(uuid.uuid4())
 
 
-class FuelPrice(Base):
-    __tablename__ = "fuel_prices"
-    __table_args__ = (UniqueConstraint("state", "station_code", "fuel_type", name="uq_fuel_price_station_fuel"),)
+class NSWFuelPrice(Base):
+    __tablename__ = "nsw_fuel_prices"
+    __table_args__ = (UniqueConstraint("state", "station_code", "fuel_type", name="uq_nsw_fuel_price_station_fuel"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     state: Mapped[str] = mapped_column(String(8), index=True)
@@ -45,11 +45,11 @@ class FuelPrice(Base):
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
-class FuelPricePollState(Base):
+class NSWFuelPricePollState(Base):
     """Per-instance, per-state last-poll timestamp to enforce once/day/instance."""
 
-    __tablename__ = "fuel_price_poll_state"
-    __table_args__ = (UniqueConstraint("instance_id", "state", name="uq_fuel_poll_instance_state"),)
+    __tablename__ = "nsw_fuel_price_poll_state"
+    __table_args__ = (UniqueConstraint("instance_id", "state", name="uq_nsw_fuel_poll_instance_state"),)
 
     instance_id: Mapped[str] = mapped_column(String(120), primary_key=True)
     state: Mapped[str] = mapped_column(String(8), primary_key=True)

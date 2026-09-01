@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.logging import get_logger
-from app.models.fuel_price import FuelPrice, FuelPricePollState
+from app.models.fuel_price import NSWFuelPrice, NSWFuelPricePollState
 
 logger = get_logger(__name__)
 
@@ -257,9 +257,9 @@ async def should_poll(db: AsyncSession, instance_id: str, state: str = "NSW") ->
     Nathan's constraint: poll once per day per instance to stay inside quota.
     """
     row = await db.scalar(
-        select(FuelPricePollState).where(
-            FuelPricePollState.instance_id == instance_id,
-            FuelPricePollState.state == state,
+        select(NSWFuelPricePollState).where(
+            NSWFuelPricePollState.instance_id == instance_id,
+            NSWFuelPricePollState.state == state,
         )
     )
     return poll_due(row.last_poll_at if row else None, hours=settings.FUEL_NSW_POLL_HOURS)
@@ -274,10 +274,10 @@ async def store_nsw_prices(db: AsyncSession, records: list[dict], state: str = "
         if not fuel_type or not station_code:
             continue
         existing = await db.scalar(
-            select(FuelPrice).where(
-                FuelPrice.state == state,
-                FuelPrice.station_code == station_code,
-                FuelPrice.fuel_type == fuel_type,
+            select(NSWFuelPrice).where(
+                NSWFuelPrice.state == state,
+                NSWFuelPrice.station_code == station_code,
+                NSWFuelPrice.fuel_type == fuel_type,
             )
         )
         if existing:
@@ -292,7 +292,7 @@ async def store_nsw_prices(db: AsyncSession, records: list[dict], state: str = "
             existing.fetched_at = fetched_at
         else:
             db.add(
-                FuelPrice(
+                NSWFuelPrice(
                     state=state,
                     station_code=station_code,
                     station_name=r.get("station_name"),
@@ -312,20 +312,20 @@ async def store_nsw_prices(db: AsyncSession, records: list[dict], state: str = "
 
 async def mark_polled(db: AsyncSession, instance_id: str, state: str = "NSW") -> None:
     row = await db.scalar(
-        select(FuelPricePollState).where(
-            FuelPricePollState.instance_id == instance_id,
-            FuelPricePollState.state == state,
+        select(NSWFuelPricePollState).where(
+            NSWFuelPricePollState.instance_id == instance_id,
+            NSWFuelPricePollState.state == state,
         )
     )
     if not row:
-        row = FuelPricePollState(instance_id=instance_id, state=state)
+        row = NSWFuelPricePollState(instance_id=instance_id, state=state)
         db.add(row)
     row.last_poll_at = datetime.now(timezone.utc)
     await db.commit()
 
 
-async def get_cached_prices(db: AsyncSession, state: str, max_age_hours: int = CACHE_MAX_AGE_HOURS) -> list[FuelPrice]:
+async def get_cached_prices(db: AsyncSession, state: str, max_age_hours: int = CACHE_MAX_AGE_HOURS) -> list[NSWFuelPrice]:
     """Return the latest cached snapshot for a state (offline-safe read path)."""
     return list(
-        (await db.scalars(select(FuelPrice).where(FuelPrice.state == state))).all()
+        (await db.scalars(select(NSWFuelPrice).where(NSWFuelPrice.state == state))).all()
     )

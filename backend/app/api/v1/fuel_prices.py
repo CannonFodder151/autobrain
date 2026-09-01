@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.db.session import get_db
-from app.models.fuel_price import FuelPrice
+from app.models.fuel_price import NSWFuelPrice
 from app.models.user import User
 from app.schemas.fuel import FuelPriceOut
 
@@ -24,12 +24,12 @@ async def list_fuel_prices(
     state: str = Query(default="NSW", max_length=8),
     db: AsyncSession = Depends(get_db),
     _user: User = Depends(get_current_user),
-) -> list[FuelPrice]:
+) -> list[NSWFuelPrice]:
     """Latest cached petrol prices for a state (map marker set)."""
     rows = await db.scalars(
-        select(FuelPrice)
-        .where(FuelPrice.state == state)
-        .order_by(FuelPrice.price.asc().nullslast())
+        select(NSWFuelPrice)
+        .where(NSWFuelPrice.state == state)
+        .order_by(NSWFuelPrice.price.asc().nullslast())
         .limit(2000)
     )
     return list(rows)
