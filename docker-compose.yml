@@ -2,6 +2,8 @@
 # Usage: cp .env.example .env && docker compose up --build
 # Runs: postgres, redis, minio, backend (API + Celery worker+beat), ai (reload), frontend.
 # All services bind to localhost — connects to 9Router at AI_ROUTER_URL.
+# Set EXPOSE_LAN=1 in .env to temporarily lift 127.0.0.1 binding for LAN mobile/QR testing.
+# Requires host firewall to allow inbound on exposed ports (see deployment-guide.md).
 
 # Backend service factory — reused by dev and test overrides.
 x-backend-base: &backend-base
@@ -19,9 +21,12 @@ x-backend-base: &backend-base
     # uploads) work; optional passthrough — the script skips cleanly if absent.
     MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-}
     MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-}
-      AI_ROUTER_URL: ${AI_ROUTER_URL:-http://10.0.3.17:20128/v1}
+    AI_ROUTER_URL: ${AI_ROUTER_URL:-http://10.0.3.17:20128/v1}
     SOCIAL_FEDERATION_HUB_URL: ${SOCIAL_FEDERATION_HUB_URL:-https://hub.autobrainservice.app}
     SOCIAL_FEDERATION_HOSTED: ${SOCIAL_FEDERATION_HOSTED:-false}
+    # EXPOSE_LAN_HOST controls the host IP for port bindings (default 127.0.0.1).
+    # When EXPOSE_LAN=1 is set in .env, this becomes 0.0.0.0 for LAN access.
+    EXPOSE_LAN_HOST: ${EXPOSE_LAN:+0.0.0.0}
   depends_on:
     postgres:
       condition: service_healthy
@@ -96,8 +101,8 @@ services:
   backend:
     <<: *backend-base
     ports:
-      - "8000:8000"
-    command: ["sh", "-c", "alembic upgrade head && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"]
+      - "${EXPOSE_LAN_HOST:-127.0.0.1}:8000:8000"
+    command: ["sh", "-c", "alembic upgrade head && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && exec uvicorn app.main:app --host ${EXPOSE_LAN_HOST:-127.0.0.1} --port 8000 --reload"]
     volumes:
       - ./backend:/app
 
@@ -110,12 +115,14 @@ services:
     shm_size: "256m"
     env_file: .env
     environment:
-    AI_ROUTER_URL: ${AI_ROUTER_URL:-http://10.0.3.17:20128/v1}
+      AI_ROUTER_URL: ${AI_ROUTER_URL:-http://10.0.3.17:20128/v1}
       # AB-INFRA-006: gateway auth stays on in dev; backend sends the shared key.
       AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:?AI_GATEWAY_API_KEY must be set in .env}
+      # EXPOSE_LAN_HOST: when EXPOSE_LAN=1, binds the AI gateway to 0.0.0.0 for LAN access.
+      EXPOSE_LAN_HOST: ${EXPOSE_LAN:+0.0.0.0}
     ports:
-      - "127.0.0.1:8001:8001"
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+      - "${EXPOSE_LAN_HOST:-127.0.0.1}:8001:8001"
+    command: uvicorn app.main:app --host ${EXPOSE_LAN_HOST:-127.0.0.1} --port 8001 --reload
     volumes:
       - ./ai:/app
 
@@ -127,8 +134,10 @@ services:
         API_BASE_URL: ${API_BASE_URL:-http://localhost:8000/api/v1}
         WS_BASE_URL: ${WS_BASE_URL:-ws://localhost:8000/ws}
     restart: unless-stopped
+    environment:
+      EXPOSE_LAN_HOST: ${EXPOSE_LAN:+0.0.0.0}
     ports:
-      - "8080:80"
+      - "${EXPOSE_LAN_HOST:-127.0.0.1}:8080:80"
     depends_on:
       - backend
 

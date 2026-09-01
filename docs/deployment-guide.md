@@ -113,6 +113,68 @@ Services:
 - AI gateway: http://localhost:8001/docs
 - MinIO console: http://localhost:9001
 
+### LAN testing (mobile/QR) — `EXPOSE_LAN=1` (AUT-2012)
+
+The dev compose defaults every service to `127.0.0.1` so nothing leaks to the
+LAN unless you opt in. To test the mobile app or scan a QR code from a phone
+on the same Wi-Fi, flip the override:
+
+```bash
+# .env
+EXPOSE_LAN=1
+```
+
+Effect:
+
+| Service | Port | Default bind | With `EXPOSE_LAN=1` |
+|---------|------|--------------|---------------------|
+| backend | 8000 | 127.0.0.1 | 0.0.0.0 |
+| ai      | 8001 | 127.0.0.1 | 0.0.0.0 |
+| frontend| 8080 | 127.0.0.1 | 0.0.0.0 |
+| postgres| 5432 | 127.0.0.1 | 127.0.0.1 (unchanged) |
+| redis   | 6379 | 127.0.0.1 | 127.0.0.1 (unchanged) |
+| minio   | 9000/9001 | 127.0.0.1 | 127.0.0.1 (unchanged) |
+
+Then `docker compose up -d --build` and reach the stack from your phone at
+`http://<host-lan-ip>:8080` (e.g. `http://10.0.3.39:8080`). The Flutter
+`API_BASE_URL`/`WS_BASE_URL` build args default to `http://localhost:8000`,
+which the phone can't resolve — point them at your host LAN IP for the build:
+
+```bash
+API_BASE_URL=http://10.0.3.39:8000/api/v1
+WS_BASE_URL=ws://10.0.3.39:8000/ws
+```
+
+**Host firewall — MANDATORY before flipping `EXPOSE_LAN=1`:** Docker publishing
+on `0.0.0.0` binds the host's network stack, not just the docker bridge. Without
+a firewall rule, every device on the LAN (and any guest Wi-Fi client) gets
+unauthenticated access to the dev API, MinIO console, and Postgres. Close that
+gap on the dev box (`10.0.3.39`) before opening the ports:
+
+```bash
+# ufw (Ubuntu/Debian) — allow only your phone's LAN subnet to the dev ports
+sudo ufw allow from 192.168.1.0/24 to any port 8000,8001,8080 proto tcp comment 'autobrain-dev EXPOSE_LAN'
+
+# firewalld (RHEL/Fedora)
+sudo firewall-cmd --permanent --add-rich-rule='rule family=ipv4 source address=192.168.1.0/24 port port=8000-8080 protocol=tcp accept'
+sudo firewall-cmd --reload
+
+# iptables (raw, when no frontend is loaded)
+sudo iptables -A INPUT -p tcp -s 192.168.1.0/24 --match multiport --dports 8000,8001,8080 -j ACCEPT
+sudo iptables -A INPUT -p tcp --match multiport --dports 8000,8001,8080 -j DROP   # default deny for everyone else
+```
+
+- Scope the rule to your **phone's actual subnet** (replace `192.168.1.0/24`),
+  not `0.0.0.0/0`. A broad rule defeats the purpose.
+- Never expose Postgres (5432), Redis (6379), or MinIO (9000/9001) to the LAN
+  even with `EXPOSE_LAN=1`; the compose keeps those on `127.0.0.1` for that
+  reason. If you bypass the override, drop the ports at the firewall instead.
+- Revert: set `EXPOSE_LAN=0` in `.env` and `docker compose up -d`. The firewall
+  rule can stay (harmless) or be removed.
+
+Never set `EXPOSE_LAN=1` on the production / hosted stacks — use the Cloudflare
+→ npm path instead. The override is dev-only.
+
 ## Deploy (hosted) — the upgrade path (AUT-1847)
 
 **Always use the GitHub Actions runner on the Oracle VM** to build hosted
