@@ -21,7 +21,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.198] - 2026-09-01
 
 ### Security
 - Pin every application image (`backend`, `worker`, `ai`, `frontend`,
