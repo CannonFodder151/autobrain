@@ -22,6 +22,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- fix(docker): unpin nginx base image digest in frontend Dockerfile (AUT-1908).
+  The `@sha256:ee055adf...` digest was amd64-only; on arm64 hosted builds
+  buildx pulled the amd64 binary into the arm64 image, causing
+  `exec /docker-entrypoint.sh: exec format error` and a crash loop on
+  hosted.autobrainservice.app. Use the `stable-alpine` tag so buildx resolves
+  the correct architecture-specific manifest per build platform.
+
 ## [0.3.196] - 2026-08-30
 
 ## [0.3.195] - 2026-08-30
