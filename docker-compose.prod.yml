@@ -85,7 +85,7 @@ services:
       retries: 10
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.2.5-alpine@sha256:6aaf3f5e6bc8a592fbfe2cccf19eb36d27c39d12dab4f4b01556b7449e7b1f44
     restart: unless-stopped
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}"]
     read_only: true

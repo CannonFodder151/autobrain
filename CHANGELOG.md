@@ -23,6 +23,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security
+- Pin every application image (`backend`, `worker`, `ai`, `frontend`,
+  `dongle-server`, `federation-hub`) by `@sha256` digest in
+  `docker-compose.hosted.yml`, replacing the floating `:hosted` manifest
+  tag. Resolves the mutable-tag supply-chain gap flagged in AUT-1881.
+- Pin `redis:7-alpine` by digest in `docker-compose.yml`,
+  `docker-compose.prod.yml`, and `docker-compose.hosted.yml` (now
+  `redis:7.2.5-alpine@sha256:6aaf3f5e...`).
+- Build pipeline (`build-hosted.yml`) now captures the multi-arch manifest
+  digest of every published image as a `$GITHUB_OUTPUT` value, so the next
+  digest bump is a single workflow_dispatch with no GHCR round-trip.
+- PR-time security gate (`security-pr-gate.yml`) gains a `pin-guard` job
+  that fails any compose `image:` line lacking `@sha256` (with legitimate
+  exemptions for `${VAR}` expansions and locally-built `build:` services).
+
 ## [0.3.197] - 2026-09-01
 
 ### Fixed

@@ -75,7 +75,7 @@ services:
       retries: 10
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.2.5-alpine@sha256:6aaf3f5e6bc8a592fbfe2cccf19eb36d27c39d12dab4f4b01556b7449e7b1f44
     restart: unless-stopped
     # AB-INFRA-004: an open Celery broker is RCE — requirepass in prod and dev.
     # The password is read from the secret file at start; it never enters env.
@@ -136,7 +136,7 @@ services:
       retries: 10
 
   backend:
-    image: ghcr.io/cannonfodder151/autobrain-backend:hosted
+    image: ghcr.io/cannonfodder151/autobrain-backend:hosted@sha256:09a7ff2d0773e0d43d5505fc5158734c92f0c47bdc13b51540f8693facf40576
     restart: unless-stopped
     command: sh -c "python -m app.db.bootstrap && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
@@ -237,7 +237,7 @@ services:
         ipv4_address: 172.18.0.15
 
   dongle-server:
-    image: ghcr.io/cannonfodder151/autobrain-dongle-server:hosted
+    image: ghcr.io/cannonfodder151/autobrain-dongle-server:hosted@sha256:aaa00cf3b98425939f372003ba7198c0ad483afe6cbb9bbf096d1c82da928e9c
     restart: unless-stopped
     command: ["uvicorn", "dongle_server.main:app", "--host", "0.0.0.0", "--port", "8012"]
     environment:
@@ -273,7 +273,7 @@ services:
         condition: service_started
 
   ai:
-    image: ghcr.io/cannonfodder151/autobrain-ai:hosted
+    image: ghcr.io/cannonfodder151/autobrain-ai:hosted@sha256:ba0f2d194fe0241b8cda5678c6ea79e94ceea67481f6993ba41c338830a698cf
     restart: unless-stopped
     # AUT-1739: adequate /dev/shm for Chromium (market-data scraper).
     shm_size: "256m"
@@ -288,7 +288,7 @@ services:
       - "8001"
 
   worker:
-    image: ghcr.io/cannonfodder151/autobrain-worker:hosted
+    image: ghcr.io/cannonfodder151/autobrain-worker:hosted@sha256:bca661931060c4cffa017624e6dd0c8a6f79c2ba57f3805b6e039b37cc141242
     restart: unless-stopped
     # AUT-1242/C1: beat scheduler embedded in the worker (-B), matching the dev
     # compose. Removes the separate beat container.
@@ -318,7 +318,7 @@ services:
   # whitelist (paid-account gate), and the ops web GUI. Shares the hosted
   # stack's MinIO and Postgres where applicable (SQLite in the local compose).
   dongle-server:
-    image: ghcr.io/cannonfodder151/autobrain-dongle-server:hosted
+    image: ghcr.io/cannonfodder151/autobrain-dongle-server:hosted@sha256:aaa00cf3b98425939f372003ba7198c0ad483afe6cbb9bbf096d1c82da928e9c
     restart: unless-stopped
     environment:
       <<: *core-env
@@ -342,7 +342,7 @@ services:
       - "8000"
 
   frontend:
-    image: ghcr.io/cannonfodder151/autobrain-frontend:hosted
+    image: ghcr.io/cannonfodder151/autobrain-frontend:hosted@sha256:44654bb84213906e6c00feb55054afac5c0bf8a34e61f4e19d32766f51785ef0
     restart: unless-stopped
     # AUT-473: localhost-bound. External clients reach the app via Cloudflare ->
     # npm (:443), which proxies to the frontend over the docker network. Never
@@ -373,7 +373,7 @@ services:
     # (board rev 8): private code, private GHCR image. Nothing here is hub code.
     # AUT-1533: HUB_* secrets remain plain env until the hub image gains
     # *_FILE support (follow-up in autobrain-federation-hub).
-    image: ghcr.io/cannonfodder151/autobrain-federation-hub:hosted
+    image: ghcr.io/cannonfodder151/autobrain-federation-hub:hosted@sha256:d1d9bde1f1531466c6c7c19ae869897cd10690a867aad5ec0c80a90ffc7921e4
     restart: unless-stopped
     environment:
       DATABASE_PATH: /data/hub.db
