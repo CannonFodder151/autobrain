@@ -113,6 +113,63 @@ Services:
 - AI gateway: http://localhost:8001/docs
 - MinIO console: http://localhost:9001
 
+### LAN exposure (mobile/QR testing)
+
+For temporary testing from a phone or another device on the LAN (e.g. scanning
+a QR code), bind dev ports to `0.0.0.0` instead of `127.0.0.1`:
+
+```bash
+# .env
+EXPOSE_LAN=1
+BIND_ADDRESS=0.0.0.0
+docker compose up -d --build
+```
+
+Defaults stay `127.0.0.1` — `EXPOSE_LAN=0` means nothing is reachable off-host.
+Never commit `BIND_ADDRESS=0.0.0.0` to a shared `.env`.
+
+**Host-level firewall (required when `EXPOSE_LAN=1`):**
+
+Docker publishing to `0.0.0.0` exposes the port on every interface. Lock the host
+firewall to trusted LAN ranges only. Example with `ufw`:
+
+```bash
+# Allow LAN subnet only (adjust to your network)
+sudo ufw allow from 192.168.1.0/24 to any port 8000 proto tcp   # backend
+sudo ufw allow from 192.168.1.0/24 to any port 8001 proto tcp   # ai gateway
+sudo ufw allow from 192.168.1.0/24 to any port 8080 proto tcp   # frontend
+sudo ufw deny 8000                                                  # block WAN
+sudo ufw deny 8001
+sudo ufw deny 8080
+```
+
+Or with `iptables`:
+
+```bash
+sudo iptables -I INPUT -p tcp --dport 8000 -s 192.168.1.0/24 -j ACCEPT
+sudo iptables -I INPUT -p tcp --dport 8001 -s 192.168.1.0/24 -j ACCEPT
+sudo iptables -I INPUT -p tcp --dport 8080 -s 192.168.1.0/24 -j ACCEPT
+sudo iptables -A INPUT -p tcp --dport 8000 -j DROP
+sudo iptables -A INPUT -p tcp --dport 8001 -j DROP
+sudo iptables -A INPUT -p tcp --dport 8080 -j DROP
+```
+
+Verify after enabling:
+
+```bash
+# From a LAN device:
+curl http://<dev-host-ip>:8000/health
+# From WAN (should fail):
+curl --connect-timeout 5 http://<dev-host-ip>:8000/health
+```
+
+Restore the default (localhost-only) when LAN testing is done:
+
+```bash
+sed -i 's/^EXPOSE_LAN=1/EXPOSE_LAN=0/; s/^BIND_ADDRESS=0.0.0.0/BIND_ADDRESS=127.0.0.1/' .env
+docker compose up -d
+```
+
 ## Deploy (hosted) — the upgrade path (AUT-1847)
 
 **Always use the GitHub Actions runner on the Oracle VM** to build hosted

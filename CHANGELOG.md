@@ -276,6 +276,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Security
 - Hardened Redis in `docker-compose.prod.yml` — added `--requirepass` and updated healthcheck to authenticate; environment variable `REDIS_PASSWORD` is now required (AUT-1600).
+- **Security (AUT-1600):** hardened Redis healthcheck — `redis-cli` now receives `REDIS_PASSWORD` via the `REDISCLI_AUTH` env var instead of `redis-cli -a`, so the broker password never appears in the container process list (`docker-compose.yml`, `docker-compose.prod.yml`).
 
 
 ### Security
