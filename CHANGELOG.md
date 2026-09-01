@@ -30,6 +30,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   `Future<Database>? _opening`, indentation in login/signup/add_vehicle/edit_vehicle
   screens, `MaterialBanner.actions` + `MediaQuery` clamp in app.dart.
 
+### Added (AUT-2012)
+- **EXPOSE_LAN=1 override for dev compose:** set `EXPOSE_LAN=1` in `.env` to lift the `127.0.0.1` binding on backend (`:8000`), AI gateway (`:8001`), and frontend (`:8080`) for LAN mobile/QR testing. Postgres/Redis/MinIO stay `127.0.0.1`. Requires host firewall allow-list (see `docs/deployment-guide.md`).
+
 ## [0.3.254] - 2026-09-08
 ### Added (AUT-2386)
 - feat(backend): source-arbitration rule for multi-feed overlap. ``FuelPrice`` now carries ``source_id`` + ``arbitration_score``; new ``fuel_price_arbitrations`` table stores the daily winning source per (station, fuel_type, day). PR #473.
