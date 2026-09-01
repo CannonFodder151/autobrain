@@ -20,7 +20,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.197] - 2026-09-01
 
 ### Fixed
 - fix(docker): unpin nginx base image digest in frontend Dockerfile (AUT-1908).
