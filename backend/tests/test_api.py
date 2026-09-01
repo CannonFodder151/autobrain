@@ -38,7 +38,25 @@ async def test_health() -> None:
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.get("/health")
     assert resp.status_code == 200
-    assert resp.json()["status"] == "ok"
+    data = resp.json()
+    assert data["status"] == "ok"
+    assert data["service"] == "autobrain-backend"
+    assert "version" in data
+
+@pytest.mark.asyncio
+async def test_health_includes_version() -> None:
+    """AUT-1962: Health endpoint must return version for CI gate validation."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/health")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "version" in data
+    assert isinstance(data["version"], str)
+    # Semver format check (major.minor.patch)
+    parts = data["version"].split(".")
+    assert len(parts) == 3
+    assert all(p.isdigit() for p in parts)
 
 
 @pytest.mark.asyncio

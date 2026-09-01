@@ -5,10 +5,15 @@ import os
 os.environ.setdefault("AI_ROUTER_URL", "http://your-9router-instance:port")
 
 import base64  # noqa: E402
+from unittest.mock import AsyncMock, patch  # noqa: E402
 
 import pytest  # noqa: E402
 
-from app.modules.social_image import render_card, run  # noqa: E402
+from app.modules.social_image import (  # noqa: E402
+    _MAX_PROMPT_LEN,
+    render_card,
+    run,
+)
 
 
 def test_render_card_produces_valid_png() -> None:
@@ -51,4 +56,68 @@ async def test_run_clamps_string_dimensions() -> None:
     out = await run({"title": "Str", "width": "99999", "height": "99999"})
     assert out["width"] == 2048
     assert out["height"] == 2048
+
+
+@pytest.mark.asyncio
+async def test_ai_image_rejects_overlong_prompt() -> None:
+    """AUT-1604: Prompt exceeding MAX_PROMPT_LEN must be rejected."""
+    from app.modules.social_image import _ai_image
+    long_prompt = "a" * (_MAX_PROMPT_LEN + 1)
+    result = await _ai_image(long_prompt, 1200, 630)
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_ai_image_url_encodes_injection_chars() -> None:
+    """AUT-1604: URL injection characters must be percent-encoded."""
+    from app.modules.social_image import _ai_image
+    with patch("app.modules.social_image.httpx.AsyncClient") as mock_client:
+        mock_resp = AsyncMock()
+        mock_resp.raise_for_status = lambda: None
+        mock_resp.content = b"fake-png-bytes"
+        mock_client.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
+
+        prompt = "car?width=9999&height=9999#frag"
+        await _ai_image(prompt, 1200, 630)
+
+        called_url = mock_client.return_value.__aenter__.return_value.get.call_args[0][0]
+        assert "car%3Fwidth%3D9999%26height%3D9999%23frag" in called_url
+        assert "width=9999&" not in called_url or called_url.count("width=") == 1
+        assert "height=9999" not in called_url or called_url.count("height=") == 1
+
+
+@pytest.mark.asyncio
+async def test_ai_image_blocks_path_traversal() -> None:
+    """AUT-1604: Path traversal sequences must be encoded."""
+    from app.modules.social_image import _ai_image
+    with patch("app.modules.social_image.httpx.AsyncClient") as mock_client:
+        mock_resp = AsyncMock()
+        mock_resp.raise_for_status = lambda: None
+        mock_resp.content = b"fake-png-bytes"
+        mock_client.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
+
+        prompt = "x/../v1/other-endpoint"
+        await _ai_image(prompt, 1200, 630)
+
+        called_url = mock_client.return_value.__aenter__.return_value.get.call_args[0][0]
+        assert "x%2F..%2Fv1%2Fother-endpoint" in called_url
+        assert "/../" not in called_url
+
+
+@pytest.mark.asyncio
+async def test_ai_image_blocks_fragment_injection() -> None:
+    """AUT-1604: Fragment (#) must be encoded, not truncate query."""
+    from app.modules.social_image import _ai_image
+    with patch("app.modules.social_image.httpx.AsyncClient") as mock_client:
+        mock_resp = AsyncMock()
+        mock_resp.raise_for_status = lambda: None
+        mock_resp.content = b"fake-png-bytes"
+        mock_client.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_resp)
+
+        prompt = "car#"
+        await _ai_image(prompt, 1200, 630)
+
+        called_url = mock_client.return_value.__aenter__.return_value.get.call_args[0][0]
+        assert "car%23" in called_url
+        assert called_url.count("?") == 1
 

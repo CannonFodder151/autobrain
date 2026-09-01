@@ -97,10 +97,12 @@ class FakeBucket:
 def test_scheduled_backup_stores_snapshot(monkeypatch) -> None:
     import app.core.storage as storage
     import app.services.backup as svc_backup
+    from app.core.config import settings
 
     fake_db = FakeDB()
     bucket = FakeBucket()
     monkeypatch.setattr(tasks, "SessionLocal", lambda: fake_db)
+    monkeypatch.setattr(settings, "MINIO_BUCKET", "test-minio-bucket")
 
     async def fake_serialize(db):
         assert db is fake_db
