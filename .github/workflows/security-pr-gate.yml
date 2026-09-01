@@ -125,17 +125,57 @@ jobs:
           # subcommand is `dart pub audit` (per AUT-1746 recommendation).
           dart pub audit
 
+  # (6) AUT-1881 pin-guard — fail any compose `image:` reference that is not
+  # pinned by `@sha256` digest. Complements the postgres/nginx/python pin
+  # guards in trivy-image-scan.yml and ensures the floating `:hosted` /
+  # `:latest` tags cannot re-appear in compose without a digest pin.
+  pin-guard:
+    name: "Pin guard — every compose image: must carry @sha256"
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check image references for digest pin
+        run: |
+          set -euo pipefail
+          FILES="docker-compose.yml docker-compose.prod.yml docker-compose.hosted.yml"
+          # Fail: every `image:` line in $FILES must carry an @sha256 digest,
+          # use a `${VAR}` expansion (deploy-time), or follow a `build:` block
+          # within the same service (locally-built image). Locally-built
+          # images tag themselves `:latest` post-build, so we exempt them —
+          # the supply-chain integrity for those flows from the Dockerfile
+          # base digest pin (AUT-1735) and the build context.
+          FLOATING="$(awk '
+            FNR==1 {svc_has_build=0; svc_indent=-1}
+            /^[^ #].*:/ && !/^[[:space:]]/ {svc_has_build=0}
+            /^[[:space:]]+build:[[:space:]]*$/ {svc_has_build=1; svc_indent=match($0, /[^ ]/)-1}
+            /^[[:space:]]+image:[[:space:]]+/ {
+              cur_indent = match($0, /[^ ]/) - 1
+              if (cur_indent < svc_indent) {svc_has_build=0; svc_indent=cur_indent}
+              line=$0
+              sub(/^[[:space:]]+image:[[:space:]]+/, "", line)
+              if (line ~ /@sha256:/) next
+              if (line ~ /\$\{/) next
+              if (svc_has_build) next
+              print FILENAME ":" FNR ": " $0
+            }
+          ' FILES="$FILES" $FILES)"
+          if [ -n "$FLOATING" ]; then
+            echo "::error::floating (non-digest) compose image: references found (AUT-1881):" >&2
+            printf '%s\n' "$FLOATING" >&2
+            exit 1
+          fi
+          echo "OK: every compose image: reference carries an @sha256 digest (AUT-1881)."
   report-status:
     name: Report gate result to Discord #status
     if: always()
-    needs: [gitleaks, trivy-config, pip-audit, flutter-audit]
+    needs: [gitleaks, trivy-config, pip-audit, flutter-audit, pin-guard]
     runs-on: [self-hosted, linux, x64]
     steps:
       - name: Report to Discord #status
         env:
-          RESULT: ${{ needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.flutter-audit.result == 'success' && 'clean' || 'findings' }}
-          COLOR: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.flutter-audit.result == 'success') && '0x57F287' || '0xED4245' }}
-          TITLE: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.flutter-audit.result == 'success') && 'PR security gate clean' || 'PR security gate found issues' }}
+          RESULT: ${{ needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.flutter-audit.result == 'success' && needs.pin-guard.result == 'success' && 'clean' || 'findings' }}
+          COLOR: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.flutter-audit.result == 'success' && needs.pin-guard.result == 'success') && '0x57F287' || '0xED4245' }}
+          TITLE: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.flutter-audit.result == 'success' && needs.pin-guard.result == 'success') && 'PR security gate clean' || 'PR security gate found issues' }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \

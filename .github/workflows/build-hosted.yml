@@ -136,6 +136,7 @@ jobs:
           password: ${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}
 
       - name: Assemble multi-arch manifests
+        id: digest
         env:
           TAG: ${{ github.event.inputs.tag || 'hosted' }}
           SHA_TAG: hosted-sha-${{ github.sha }}
@@ -151,4 +152,14 @@ jobs:
               -t "ghcr.io/cannonfodder151/autobrain-${svc}:${SHA_TAG}" \
               "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}-amd64" \
               "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}-arm64"
+          done
+
+          # AUT-1881: capture every multi-arch manifest digest so downstream
+          # compose-pin updates and the PR-time pin-guard have a stable ref.
+          # The digest below is the content-addressed digest of the
+          # :TAG multi-arch manifest list (Docker-Content-Digest). Pinned compose
+          # references use <image>:<tag>@<digest> — see docker-compose.hosted.yml.
+          for svc in backend worker ai frontend; do
+            d="$(docker buildx imagetools inspect "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}" --raw | head -n1)"
+            echo "${svc}_digest=${d}" >> "$GITHUB_OUTPUT"
           done
