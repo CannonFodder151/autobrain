@@ -36,7 +36,7 @@ USER autobrain
 #   round-trip). AUT-1878: `inspect ping` exits 1 on a healthy worker in the
 #   hosted stack — process check is more reliable.
 HEALTHCHECK --interval=30s --timeout=15s --start-period=30s --retries=3 \
-    CMD sh -c 'c=$(tr "\0" " " < /proc/1/cmdline); case "$c" in *beat*|* -B *) [ -f celerybeat-schedule ] || exit 1; [ -z "$(find celerybeat-schedule -mmin -30 2>/dev/null)" ] && exit 1; exit 0 ;; *) pgrep -f "celery.*worker" >/dev/null 2>&1 ;; esac'
+    CMD bash -c 'c=$(tr "\0" " " < /proc/1/cmdline); case "$c" in *beat*|* -B *) [ -f celerybeat-schedule ] || exit 1; [ -z "$(find celerybeat-schedule -mmin -30 2>/dev/null)" ] && exit 1; exit 0 ;; *) pgrep -f "celery.*worker" >/dev/null 2>&1 ;; esac'
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
