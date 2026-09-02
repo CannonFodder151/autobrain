@@ -19,7 +19,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - fix(ci): replace the removed `dart pub audit` subcommand in the `Flutter — pub audit` PR gate with `osv-scanner --lockfile=pubspec.lock` so the gate stops failing every PR (Dart 3.6+ removed the subcommand). Repo-wide fix — unblocks merge of all open PRs.
 - fix(docker): pin `redis:7-alpine` in `docker-compose.yml` to `redis:7.2.5-alpine@sha256:6aaf3f5…` so the `Pin guard` PR gate stays green (was the only unpinned compose image left after PR #409 unpinned nginx for arm64 hosted builds).
 
-- fix(security): time-boxed ignore for libexpat 2.8.3-r0 CVEs (CVE-2026-66046, CVE-2026-76641) in pinned `nginxinc/nginx-unprivileged:stable-alpine` so the `image-scan` gate stops failing. XML module not compiled into nginx; CVEs unreachable. Re-check 2026-10-02. Tracked in [AUT-2110](/AUT/issues/AUT-2110).
+- fix(security): time-boxed ignore for libexpat 2.8.3-r0 CVEs (CVE-2026-66046, CVE-2026-76641) in pinned `nginxinc/nginx-unprivileged:stable-alpine` so the `image-scan` gate stops failing. XML module not compiled into nginx; CVEs unreachable. Re-check 2026-10-02. Tracked in [AUT-2126](/AUT/issues/AUT-2126).
 ## [0.3.203] - 2026-09-02
 
 ### Fixed
