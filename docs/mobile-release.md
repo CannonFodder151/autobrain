@@ -265,8 +265,18 @@ Automated pipeline now lives at `CannonFodder151/autobrain-mobile`
    `pubspec.yaml` version tag (`v<X.Y.Z>+<build>`, e.g. `v0.3.5+22`); the job
    fails if they mismatch. `sync-mobile.yml` dispatches it automatically on a
    frontend version bump; otherwise bump with `sync-mobile.sh` first.
-2. `actions/checkout@v4` → `subosito/flutter-action@v2` (stable) →
-   `android-actions/setup-android@v3`.
+2. `actions/checkout@v4` → `subosito/flutter-action@v2` (stable) → manual
+   `cmdline-tools` install + direct zip downloads for
+   `platforms;android-37` / `build-tools;37.0.0` / `platform-tools`.
+   `android-actions/setup-android@v3` was removed in
+   `fix/AUT-2078-release-mobile-direct-sdk-install` on
+   `autobrain-mobile`: its `which()` strips absolute paths to a
+   basename and then only searches `PATH`, so on this self-hosted
+   runner (which doesn't add the cmdline-tools dir to `PATH` before
+   the action runs) it fails with "Unable to locate executable file:
+   .../sdkmanager" even when the binary is present and `+x`. Direct
+   zip installs also avoid `sdkmanager --console`, which was removed
+   in cmdline-tools 16.0 (AUT-2064).
 3. Decodes `android/upload-keystore.jks` + writes `android/key.properties` from
    Actions secrets (`UPLOAD_KEYSTORE_BASE64`, `KEY_STORE_PASSWORD`,
    `KEY_PASSWORD`, `KEY_ALIAS`). Keystore files are gitignored — never commit.
