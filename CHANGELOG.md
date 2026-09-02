@@ -39,6 +39,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   and adds a `priceFor(fuelType)` helper on `ServoStationRow`, mirroring
   the map view's `_MapStation.priceFor` (AUT-2105).
 
+### Security
+- **AUT-1602:** Cap inbound user payload length per field in
+  `ai/app/router_client.py` (`_cap_payload`, per-field: symptoms 2000,
+  content 50000, text/notes/reason/repair_notes 2000, description 5000,
+  raw_text 10000, default 5000; 100k total-budget guard with iterative
+  halving). Together with the `<user_data>` instruction barrier + hardened
+  system prompt already shipped on this branch, this closes the OWASP
+  LLM01 prompt-injection path on narrative fields
+  (summary/reason/repair_notes/recommendations) which had no `_AI_IMMUTABLE`
+  protection. Deterministic baseline + schema whitelist + immutable
+  numeric/financial fields remain the first line of defence; AI output
+  stays an enrichment overlay.
+
 ## [0.3.202] - 2026-09-02
 
 ### Security
