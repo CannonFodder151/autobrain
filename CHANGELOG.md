@@ -26,6 +26,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+- refactor(ai): extract shared router constants into `router_utils` module to reduce coupling across the 10 AI modules. `router_client.py` drops from 342 → 133 lines; config (system prompts, schema whitelists, immutable-key sets, validation helpers) lives in a single `router_utils.py` source of truth (AUT-1969).
+
 ## [0.3.200] - 2026-09-02
 
 ### Fixed
@@ -44,7 +47,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   (`* -B *` was parsed by bash as `PATTERN OPTIONS PATTERN`). Clears the
   2000+ failing-strike healthcheck backlog on EP5 `autobrain-hosted-worker-1`
   (AUT-2056).
-
 
 ## [0.3.198] - 2026-09-01
 
