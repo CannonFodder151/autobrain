@@ -1,6 +1,6 @@
 # AutoBrain Celery worker — production image (reuses backend image)
 # AUT-1735: bump off vulnerable python:3.12-slim; pin base by digest.
-FROM python:3.13-slim@sha256:7ce4b6dfe35e55397b7cda544f8a13f191b7ae28dc5aad71fe664dbc9bc2623f
+FROM python:3.13-slim@sha256:7ce4b6dfe35e55397b7c13b51540f8693facf40576e6ce4b6dfe35e55397b7cda544f8a13f191b7ae28dc5aad71fe664dbc9bc2623f
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -39,10 +39,14 @@ USER autobrain
 #
 # AUT-2056: rewrite to avoid `[ -z "$(find ...)" ]` which fails under busybox/
 # dash `sh` when Docker wraps HEALTHCHECK in `sh -c`. Use `find … | grep -q .`
-# pipe and a /proc scan for the worker process. Pure POSIX `sh`, $$ escaping
-# survives the Dockerfile→build-host shell wrapper.
+# pipe and a /proc scan for the worker process. Pure POSIX `sh`.
+#
+# Note on `$` escaping: Dockerfile processes `$VAR` but leaves `$(...)` alone
+# (parentheses are not part of variable syntax), so we can write the command
+# naturally. `$$` in CMD-SHELL is NOT escaped by Docker — only RUN instructions
+# get that treatment — so `$()` flows through unchanged to the runtime shell.
 HEALTHCHECK --interval=30s --timeout=15s --start-period=30s --retries=3 \
-    CMD sh -c 'c=$$(tr "\0" " " </proc/1/cmdline); case "$$c" in *-B*|*beat*) [ -f celerybeat-schedule ] && find celerybeat-schedule -mmin -30 2>/dev/null | grep -q . || exit 1 ;; *) for d in /proc/[0-9]*; do [ -r "$$d/comm" ] || continue; [ "$$(cat $$d/comm 2>/dev/null)" = celery ] || continue; tr "\0" " " < $$d/cmdline 2>/dev/null | grep -q "celery.*worker" && exit 0; done; exit 1 ;; esac'
+    CMD sh -c 'c=$(tr "\0" " " </proc/1/cmdline); case "$c" in *-B*|*beat*) [ -f celerybeat-schedule ] && find celerybeat-schedule -mmin -30 2>/dev/null | grep -q . || exit 1 ;; *) for d in /proc/[0-9]*; do [ -r "$d/comm" ] || continue; [ "$(cat $d/comm 2>/dev/null)" = celery ] || continue; tr "\0" " " < $d/cmdline 2>/dev/null | grep -q "celery.*worker" && exit 0; done; exit 1 ;; esac'
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 

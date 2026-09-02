@@ -25,6 +25,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- fix(worker): correct `$` escaping in HEALTHCHECK CMD-SHELL. Docker escapes
+  `$$` only for RUN instructions — not for CMD-SHELL / HEALTHCHECK — so the
+  prior fix landed as literal `$$(tr ...)` and sh expanded `$$` to PID,
+  breaking command substitution. Use single `$` for `$(...)` so it flows
+  through unchanged to the runtime shell (AUT-2056).
+
 ## [0.3.199] - 2026-09-02
 
 ### Fixed
