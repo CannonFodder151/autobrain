@@ -100,3 +100,41 @@ async def test_enhance_immutable_never_overridden() -> None:
         out = await enhance("resale", {}, baseline)
     assert out["estimated_value"] == 30000.0  # immutable survives
     assert out["rrp"] == 60000.0              # valid enrichment merged
+
+
+from app.router_client import _cap_payload, _PAYLOAD_FIELD_MAX_CHARS
+
+
+def test_cap_payload_truncates_long_string() -> None:
+    """Long narrative fields must be truncated to per-field limits."""
+    limit = _PAYLOAD_FIELD_MAX_CHARS["symptoms"]
+    long_symptoms = "X" * (limit + 500)
+    result = _cap_payload({"symptoms": long_symptoms, "vssm_make": "Toyota"})
+    assert len(result["symptoms"]) == limit
+    assert result["vssm_make"] == "Toyota"
+
+
+def test_cap_payload_keeps_short_strings() -> None:
+    short = {"symptoms": "slow to start", "notes": "cold mornings"}
+    assert _cap_payload(short) == short
+
+
+def test_cap_payload_strips_non_string_unchanged() -> None:
+    p = {"odometer_km": 90000, "items": [{"a": 1}]}
+    assert _cap_payload(p) == p
+
+
+def test_cap_payload_caps_unknown_string_to_default() -> None:
+    default_limit = 2000
+    big = {"xarbitrary": "A" * 3000}
+    result = _cap_payload(big)
+    assert len(result["xarbitrary"]) == default_limit
+
+
+def test_cap_payload_totals_bound() -> None:
+    from app.router_client import _MAX_PAYLOAD_TOTAL_CHARS
+    # 200 fields × 1200 chars each > default limit, must be truncated
+    big = {f"field_{i}": "A" * 1200 for i in range(200)}
+    result = _cap_payload(big)
+    import json
+    assert len(json.dumps(result)) <= _MAX_PAYLOAD_TOTAL_CHARS + 100  # small slack for structure
