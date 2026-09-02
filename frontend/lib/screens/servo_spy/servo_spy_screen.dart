@@ -101,8 +101,8 @@ class _ServoSpyMap extends StatefulWidget {
 class _FuelPriceEntry {
   final String fuelType;
   final double? priceCents; // null = no price
-  final double? costPerKm; // $/km (AUT-2201/2202, null without vehicle_id)
-  final double? avgFillCost; // $ per fill (AUT-2201/2202)
+  final double? costPerKm; // AUT-2053
+  final double? avgFillCost; // AUT-2053
 
   const _FuelPriceEntry({
     required this.fuelType,
@@ -164,6 +164,13 @@ class _MapStation {
     );
     return p.priceCents;
   }
+
+  _FuelPriceEntry entryFor(String fuelType) {
+    for (final p in prices) {
+      if (p.fuelType == fuelType) return p;
+    }
+    return const _FuelPriceEntry(fuelType: '');
+  }
 }
 
 class _ServoSpyMapState extends State<_ServoSpyMap> {
@@ -176,6 +183,7 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
   String? _selectedFuelType;
   String? _vehicleId;
   double _maxDistanceKm = 25;
+  String? _vehicleId; // AUT-2053: for $/km + avg fill cost projection
   final MapController _mapController = MapController();
   LatLng? _mapCenter;
 
@@ -228,6 +236,7 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
       final current = Vehicle.resolveSelection(vehicles, null);
       _vehicleId = current?.id;
       _selectedFuelType = current?.fuelType;
+      _vehicleId = current?.id; // AUT-2053
 
       _fuelTypes = await fetchFuelTypes(api);
       if (_selectedFuelType == null || !_fuelTypes.contains(_selectedFuelType)) {
@@ -761,13 +770,17 @@ class _StationSheet extends StatelessWidget {
               contentPadding: EdgeInsets.zero,
               leading: Icon(Icons.local_gas_station, color: scheme.primary),
               title: Text(p.fuelType),
-              subtitle: Text(
-                p.costPerKm != null
-                    ? '\$${p.costPerKm!.toStringAsFixed(3)}/km'
-                        '${p.avgFillCost != null ? '  ·  fill \$${p.avgFillCost!.toStringAsFixed(2)}' : ''}'
-                    : '—',
-                style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
-              ),
+              subtitle: p.costPerKm != null || p.avgFillCost != null
+                  ? Text(
+                      [
+                        if (p.costPerKm != null)
+                          '\$${p.costPerKm!.toStringAsFixed(3)}/km',
+                        if (p.avgFillCost != null)
+                          'avg fill \$${p.avgFillCost!.toStringAsFixed(2)}',
+                      ].join('  ·  '),
+                      style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+                    )
+                  : null,
               trailing: Text(
                 p.priceCents == null
                     ? '—'
@@ -816,6 +829,7 @@ class _ServoSpyListState extends State<_ServoSpyList> {
   String? _vehicleId;
   double _maxDistanceKm = 25;
   ServoSortMetric _sortMetric = ServoSortMetric.price;
+  String? _vehicleId; // AUT-2053
   late final ApiClient _api;
   Map<String, double>? _pos;
 
@@ -848,6 +862,7 @@ class _ServoSpyListState extends State<_ServoSpyList> {
       final current = Vehicle.resolveSelection(vehicles, null);
       _vehicleId = current?.id;
       _selectedFuelType = current?.fuelType;
+      _vehicleId = current?.id; // AUT-2053
 
       _fuelTypes = await fetchFuelTypes(_api);
       if (_selectedFuelType == null || !_fuelTypes.contains(_selectedFuelType)) {
@@ -1088,12 +1103,12 @@ class _ServoSpyListState extends State<_ServoSpyList> {
                             final distLabel = s.distanceKm != null
                                 ? '${s.distanceKm!.toStringAsFixed(1)} km'
                                 : '';
-                            final ckmLabel = s.costPerKm != null
-                                ? '\$${s.costPerKm!.toStringAsFixed(3)}/km'
-                                : '—';
-                            final afcLabel = s.avgFillCost != null
-                                ? 'fill \$${s.avgFillCost!.toStringAsFixed(2)}'
-                                : '';
+                            final extras = <String>[
+                              if (s.costPerKm != null)
+                                '\$${s.costPerKm!.toStringAsFixed(3)}/km',
+                              if (s.avgFillCost != null)
+                                'fill \$${s.avgFillCost!.toStringAsFixed(0)}',
+                            ];
                             return ListTile(
                               onTap: () => _openHistory(s),
                               leading: CircleAvatar(
@@ -1113,21 +1128,11 @@ class _ServoSpyListState extends State<_ServoSpyList> {
                                       ),
                               ),
                               title: Text(s.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(distLabel),
-                                  Text(
-                                    afcLabel.isEmpty
-                                        ? ckmLabel
-                                        : '$ckmLabel  ·  $afcLabel',
-                                    style: TextStyle(
-                                      color: scheme.onSurfaceVariant,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
+                              subtitle: Text(
+                                [
+                                  distLabel,
+                                  ...extras,
+                                ].where((e) => e.isNotEmpty).join('  ·  '),
                               ),
                               trailing: Text(
                                 priceLabel,
