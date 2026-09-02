@@ -3,19 +3,26 @@
 # App images from ghcr.io (multi-arch: the Oracle host is arm64 and Docker Hub :hosted tags are
 # amd64-only since AUT-967; ghcr :hosted carries amd64+arm64, AUT-1114).
 # Non-secret config interpolates from the Portainer stack env; secret-class
-# values come from /opt/autobrain/secrets via the *_FILE pattern (AUT-1533).
-# Env must stay applied via the stack so redeploys never revert SMTP2GO/SMTP_* (see AUT-97/AUT-101).
+# values come from ${SECRETS_DIR:-/data/autobrain/secrets} via the *_FILE pattern
+# (AUT-1533). Env must stay applied via the stack so redeploys never revert
+# SMTP2GO/SMTP_* (see AUT-97/AUT-101).
 
 # Secret-file pattern (AUT-1533): secret-class values are bind-mounted from
-# /opt/autobrain/secrets (root:1000, 0640) and loaded into process env at
-# container start by docker/lib-load-secrets.sh. They never appear in
-# `docker inspect`. Seed with scripts/seed-secrets.sh BEFORE deploying this
-# file; see docs/security.md ("Secret-file pattern & broker auth").
+# ${SECRETS_DIR:-/data/autobrain/secrets} (root:1000, 0640) and loaded into
+# process env at container start by docker/lib-load-secrets.sh. They never
+# appear in `docker inspect`. Seed with scripts/seed-secrets.sh BEFORE
+# deploying this file; see docs/security.md ("Secret-file pattern & broker auth").
+# AUT-1853: the default is /data/autobrain/secrets, NOT /opt/autobrain/secrets —
+# the snap dockerd on the Oracle VM mounts /opt from a read-only core24 squashfs
+# and masks the host /opt, so a bind on /opt/autobrain/secrets fails with
+# "read-only file system". /data is on the daemon-visible rootfs and is never
+# masked, so the stack no longer depends on the /opt remount workaround
+# (autobrain-opt-guard.sh).
 
 x-secrets: &secrets
   volumes:
     - type: bind
-      source: ${SECRETS_DIR:-/opt/autobrain/secrets}
+      source: ${SECRETS_DIR:-/data/autobrain/secrets}
       target: /run/secrets
       read_only: true
 
@@ -65,7 +72,7 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - type: bind
-        source: ${SECRETS_DIR:-/opt/autobrain/secrets}/postgres_password
+        source: ${SECRETS_DIR:-/data/autobrain/secrets}/postgres_password
         target: /run/secrets/postgres_password
         read_only: true
     healthcheck:
@@ -83,7 +90,7 @@ services:
     volumes:
       - redis-data:/data
       - type: bind
-        source: ${SECRETS_DIR:-/opt/autobrain/secrets}/redis_password
+        source: ${SECRETS_DIR:-/data/autobrain/secrets}/redis_password
         target: /run/secrets/redis_password
         read_only: true
     healthcheck:
@@ -122,11 +129,11 @@ services:
     volumes:
       - minio-data:/data
       - type: bind
-        source: ${SECRETS_DIR:-/opt/autobrain/secrets}/minio_access_key
+        source: ${SECRETS_DIR:-/data/autobrain/secrets}/minio_access_key
         target: /run/secrets/minio_access_key
         read_only: true
       - type: bind
-        source: ${SECRETS_DIR:-/opt/autobrain/secrets}/minio_secret_key
+        source: ${SECRETS_DIR:-/data/autobrain/secrets}/minio_secret_key
         target: /run/secrets/minio_secret_key
         read_only: true
     healthcheck:
@@ -158,7 +165,7 @@ services:
       # Enable with FUEL_VIC_ENABLED=true once key/secret are provisioned.
       FUEL_VIC_API_KEY_FILE: /run/secrets/fuel_vic_api_key
       FUEL_VIC_API_SECRET_FILE: /run/secrets/fuel_vic_api_secret
-      FUEL_VIC_ENABLED: "false"
+      FUEL_VIC_ENABLED: "true"
       AI_GATEWAY_API_KEY_FILE: /run/secrets/ai_gateway_api_key
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@autobrain.io}
       ADMIN_DISPLAY_NAME: AutoBrain Admin
@@ -288,7 +295,8 @@ services:
       - "8001"
 
   worker:
-    image: ghcr.io/cannonfodder151/autobrain-worker:hosted@sha256:e3d31003922abddaf7274ad8458af223987dff2a8350030e97b6f02c64fc201c
+    # AUT-2056: digest bumped to include the healthcheck sh→bash fix.
+    image: ghcr.io/cannonfodder151/autobrain-worker:hosted@sha256:442cc84cf0ef64d3de6f3492cc18c7342d92bdd287b14fec84c86891a7d0102f
     restart: unless-stopped
     # AUT-1242/C1: beat scheduler embedded in the worker (-B), matching the dev
     # compose. Removes the separate beat container.
@@ -305,7 +313,7 @@ services:
       # AUT-1932: VIC Servo Saver — approved partner key (AUT-1813 phase).
       FUEL_VIC_API_KEY_FILE: /run/secrets/fuel_vic_api_key
       FUEL_VIC_API_SECRET_FILE: /run/secrets/fuel_vic_api_secret
-      FUEL_VIC_ENABLED: "false"
+      FUEL_VIC_ENABLED: "true"
     <<: *secrets
     depends_on:
       postgres:
@@ -342,7 +350,14 @@ services:
       - "8000"
 
   frontend:
-    image: ghcr.io/cannonfodder151/autobrain-frontend:hosted@sha256:44654bb84213906e6c00feb55054afac5c0bf8a34e61f4e19d32766f51785ef0
+    image: ghcr.io/cannonfodder151/autobrain-frontend@sha256:f8cde5cdfa2604c852790404e228b91e21d2abc689399c3da578596bba969cc4
+    # AUT-2087: pinned to the verified arm64 child manifest digest of the
+    # autobrain-frontend :hosted OCI image index. Earlier pin
+    # (`@sha256:8937c2bb…`) targeted an arm64 image whose nginx + busybox
+    # binaries were x86_64 ELF (digest pin overrode the buildx platform
+    # flag). New pin resolves on the Oracle VM (aarch64) to a real arm64
+    # image. PR #409 (AUT-2087) unpinned the Dockerfile nginx base so
+    # future :hosted multi-arch rebuilds do not regress.
     restart: unless-stopped
     # AUT-473: localhost-bound. External clients reach the app via Cloudflare ->
     # npm (:443), which proxies to the frontend over the docker network. Never
