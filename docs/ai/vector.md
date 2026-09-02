@@ -20,6 +20,9 @@ All embedding columns use `vector(1536)` to match OpenAI's `text-embedding-3-sma
 | `service_records` | `embedding` | Description + notes + steps | Find similar service records |
 | `modifications` | `embedding` | Name + notes + category | Search modifications by description |
 | `receipts` | `embedding` | Vendor + extracted line-item names | Search receipts by content |
+| `social_issue_posts` | `embedding` | Title + body + tags | Community Garage issue search |
+
+All five tables use `vector(1536)` to match OpenAI's `text-embedding-3-small`. Dimensions are bound from `app.core.config.settings.EMBEDDING_DIMENSION` so the schema can't drift from config.
 
 ## Index
 
@@ -32,20 +35,30 @@ HNSW (Hierarchical Navigable Small World) chosen over IVFFlat because:
 - Better performance on small per-user tables
 - Faster updates (no reindex needed)
 
-Applied to all four embedding tables in migration `g7h8i9j0k1l2`.
+The initial pgvector migration (`g7h8i9j0k1l2`) shipped IVFFlat indexes as a
+placeholder; `h1i2j3k4l5m6` rebuilds them as HNSW (idempotent — drops the old
+index first, then recreates). The Community Garage entity (`social_issue_posts`)
+was added later and built HNSW directly in `u1v2w3x4y5z6`.
 
 ## Embedding pipeline
 
 ### Embed-on-create
 
-When a new entity is created, an embedding is generated via 9Router:
+When a new entity is created, an embedding is generated via 9Router
+(best-effort; a router outage never blocks the write):
 
 ```python
-# backend/app/services/search.py
-embedding = await generate_embedding(entity_type, data)
+# backend/app/api/v1/{diagnostics,services,mods,receipts,issues}.py
+queue_embedding(entity_type, str(record.id))
 ```
 
-For receipt OCR, embedding happens during `process_receipt` after extraction completes.
+For receipt OCR, embedding happens during `process_receipt` after extraction
+completes. Issue posts call `queue_embedding("issue", post.id)` on create and
+update in `backend/app/api/v1/issues.py`.
+
+The dispatch goes through Celery (`app.workers.tasks.queue_embedding` →
+`embed_entity.delay`); broker hiccups are swallowed so write paths remain
+healthy.
 
 ### Backfill
 
@@ -73,7 +86,9 @@ Search (`GET /api/v1/search?q=...&entity_types=...`) combines two strategies:
 
 ### 1. Keyword search (always runs)
 
-ILIKE pattern matching against the entity's text fields. Returns results ranked by relevance score.
+ILIKE pattern matching against the entity's text fields (scoped to the
+caller's vehicles for non-community entities; `status_hidden = false` for
+`social_issue_posts`). Returns results ranked by relevance score.
 
 ### 2. Vector search (optional)
 
@@ -110,8 +125,9 @@ The query embedding is generated via 9Router. If the router is down, only keywor
 
 | Migration | Description |
 |-----------|-------------|
-| `g7h8i9j0k1l2` | Add `embedding vector(1536)` columns + HNSW indexes |
-| `h1i2j3k4l5m6` | Update vector dimension if model changes |
+| `g7h8i9j0k1l2` | Add `embedding vector(1536)` columns + IVFFlat indexes (diagnostics, service_records, modifications, receipts) |
+| `h1i2j3k4l5m6` | Rebuild embedding indexes as HNSW (replaces IVFFlat) |
+| `u1v2w3x4y5z6` | Add `social_issue_posts` table + `embedding` column (HNSW) for Community Garage hybrid search |
 
 ## Fallback behaviour
 

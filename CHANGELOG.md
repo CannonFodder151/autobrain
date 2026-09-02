@@ -27,6 +27,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- docs(ai/vector): reconcile schema table + migration reference with code
+  reality. The 5th entity (`social_issue_posts`) was missing from the doc
+  even though `search._ENTITY_MAP["issue"]` and the daily backfill sweep
+  (`app.workers.tasks.backfill_entity_embeddings`) both query it. Also
+  clarified that `g7h8i9j0k1l2` builds IVFFlat and `h1i2j3k4l5m6` rebuilds
+  as HNSW (the original doc implied `g7h8i9j0k1l2` already used HNSW).
+  No runtime change — vector storage already covers all five entities on
+  every stack (AUT-1967).
+
 ## [0.3.201] - 2026-09-02
 
 ### Fixed
