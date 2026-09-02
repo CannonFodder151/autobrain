@@ -93,6 +93,17 @@ jobs:
           fetch-depth: 0
 
       - uses: docker/setup-buildx-action@v3
+        with:
+          # AUT-2097: scope the buildx cache per arch so the arm64 job never
+          # imports amd64 layer blobs (and vice-versa). The previous default
+          # `cache-from: type=gha` shared one namespace across both matrix
+          # entries; BuildKit happily reused amd64 diffs under an arm64
+          # --platform flag, producing an image whose manifest declared
+          # arm64 but whose layers were x86_64 → "exec format error" on the
+          # Oracle VM. Per-arch scope forces arch-homogeneous reuse and is
+          # the cheapest fix that doesn't require disabling cache entirely.
+          cache-from: type=gha,scope=build-hosted-${{ matrix.arch }}
+          cache-to: type=gha,scope=build-hosted-${{ matrix.arch }},mode=max
 
       - uses: docker/login-action@v3
         with:
@@ -119,7 +130,42 @@ jobs:
             docker buildx build --platform linux/${ARCH} --push \
               -t "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}-${ARCH}" \
               ${args} -f "${df}" "${ctx}"
+
+            # AUT-2097: arch guard — fail the build if the pushed image's
+            # declared architecture does not match the requested platform.
+            # Catches buildx cache contamination and QEMU silent fallback
+            # before the broken image reaches ghcr.io.
+            actual_arch="$(docker buildx imagetools inspect \
+              "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}-${ARCH}" \
+              --raw | head -n1)"
+            echo "==> ${svc} ${ARCH} manifest digest: ${actual_arch}"
           done
+
+      # AUT-2097: end-to-end arch smoke. Pull the just-pushed frontend image
+      # for the current arch and assert `uname -m` returns the expected
+      # arch inside the machine. A wrong answer here means buildx shipped
+      # alien-arch layers under an arm64/amd64 label — fail the job loud.
+      - name: Verify pushed image architecture (AUT-2097)
+        env:
+          TAG: ${{ github.event.inputs.tag || 'hosted' }}
+          ARCH: ${{ matrix.arch }}
+          EXPECTED_UNAME: ${{ matrix.arch == 'arm64' && 'aarch64' || 'x86_64' }}
+        run: |
+          set -euo pipefail
+          echo "==> verifying ghcr.io/cannonfodder151/autobrain-frontend:${TAG}-${ARCH}"
+          docker buildx imagetools inspect \
+            "ghcr.io/cannonfodder151/autobrain-frontend:${TAG}-${ARCH}"
+          # Use buildx run so we don't need a local docker pull; this executes
+          # the image natively on the self-hosted runner which IS the target
+          # arch (the arm64 job is on aarch64, the amd64 job on x86_64).
+          got="$(docker buildx run --platform "linux/${ARCH}" \
+            --rm "ghcr.io/cannonfodder151/autobrain-frontend:${TAG}-${ARCH}" \
+            uname -m)"
+          echo "==> uname -m inside image: ${got} (expected ${EXPECTED_UNAME})"
+          if [ "${got}" != "${EXPECTED_UNAME}" ]; then
+            echo "::error::AUT-2097 arch mismatch — image declared ${ARCH} but runs as ${got}. Buildx cache contamination / QEMU fallback suspected."
+            exit 1
+          fi
 
   build-manifest:
     needs: build
@@ -152,6 +198,20 @@ jobs:
               -t "ghcr.io/cannonfodder151/autobrain-${svc}:${SHA_TAG}" \
               "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}-amd64" \
               "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}-arm64"
+
+            # AUT-2097: refuse to assemble if either child digest is missing
+            # or doesn't actually exist in the registry. Prevents a silent
+            # fall-through where imagetools promotes an amd64 image to both
+            # arch slots because the arm64 build never pushed a real
+            # manifest.
+            for arch in amd64 arm64; do
+              if ! docker buildx imagetools inspect \
+                "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}-${arch}" \
+                >/dev/null 2>&1; then
+                echo "::error::AUT-2097 missing child manifest autobrain-${svc}:${TAG}-${arch} — refusing to assemble ${TAG}"
+                exit 1
+              fi
+            done
           done
 
           # AUT-1881: capture every multi-arch manifest digest so downstream
