@@ -29,6 +29,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Fixed
+- fix(servo-spy): map view no longer renders a second inner `Scaffold` +
+  `AppBar`, which was duplicating the back button and constraining the
+  map so tiles failed to lay out. The map view now sits directly under
+  the outer screen `Scaffold`; refresh / filter / enable-location
+  actions moved into an inline header row inside the body (AUT-2073).
 - fix(servo-spy): list view now shows the price for the selected fuel type
   instead of always reading `prices[0]`. Parses the full `prices[]` array
   and adds a `priceFor(fuelType)` helper on `ServoStationRow`, mirroring
