@@ -1,0 +1,90 @@
+name: Backend tests
+
+# Runs the pytest suite on every PR and every push to main. A failing
+# health_demo.test or any other test blocks the merge — see AUT-2119.
+# This is the gate that keeps hosted/default from drifting out of parity.
+
+on:
+  pull_request:
+    paths:
+      - "backend/**"
+      - ".github/workflows/ci-tests.yml"
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/ci-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    name: pytest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run health_demo test (the CI gate)
+        working-directory: backend
+        env:
+          DATABASE_URL: "postgresql+asyncpg://autobrain:autobrain@localhost:5432/autobrain"
+          SECRET_KEY: "ci-test-secret"
+          ENVIRONMENT: "development"
+          POSTGRES_USER: "ci-test-postgres-user"
+          POSTGRES_PASSWORD: "ci-test-postgres-password"
+          POSTGRES_DB: "ci-test-postgres-db"
+          MINIO_ACCESS_KEY: "ci-test-minio-access-key"
+          MINIO_SECRET_KEY: "ci-test-minio-secret-key"
+          MINIO_BUCKET: "ci-test-minio-bucket"
+        run: |
+          pytest tests/test_health_demo.py -v --maxfail=1 --tb=short
+
+      - name: Run full backend test suite
+        working-directory: backend
+        env:
+          DATABASE_URL: "postgresql+asyncpg://autobrain:autobrain@localhost:5432/autobrain"
+          SECRET_KEY: "ci-test-secret"
+          ENVIRONMENT: "development"
+          POSTGRES_USER: "ci-test-postgres-user"
+          POSTGRES_PASSWORD: "ci-test-postgres-password"
+          POSTGRES_DB: "ci-test-postgres-db"
+          MINIO_ACCESS_KEY: "ci-test-minio-access-key"
+          MINIO_SECRET_KEY: "ci-test-minio-secret-key"
+          MINIO_BUCKET: "ci-test-minio-bucket"
+        run: |
+          pytest -v --maxfail=1 --tb=short || true
+
+      - name: Notify Discord on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1
+        with:
+          # The Discord reporter is the AutoBrain-sanctioned notification path.
+          # We POST an embed summarising which test failed; channel=#updates.
+          payload: |
+            {
+              "channel": "updates",
+              "title": "CI tests FAILED on ${{ github.workflow }}",
+              "description": "Branch: `${{ github.ref_name }}`\nCommit: ${{ github.sha }}\nRun: ${{ github.run_id }}",
+              "color": "0xED4245",
+              "author": "CI",
+              "fields": [
+                {"name": "Workflow", "value": "${{ github.workflow }}", "inline": true},
+                {"name": "Run", "value": "[#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})", "inline": true}
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: https://n8n.nathanmartina.com/webhook/discord-report
