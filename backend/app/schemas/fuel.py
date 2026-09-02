@@ -82,13 +82,19 @@ class FuelPriceQuote(BaseModel):
     distance_km: float | None = None  # set in nearest mode
 
 
-class SevenElevenPricesOut(BaseModel):
-    """Accurate 7-Eleven fuel prices (projectzerothree.info). Deterministic, no AI."""
+class FuelPriceOut(BaseModel):
+    """A cached petrol price feed row, served to the price-map frontend."""
 
-    source: str = "projectzerothree"
-    updated: int | None = None  # upstream snapshot timestamp (unix)
-    as_of: str | None = None  # when we fetched/cached (ISO)
-    mode: str  # "cheapest" | "nearest"
+    state: str
+    station_code: str
+    station_name: str | None = None
+    brand: str | None = None
+    address: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
     fuel_type: str
-    region: str | None = None
-    quotes: list[FuelPriceQuote]
+    price: float | None = None
+    currency: str = "AUD"
+    updated_at: datetime | None = None
+
+    model_config = {"from_attributes": True}

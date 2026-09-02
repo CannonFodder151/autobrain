@@ -194,6 +194,65 @@ def run_daily_notification_checks() -> None:
 
 
 @shared_task
+def check_fuel_price_alerts() -> None:
+    """AUT-1859: evaluate servo-spy watch lists against the latest prices.
+
+    Deterministic-first: a pure price-change comparison (no AI) decides whether
+    each watched station/fuel-type crossed the user's % threshold since the
+    previous day. Alerts reuse the user's existing notification channels.
+
+    Runs after the daily NSW poll so it evaluates fresh data; it also runs
+    standalone (beat) so cached-snapshot-only instances still alert.
+    """
+    from datetime import date
+
+    from sqlalchemy import select
+
+    from app.models.fuel_price import FuelPriceSnapshot, FuelPriceWatchlist
+    from app.services.fuel_prices import compute_price_change
+    from app.services.notify import deliver_fuel_price_alert
+
+    async def _run():
+        async with SessionLocal() as db:
+            watch_ids = list((await db.scalars(select(FuelPriceWatchlist.id))).all())
+            for wid in watch_ids:
+                w = await db.get(FuelPriceWatchlist, wid)
+                if not w:
+                    continue
+                fp = await db.scalar(
+                    select(FuelPriceSnapshot).where(
+                        FuelPriceSnapshot.state == w.state,
+                        FuelPriceSnapshot.station_code == w.station_code,
+                        FuelPriceSnapshot.fuel_type == w.fuel_type,
+                    )
+                )
+                if not fp:
+                    logger.info("fuel_alert_no_price", watch_id=wid, station=w.station_code)
+                    continue
+                pct, direction = compute_price_change(fp.price, fp.previous_price)
+                if direction is None:
+                    continue  # not enough history yet (first poll) — no alert
+                if w.direction not in ("both", direction):
+                    continue
+                if abs(pct) < w.threshold_pct:
+                    continue
+                # One alert per (user, station, fuel, direction, day).
+                day = date.today().isoformat()
+                kind = f"fuel_price:{direction}:{w.station_code}:{w.fuel_type}:{day}"
+                label = (fp.brand or fp.station_name or "Station")
+                title = f"{label} {fp.fuel_type} price {direction} {abs(pct):.1f}%"
+                description = (
+                    f"{fp.station_name or w.station_code} {fp.fuel_type}: "
+                    f"{fp.previous_price} → {fp.price} c/L "
+                    f"({'%.1f' % pct}% vs yesterday)"
+                )
+                await deliver_fuel_price_alert(db, w.user_id, kind, title, description)
+                logger.info("fuel_alert_evaluated", watch_id=wid, direction=direction, pct=pct)
+
+    _run(_run())
+
+
+@shared_task
 def purge_stale_pending_accounts() -> None:
     """Delete invited/self-signed-up accounts that never completed registration."""
     from datetime import datetime, timedelta, timezone
@@ -317,6 +376,50 @@ def backfill_entity_embeddings() -> None:
                     await backfill_entity_embedding(db, etype, entity_id)
 
     _run(_backfill())
+
+
+@shared_task
+def poll_nsw_fuel_prices() -> None:
+    """Daily NSW Fuel API poll (AUT-1813).
+
+    Honours Nathan's constraint: poll once per day per instance (enforced via
+    the per-instance poll-state row), never the API quota (2500/month → ~81/day
+    headroom at one/day/instance). Falls back silently to the existing cache
+    on any transport/HTTP error — the map keeps serving cached prices.
+    """
+    from datetime import datetime, timezone
+
+    from app.core.config import settings
+    from app.services import fuel_prices as fuel_svc
+
+    async def _poll():
+        if not fuel_svc.enabled():
+            logger.info("nsw_fuel_poll_skipped", reason="disabled_or_unconfigured")
+            return
+        instance_id = settings.INSTANCE_ID or _hostname()
+        async with SessionLocal() as db:
+            if not await fuel_svc.should_poll(db, instance_id, "NSW"):
+                logger.info("nsw_fuel_poll_skipped", reason="already_polled_today", instance_id=instance_id)
+                return
+            try:
+                records = await fuel_svc.fetch_nsw_prices()
+            except Exception:
+                logger.exception("nsw_fuel_poll_failed", instance_id=instance_id)
+                return
+            count = await fuel_svc.store_nsw_prices(db, records)
+            await fuel_svc.mark_polled(db, instance_id, "NSW")
+            logger.info("nsw_fuel_poll_done", count=count, instance_id=instance_id)
+            # AUT-1859: re-evaluate servo-spy alerts against the freshly cached prices.
+            check_fuel_price_alerts.delay()
+
+    _run(_poll())
+
+
+def _hostname() -> str:
+    import socket
+
+    return socket.gethostname()
+
 
 def queue_embedding(entity_type: str, entity_id: str) -> None:
     """Best-effort async embed trigger; a broker hiccup never breaks write paths."""

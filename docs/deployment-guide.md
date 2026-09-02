@@ -113,17 +113,40 @@ Services:
 - AI gateway: http://localhost:8001/docs
 - MinIO console: http://localhost:9001
 
-### LAN exposure (mobile/QR testing)
+## Deploy (hosted) — the upgrade path (AUT-1847)
 
-For temporary testing from a phone or another device on the LAN (e.g. scanning
-a QR code), bind dev ports to `0.0.0.0` instead of `127.0.0.1`:
+**Always use the GitHub Actions runner on the Oracle VM** to build hosted
+images (do NOT build locally). The `build-hosted.yml` workflow (on every merge
+to `main`, or via `workflow_dispatch`) builds multi-arch images on the
+self-hosted runners (x64 + ARM64 on the Oracle VM) and pushes them to ghcr.io
+with the `:hosted` tag.
+
+Deployment is **owned by the Deployment Lead**, not automatic (board direction,
+AUT-1847): after `build-hosted.yml` (or `dockerhub-publish.yml` for Demo/Default)
+completes, CI posts a Discord `#ops` notification (author "Deployment Lead")
+that an image is published and ready to promote. The Deployment Lead then
+triggers the `deploy-instances.yml` workflow (`workflow_dispatch`), which runs
+the upgrade path:
+
+1. `scripts/upgrade-instances.sh` redeploys each Portainer stack in promotion
+   order (Demo → Default → Hosted) via
+   `PUT /api/stacks/{id}?endpointId={ep}&pullImage=true`, preserving the stack
+   env and volumes (`Prune: false`).
+2. Each tier is health-checked (`/health`) before the next is promoted; a failed
+   tier stops the rollout (AUT-107).
+3. DB migrations run on backend boot, so a redeploy is a full upgrade.
+4. `scripts/prune-images.sh` drops dangling images on EP2/EP5 after success.
 
 ```bash
-# .env
-EXPOSE_LAN=1
-BIND_ADDRESS=0.0.0.0
-docker compose up -d --build
+# Manual run (any tier ordering / verification override):
+./scripts/upgrade-instances.sh                       # promote all tiers
+UPGRADE_DRY_RUN=1 ./scripts/upgrade-instances.sh     # resolve + health only
+UPGRADE_TIERS="autobrain-hosted|5|https://hosted.autobrainservice.app/health|" \
+  ./scripts/upgrade-instances.sh                     # Hosted only
 ```
+Run it from the repo checkout on a host that can reach Portainer (the
+`deploy-instances.yml` `upgrade` job does exactly this, with the
+`PORTAINER_API_KEY`/`PORTAINER_URL` repo secrets injected by GitHub).
 
 Defaults stay `127.0.0.1` — `EXPOSE_LAN=0` means nothing is reachable off-host.
 Never commit `BIND_ADDRESS=0.0.0.0` to a shared `.env`.
