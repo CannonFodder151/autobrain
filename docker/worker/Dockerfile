@@ -1,6 +1,6 @@
 # AutoBrain Celery worker — production image (reuses backend image)
 # AUT-1735: bump off vulnerable python:3.12-slim; pin base by digest.
-FROM python:3.13-slim@sha256:7ce4b6dfe35e55397b7c13b51540f8693facf40576e6ce4b6dfe35e55397b7cda544f8a13f191b7ae28dc5aad71fe664dbc9bc2623f
+FROM python:3.13-slim@sha256:7ce4b6dfe35e55397b7cda544f8a13f191b7ae28dc5aad71fe664dbc9bc2623f
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
