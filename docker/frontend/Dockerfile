@@ -22,7 +22,7 @@ RUN flutter build web \
     --dart-define=API_BASE_URL=${API_BASE_URL} \
     --dart-define=WS_BASE_URL=${WS_BASE_URL}
 
-FROM nginxinc/nginx-unprivileged:stable-alpine
+FROM nginxinc/nginx-unprivileged:stable-alpine@sha256:45ce1e2e699234253d1def7baa96218a5d00b498d1ba0cbb1a17b6bdf73d1351
 COPY --from=build /build/build/web /usr/share/nginx/html
 COPY docker/frontend/nginx.conf /etc/nginx/conf.d/default.conf
 COPY docker/frontend/security-headers.inc /etc/nginx/conf.d/security-headers.inc
