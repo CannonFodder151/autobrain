@@ -720,28 +720,13 @@ class _ServoSpyListState extends State<_ServoSpyList> {
           .map((e) => '${e.key}=${Uri.encodeComponent(e.value)}')
           .join('&');
       final data = await _api.get('/fuel/stations?$qs') as List;
-      final rows = data.map((e) {
-        final m = e as Map<String, dynamic>;
-        final prices = ((m['prices'] as List?) ?? const [])
-            .map((p) => ServoFuelPrice(
-                  fuelType: (p as Map<String, dynamic>)['fuel_type'] as String? ?? '',
-                  priceCents: p['price'] != null ? (p['price'] as num).toDouble() : null,
-                ))
-            .toList();
-        final selected = _selectedFuelType;
-        final priceCents = selected != null
-            ? ServoStationRow.priceForFrom(prices, selected)
-            : null;
-        return ServoStationRow(
-          name: m['name'] as String? ?? 'Unknown',
-          brand: m['brand'] as String?,
-          logoUrl: m['logo'] as String?,
-          distanceKm: (m['distance_km'] as num?)?.toDouble(),
-          priceCents: priceCents,
-          fuelType: selected,
-          prices: prices,
-        );
-      }).toList();
+      final selFuel = _selectedFuelType;
+      final rows = data
+          .map((e) => stationRowFromApi(
+                e as Map<String, dynamic>,
+                selectedFuelType: selFuel,
+              ))
+          .toList();
       sortStationRows(rows, _sortMetric);
       if (!mounted) return;
       setState(() {
@@ -858,6 +843,28 @@ class _ServoSpyListState extends State<_ServoSpyList> {
             ],
           ),
         ),
+        if (_selectedFuelType != null && _fuelTypes.isNotEmpty)
+          SizedBox(
+            height: 44,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              children: [
+                for (final ft in _fuelTypes)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(ft),
+                      selected: ft == _selectedFuelType,
+                      onSelected: (_) {
+                        setState(() => _selectedFuelType = ft);
+                        _fetchStations();
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
         Expanded(
           child: _loading
               ? const Center(child: CircularProgressIndicator())

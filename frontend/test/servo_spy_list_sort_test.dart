@@ -56,16 +56,113 @@ void main() {
     expect('\$${(row.priceCents! / 100).toStringAsFixed(3)}', '\$1.799');
   });
 
-  test('priceFor returns the price matching the selected fuel type, not prices[0] (AUT-2105)', () {
-    // prices[0] is diesel, the user has selected 91.
+// AUT-2070: list view previously always took prices[0], ignoring the
+  // selected fuel type. The parser now picks the matching entry and falls
+  // back to the first available price when the selected fuel is absent.
+  test('pickPriceForFuel selects the entry matching the selected fuel type', () {
     final prices = [
-      const ServoFuelPrice(fuelType: 'diesel', priceCents: 199.9),
-      const ServoFuelPrice(fuelType: '91', priceCents: 179.9),
-      const ServoFuelPrice(fuelType: '98', priceCents: 209.9),
+      {'fuel_type': 'E10', 'price': 165.7},
+      {'fuel_type': '91', 'price': 178.9},
+      {'fuel_type': 'Diesel', 'price': 189.0},
     ];
-    expect(ServoStationRow.priceForFrom(prices, '91'), 179.9);
-    expect(ServoStationRow.priceForFrom(prices, 'diesel'), 199.9);
-    expect(ServoStationRow.priceForFrom(prices, '98'), 209.9);
-    expect(ServoStationRow.priceForFrom(prices, 'lpg'), null);
+    final p = pickPriceForFuel(prices, '91');
+    expect(p.priceCents, 178.9);
+    expect(p.fuelType, '91');
+  });
+
+  test('pickPriceForFuel falls back to first price when selected fuel is missing', () {
+    final prices = [
+      {'fuel_type': '91', 'price': 178.9},
+      {'fuel_type': 'Diesel', 'price': 189.0},
+    ];
+    final p = pickPriceForFuel(prices, 'LPG');
+    expect(p.priceCents, 178.9);
+    expect(p.fuelType, '91');
+  });
+
+  test('pickPriceForFuel returns nulls on an empty payload', () {
+    final p = pickPriceForFuel(const [], '91');
+    expect(p.priceCents, isNull);
+    expect(p.fuelType, isNull);
+  });
+
+  test('stationRowFromApi fills name + distance and the right price', () {
+    final row = stationRowFromApi(
+      {
+        'name': 'BP Cluden',
+        'brand': 'BP',
+        'logo': 'https://example.com/bp.png',
+        'distance_km': 2.4,
+        'prices': [
+          {'fuel_type': 'E10', 'price': 165.7},
+          {'fuel_type': '95', 'price': 184.0},
+        ],
+      },
+      selectedFuelType: '95',
+    );
+    expect(row.name, 'BP Cluden');
+    expect(row.brand, 'BP');
+    expect(row.distanceKm, 2.4);
+    expect(row.priceCents, 184.0);
+    expect(row.fuelType, '95');
+  });
+
+  test('pickPriceForFuel with null selectedFuelType picks the first available entry', () {
+    final prices = [
+      {'fuel_type': '91', 'price': 178.9},
+      {'fuel_type': 'Diesel', 'price': 189.0},
+    ];
+    final p = pickPriceForFuel(prices, null);
+    expect(p.priceCents, 178.9);
+    expect(p.fuelType, '91');
+  });
+
+  test('pickPriceForFuel skips malformed entries and picks the first valid one', () {
+    final prices = [
+      'not a map',
+      {'fuel_type': null, 'price': '0'},
+      {'fuel_type': '91', 'price': 178.9},
+    ];
+    final p = pickPriceForFuel(prices, '91');
+    expect(p.priceCents, 178.9);
+    expect(p.fuelType, '91');
+  });
+
+  test('pickPriceForFuel parses string price (e.g. "178.9") as double', () {
+    final prices = [
+      {'fuel_type': '91', 'price': '178.9'},
+    ];
+    final p = pickPriceForFuel(prices, '91');
+    expect(p.priceCents, 178.9);
+  });
+
+  test('stationRowFromApi with no selectedFuelType picks the first price', () {
+    final row = stationRowFromApi(
+      {
+        'name': 'Caltex',
+        'brand': 'Caltex',
+        'distance_km': 1.0,
+        'prices': [
+          {'fuel_type': 'E10', 'price': 165.7},
+          {'fuel_type': '95', 'price': 184.0},
+        ],
+      },
+    );
+    expect(row.priceCents, 165.7);
+    expect(row.fuelType, 'E10');
+  });
+
+  test('stationRowFromApi with no prices key still returns a row with null price', () {
+    final row = stationRowFromApi(
+      {
+        'name': 'No Prices',
+        'brand': 'Unknown',
+        'distance_km': 3.0,
+      },
+      selectedFuelType: '91',
+    );
+    expect(row.name, 'No Prices');
+    expect(row.priceCents, isNull);
+    expect(row.fuelType, isNull);
   });
 }
