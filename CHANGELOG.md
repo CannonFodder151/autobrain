@@ -25,7 +25,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.202] - 2026-09-02
 
 ### Security
 - **AUT-1189:** Pin three previously-unpinned transitives flagged by osv-scanner
