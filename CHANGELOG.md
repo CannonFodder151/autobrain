@@ -24,7 +24,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.201] - 2026-09-02
 
 ### Fixed
 - fix(hosted): bump frontend image digest to the multi-arch `:hosted` image
