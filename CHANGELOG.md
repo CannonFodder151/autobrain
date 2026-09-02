@@ -8,29 +8,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > user-facing change ships with an entry here under `[Unreleased]` — see
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
+
 ## [Unreleased]
 
 ### Fix (AUT-2070)
-- fix(frontend): Servo Spy list view now shows the price for the **selected** fuel type instead of always `prices[0]` (was ignoring the chip/filter).
-- fix(frontend): Servo Spy list view now exposes an inline fuel-type chip bar so the filter is visible without opening the sheet.
+- fix(frontend): Servo Spy list view now exposes an inline fuel-type chip bar so the fuel filter is visible without opening the filter sheet. The selected-fuel price-match fix from PR #410 (AUT-2105) already shipped in 0.3.203.
 
+## [0.3.203] - 2026-09-02
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+### Fixed
+- fix(servo-spy): map view no longer renders a second inner `Scaffold` +
+  `AppBar`, which was duplicating the back button and constraining the
+  map so tiles failed to lay out. The map view now sits directly under
+  the outer screen `Scaffold`; refresh / filter / enable-location
+  actions moved into an inline header row inside the body (AUT-2073).
+- fix(servo-spy): list view now shows the price for the selected fuel type
+  instead of always reading `prices[0]`. Parses the full `prices[]` array
+  and adds a `priceFor(fuelType)` helper on `ServoStationRow`, mirroring
+  the map view's `_MapStation.priceFor` (AUT-2105).
 
 ## [0.3.202] - 2026-09-02
 

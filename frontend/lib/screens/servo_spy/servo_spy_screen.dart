@@ -362,123 +362,120 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
           ),
         ),
     ];
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Servo Spy'),
-        actions: [
-          if (_locationDenied)
+    return Column(
+      children: [
+        if (_locationDenied)
+          Container(
+            width: double.infinity,
+            color: Colors.amber.withValues(alpha: 0.15),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: const Text(
+              'Location off — showing stations in the selected region. '
+              'Enable location for nearby results.',
+              style: TextStyle(fontSize: 12),
+            ),
+          ),
+        Row(
+          children: [
+            if (_locationDenied)
+              IconButton(
+                tooltip: 'Enable location',
+                icon: const Icon(Icons.location_disabled),
+                onPressed: _bootstrap,
+              ),
+            const Spacer(),
             IconButton(
-              tooltip: 'Enable location',
-              icon: const Icon(Icons.location_disabled),
+              tooltip: 'Refresh',
+              icon: const Icon(Icons.refresh),
               onPressed: _bootstrap,
             ),
-          IconButton(
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh),
-            onPressed: _bootstrap,
-          ),
-          IconButton(
-            tooltip: 'Filters',
-            icon: const Icon(Icons.filter_alt_outlined),
-            onPressed: _openFilter,
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          if (_locationDenied)
-            Container(
-              width: double.infinity,
-              color: Colors.amber.withValues(alpha: 0.15),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: const Text(
-                'Location off — showing stations in the selected region. '
-                'Enable location for nearby results.',
-                style: TextStyle(fontSize: 12),
-              ),
+            IconButton(
+              tooltip: 'Filters',
+              icon: const Icon(Icons.filter_alt_outlined),
+              onPressed: _openFilter,
             ),
-          // Fuel type chip bar
-          if (_selectedFuelType != null)
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              child: Row(
-                children: [
-                  for (final ft in _fuelTypes)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: ChoiceChip(
-                        label: Text(ft),
-                        selected: ft == _selectedFuelType,
-                        onSelected: (_) {
-                          setState(() => _selectedFuelType = ft);
-                          _fetchStations();
-                        },
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          Expanded(
-            child: Stack(
+          ],
+        ),
+        if (_selectedFuelType != null)
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            child: Row(
               children: [
-                FlutterMap(
-                  mapController: _mapController,
-                  options: MapOptions(
-                    initialCenter: center,
-                    initialZoom: _userLoc != null ? 12 : 11,
-                    interactionOptions: InteractionOptions(
-                      flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+                for (final ft in _fuelTypes)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(ft),
+                      selected: ft == _selectedFuelType,
+                      onSelected: (_) {
+                        setState(() => _selectedFuelType = ft);
+                        _fetchStations();
+                      },
                     ),
                   ),
-                  children: [
-                    TileLayer(
-                      urlTemplate: isDark
-                          ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-                          : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-                      subdomains: isDark ? const ['a', 'b', 'c', 'd'] : const ['a', 'b', 'c', 'd'],
-                      userAgentPackageName: 'com.autobrain',
-                    ),
-                    MarkerLayer(markers: markers),
-                  ],
-                ),
-                if (_loading)
-                  const Positioned.fill(
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
-                if (_error != null && !_loading)
-                  Positioned(
-                    left: 16,
-                    right: 16,
-                    bottom: 16,
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: scheme.error.withValues(alpha: 0.9),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text('Prices unavailable: $_error',
-                          style: TextStyle(color: scheme.onError)),
-                    ),
-                  ),
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    color: scheme.scrim.withValues(alpha: 0.6),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    child: const Text(
-                      '© OpenStreetMap contributors © CARTO',
-                      style: TextStyle(color: Colors.white, fontSize: 11),
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
-        ],
-      ),
+        Expanded(
+          child: Stack(
+            children: [
+              FlutterMap(
+                mapController: _mapController,
+                options: MapOptions(
+                  initialCenter: center,
+                  initialZoom: _userLoc != null ? 12 : 11,
+                  interactionOptions: InteractionOptions(
+                    flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+                  ),
+                ),
+                children: [
+                  TileLayer(
+                    urlTemplate: isDark
+                        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+                        : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+                    subdomains: const ['a', 'b', 'c', 'd'],
+                    userAgentPackageName: 'com.autobrain',
+                  ),
+                  MarkerLayer(markers: markers),
+                ],
+              ),
+              if (_loading)
+                const Positioned.fill(
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+              if (_error != null && !_loading)
+                Positioned(
+                  left: 16,
+                  right: 16,
+                  bottom: 16,
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: scheme.error.withValues(alpha: 0.9),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text('Prices unavailable: $_error',
+                        style: TextStyle(color: scheme.onError)),
+                  ),
+                ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  color: scheme.scrim.withValues(alpha: 0.6),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  child: const Text(
+                    '© OpenStreetMap contributors © CARTO',
+                    style: TextStyle(color: Colors.white, fontSize: 11),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

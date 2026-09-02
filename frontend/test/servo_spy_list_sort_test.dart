@@ -56,7 +56,7 @@ void main() {
     expect('\$${(row.priceCents! / 100).toStringAsFixed(3)}', '\$1.799');
   });
 
-  // AUT-2070: list view previously always took prices[0], ignoring the
+// AUT-2070: list view previously always took prices[0], ignoring the
   // selected fuel type. The parser now picks the matching entry and falls
   // back to the first available price when the selected fuel is absent.
   test('pickPriceForFuel selects the entry matching the selected fuel type', () {
