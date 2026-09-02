@@ -20,6 +20,7 @@ All embedding columns use `vector(1536)` to match OpenAI's `text-embedding-3-sma
 | `service_records` | `embedding` | Description + notes + steps | Find similar service records |
 | `modifications` | `embedding` | Name + notes + category | Search modifications by description |
 | `receipts` | `embedding` | Vendor + extracted line-item names | Search receipts by content |
+| `social_issue_posts` | `embedding` | Title + body | Community-wide semantic search across help requests |
 
 ## Index
 
@@ -32,7 +33,7 @@ HNSW (Hierarchical Navigable Small World) chosen over IVFFlat because:
 - Better performance on small per-user tables
 - Faster updates (no reindex needed)
 
-Applied to all four embedding tables in migration `g7h8i9j0k1l2`.
+Applied to all five embedding tables (`g7h8i9j0k1l2` plus the social-issue-blog migration).
 
 ## Embedding pipeline
 
