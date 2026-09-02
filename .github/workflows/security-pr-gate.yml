@@ -116,14 +116,29 @@ jobs:
         with:
           channel: stable
           cache: true
-      - name: dart pub audit (frontend)
+      - name: pub audit (frontend)
         working-directory: frontend
         run: |
           set -euo pipefail
           flutter pub get
-          # `flutter pub audit` was removed; the canonical Dart/Flutter audit
-          # subcommand is `dart pub audit` (per AUT-1746 recommendation).
-          dart pub audit
+          # `dart pub audit` was removed in Dart 3.6+. Fall back to
+          # `osv-scanner` against pubspec.lock for CVE coverage (matches the
+          # Python side). Auto-installed; cache the binary across runs.
+          if command -v osv-scanner >/dev/null 2>&1; then
+            SCAN=osv-scanner
+          else
+            echo "::notice::osv-scanner not installed; downloading release binary"
+            case "$(uname -m)" in
+              x86_64|amd64) ARCH=amd64 ;;
+              aarch64|arm64) ARCH=arm64 ;;
+              *) echo "::error::unsupported arch $(uname -m)"; exit 1 ;;
+            esac
+            curl -fsSL -o /tmp/osv-scanner.zip \
+              "https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_linux_${ARCH}.zip"
+            (cd /tmp && unzip -o osv-scanner.zip && chmod +x osv-scanner)
+            SCAN=/tmp/osv-scanner
+          fi
+          $SCAN --lockfile=./pubspec.lock --format=table
 
   # (6) AUT-1881 pin-guard — fail any compose `image:` reference that is not
   # pinned by `@sha256` digest. Complements the postgres/nginx/python pin
