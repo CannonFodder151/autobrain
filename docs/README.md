@@ -38,6 +38,7 @@ below are mirrors kept in-repo for offline reading and PR review.
 | [test-strategy.md](test-strategy.md) | Test environments, coverage areas, triage flow, sign-off bar |
 | [qa-run-logs.md](qa-run-logs.md) | Chronological verified test passes and verification runs |
 | [user-testing-results.md](user-testing-results.md) | Verified bug reports, feature verification, test-pass outcomes |
+| [task-pipeline.md](task-pipeline.md) | Sub-task & follow-up creation pattern, verify-then-comment flow, curl examples |
 
 **Rule:** when behaviour changes, update the matching Outline document and the
 mirror here in the same change.
