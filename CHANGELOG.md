@@ -42,9 +42,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 - **VIC Servo Saver fuel feed (AUT-1932):** wired up the partner VIC fuel-price
-  API behind \`FUEL_VIC_*\` config + compose env/secrets so the default and
+  API behind `FUEL_VIC_*` config + compose env/secrets so the default and
   hosted stacks can ingest Victorian servo prices once an approved partner
-  key is provisioned. Disabled by default (\`FUEL_VIC_ENABLED=false\`); follows
+  key is provisioned. Disabled by default (`FUEL_VIC_ENABLED=false`); follows
   the same secret-file pattern as the NSW FuelCheck integration (AUT-1858).
 
 ## [0.3.203] - 2026-09-02
