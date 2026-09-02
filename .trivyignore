@@ -55,3 +55,16 @@ CVE-2026-56862  # gosu-stdlib: crypto/tls KeyUpdate; gosu does no TLS
 # Security Officer sign-off requested — see child issue AUT-1844 (sign-off).
 GHSA-6v7p-g79w-8964  # msgpack OOB read: not imported by any runtime service
 CVE-2025-47273  # setuptools PackageIndex path traversal: build-time only, no runtime install path
+
+# --- nginx:stable-alpine libexpat CVEs (time-boxed) ----------------------------
+# Source: libexpat 2.8.3-r0 bundled in nginxinc/nginx-unprivileged:stable-alpine
+# (alpine 3.24.1). Fixed upstream in libexpat 2.8.4-r0; no alpine rebuild has
+# landed yet (2026-09-02). CVE-2026-66046 and CVE-2026-76641 are both DoS-class
+# (denial of service via crafted XML) — nginx's default build does NOT compile
+# the XML module (ngx_http_xml_module) and none of the AutoBrain reverse-proxy
+# configs load it, so the vulnerability is not reachable.
+# Time-boxed: re-check 2026-10-02; drop entries once a new stable-alpine tag
+# ships libexpat >= 2.8.4-r0.
+# Security Officer sign-off requested — see child issue AUT-2110.
+CVE-2026-66046  # libexpat DoS: XML parsing unreachable — nginx XML module not compiled
+CVE-2026-76641  # libexpat DoS: XML parsing unreachable — nginx XML module not compiled
