@@ -41,3 +41,45 @@ List<ServoStationRow> sortStationRows(
   }
   return rows;
 }
+
+/// Picks the price entry for [fuelType] out of a raw API `prices` payload,
+/// falling back to the first entry when no match exists.
+///
+/// The list view (AUT-1821) used to always take `prices[0]`, which could be a
+/// different fuel than the one the user selected (AUT-2070). Centralising the
+/// rule here keeps the parser deterministic and unit-testable.
+({double? priceCents, String? fuelType}) pickPriceForFuel(
+  List<dynamic> prices,
+  String? fuelType,
+) {
+  if (prices.isEmpty) return (priceCents: null, fuelType: null);
+  for (final p in prices) {
+    final ft = p['fuel_type'] as String?;
+    if (fuelType != null && ft == fuelType) {
+      return (priceCents: (p['price'] as num?)?.toDouble(), fuelType: ft);
+    }
+  }
+  final first = prices.first;
+  return (
+    priceCents: (first['price'] as num?)?.toDouble(),
+    fuelType: first['fuel_type'] as String?,
+  );
+}
+
+/// Parses one raw API station map into a [ServoStationRow], picking the price
+/// for [selectedFuelType] when available.
+ServoStationRow stationRowFromApi(
+  Map<String, dynamic> m, {
+  String? selectedFuelType,
+}) {
+  final prices = (m['prices'] as List?) ?? const [];
+  final picked = pickPriceForFuel(prices, selectedFuelType);
+  return ServoStationRow(
+    name: m['name'] as String? ?? 'Unknown',
+    brand: m['brand'] as String?,
+    logoUrl: m['logo'] as String?,
+    distanceKm: (m['distance_km'] as num?)?.toDouble(),
+    priceCents: picked.priceCents,
+    fuelType: picked.fuelType,
+  );
+}

@@ -723,19 +723,13 @@ class _ServoSpyListState extends State<_ServoSpyList> {
           .map((e) => '${e.key}=${Uri.encodeComponent(e.value)}')
           .join('&');
       final data = await _api.get('/fuel/stations?$qs') as List;
-      final rows = data.map((e) {
-        final m = e as Map<String, dynamic>;
-        final prices = (m['prices'] as List?) ?? [];
-        final price = prices.isNotEmpty ? (prices[0]['price'] as num?)?.toDouble() : null;
-        return ServoStationRow(
-          name: m['name'] as String? ?? 'Unknown',
-          brand: m['brand'] as String?,
-          logoUrl: m['logo'] as String?,
-          distanceKm: (m['distance_km'] as num?)?.toDouble(),
-          priceCents: price,
-          fuelType: prices.isNotEmpty ? prices[0]['fuel_type'] as String? : null,
-        );
-      }).toList();
+      final selFuel = _selectedFuelType;
+      final rows = data
+          .map((e) => stationRowFromApi(
+                e as Map<String, dynamic>,
+                selectedFuelType: selFuel,
+              ))
+          .toList();
       sortStationRows(rows, _sortMetric);
       if (!mounted) return;
       setState(() {
@@ -852,6 +846,28 @@ class _ServoSpyListState extends State<_ServoSpyList> {
             ],
           ),
         ),
+        if (_selectedFuelType != null && _fuelTypes.isNotEmpty)
+          SizedBox(
+            height: 44,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              children: [
+                for (final ft in _fuelTypes)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(ft),
+                      selected: ft == _selectedFuelType,
+                      onSelected: (_) {
+                        setState(() => _selectedFuelType = ft);
+                        _fetchStations();
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          ),
         Expanded(
           child: _loading
               ? const Center(child: CircularProgressIndicator())

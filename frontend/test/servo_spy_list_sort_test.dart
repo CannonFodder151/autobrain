@@ -55,4 +55,55 @@ void main() {
     expect(row.priceCents, 179.9);
     expect('\$${(row.priceCents! / 100).toStringAsFixed(3)}', '\$1.799');
   });
+
+  // AUT-2070: list view previously always took prices[0], ignoring the
+  // selected fuel type. The parser now picks the matching entry and falls
+  // back to the first available price when the selected fuel is absent.
+  test('pickPriceForFuel selects the entry matching the selected fuel type', () {
+    final prices = [
+      {'fuel_type': 'E10', 'price': 165.7},
+      {'fuel_type': '91', 'price': 178.9},
+      {'fuel_type': 'Diesel', 'price': 189.0},
+    ];
+    final p = pickPriceForFuel(prices, '91');
+    expect(p.priceCents, 178.9);
+    expect(p.fuelType, '91');
+  });
+
+  test('pickPriceForFuel falls back to first price when selected fuel is missing', () {
+    final prices = [
+      {'fuel_type': '91', 'price': 178.9},
+      {'fuel_type': 'Diesel', 'price': 189.0},
+    ];
+    final p = pickPriceForFuel(prices, 'LPG');
+    expect(p.priceCents, 178.9);
+    expect(p.fuelType, '91');
+  });
+
+  test('pickPriceForFuel returns nulls on an empty payload', () {
+    final p = pickPriceForFuel(const [], '91');
+    expect(p.priceCents, isNull);
+    expect(p.fuelType, isNull);
+  });
+
+  test('stationRowFromApi fills name + distance and the right price', () {
+    final row = stationRowFromApi(
+      {
+        'name': 'BP Cluden',
+        'brand': 'BP',
+        'logo': 'https://example.com/bp.png',
+        'distance_km': 2.4,
+        'prices': [
+          {'fuel_type': 'E10', 'price': 165.7},
+          {'fuel_type': '95', 'price': 184.0},
+        ],
+      },
+      selectedFuelType: '95',
+    );
+    expect(row.name, 'BP Cluden');
+    expect(row.brand, 'BP');
+    expect(row.distanceKm, 2.4);
+    expect(row.priceCents, 184.0);
+    expect(row.fuelType, '95');
+  });
 }

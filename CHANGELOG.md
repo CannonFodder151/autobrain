@@ -8,25 +8,29 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > user-facing change ships with an entry here under `[Unreleased]` — see
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ## [Unreleased]
+
+### Fix (AUT-2070)
+- fix(frontend): Servo Spy list view now shows the price for the **selected** fuel type instead of always `prices[0]` (was ignoring the chip/filter).
+- fix(frontend): Servo Spy list view now exposes an inline fuel-type chip bar so the filter is visible without opening the sheet.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ## [0.3.202] - 2026-09-02
 
