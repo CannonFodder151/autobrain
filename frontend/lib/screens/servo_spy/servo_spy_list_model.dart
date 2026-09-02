@@ -13,6 +13,7 @@ class ServoStationRow {
   final double? distanceKm;
   final double? priceCents;
   final String? fuelType;
+  final List<ServoFuelPrice> prices;
 
   const ServoStationRow({
     required this.name,
@@ -21,7 +22,27 @@ class ServoStationRow {
     this.distanceKm,
     this.priceCents,
     this.fuelType,
+    this.prices = const [],
   });
+
+  /// Price in cents for [fuelType] in [prices], or null if missing.
+  /// Mirrors `_MapStation.priceFor` on the map view (AUT-2105).
+  static double? priceForFrom(List<ServoFuelPrice> prices, String fuelType) {
+    for (final p in prices) {
+      if (p.fuelType == fuelType) return p.priceCents;
+    }
+    return null;
+  }
+
+  /// Price in cents for [fuelType] on this row, or null if the station
+  /// doesn't list it.
+  double? priceFor(String fuelType) => priceForFrom(prices, fuelType);
+}
+
+class ServoFuelPrice {
+  final String fuelType;
+  final double? priceCents;
+  const ServoFuelPrice({required this.fuelType, this.priceCents});
 }
 
 /// Sorts [rows] in place by [metric], ascending, and returns it.

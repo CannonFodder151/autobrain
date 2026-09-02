@@ -55,4 +55,17 @@ void main() {
     expect(row.priceCents, 179.9);
     expect('\$${(row.priceCents! / 100).toStringAsFixed(3)}', '\$1.799');
   });
+
+  test('priceFor returns the price matching the selected fuel type, not prices[0] (AUT-2105)', () {
+    // prices[0] is diesel, the user has selected 91.
+    final prices = [
+      const ServoFuelPrice(fuelType: 'diesel', priceCents: 199.9),
+      const ServoFuelPrice(fuelType: '91', priceCents: 179.9),
+      const ServoFuelPrice(fuelType: '98', priceCents: 209.9),
+    ];
+    expect(ServoStationRow.priceForFrom(prices, '91'), 179.9);
+    expect(ServoStationRow.priceForFrom(prices, 'diesel'), 199.9);
+    expect(ServoStationRow.priceForFrom(prices, '98'), 209.9);
+    expect(ServoStationRow.priceForFrom(prices, 'lpg'), null);
+  });
 }
