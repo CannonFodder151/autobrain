@@ -8,7 +8,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > user-facing change ships with an entry here under `[Unreleased]` — see
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
+
 ## [Unreleased]
+
+## [0.3.204] - 2026-09-02
 
 ### Fixed
 - CI (AUT-2097): fix buildx cache contamination in `build-hosted.yml` that shipped
