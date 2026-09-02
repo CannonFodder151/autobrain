@@ -9,7 +9,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
 
+
 ## [Unreleased]
+
+## [0.3.205] - 2026-09-02
 
 ## [0.3.204] - 2026-09-02
 
