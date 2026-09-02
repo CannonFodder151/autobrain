@@ -22,7 +22,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.199] - 2026-09-02
 
 ### Fixed
 - fix(worker): switch HEALTHCHECK shell from `sh` to `bash` so the embedded
