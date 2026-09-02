@@ -106,4 +106,63 @@ void main() {
     expect(row.priceCents, 184.0);
     expect(row.fuelType, '95');
   });
+
+  test('pickPriceForFuel with null selectedFuelType picks the first available entry', () {
+    final prices = [
+      {'fuel_type': '91', 'price': 178.9},
+      {'fuel_type': 'Diesel', 'price': 189.0},
+    ];
+    final p = pickPriceForFuel(prices, null);
+    expect(p.priceCents, 178.9);
+    expect(p.fuelType, '91');
+  });
+
+  test('pickPriceForFuel skips malformed entries and picks the first valid one', () {
+    final prices = [
+      'not a map',
+      {'fuel_type': null, 'price': '0'},
+      {'fuel_type': '91', 'price': 178.9},
+    ];
+    final p = pickPriceForFuel(prices, '91');
+    expect(p.priceCents, 178.9);
+    expect(p.fuelType, '91');
+  });
+
+  test('pickPriceForFuel parses string price (e.g. "178.9") as double', () {
+    final prices = [
+      {'fuel_type': '91', 'price': '178.9'},
+    ];
+    final p = pickPriceForFuel(prices, '91');
+    expect(p.priceCents, 178.9);
+  });
+
+  test('stationRowFromApi with no selectedFuelType picks the first price', () {
+    final row = stationRowFromApi(
+      {
+        'name': 'Caltex',
+        'brand': 'Caltex',
+        'distance_km': 1.0,
+        'prices': [
+          {'fuel_type': 'E10', 'price': 165.7},
+          {'fuel_type': '95', 'price': 184.0},
+        ],
+      },
+    );
+    expect(row.priceCents, 165.7);
+    expect(row.fuelType, 'E10');
+  });
+
+  test('stationRowFromApi with no prices key still returns a row with null price', () {
+    final row = stationRowFromApi(
+      {
+        'name': 'No Prices',
+        'brand': 'Unknown',
+        'distance_km': 3.0,
+      },
+      selectedFuelType: '91',
+    );
+    expect(row.name, 'No Prices');
+    expect(row.priceCents, isNull);
+    expect(row.fuelType, isNull);
+  });
 }
