@@ -68,3 +68,17 @@ CVE-2025-47273  # setuptools PackageIndex path traversal: build-time only, no ru
 # Security Officer sign-off requested — see child issue AUT-2126.
 CVE-2026-66046  # libexpat DoS: XML parsing unreachable — nginx XML module not compiled
 CVE-2026-76641  # libexpat DoS: XML parsing unreachable — nginx XML module not compiled
+
+# --- python:3.13-slim openssl QUIC DoS (CVE-2026-14456, AUT-1740) ---------------
+# Source: openssl 3.5.6-1~deb13u2 (libssl3t64 / openssl / openssl-provider-legacy)
+# bundled in python:3.13-slim@sha256:7ce4b6d... (debian 13.6). Fixed upstream in
+# 3.5.7-1~deb13u2; no python:3.13-slim respin has shipped the patched openssl
+# yet (2026-09-02). The vulnerability is unbounded memory growth in the OpenSSL
+# QUIC SERVER. AutoBrain python services (backend/ai/worker/market-data) do not
+# run a QUIC listener — FastAPI/uvicorn serve HTTP only, no QUIC negotiation is
+# attempted at any ingress. Confirmed by grep across backend/ai/worker code:
+# no `quic`, `nghttp3`, or `msquic` imports anywhere in the runtime services.
+# Tracked in AUT-1844 (existing python ignore time-box); re-check 2026-11-28
+# alongside the msgpack/setuptools entries. Drop + bump PYTHON_BASE_IMAGE
+# digest once a python:3.13-slim ships openssl >= 3.5.7-1~deb13u2.
+CVE-2026-14456  # openssl QUIC server DoS: not reachable — no QUIC listener in python runtime
