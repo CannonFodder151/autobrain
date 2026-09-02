@@ -18,6 +18,7 @@ from app.core.logging import get_logger
 from app.db.session import get_db
 from app.models.fuel_station import FuelPrice, FuelStation
 from app.models.user import User
+from app.schemas.fuel import FuelStats  # noqa: F401  (type hint in _station_out)
 from app.schemas.fuel_servo import (
     AttributionOut,
     FuelBrandOut,
@@ -25,6 +26,8 @@ from app.schemas.fuel_servo import (
     FuelStationOut,
 )
 from app.services import fuel_feeds as feeds
+from app.services.fuel import compute_fuel_stats
+from app.services.ownership import get_accessible_vehicle
 
 logger = get_logger(__name__)
 
@@ -94,17 +97,26 @@ async def fuel_stations(
     lon: float = Query(..., description="Search centre longitude"),
     radius_km: float = Query(25, gt=0, le=2000, description="Search radius in km"),
     fuel_type: str | None = Query(default=None, description="Filter to a canonical fuel type (91/95/98/E10/Diesel/LPG)"),
+    vehicle_id: str | None = Query(default=None, description="Annotate prices with this vehicle's per-station cost (AUT-2201)"),
     limit: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_fuel_access),
+    user: User = Depends(require_fuel_access),
 ):
     """Stations within ``radius_km`` of (lat,lon), each with its prices.
 
     Radius filter is a great-circle distance in Python (no PostGIS needed for
     MVP). When ``fuel_type`` is given, only stations with a price for that fuel
     are returned, and each carries just that fuel's latest price.
+
+    When ``vehicle_id`` is given (must be accessible to ``user``), every price
+    carries ``cost_per_km`` ($/km, from avg L/100km) and ``avg_fill_cost`` ($,
+    from avg litres/fill) — deterministic, no AI.
     """
     _set_attribution(response)
+    stats = None
+    if vehicle_id is not None:
+        await get_accessible_vehicle(db, vehicle_id, user)
+        stats = await compute_fuel_stats(db, vehicle_id)
     stations = list((await db.scalars(select(FuelStation))).all())
     hits: list[tuple[float, FuelStation]] = []
     for s in stations:
@@ -128,7 +140,7 @@ async def fuel_stations(
                 select(FuelPrice).where(FuelPrice.station_id == s.id)
                 .order_by(FuelPrice.fuel_type, FuelPrice.effective_at.desc())
             )).all())
-        out.append(_station_out(s, prices, dist))
+        out.append(_station_out(s, prices, dist, stats))
     return out
 
 
@@ -148,7 +160,7 @@ async def station_prices(
         select(FuelPrice).where(FuelPrice.station_id == station_id)
         .order_by(FuelPrice.fuel_type, FuelPrice.effective_at.desc())
     )).all())
-    return _station_out(station, prices, None)
+    return _station_out(station, prices, None, None)
 
 
 @router.get("/attribution", response_model=AttributionOut)
@@ -169,7 +181,31 @@ async def _latest_price(db: AsyncSession, station_id: str, fuel_type: str) -> Fu
     )).first()
 
 
-def _station_out(s: FuelStation, prices: list[FuelPrice], dist: float | None) -> FuelStationOut:
+def _station_out(
+    s: FuelStation,
+    prices: list[FuelPrice],
+    dist: float | None,
+    stats: "FuelStats | None" = None,
+) -> FuelStationOut:
+    avg_l_100 = stats.avg_l_per_100km if stats else None
+    avg_litres = stats.avg_litres_per_fill if stats else None
+    out_prices: list[FuelPriceOut] = []
+    for p in prices:
+        cost_per_km = None
+        avg_fill_cost = None
+        if avg_l_100 is not None:
+            cost_per_km = round(avg_l_100 * p.price / 100, 4)
+        if avg_litres is not None:
+            avg_fill_cost = round(p.price * avg_litres / 100, 2)
+        out_prices.append(
+            FuelPriceOut(
+                fuel_type=p.fuel_type,
+                price=p.price,
+                effective_at=p.effective_at,
+                cost_per_km=cost_per_km,
+                avg_fill_cost=avg_fill_cost,
+            )
+        )
     return FuelStationOut(
         id=s.id,
         source=s.source,
@@ -180,5 +216,5 @@ def _station_out(s: FuelStation, prices: list[FuelPrice], dist: float | None) ->
         lon=s.lon,
         logo=feeds.BRAND_LOGOS.get((s.brand or "").lower()),
         distance_km=round(dist, 2) if dist is not None else None,
-        prices=[FuelPriceOut(fuel_type=p.fuel_type, price=p.price, effective_at=p.effective_at) for p in prices],
+        prices=out_prices,
     )
