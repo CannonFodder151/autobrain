@@ -40,6 +40,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Changed
 - **AI gateway:** Extract router configuration (system prompts, schemas, payload caps, validation helpers) from `router_client.py` into new `router_utils.py` module. `router_client.py` now contains only HTTP transport. (AUT-1969)
 
+### Added
+- **VIC Servo Saver fuel feed (AUT-1932):** wired up the partner VIC fuel-price
+  API behind \`FUEL_VIC_*\` config + compose env/secrets so the default and
+  hosted stacks can ingest Victorian servo prices once an approved partner
+  key is provisioned. Disabled by default (\`FUEL_VIC_ENABLED=false\`); follows
+  the same secret-file pattern as the NSW FuelCheck integration (AUT-1858).
+
 ## [0.3.203] - 2026-09-02
 
 ### Fixed
