@@ -65,6 +65,6 @@ CVE-2025-47273  # setuptools PackageIndex path traversal: build-time only, no ru
 # configs load it, so the vulnerability is not reachable.
 # Time-boxed: re-check 2026-10-02; drop entries once a new stable-alpine tag
 # ships libexpat >= 2.8.4-r0.
-# Security Officer sign-off requested — see child issue AUT-2110.
+# Security Officer sign-off requested — see child issue AUT-2126.
 CVE-2026-66046  # libexpat DoS: XML parsing unreachable — nginx XML module not compiled
 CVE-2026-76641  # libexpat DoS: XML parsing unreachable — nginx XML module not compiled
