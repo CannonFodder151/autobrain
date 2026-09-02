@@ -45,6 +45,7 @@ The **odometer** module is deterministic-only: it never calls the router.
 | Mod impact | `/v1/mod-impact` | `mod_impact.py` — per-category performance/value/reliability table | Advice prose on top of the scored baseline | `performance_score`, `value_impact`, `reliability_impact` |
 | Fuel receipt OCR | `/v1/fuel-ocr` | `fuel_ocr.py` — line-scan for vendor, date, litres, price-per-litre, total | Only fills optional/missing fields; never the measured numbers | `vendor`, `date`, `litres`, `price_per_litre`, `total_cost`, `currency` |
 | Odometer | `/v1/odometer` | `odometer.py` — local Tesseract OCR + regex digit scan on the dashboard photo | **None — deterministic-only** (reads are ~95% accurate, AI adds nothing) | all output |
+| Parts guide | `/v1/parts-guide` | `parts_guide.py` — SCA category taxonomy normalisation + service-type inventory prefill | Tidy descriptions, brands, categories (never overrides SKU/service_group/supplier) | `sku`, `service_group`, `supplier` |
 
 ## Gateway contract
 
@@ -62,8 +63,9 @@ The **odometer** module is deterministic-only: it never calls the router.
 
 The rule engines live in the `ai/app/fallbacks/` package — one module per
 feature (`diagnose.py`, `service_prediction.py`, `ocr.py`, `resale.py`,
-`mod_impact.py`, `fuel_ocr.py`, `odometer.py`). Each exports a single
-`*_fallback()` entry point used by the matching `ai/app/modules/` handler.
+`mod_impact.py`, `fuel_ocr.py`, `odometer.py`, `parts_guide.py`,
+`condition.py`). Each exports a single `*_fallback()` entry point used by
+the matching `ai/app/modules/` handler.
 
 > When adding a module: add the fallback first, expose it, then layer the
 > router enrichment on top. A module must always work with the router down.

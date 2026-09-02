@@ -77,5 +77,5 @@ Hub[hub - Federation Hub, deploy-only, hosted stack] -.-> Backend
 ## Vectorisation (pgvector)
 
 Semantic search is backed by pgvector. The hosted PostgreSQL image is
-`pgvector/pgvector:pg16`. See `docs/container-architecture.md#vectorisation-pgvector`
-for the schema and embedding pipeline.
+`pgvector/pgvector:pg17`. See `docs/ai/vector.md` for the schema and embedding
+pipeline.
