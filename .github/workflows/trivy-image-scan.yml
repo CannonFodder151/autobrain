@@ -22,6 +22,7 @@ on:
       - 'market-data/Dockerfile'
       - '.trivyignore'
       - '.github/workflows/trivy-image-scan.yml'
+      - '.github/workflows/libexpat-version-check.yml'
   push:
     branches: [main]
     paths:
@@ -35,6 +36,7 @@ on:
       - 'market-data/Dockerfile'
       - '.trivyignore'
       - '.github/workflows/trivy-image-scan.yml'
+      - '.github/workflows/libexpat-version-check.yml'
   schedule:
     - cron: '0 7 * * 1'
   workflow_dispatch:
