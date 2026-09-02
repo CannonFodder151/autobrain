@@ -158,7 +158,7 @@ services:
       # Enable with FUEL_VIC_ENABLED=true once key/secret are provisioned.
       FUEL_VIC_API_KEY_FILE: /run/secrets/fuel_vic_api_key
       FUEL_VIC_API_SECRET_FILE: /run/secrets/fuel_vic_api_secret
-      FUEL_VIC_ENABLED: "false"
+      FUEL_VIC_ENABLED: "true"
       AI_GATEWAY_API_KEY_FILE: /run/secrets/ai_gateway_api_key
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@autobrain.io}
       ADMIN_DISPLAY_NAME: AutoBrain Admin
@@ -306,7 +306,7 @@ services:
       # AUT-1932: VIC Servo Saver — approved partner key (AUT-1813 phase).
       FUEL_VIC_API_KEY_FILE: /run/secrets/fuel_vic_api_key
       FUEL_VIC_API_SECRET_FILE: /run/secrets/fuel_vic_api_secret
-      FUEL_VIC_ENABLED: "false"
+      FUEL_VIC_ENABLED: "true"
     <<: *secrets
     depends_on:
       postgres:

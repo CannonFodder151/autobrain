@@ -46,7 +46,7 @@ x-backend-base: &backend-base
     # Enable with FUEL_VIC_ENABLED=true once key/secret are provisioned.
     FUEL_VIC_API_KEY: ${FUEL_VIC_API_KEY:-}
     FUEL_VIC_API_SECRET: ${FUEL_VIC_API_SECRET:-}
-    FUEL_VIC_ENABLED: "false"
+    FUEL_VIC_ENABLED: "true"
   depends_on:
     postgres:
       condition: service_healthy

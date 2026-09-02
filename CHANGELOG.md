@@ -40,6 +40,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Changed
 - **AI gateway:** Extract router configuration (system prompts, schemas, payload caps, validation helpers) from `router_client.py` into new `router_utils.py` module. `router_client.py` now contains only HTTP transport. (AUT-1969)
 
+### Changed
+- **Servo Spy fuel map:** flip `FUEL_VIC_ENABLED` to `"true"` on Default and
+  Hosted tiers and document the VIC Servo Saver partner-key wiring
+  (`.env.example`, `docs/petrol-price-map.md`). The polling consumer is
+  gated on an approved partner key being present in `/opt/autobrain/secrets`
+  on Hosted, or `FUEL_VIC_API_KEY` on Default; absent the key the source
+  silently skips per the existing `enabled()` check (AUT-1932).
+
 ## [0.3.203] - 2026-09-02
 
 ### Fixed
