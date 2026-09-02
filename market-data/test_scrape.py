@@ -44,7 +44,7 @@ def test_map_and_filter():
         {"title": "e", "price": 50.0, "year": 1998, "source": "carsguide", "url": "", "odometer_km": 1},
     ]
     assert len(carsguide._filter_year(cars, 2016)) == 3
-    assert len(carsguide._filter_year(cars, 1997)) == 5  # <3 exact+near -> keep all
+    assert len(carsguide._filter_year(cars, 1997)) == 5  # ±1yr = {1997, 1998} = 2 <3 -> all
     assert len(carsguide._filter_year(cars, 1990)) == 5  # <3 near -> all
     assert len(carsguide._filter_year(cars, None)) == 5
     print("unit tests OK")
