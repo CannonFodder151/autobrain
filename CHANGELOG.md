@@ -39,6 +39,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   schemas) without authentication, matching the backend's pattern. Adds
   `test_docs_disabled.py` regression test. Docs remain available when
   `ENVIRONMENT` is set to a non-production value for local debugging.
+- Unblock AUT-2165 PR security gates: pin `redis:7-alpine` by digest in
+  `docker-compose.yml` (mirror the `docker-compose.prod.yml` / `.hosted.yml`
+  pin from 0.3.198), bump `pypdf` 6.15.0 → 6.16.1 in `backend/` and `ai/`
+  requirements (closes CVE-2026-84309/84310/84311), and replace the broken
+  `dart pub audit` step in `.github/workflows/security-pr-gate.yml` with an
+  `osv-scanner` scan against `frontend/pubspec.lock` so the Flutter
+  dependency gate runs again on every PR.
 
 ## [0.3.199] - 2026-09-02
 

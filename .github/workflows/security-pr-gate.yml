@@ -105,25 +105,36 @@ jobs:
           rm -f "$TMPREQ"
           python3 -m pip_audit --disable-pip --no-deps -r market-data/requirements.txt
 
-  # (5) dart pub audit on the frontend (requires the Flutter toolchain).
+  # (5) Flutter dependency audit. `flutter pub audit` and `dart pub audit` do
+  # not exist on current Flutter/Dart stable; use `osv-scanner` against the
+  # committed `pubspec.lock` so the gate still blocks on known CVEs in the
+  # transitive Dart/Flutter tree (per AUT-1746 / AUT-2066).
   flutter-audit:
-    name: Flutter — pub audit
+    name: Flutter — osv-scanner (pubspec.lock)
     runs-on: [self-hosted, linux, x64, vm2]
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Flutter
+      - name: Set up Flutter (resolves pubspec.lock)
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
-      - name: dart pub audit (frontend)
+      - name: Resolve pub dependencies
+        working-directory: frontend
+        run: flutter pub get
+      - name: Install osv-scanner
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+          curl -sfL https://github.com/google/osv-scanner/releases/download/v1.7.3/osv-scanner_1.7.3_linux_amd64 \
+            -o "$HOME/.local/bin/osv-scanner"
+          chmod +x "$HOME/.local/bin/osv-scanner"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: osv-scanner against pubspec.lock (exit 1 on any known vuln)
         working-directory: frontend
         run: |
           set -euo pipefail
-          flutter pub get
-          # `flutter pub audit` was removed; the canonical Dart/Flutter audit
-          # subcommand is `dart pub audit` (per AUT-1746 recommendation).
-          dart pub audit
+          osv-scanner --lockfile=pubspec.lock --format=table --exit-code=1
 
   # (6) AUT-1881 pin-guard — fail any compose `image:` reference that is not
   # pinned by `@sha256` digest. Complements the postgres/nginx/python pin
