@@ -105,13 +105,17 @@ jobs:
           rm -f "$TMPREQ"
           python3 -m pip_audit --disable-pip --no-deps -r market-data/requirements.txt
 
-  # (5) dart pub audit on the frontend (requires the Flutter toolchain).
+  # (5) Flutter dependency audit. `flutter pub audit` and `dart pub audit` do
+  # not exist on current Flutter/Dart stable; the mainline choice (AUT-1746
+  # / AUT-2066) is `flutter pub outdated` with a heuristic regex that flags
+  # any data row. Add osv-scanner against `pubspec.lock` once the runner
+  # image carries it for proper CVE coverage.
   flutter-audit:
-    name: Flutter — pub audit
-    runs-on: [self-hosted, linux, x64, vm2]
+    name: Flutter — pub outdated (heuristic CVE placeholder)
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Flutter
+      - name: Set up Flutter (resolves pubspec.lock)
         uses: subosito/flutter-action@v2
         with:
           channel: stable
