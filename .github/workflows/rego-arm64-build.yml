@@ -42,11 +42,16 @@ jobs:
       packages: write
     steps:
       - name: Checkout rego-lookup-api
+        # AUT-2158: this runs on the autobrain repo's arm64 runner, so the
+        # workflow-scoped GITHUB_TOKEN does NOT grant access to the separate
+        # rego-lookup-api repo. Use the repo-level github_pat secret instead.
+        env:
+          GITHUB_PAT: ${{ secrets.GH_PAT }}
         run: |
           set -euo pipefail
           rm -rf rego-lookup-api
           git clone --depth 1 --branch "${{ inputs.ref }}" \
-            "https://github.com/CannonFodder151/rego-lookup-api.git" rego-lookup-api
+            "https://x-access-token:${GITHUB_PAT}@github.com/CannonFodder151/rego-lookup-api.git" rego-lookup-api
 
       - uses: docker/setup-buildx-action@v3
 
