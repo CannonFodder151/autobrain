@@ -8,6 +8,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > user-facing change ships with an entry here under `[Unreleased]` — see
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
+## [Unreleased]
+
+### Fixed
+- CI (AUT-2097): fix buildx cache contamination in `build-hosted.yml` that shipped
+  amd64 layer blobs inside arm64 manifests. Scoped GHA buildx cache per-architecture,
+  disabled cache import for arm64 builds, added pre- and post-build arch verification
+  steps, and gated manifest assembly on both arch checks passing.
+
 
 ## [Unreleased]
 
@@ -21,6 +29,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 - fix(frontend): guard `pickPriceForFuel` against malformed price entries (non-Map, non-num/string price) so a bad API row no longer aborts the whole list view. OCR-review advisory.
 - test(frontend): extend `servo_spy_list_sort_test.dart` with cases for `selectedFuelType == null`, missing `prices` key, string-encoded price, and malformed price entries (OCR-review advisory).
+
+### Changed
+- **AI gateway:** Extract router configuration (system prompts, schemas, payload caps, validation helpers) from `router_client.py` into new `router_utils.py` module. `router_client.py` now contains only HTTP transport. (AUT-1969)
+
+### Changed
+- **Servo Spy fuel map:** flip `FUEL_VIC_ENABLED` to `"true"` on Default and
+  Hosted tiers and document the VIC Servo Saver partner-key wiring
+  (`.env.example`, `docs/petrol-price-map.md`). The polling consumer is
+  gated on an approved partner key being present in `/opt/autobrain/secrets`
+  on Hosted, or `FUEL_VIC_API_KEY` on Default; absent the key the source
+  silently skips per the existing `enabled()` check (AUT-1932).
+
 ## [0.3.203] - 2026-09-02
 
 ### Fixed
@@ -33,6 +53,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   instead of always reading `prices[0]`. Parses the full `prices[]` array
   and adds a `priceFor(fuelType)` helper on `ServoStationRow`, mirroring
   the map view's `_MapStation.priceFor` (AUT-2105).
+
+### Security
+- **AUT-1602:** Cap inbound user payload length per field in
+  `ai/app/router_client.py` (`_cap_payload`, per-field: symptoms 2000,
+  content 50000, text/notes/reason/repair_notes 2000, description 5000,
+  raw_text 10000, default 5000; 100k total-budget guard with iterative
+  halving). Together with the `<user_data>` instruction barrier + hardened
+  system prompt already shipped on this branch, this closes the OWASP
+  LLM01 prompt-injection path on narrative fields
+  (summary/reason/repair_notes/recommendations) which had no `_AI_IMMUTABLE`
+  protection. Deterministic baseline + schema whitelist + immutable
+  numeric/financial fields remain the first line of defence; AI output
+  stays an enrichment overlay.
 
 ## [0.3.202] - 2026-09-02
 
