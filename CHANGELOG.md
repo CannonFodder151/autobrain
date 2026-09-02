@@ -26,6 +26,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- fix(hosted): bump frontend image digest to the multi-arch `:hosted` image
+  published after PR #384 (AUT-1908 unpinned the nginx base digest). The
+  previous pin (`sha256:44654bb…`) was an amd64-only build that crashed on
+  the arm64 hosted VM (`exec format error`, restart loop every ~60s). The
+  new pin (`sha256:8937c2bb…`) is a true OCI image index with both amd64
+  and arm64 manifests (AUT-2077).
+
 ## [0.3.200] - 2026-09-02
 
 ### Fixed

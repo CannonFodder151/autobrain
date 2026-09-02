@@ -343,7 +343,11 @@ services:
       - "8000"
 
   frontend:
-    image: ghcr.io/cannonfodder151/autobrain-frontend:hosted@sha256:44654bb84213906e6c00feb55054afac5c0bf8a34e61f4e19d32766f51785ef0
+    image: ghcr.io/cannonfodder151/autobrain-frontend:hosted@sha256:8937c2bb7a3da99fb777199010d7ab22a12329ebb3276ea3b8cf57620a5056a7
+    # AUT-2077: bump from sha256:44654bb… (amd64-only, breaks arm64 hosted
+    # VM). PR #384 / AUT-1908 unpinned the nginx base digest so buildx now
+    # produces a true multi-arch image; this pin matches the new `:hosted`
+    # OCI image index (amd64 + arm64 manifests).
     restart: unless-stopped
     # AUT-473: localhost-bound. External clients reach the app via Cloudflare ->
     # npm (:443), which proxies to the frontend over the docker network. Never
