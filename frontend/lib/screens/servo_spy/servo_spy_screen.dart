@@ -90,8 +90,15 @@ class _ServoSpyMap extends StatefulWidget {
 class _FuelPriceEntry {
   final String fuelType;
   final double? priceCents; // null = no price
+  final double? costPerKm; // AUT-2053
+  final double? avgFillCost; // AUT-2053
 
-  const _FuelPriceEntry({required this.fuelType, this.priceCents});
+  const _FuelPriceEntry({
+    required this.fuelType,
+    this.priceCents,
+    this.costPerKm,
+    this.avgFillCost,
+  });
 }
 
 class _MapStation {
@@ -132,6 +139,8 @@ class _MapStation {
           .map((p) => _FuelPriceEntry(
                 fuelType: p['fuel_type'] as String? ?? '',
                 priceCents: p['price'] != null ? (p['price'] as num).toDouble() : null,
+                costPerKm: (p['cost_per_km'] as num?)?.toDouble(),
+                avgFillCost: (p['avg_fill_cost'] as num?)?.toDouble(),
               ))
           .toList(),
     );
@@ -144,6 +153,13 @@ class _MapStation {
     );
     return p.priceCents;
   }
+
+  _FuelPriceEntry entryFor(String fuelType) {
+    for (final p in prices) {
+      if (p.fuelType == fuelType) return p;
+    }
+    return const _FuelPriceEntry(fuelType: '');
+  }
 }
 
 class _ServoSpyMapState extends State<_ServoSpyMap> {
@@ -155,6 +171,7 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
   List<String> _fuelTypes = List<String>.from(defaultFuelTypes);
   String? _selectedFuelType;
   double _maxDistanceKm = 25;
+  String? _vehicleId; // AUT-2053: for $/km + avg fill cost projection
   final MapController _mapController = MapController();
 
   @override
@@ -193,6 +210,7 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
           .toList();
       final current = Vehicle.resolveSelection(vehicles, null);
       _selectedFuelType = current?.fuelType;
+      _vehicleId = current?.id; // AUT-2053
 
       _fuelTypes = await fetchFuelTypes(api);
       if (_selectedFuelType == null || !_fuelTypes.contains(_selectedFuelType)) {
@@ -222,6 +240,7 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
         'radius_km': _maxDistanceKm.toInt().toString(),
         'limit': '50',
       };
+      if (_vehicleId != null) params['vehicle_id'] = _vehicleId!;
       final qs = params.entries
           .map((e) => '${e.key}=${Uri.encodeComponent(e.value)}')
           .join('&');
@@ -620,6 +639,17 @@ class _StationSheet extends StatelessWidget {
               contentPadding: EdgeInsets.zero,
               leading: Icon(Icons.local_gas_station, color: scheme.primary),
               title: Text(p.fuelType),
+              subtitle: p.costPerKm != null || p.avgFillCost != null
+                  ? Text(
+                      [
+                        if (p.costPerKm != null)
+                          '\$${p.costPerKm!.toStringAsFixed(3)}/km',
+                        if (p.avgFillCost != null)
+                          'avg fill \$${p.avgFillCost!.toStringAsFixed(2)}',
+                      ].join('  ·  '),
+                      style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+                    )
+                  : null,
               trailing: Text(
                 p.priceCents == null
                     ? '—'
@@ -658,6 +688,7 @@ class _ServoSpyListState extends State<_ServoSpyList> {
   String? _selectedFuelType;
   double _maxDistanceKm = 25;
   ServoSortMetric _sortMetric = ServoSortMetric.price;
+  String? _vehicleId; // AUT-2053
   late final ApiClient _api;
   Map<String, double>? _pos;
 
@@ -689,6 +720,7 @@ class _ServoSpyListState extends State<_ServoSpyList> {
           .toList();
       final current = Vehicle.resolveSelection(vehicles, null);
       _selectedFuelType = current?.fuelType;
+      _vehicleId = current?.id; // AUT-2053
 
       _fuelTypes = await fetchFuelTypes(_api);
       if (_selectedFuelType == null || !_fuelTypes.contains(_selectedFuelType)) {
@@ -716,6 +748,7 @@ class _ServoSpyListState extends State<_ServoSpyList> {
         'radius_km': _maxDistanceKm.toInt().toString(),
       };
       if (_selectedFuelType != null) params['fuel_type'] = _selectedFuelType!;
+      if (_vehicleId != null) params['vehicle_id'] = _vehicleId!;
       final qs = params.entries
           .map((e) => '${e.key}=${Uri.encodeComponent(e.value)}')
           .join('&');
@@ -915,6 +948,12 @@ class _ServoSpyListState extends State<_ServoSpyList> {
                             final distLabel = s.distanceKm != null
                                 ? '${s.distanceKm!.toStringAsFixed(1)} km'
                                 : '';
+                            final extras = <String>[
+                              if (s.costPerKm != null)
+                                '\$${s.costPerKm!.toStringAsFixed(3)}/km',
+                              if (s.avgFillCost != null)
+                                'fill \$${s.avgFillCost!.toStringAsFixed(0)}',
+                            ];
                             return ListTile(
                               leading: CircleAvatar(
                                 backgroundColor: scheme.surfaceContainerHighest,
@@ -933,7 +972,12 @@ class _ServoSpyListState extends State<_ServoSpyList> {
                                       ),
                               ),
                               title: Text(s.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-                              subtitle: Text(distLabel),
+                              subtitle: Text(
+                                [
+                                  distLabel,
+                                  ...extras,
+                                ].where((e) => e.isNotEmpty).join('  ·  '),
+                              ),
                               trailing: Text(
                                 priceLabel,
                                 style: Theme.of(context).textTheme.titleSmall?.copyWith(

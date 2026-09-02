@@ -165,4 +165,44 @@ void main() {
     expect(row.priceCents, isNull);
     expect(row.fuelType, isNull);
   });
+
+// AUT-2053: when the server is called with ?vehicle_id it returns per-price
+  // cost_per_km + avg_fill_cost projections from the vehicle's fuel stats.
+  // The model must surface them on the row and on the parsed price entry.
+  test('AUT-2053: pickPriceForFuel captures cost_per_km + avg_fill_cost from the API', () {
+    final prices = [
+      {
+        'fuel_type': '91',
+        'price': 180.0,
+        'cost_per_km': 0.144,
+        'avg_fill_cost': 72.0,
+      },
+    ];
+    final p = pickPriceForFuel(prices, '91');
+    expect(p.priceCents, 180.0);
+    expect(p.costPerKm, 0.144);
+    expect(p.avgFillCost, 72.0);
+  });
+
+  test('AUT-2053: stationRowFromApi copies the projection onto the row', () {
+    final row = stationRowFromApi(
+      {
+        'name': 'Ampol',
+        'brand': 'Ampol',
+        'distance_km': 4.0,
+        'prices': [
+          {
+            'fuel_type': '95',
+            'price': 190.0,
+            'cost_per_km': 0.19,
+            'avg_fill_cost': 76.0,
+          },
+        ],
+      },
+      selectedFuelType: '95',
+    );
+    expect(row.priceCents, 190.0);
+    expect(row.costPerKm, 0.19);
+    expect(row.avgFillCost, 76.0);
+  });
 }
