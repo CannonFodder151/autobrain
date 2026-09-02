@@ -19,7 +19,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - fix(ci): replace the removed `dart pub audit` subcommand in the `Flutter — pub audit` PR gate with `osv-scanner --lockfile=pubspec.lock` so the gate stops failing every PR (Dart 3.6+ removed the subcommand). Repo-wide fix — unblocks merge of all open PRs.
 - fix(docker): pin `redis:7-alpine` in `docker-compose.yml` to `redis:7.2.5-alpine@sha256:6aaf3f5…` so the `Pin guard` PR gate stays green (was the only unpinned compose image left after PR #409 unpinned nginx for arm64 hosted builds).
 
-- fix(security): time-boxed ignore for CVE-2026-14456 (openssl QUIC server DoS) in pinned `python:3.13-slim` digest so the `image-scan` gate stays green. No QUIC listener in any AutoBrain python service. Re-check 2026-11-28 (AUT-1844). Tracked in [AUT-2126](/AUT/issues/AUT-2126).
+- fix(frontend): guard `pickPriceForFuel` against malformed price entries (non-Map, non-num/string price) so a bad API row no longer aborts the whole list view. OCR-review advisory.
+- test(frontend): extend `servo_spy_list_sort_test.dart` with cases for `selectedFuelType == null`, missing `prices` key, string-encoded price, and malformed price entries (OCR-review advisory).
 ## [0.3.203] - 2026-09-02
 
 ### Fixed
