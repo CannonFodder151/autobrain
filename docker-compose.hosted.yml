@@ -288,7 +288,7 @@ services:
       - "8001"
 
   worker:
-    image: ghcr.io/cannonfodder151/autobrain-worker:hosted@sha256:bca661931060c4cffa017624e6dd0c8a6f79c2ba57f3805b6e039b37cc141242
+    image: ghcr.io/cannonfodder151/autobrain-worker:hosted@sha256:e3d31003922abddaf7274ad8458af223987dff2a8350030e97b6f02c64fc201c
     restart: unless-stopped
     # AUT-1242/C1: beat scheduler embedded in the worker (-B), matching the dev
     # compose. Removes the separate beat container.
