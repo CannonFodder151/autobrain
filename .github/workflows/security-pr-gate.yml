@@ -1,9 +1,16 @@
-# AUT-1746: x64 jobs (gitleaks, trivy config, pip-audit) dispatch to the bare
-# x64 self-hosted runner; the flutter pub-audit job uses the vm2 x64 runner
-# (AUT-1798/AUT-1802). This is the missing PR/push-time security gate called for
-# in AUT-1746: a pre-merge gate that blocks on findings so the CVEs /
-# misconfigurations from the review cannot recur silently.
-name: Security — PR gate (secrets, IaC, deps, flutter)
+# AUT-1746: x64 jobs (gitleaks, trivy config, pip-audit, pin-guard) dispatch to
+# the bare x64 self-hosted runner. This is the missing PR/push-time security
+# gate called for in AUT-1746: a pre-merge gate that blocks on findings so the
+# CVEs / misconfigurations from the review cannot recur silently.
+#
+# AUT-2052: the legacy `flutter pub audit` job was dropped from this gate. The
+# upstream `flutter pub audit` / `dart pub audit` commands were both removed
+# from stable Flutter (see in-file note at AUT-1746 history); the in-tree
+# fallback was a `flutter pub outdated` regex that flagged ANY outdated pub
+# package as a finding, which is not a CVE gate and was blocking unrelated PRs
+# (e.g. PR #341 round 1). Replaced with no-op until a real Flutter CVE scanner
+# (osv-scanner / dart pub deps --json) lands — tracked in AUT-2053.
+name: Security — PR gate (secrets, IaC, deps)
 
 on:
   pull_request:
@@ -105,40 +112,68 @@ jobs:
           rm -f "$TMPREQ"
           python3 -m pip_audit --disable-pip --no-deps -r market-data/requirements.txt
 
-  # (5) dart pub audit on the frontend (requires the Flutter toolchain).
-  flutter-audit:
-    name: Flutter — pub audit
-    runs-on: [self-hosted, linux, x64, vm2]
+  # AUT-2052: the Flutter pub-audit job was removed. The previous fallback
+  # was a `flutter pub outdated` regex that flagged any outdated pub package
+  # as a finding — not a real CVE gate. A real Flutter CVE scanner
+  # (osv-scanner against `dart pub deps --json`, or dart-lang/dart-pub-canaudit)
+  # is tracked separately (AUT-2053). Until then, the gate covers secrets,
+  # IaC misconfig, and Python deps only; Flutter deps are covered indirectly
+  # by the weekly security-scan.yml full-resolution run.
+
+  # (5) AUT-1881 pin-guard — fail any compose `image:` reference that is not
+  # pinned by `@sha256` digest. Complements the postgres/nginx/python pin
+  # guards in trivy-image-scan.yml and ensures the floating `:hosted` /
+  # `:latest` tags cannot re-appear in compose without a digest pin.
+  pin-guard:
+    name: "Pin guard — every compose image: must carry @sha256"
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-      - name: dart pub audit (frontend)
-        working-directory: frontend
+      - name: Check image references for digest pin
         run: |
           set -euo pipefail
-          flutter pub get
-          # `flutter pub audit` was removed; the canonical Dart/Flutter audit
-          # subcommand is `dart pub audit` (per AUT-1746 recommendation).
-          dart pub audit
-
+          FILES="docker-compose.yml docker-compose.prod.yml docker-compose.hosted.yml"
+          # Fail: every `image:` line in $FILES must carry an @sha256 digest,
+          # use a `${VAR}` expansion (deploy-time), or follow a `build:` block
+          # within the same service (locally-built image). Locally-built
+          # images tag themselves `:latest` post-build, so we exempt them —
+          # the supply-chain integrity for those flows from the Dockerfile
+          # base digest pin (AUT-1735) and the build context.
+          FLOATING="$(awk '
+            FNR==1 {svc_has_build=0; svc_indent=-1}
+            /^[^ #].*:/ && !/^[[:space:]]/ {svc_has_build=0}
+            /^[[:space:]]+build:[[:space:]]*$/ {svc_has_build=1; svc_indent=match($0, /[^ ]/)-1}
+            /^[[:space:]]+image:[[:space:]]+/ {
+              cur_indent = match($0, /[^ ]/) - 1
+              if (cur_indent < svc_indent) {svc_has_build=0; svc_indent=cur_indent}
+              line=$0
+              sub(/^[[:space:]]+image:[[:space:]]+/, "", line)
+              if (line ~ /@sha256:/) next
+              if (line ~ /\$\{/) next
+              if (svc_has_build) next
+              print FILENAME ":" FNR ": " $0
+            }
+          ' FILES="$FILES" $FILES)"
+          if [ -n "$FLOATING" ]; then
+            echo "::error::floating (non-digest) compose image: references found (AUT-1881):" >&2
+            printf '%s\n' "$FLOATING" >&2
+            exit 1
+          fi
+          echo "OK: every compose image: reference carries an @sha256 digest (AUT-1881)."
   report-status:
     name: Report gate result to Discord #status
     if: always()
-    needs: [gitleaks, trivy-config, pip-audit, flutter-audit]
+    needs: [gitleaks, trivy-config, pip-audit, pin-guard]
     runs-on: [self-hosted, linux, x64]
     steps:
       - name: Report to Discord #status
         env:
-          RESULT: ${{ needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.flutter-audit.result == 'success' && 'clean' || 'findings' }}
-          COLOR: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.flutter-audit.result == 'success') && '0x57F287' || '0xED4245' }}
-          TITLE: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.flutter-audit.result == 'success') && 'PR security gate clean' || 'PR security gate found issues' }}
+          RESULT: ${{ needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.pin-guard.result == 'success' && 'clean' || 'findings' }}
+          COLOR: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.pin-guard.result == 'success') && '0x57F287' || '0xED4245' }}
+          TITLE: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.pin-guard.result == 'success') && 'PR security gate clean' || 'PR security gate found issues' }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
             -H "Content-Type: application/json" \
             -d "$(jq -nc --arg c status --arg t "$TITLE" --arg col "$COLOR" --arg u "$RUN_URL" \
-              '{channel:$c,title:$t,description:"AUT-1746 PR gate: gitleaks + trivy config + pip-audit + flutter pub audit.",color:$col,author:"Security Scan",fields:[{name:"Scope",value:"secrets, IaC, python, flutter",inline:true},{name:"Run",value:$u,inline:true}]}')"
+              '{channel:$c,title:$t,description:"AUT-1746 PR gate: gitleaks + trivy config + pip-audit + pin-guard (flutter CVE gate deferred — AUT-2053).",color:$col,author:"Security Scan",fields:[{name:"Scope",value:"secrets, IaC, python, pins",inline:true},{name:"Run",value:$u,inline:true}]}')"

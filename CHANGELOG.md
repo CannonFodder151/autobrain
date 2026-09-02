@@ -12,17 +12,149 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+## [Unreleased]
 
+### CI / Security (AUT-2052)
 
+- Drop the legacy `flutter pub audit` job from `.github/workflows/security-pr-gate.yml`. Upstream `flutter pub audit` and `dart pub audit` were both removed from stable Flutter; the in-tree fallback was a `flutter pub outdated` regex that flagged any outdated pub package as a finding, which is not a CVE gate and was blocking unrelated PRs (PR #341 round 1). The gate now covers gitleaks + trivy config + pip-audit + pin-guard. A real Flutter CVE scanner (osv-scanner against `dart pub deps --json`) is tracked in AUT-2053.
 
+## [0.3.207] - 2026-09-02
 
+## [0.3.206] - 2026-09-02
 
+## [0.3.205] - 2026-09-02
 
+## [0.3.204] - 2026-09-02
+
+### Fixed
+- CI (AUT-2097): fix buildx cache contamination in `build-hosted.yml` that shipped
+  amd64 layer blobs inside arm64 manifests. Scoped GHA buildx cache per-architecture,
+  disabled cache import for arm64 builds, added pre- and post-build arch verification
+  steps, and gated manifest assembly on both arch checks passing.
 
 
 ## [Unreleased]
-- fix(backup): add retry logic for MinIO put_object in scheduled_backup task (AUT-1958). Backup jobs on hosted stack were failing due to transient MinIO network issues without retry — now retries 3x with backoff before reporting failure.
-- fix(backup): improved pruning logging to report number of backups removed
+
+<<<<<<< HEAD
+### Fix (AUT-2070)
+- fix(docker): pin `nginxinc/nginx-unprivileged:stable-alpine` in `docker/frontend/Dockerfile` to the multi-arch manifest digest `sha256:45ce1e2e…` so the `Pin guard — frontend nginx image` gate stays green (was floating `:stable-alpine`).
+- fix(frontend): Servo Spy list view now exposes an inline fuel-type chip bar so the fuel filter is visible without opening the filter sheet. The selected-fuel price-match fix from PR #410 (AUT-2105) already shipped in 0.3.203.
+
+### Fixed
+- fix(ci): replace the removed `dart pub audit` subcommand in the `Flutter — pub audit` PR gate with `osv-scanner --lockfile=pubspec.lock` so the gate stops failing every PR (Dart 3.6+ removed the subcommand). Repo-wide fix — unblocks merge of all open PRs.
+- fix(docker): pin `redis:7-alpine` in `docker-compose.yml` to `redis:7.2.5-alpine@sha256:6aaf3f5…` so the `Pin guard` PR gate stays green (was the only unpinned compose image left after PR #409 unpinned nginx for arm64 hosted builds).
+
+- fix(frontend): guard `pickPriceForFuel` against malformed price entries (non-Map, non-num/string price) so a bad API row no longer aborts the whole list view. OCR-review advisory.
+- test(frontend): extend `servo_spy_list_sort_test.dart` with cases for `selectedFuelType == null`, missing `prices` key, string-encoded price, and malformed price entries (OCR-review advisory).
+
+### Changed
+- **AI gateway:** Extract router configuration (system prompts, schemas, payload caps, validation helpers) from `router_client.py` into new `router_utils.py` module. `router_client.py` now contains only HTTP transport. (AUT-1969)
+
+### Changed
+- **Servo Spy fuel map:** flip `FUEL_VIC_ENABLED` to `"true"` on Default and
+  Hosted tiers and document the VIC Servo Saver partner-key wiring
+  (`.env.example`, `docs/petrol-price-map.md`). The polling consumer is
+  gated on an approved partner key being present in `/opt/autobrain/secrets`
+  on Hosted, or `FUEL_VIC_API_KEY` on Default; absent the key the source
+  silently skips per the existing `enabled()` check (AUT-1932).
+- **Stack/docker-compose (AUT-1853):** `docker-compose.hosted.yml` and `scripts/seed-secrets.sh` now default `SECRETS_DIR` to `/data/autobrain/secrets` instead of `/opt/autobrain/secrets`. The snap dockerd on the Oracle VM masks `/opt` from a read-only core24 squashfs, so the old bind-mount failed with `read-only file system` and took the hosted stack down; `/data` is daemon-visible and never masked. `docs/security.md` and `docs/deployment-guide.md` updated for the path migration (the live HostED cutover — re-seed + redeploy — is tracked separately in AUT-1853-live).
+
+## [0.3.203] - 2026-09-02
+
+### Fixed
+- fix(servo-spy): map view no longer renders a second inner `Scaffold` +
+  `AppBar`, which was duplicating the back button and constraining the
+  map so tiles failed to lay out. The map view now sits directly under
+  the outer screen `Scaffold`; refresh / filter / enable-location
+  actions moved into an inline header row inside the body (AUT-2073).
+- fix(servo-spy): list view now shows the price for the selected fuel type
+  instead of always reading `prices[0]`. Parses the full `prices[]` array
+  and adds a `priceFor(fuelType)` helper on `ServoStationRow`, mirroring
+  the map view's `_MapStation.priceFor` (AUT-2105).
+
+### Security
+- **AUT-1602:** Cap inbound user payload length per field in
+  `ai/app/router_client.py` (`_cap_payload`, per-field: symptoms 2000,
+  content 50000, text/notes/reason/repair_notes 2000, description 5000,
+  raw_text 10000, default 5000; 100k total-budget guard with iterative
+  halving). Together with the `<user_data>` instruction barrier + hardened
+  system prompt already shipped on this branch, this closes the OWASP
+  LLM01 prompt-injection path on narrative fields
+  (summary/reason/repair_notes/recommendations) which had no `_AI_IMMUTABLE`
+  protection. Deterministic baseline + schema whitelist + immutable
+  numeric/financial fields remain the first line of defence; AI output
+  stays an enrichment overlay.
+
+## [0.3.202] - 2026-09-02
+
+### Security
+- **AUT-1189:** Pin three previously-unpinned transitives flagged by osv-scanner
+  (idna 3.18, pycryptodome 3.23, pygments 2.20) plus bump `pypdf` 6.15.0 →
+  6.16.1 across `backend/requirements.txt` and `ai/requirements.txt`. The
+  PR-time `pip-audit` gate (`security-pr-gate.yml`) audits direct pins in
+  `--no-deps` mode, so an unpinned transitive inherits any build-time
+  resolution. Pinning to the current safe release makes a vulnerable
+  build fail the gate instead of silently shipping. Adds
+  `security-pr-gate-rego.yml` so `rego-lookup-api/requirements.txt` gets the
+  same direct-pin gate as the monorepo (weekly full-resolution scan already
+  covers its transitives).
+
+## [0.3.201] - 2026-09-02
+
+### Fixed
+- fix(hosted): bump frontend image digest to the multi-arch `:hosted` image
+  published after PR #384 (AUT-1908 unpinned the nginx base digest). The
+  previous pin (`sha256:44654bb…`) was an amd64-only build that crashed on
+  the arm64 hosted VM (`exec format error`, restart loop every ~60s). The
+  new pin (`sha256:8937c2bb…`) is a true OCI image index with both amd64
+  and arm64 manifests (AUT-2077).
+
+## [0.3.200] - 2026-09-02
+
+### Fixed
+- fix(worker): correct `$` escaping in HEALTHCHECK CMD-SHELL. Docker escapes
+  `$$` only for RUN instructions — not for CMD-SHELL / HEALTHCHECK — so the
+  prior fix landed as literal `$$(tr ...)` and sh expanded `$$` to PID,
+  breaking command substitution. Use single `$` for `$(...)` so it flows
+  through unchanged to the runtime shell (AUT-2056).
+
+## [0.3.199] - 2026-09-02
+
+### Fixed
+- fix(worker): rewrite HEALTHCHECK to pure POSIX `sh`, drop `[ -z "$(find ...)" ]`
+  (nested `$()` inside `[ ]` fails under busybox/dash), drop the `pgrep`
+  dependency (not in `python:3.13-slim`), and fix the `case` pattern syntax
+  (`* -B *` was parsed by bash as `PATTERN OPTIONS PATTERN`). Clears the
+  2000+ failing-strike healthcheck backlog on EP5 `autobrain-hosted-worker-1`
+  (AUT-2056).
+
+
+## [0.3.198] - 2026-09-01
+
+### Security
+- Pin every application image (`backend`, `worker`, `ai`, `frontend`,
+  `dongle-server`, `federation-hub`) by `@sha256` digest in
+  `docker-compose.hosted.yml`, replacing the floating `:hosted` manifest
+  tag. Resolves the mutable-tag supply-chain gap flagged in AUT-1881.
+- Pin `redis:7-alpine` by digest in `docker-compose.yml`,
+  `docker-compose.prod.yml`, and `docker-compose.hosted.yml` (now
+  `redis:7.2.5-alpine@sha256:6aaf3f5e...`).
+- Build pipeline (`build-hosted.yml`) now captures the multi-arch manifest
+  digest of every published image as a `$GITHUB_OUTPUT` value, so the next
+  digest bump is a single workflow_dispatch with no GHCR round-trip.
+- PR-time security gate (`security-pr-gate.yml`) gains a `pin-guard` job
+  that fails any compose `image:` line lacking `@sha256` (with legitimate
+  exemptions for `${VAR}` expansions and locally-built `build:` services).
+
+## [0.3.197] - 2026-09-01
+
+### Fixed
+- fix(docker): unpin nginx base image digest in frontend Dockerfile (AUT-1908).
+  The `@sha256:ee055adf...` digest was amd64-only; on arm64 hosted builds
+  buildx pulled the amd64 binary into the arm64 image, causing
+  `exec /docker-entrypoint.sh: exec format error` and a crash loop on
+  hosted.autobrainservice.app. Use the `stable-alpine` tag so buildx resolves
+  the correct architecture-specific manifest per build platform.
 
 ## [0.3.196] - 2026-08-30
 
@@ -249,6 +381,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Security
 - Hardened Redis in `docker-compose.prod.yml` — added `--requirepass` and updated healthcheck to authenticate; environment variable `REDIS_PASSWORD` is now required (AUT-1600).
+- **Security (AUT-1600):** hardened Redis healthcheck — `redis-cli` now receives `REDIS_PASSWORD` via the `REDISCLI_AUTH` env var instead of `redis-cli -a`, so the broker password never appears in the container process list (`docker-compose.yml`, `docker-compose.prod.yml`).
 
 
 ### Security
