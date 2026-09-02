@@ -61,11 +61,12 @@ reads configuration exclusively from environment variables.
 ## Vectorisation (pgvector)
 
 Semantic search uses pgvector columns, installed by migrations
-(`alembic: g7h8i9j0k1l2`, `h1i2j3k4l5m6`). See `docs/ai/vector.md` for full schema and embedding pipeline.
+(`alembic: g7h8i9j0k1l2`, `u1v2w3x4y5z6`, `h1i2j3k4l5m6`).
 
 - **Extension/columns:** `CREATE EXTENSION vector`; `embedding vector(1536)`
-  columns on `diagnostics`, `service_records`, `modifications`, `receipts`
-  (dimension from `EMBEDDING_DIMENSION`, matching `text-embedding-3-small`).
+  columns on `diagnostics`, `service_records`, `modifications`, `receipts`,
+  and `social_issue_posts` (dimension from `EMBEDDING_DIMENSION`, matching
+  `text-embedding-3-small`).
 - **Index:** `USING hnsw (embedding vector_cosine_ops)` — HNSW chosen over
   IVFFlat because it needs no list tuning/training on small per-user tables.
 - **Embed-on-create:** API routes enqueue `queue_embedding` (Celery →
@@ -75,8 +76,13 @@ Semantic search uses pgvector columns, installed by migrations
   plus pgvector cosine distance (`a <=> b` cast to `vector`, bound parameter)
   when the query embedding succeeds via 9Router `/embeddings`. Results are
   deduped and ranked by score; keyword-only fallback if embeddings unavailable.
+- **Bootstrap gap:** if the DB is initialised by the bootstrap `create_all`
+  fallback (alembic not stamped), the vector extension and columns are missing
+  — semantic search will fail until `alembic upgrade head` is run.
 - Postgres image in hosted/dev/prod is `pgvector/pgvector:pg17` so the
   extension is available at migration time.
+
+Full schema + pipeline: `docs/ai/vector.md`.
 
 ## Upgrade path (AUT-1847)
 

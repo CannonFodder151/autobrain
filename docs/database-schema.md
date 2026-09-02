@@ -12,22 +12,29 @@ Managed by SQLAlchemy models (`backend/app/models/`) and Alembic migrations (`ba
 PostgreSQL runs the `pgvector/pgvector:pg17` image (pgvector extension pre-installed; pinned by digest, AUT-1749).
 For the pg16 → pg17 major-bump migration procedure, see `postgres-pg17-upgrade.md`.
 Embeddings are generated via 9Router's OpenAI-compatible `/v1/embeddings` endpoint (model: `text-embedding-3-small`, 1536-dim).
-The following tables carry an `embedding vector(1536)` column (created by the `g7h8i9j0k1l2` migration) with HNSW cosine-similarity indexes:
+The following tables carry an `embedding vector(1536)` column with `hnsw` cosine-similarity indexes (rebuilt by `h1i2j3k4l5m6` from the original IVFFlat indexes in `g7h8i9j0k1l2`):
 
-- **diagnostics** — symptoms + AI response summary
-- **service_records** — description + notes + steps
-- **modifications** — name + notes + category
-- **receipts** — vendor + extracted line-item names
+- **diagnostics** — symptoms + AI response summary (`g7h8i9j0k1l2`)
+- **service_records** — description + notes + steps (`g7h8i9j0k1l2`)
+- **modifications** — name + notes + category (`g7h8i9j0k1l2`)
+- **receipts** — vendor + extracted line-item names (`g7h8i9j0k1l2`)
+- **social_issue_posts** — title + body + tags (`u1v2w3x4y5z6`, Community Garage Issues Blog)
 
 The `embedding` columns exist at the **database layer only** (raw SQL in the
 migration) — the SQLAlchemy models do not map them, so writes go through raw
 SQL (`backfill_entity_embedding` in `backend/app/services/search.py`).
 
-See `docs/ai/vector.md` for full schema, embedding pipeline, and hybrid search implementation.
-
 Search is hybrid: keyword ILIKE runs always; vector cosine similarity layers on
 top when the embedding router is reachable. Both paths return ranked results via
 `GET /api/v1/search?q=...&entity_types=...` (`entity_types` is comma-separated).
+
+> **Bootstrap gap:** if the DB is initialised by the bootstrap `create_all`
+> fallback (no alembic stamp), the `vector` extension and embedding columns are
+> not created. `alembic upgrade head` must run once at bootstrap so semantic
+> search works. The Dev box currently uses `create_all` and is missing the
+> vector schema — see follow-up issue tracked from AUT-1967.
+
+Full pipeline + bootstrap procedure: `docs/ai/vector.md`.
 
 ## users
 
