@@ -26,7 +26,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.203] - 2026-09-02
 
 ### Fixed
 - fix(servo-spy): map view no longer renders a second inner `Scaffold` +
