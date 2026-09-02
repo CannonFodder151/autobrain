@@ -8,25 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > user-facing change ships with an entry here under `[Unreleased]` — see
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
-
-
-
-
-
-
 ## [Unreleased]
-
-## [0.3.209] - 2026-09-02
-
-## [0.3.208] - 2026-09-02
-
-## [0.3.207] - 2026-09-02
-
-## [0.3.206] - 2026-09-02
-
-## [0.3.205] - 2026-09-02
-
-## [0.3.204] - 2026-09-02
 
 ### Fixed
 - CI (AUT-2097): fix buildx cache contamination in `build-hosted.yml` that shipped
@@ -34,10 +16,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   disabled cache import for arm64 builds, added pre- and post-build arch verification
   steps, and gated manifest assembly on both arch checks passing.
 
-
-## [Unreleased]
-
-<<<<<<< HEAD
 ### Fix (AUT-2070)
 - fix(docker): pin `nginxinc/nginx-unprivileged:stable-alpine` in `docker/frontend/Dockerfile` to the multi-arch manifest digest `sha256:45ce1e2e…` so the `Pin guard — frontend nginx image` gate stays green (was floating `:stable-alpine`).
 - fix(frontend): Servo Spy list view now exposes an inline fuel-type chip bar so the fuel filter is visible without opening the filter sheet. The selected-fuel price-match fix from PR #410 (AUT-2105) already shipped in 0.3.203.
@@ -145,7 +123,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   2000+ failing-strike healthcheck backlog on EP5 `autobrain-hosted-worker-1`
   (AUT-2056).
 
-
 ## [0.3.198] - 2026-09-01
 
 ### Security
@@ -206,36 +183,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Map view now renders live station markers with brand logos and the current
   vehicle's fuel-type price, highlights the cheapest station, and shows a
   bottom sheet with all fuel-type prices + one-tap Navigate (Google Maps).
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 ## [0.3.184] - 2026-08-30
 
@@ -365,12 +312,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   them failed compose interpolation. Now defaulted to `autobrain`, so a redeploy
   can never fail at interpolation.
 
-
-
-
-
-
-
 ## [0.3.156] - 2026-08-29
 
 ## [0.3.155] - 2026-08-29
@@ -387,7 +328,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed
 - feat: add autobrain-dongle-server to hosted stack (AUT-1673) (gardened, AUT-1777).
 
-
 - API: rego-lookup endpoint now enforces a per-user hourly rate limit (default 20/hour, configurable via `REGO_RATE_LIMIT_PER_HOUR`, fail-open on Redis outage) to protect the downstream AU rego service (AUT-1607).
 
 - IAP: gracefully fall back to Stripe checkout when product IDs are not configured in the Play Store — prevents Google Play's native "in-app purchases not available" overlay from blocking the upgrade flow (AUT-1149).
@@ -395,15 +335,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed
 - **AI gateway (AUT-1810):** AI router URL normalised to the corporate 9Router endpoint `http://10.0.3.17:20128/v1` (env `AI_ROUTER_URL` canonicalised) so OCR/AI calls never drift to a wrong/blank router.
 
-
 ### Security
 - Hardened Redis in `docker-compose.prod.yml` — added `--requirepass` and updated healthcheck to authenticate; environment variable `REDIS_PASSWORD` is now required (AUT-1600).
 - **Security (AUT-1600):** hardened Redis healthcheck — `redis-cli` now receives `REDIS_PASSWORD` via the `REDISCLI_AUTH` env var instead of `redis-cli -a`, so the broker password never appears in the container process list (`docker-compose.yml`, `docker-compose.prod.yml`).
 
-
 ### Security
 - **Security (AUT-1735):** Bumped `docker/backend`, `docker/ai`, `docker/worker` and `market-data` Dockerfiles off the vulnerable `python:3.12-slim` base (trivy reported 18 HIGH/CRITICAL CVEs: CVE-2026-13221 perl RCE, CVE-2026-42496 perl-Archive-Tar path traversal, CVE-2026-8376 perl heap overflow, CVE-2026-14456 OpenSSL QUIC DoS, CVE-2026-11822/11824 SQLite FTS5 code exec, CVE-2025-7458 SQLite integer overflow, CVE-2023-45853 zlib heap overflow). All python bases now pin `python:3.13-slim@sha256:...` by digest. Added a python base-image scan to `.github/workflows/trivy-image-scan.yml` (`--severity HIGH,CRITICAL --exit-code 1`) plus a pin guard that fails any floating `FROM python:*` tag. `rego-lookup-api/Dockerfile` (separate private repo) tracked in follow-up AUT-1735-r1.
-
 
 ### Security
 - (AUT-1181) Fail-closed secret defaults (HIGH): `SECRET_KEY` no longer has a
@@ -415,10 +352,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   is set, an empty `STRIPE_WEBHOOK_SECRET` now crashes at startup so forged
   webhooks cannot mutate subscriptions.
 
-
 ### Fixed
 - AI: rate limiter evicts stale buckets on overflow instead of clearing all entries, preventing 10K+ IP rotation from keeping limits perpetually ineffective (AUT-1605).
-
 
 ### Fixed
 - **AUT-1185** AI gateway OOM DoS + auth bypass + prompt injection (security):
@@ -438,7 +373,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Regression tests: `test_run_clamps_oversized_dimensions`, `test_validate_nested_depth_and_length`,
   `test_ai_env_development_no_longer_bypasses_auth`, `test_enhance_drops_nested_too_deep`.
 
-
 ### Fixed
 - **App (AUT-1771):** The 7-day free trial now appears on the Android (and iOS) app. The trial chip/Copy/CTA were previously hidden whenever the store (IAP) purchase path was active — and the hosted instance reports IAP as enabled, so Android users never saw the offer. The trial is now surfaced for both the Stripe checkout path and the store path, driven by the per-account `trial_available`/`trial_days` flags from `GET /auth/me`. Note: for the store path the native Google Play / App Store subscription base plan must be configured with the 7-day free trial for it to apply; the Stripe monthly checkout already grants it via `trial_period_days`.
 
@@ -454,18 +388,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed
 - **CI/Ops (AUT-1720):** The x64 self-hosted runner no longer freezes indefinitely during heavy `docker buildx build --push` publishes. Root cause was an intermittent dockerd wedge (publish job would hang until GitHub killed it with `context deadline exceeded`); the new watchdog restarts the daemon proactively before it wedges the next job.
 
-
-
 ## [0.3.150] - 2026-08-28
 
 - Market-data rate limiting now keys the per-IP limit on the socket remote address instead of `X-Forwarded-For`, so a forged forwarded header can no longer rotate the bucket and evade the limit (AUT-1326).
 - The market-data Playwright Chromium now launches **sandboxed**, falling back to `--no-sandbox` only when the sandboxed launch actually fails (AUT-1326).
+
 ## [0.3.149] - 2026-08-28
 
 ### Fixed
 - Deployment (hosted): `9Router` on `:20128` is now reachable at the public IP `http://152.69.188.133:20128/` from the allow-listed dev egress IP `122.199.30.128` (e.g. home). It was previously bound to `127.0.0.1` (ops via SSH tunnel only), making it unreachable. `docker-compose.hosted.yml` rebinds `:20128` to `0.0.0.0`; the host firewall (`fw-keeper`) now allows `:20128` from the dev IP + the internal docker subnet `172.18.0.0/16` and drops everything else. Backend/ai still call 9Router over docker DNS (`http://9router:20128/v1`) — the internal-subnet allow is required, since a blanket `DOCKER-USER` drop silently broke `backend → 9router`. AUT-1754.
-## [0.3.148] - 2026-08-28
 
+## [0.3.148] - 2026-08-28
 
 - Backend: SSRF hardening for Discord webhook URLs (AUT-1603). `discord_webhook_url` now allowlists `https://discord.com/api/webhooks/{id}/{token}` at two layers — a Pydantic `field_validator` on the notification-preference schema rejects non-Discord URLs at input time, and `_send_discord` re-checks the pattern before the outbound `httpx` call as defense-in-depth (rejecting internal/loopback addresses). `NotificationPreferenceOut` response schema restored so the preferences API keeps working.
 
@@ -497,8 +430,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 - CI: wired `CI_TRIAGE_WEBHOOK_SECRET`, `CI_TRIAGE_PARENT_ISSUE_ID`, `CI_TRIAGE_GOAL_ID`, `CI_TRIAGE_AGENT_ID`, and `PAPERCLIP_*` env into the AutoBrain-Hosted backend service in `docker-compose.hosted.yml`, so the merged CI triage webhook receiver (`backend/app/api/v1/ci.py`) is configured and reachable and can relay GitHub Actions CI failures into Paperclip (AUT-1751).
-
-
 
 ### Added
 - CI: added CI triage webhook receiver at `POST /api/v1/ci/webhook` with bearer auth, fail-closed PAPERCLIP config validation, and `repo`/`ref` payload validation to create Paperclip issues from GitHub Actions CI failures, replacing the broken n8n webhook (AUT-1669).
