@@ -58,11 +58,11 @@ jobs:
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          # AUT-2158: ghcr packages for rego-lookup belong to a different
-          # owner context than the autobrain repo's GITHUB_TOKEN grants.
-          # Use the repo-level GHCR_PAT (classic PAT) which has write access
-          # to all AutoBrain packages.
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          # AUT-2158: ghcr packages for rego-lookup belong to the autobrain
+          # owner's namespace; the autobrain repo's GITHUB_TOKEN can't push
+          # to it. Use GHCR_PAT (classic PAT) which has packages:write on the
+          # owner. Classic PATs work as both username and password at ghcr.io.
+          username: ${{ secrets.GHCR_PAT }}
           password: ${{ secrets.GHCR_PAT }}
 
       - name: Build and push :hosted-arm64 natively (linux/arm64)
@@ -71,10 +71,12 @@ jobs:
         run: |
           set -euo pipefail
           cd rego-lookup-api
+          # AUT-2158: only push to ghcr.io. The DockerHub mirror under
+          # cannonfodder151/ is owned by Nathan's personal account, and the
+          # autobrain repo's DOCKERHUB_TOKEN is not authorized for it.
           docker buildx build --platform linux/arm64 --push \
             -t "ghcr.io/cannonfodder151/rego-lookup:${TAG}" \
-            -t "ghcr.io/cannonfodder151/rego-lookup-api:${TAG}" \
-            -t "cannonfodder151/rego-lookup-api:${TAG}" .
+            -t "ghcr.io/cannonfodder151/rego-lookup-api:${TAG}" .
 
       - name: Verify pushed image arch (AUT-2097 pattern)
         env:
@@ -83,8 +85,7 @@ jobs:
           set -euo pipefail
           for img in \
             "ghcr.io/cannonfodder151/rego-lookup:${TAG}" \
-            "ghcr.io/cannonfodder151/rego-lookup-api:${TAG}" \
-            "cannonfodder151/rego-lookup-api:${TAG}"; do
+            "ghcr.io/cannonfodder151/rego-lookup-api:${TAG}"; do
             echo "==> verifying $img"
             got="$(docker run --rm --platform linux/arm64 "$img" uname -m)"
             if [ "$got" != "aarch64" ]; then
