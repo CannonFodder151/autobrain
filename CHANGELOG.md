@@ -23,7 +23,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 
+
 ## [Unreleased]
+
+## [0.3.200] - 2026-09-02
 
 ### Fixed
 - fix(worker): correct `$` escaping in HEALTHCHECK CMD-SHELL. Docker escapes
