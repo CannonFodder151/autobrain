@@ -74,17 +74,30 @@ List<ServoStationRow> sortStationRows(
   String? fuelType,
 ) {
   if (prices.isEmpty) return (priceCents: null, fuelType: null);
+  double? _toDouble(Object? v) {
+    if (v is num) return v.toDouble();
+    if (v is String) return double.tryParse(v);
+    return null;
+  }
+
+  String? _toFuelType(Object? v) => v is String ? v : null;
+
   for (final p in prices) {
-    final ft = p['fuel_type'] as String?;
+    if (p is! Map) continue;
+    final ft = _toFuelType(p['fuel_type']);
     if (fuelType != null && ft == fuelType) {
-      return (priceCents: (p['price'] as num?)?.toDouble(), fuelType: ft);
+      return (priceCents: _toDouble(p['price']), fuelType: ft);
     }
   }
-  final first = prices.first;
-  return (
-    priceCents: (first['price'] as num?)?.toDouble(),
-    fuelType: first['fuel_type'] as String?,
-  );
+  for (final p in prices) {
+    if (p is! Map) continue;
+    final ft = _toFuelType(p['fuel_type']);
+    final price = _toDouble(p['price']);
+    if (ft != null || price != null) {
+      return (priceCents: price, fuelType: ft);
+    }
+  }
+  return (priceCents: null, fuelType: null);
 }
 
 /// Parses one raw API station map into a [ServoStationRow], picking the price
