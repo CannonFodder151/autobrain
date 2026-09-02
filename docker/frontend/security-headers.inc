@@ -14,6 +14,10 @@
 # to attach photos ("nothing happens after I select the file").
 # Include from nginx.conf; do NOT drop this file into
 # conf.d as *.conf or nginx would load it as a top-level server block.
-add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://www.gstatic.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://www.gstatic.com; font-src 'self' data: https://www.gstatic.com https://fonts.gstatic.com; connect-src 'self' blob: https://www.gstatic.com https://fonts.gstatic.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
+add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://www.gstatic.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://www.gstatic.com; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' blob: https://www.gstatic.com https://fonts.gstatic.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
 add_header X-Frame-Options "DENY" always;
 add_header Referrer-Policy "no-referrer" always;
+# AUT-1608 D12: enforce HTTPS for one year on first response; subdomains covered.
+# Safe because every prod ingress (Cloudflare + nginx) already terminates TLS on
+# every route. preload omitted (Cloudflare HSTS-preload requires staged rollout).
+add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
