@@ -25,11 +25,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Fixed
-- fix(worker): switch HEALTHCHECK shell from `sh` to `bash` so the embedded
-  `"$(find ...)"` pattern parses cleanly under busybox/dash. Clears the 2000+
-  failing-strike healthcheck backlog on EP5 `autobrain-hosted-worker-1` (AUT-2056).
-- fix(hosted): bump worker image digest to the latest `:hosted` build carrying
-  the AUT-2056 bash healthcheck.
+- fix(worker): rewrite HEALTHCHECK to pure POSIX `sh`, drop `[ -z "$(find ...)" ]`
+  (nested `$()` inside `[ ]` fails under busybox/dash), drop the `pgrep`
+  dependency (not in `python:3.13-slim`), and fix the `case` pattern syntax
+  (`* -B *` was parsed by bash as `PATTERN OPTIONS PATTERN`). Clears the
+  2000+ failing-strike healthcheck backlog on EP5 `autobrain-hosted-worker-1`
+  (AUT-2056).
 
 
 ## [0.3.198] - 2026-09-01
