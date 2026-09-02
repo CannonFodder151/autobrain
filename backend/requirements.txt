@@ -16,7 +16,7 @@ bcrypt==4.0.1
 PyJWT[crypto]==2.13.0
 httpx==0.28.1
 reportlab==4.2.5
-pypdf==6.15.0
+pypdf==6.16.1
 python-dateutil==2.9.0.post0
 orjson==3.11.9
 pillow==12.3.0
@@ -28,6 +28,15 @@ structlog==24.4.0
 pyotp==2.9.0
 qrcode[pil]==8.0
 stripe==15.4.0
+
+# AUT-1189: transitive floor pins for known-CVE packages. Without these,
+# image builds can resolve to older vulnerable versions if an upstream
+# constraint drifts. Local resolution is already safe (idna 3.18,
+# pycryptodome 3.23, pygments 2.20) — these floors make the build
+# reproducible across all environments and add a CI fail-on-resolve gate.
+idna>=3.15            # PYSEC-2026-215 / GHSA-65pc-fj4g-8rjx (CVE 3.x<3.15)
+pycryptodome>=3.19.1  # PYSEC-2026-1811 / GHSA-j225-cvw7-qrx7 (CVE 3.x<3.19.1)
+pygments>=2.20        # PYSEC-2023-117 + PYSEC-2026-2987 (CVEs 2.x<2.20)
 
 # Test/dev
 pytest==9.1.1
