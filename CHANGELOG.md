@@ -14,6 +14,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### CI / Security (AUT-2052)
+
+- Drop the legacy `flutter pub audit` job from `.github/workflows/security-pr-gate.yml`. Upstream `flutter pub audit` and `dart pub audit` were both removed from stable Flutter; the in-tree fallback was a `flutter pub outdated` regex that flagged any outdated pub package as a finding, which is not a CVE gate and was blocking unrelated PRs (PR #341 round 1). The gate now covers gitleaks + trivy config + pip-audit + pin-guard. A real Flutter CVE scanner (osv-scanner against `dart pub deps --json`) is tracked in AUT-2053.
+
 ## [0.3.207] - 2026-09-02
 
 ## [0.3.206] - 2026-09-02
