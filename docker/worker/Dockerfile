@@ -26,17 +26,23 @@ RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/lib-load-secrets.sh
 
 USER autobrain
 
-# AUT-601 / AUT-1286 / AUT-1878: this image runs BOTH the worker and the beat
-# scheduler. `celery inspect ping` is unreliable (fails under load, false-
-# negatives on the control bus). The check is command-aware:
+# AUT-601 / AUT-1286 / AUT-1878 / AUT-2056: this image runs BOTH the worker and
+# the beat scheduler. `celery inspect ping` is unreliable (fails under load,
+# false-negatives on the control bus). The check is command-aware:
 # - When PID 1 embeds beat (`worker -B` or separate `beat`), it validates that
 #   the PersistentScheduler keeps writing `celerybeat-schedule` (stale file =
 #   wedged scheduler loop, e.g. the 100% CPU busy-loop from AUT-601).
-# - Worker-only: `pgrep` for the celery worker process (deterministic; no AMQP
-#   round-trip). AUT-1878: `inspect ping` exits 1 on a healthy worker in the
+# - Worker-only: scan /proc for the celery worker process (deterministic;
+#   no AMQP round-trip, no pgrep dependency, no nested `$()` that breaks
+#   busybox/dash). AUT-1878: `inspect ping` exits 1 on a healthy worker in the
 #   hosted stack — process check is more reliable.
+#
+# AUT-2056: rewrite to avoid `[ -z "$(find ...)" ]` which fails under busybox/
+# dash `sh` when Docker wraps HEALTHCHECK in `sh -c`. Use `find … | grep -q .`
+# pipe and a /proc scan for the worker process. Pure POSIX `sh`, $$ escaping
+# survives the Dockerfile→build-host shell wrapper.
 HEALTHCHECK --interval=30s --timeout=15s --start-period=30s --retries=3 \
-    CMD bash -c 'c=$(tr "\0" " " < /proc/1/cmdline); case "$c" in *beat*|* -B *) [ -f celerybeat-schedule ] || exit 1; [ -z "$(find celerybeat-schedule -mmin -30 2>/dev/null)" ] && exit 1; exit 0 ;; *) pgrep -f "celery.*worker" >/dev/null 2>&1 ;; esac'
+    CMD sh -c 'c=$$(tr "\0" " " </proc/1/cmdline); case "$$c" in *-B*|*beat*) [ -f celerybeat-schedule ] && find celerybeat-schedule -mmin -30 2>/dev/null | grep -q . || exit 1 ;; *) for d in /proc/[0-9]*; do [ -r "$$d/comm" ] || continue; [ "$$(cat $$d/comm 2>/dev/null)" = celery ] || continue; tr "\0" " " < $$d/cmdline 2>/dev/null | grep -q "celery.*worker" && exit 0; done; exit 1 ;; esac'
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
