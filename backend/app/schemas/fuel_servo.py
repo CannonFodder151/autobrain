@@ -24,6 +24,8 @@ class FuelPriceOut(BaseModel):
     fuel_type: str
     price: float  # cents per litre
     effective_at: datetime
+    cost_per_km: float | None = None  # $/km for this price vs vehicle avg L/100km (AUT-2201)
+    avg_fill_cost: float | None = None  # $ per fill for this price vs vehicle avg litres/fill
 
     model_config = {"from_attributes": True}
 

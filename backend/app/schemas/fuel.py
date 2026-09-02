@@ -51,6 +51,7 @@ class FuelStats(BaseModel):
     total_cost: float
     avg_l_per_100km: float | None
     avg_cost_per_km: float | None
+    avg_litres_per_fill: float | None  # mean litres across all fills (AUT-2201)
     last_log: FuelLogOut | None
     series: list[dict]
 
