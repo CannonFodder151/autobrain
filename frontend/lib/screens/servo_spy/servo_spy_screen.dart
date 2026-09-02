@@ -725,15 +725,24 @@ class _ServoSpyListState extends State<_ServoSpyList> {
       final data = await _api.get('/fuel/stations?$qs') as List;
       final rows = data.map((e) {
         final m = e as Map<String, dynamic>;
-        final prices = (m['prices'] as List?) ?? [];
-        final price = prices.isNotEmpty ? (prices[0]['price'] as num?)?.toDouble() : null;
+        final prices = ((m['prices'] as List?) ?? const [])
+            .map((p) => ServoFuelPrice(
+                  fuelType: (p as Map<String, dynamic>)['fuel_type'] as String? ?? '',
+                  priceCents: p['price'] != null ? (p['price'] as num).toDouble() : null,
+                ))
+            .toList();
+        final selected = _selectedFuelType;
+        final priceCents = selected != null
+            ? ServoStationRow.priceForFrom(prices, selected)
+            : null;
         return ServoStationRow(
           name: m['name'] as String? ?? 'Unknown',
           brand: m['brand'] as String?,
           logoUrl: m['logo'] as String?,
           distanceKm: (m['distance_km'] as num?)?.toDouble(),
-          priceCents: price,
-          fuelType: prices.isNotEmpty ? prices[0]['fuel_type'] as String? : null,
+          priceCents: priceCents,
+          fuelType: selected,
+          prices: prices,
         );
       }).toList();
       sortStationRows(rows, _sortMetric);

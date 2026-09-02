@@ -28,6 +28,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- fix(servo-spy): list view now shows the price for the selected fuel type
+  instead of always reading `prices[0]`. Parses the full `prices[]` array
+  and adds a `priceFor(fuelType)` helper on `ServoStationRow`, mirroring
+  the map view's `_MapStation.priceFor` (AUT-2105).
+
 ## [0.3.202] - 2026-09-02
 
 ### Security
