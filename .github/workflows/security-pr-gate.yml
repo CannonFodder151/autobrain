@@ -1,9 +1,16 @@
-# AUT-1746: x64 jobs (gitleaks, trivy config, pip-audit) dispatch to the bare
-# x64 self-hosted runner; the flutter pub-audit job uses the vm2 x64 runner
-# (AUT-1798/AUT-1802). This is the missing PR/push-time security gate called for
-# in AUT-1746: a pre-merge gate that blocks on findings so the CVEs /
-# misconfigurations from the review cannot recur silently.
-name: Security — PR gate (secrets, IaC, deps, flutter)
+# AUT-1746: x64 jobs (gitleaks, trivy config, pip-audit, pin-guard) dispatch to
+# the bare x64 self-hosted runner. This is the missing PR/push-time security
+# gate called for in AUT-1746: a pre-merge gate that blocks on findings so the
+# CVEs / misconfigurations from the review cannot recur silently.
+#
+# AUT-2052: the legacy `flutter pub audit` job was dropped from this gate. The
+# upstream `flutter pub audit` / `dart pub audit` commands were both removed
+# from stable Flutter (see in-file note at AUT-1746 history); the in-tree
+# fallback was a `flutter pub outdated` regex that flagged ANY outdated pub
+# package as a finding, which is not a CVE gate and was blocking unrelated PRs
+# (e.g. PR #341 round 1). Replaced with no-op until a real Flutter CVE scanner
+# (osv-scanner / dart pub deps --json) lands — tracked in AUT-2053.
+name: Security — PR gate (secrets, IaC, deps)
 
 on:
   pull_request:
@@ -105,37 +112,15 @@ jobs:
           rm -f "$TMPREQ"
           python3 -m pip_audit --disable-pip --no-deps -r market-data/requirements.txt
 
-  # (5) dart pub audit on the frontend (requires the Flutter toolchain).
-  flutter-audit:
-    name: Flutter — pub audit
-    runs-on: [self-hosted, linux, x64, vm2]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-      - name: Flutter pub audit (frontend)
-        working-directory: frontend
-        run: |
-          set -euo pipefail
-          flutter pub get
-          # `flutter pub audit` and `dart pub audit` were both removed upstream
-          # (AUT-1746 originally pointed at the dart variant, which also no
-          # longer exists in current stable SDK). `flutter pub outdated`
-          # prints an "outdated packages" table only when at least one
-          # dependency is out of date; "All packages are up to date" otherwise.
-          # We treat any data row as a finding. Add osv-scanner once the
-          # runner image carries it for proper CVE coverage.
-          OUT="$(flutter pub outdated 2>&1 || true)"
-          echo "$OUT"
-          if echo "$OUT" | grep -qE '^[[:space:]]+[A-Za-z][A-Za-z0-9_]+[[:space:]]+[0-9]'; then
-            echo "::error::Outdated Flutter dependencies found — refresh before merge (AUT-1746)."
-            exit 1
-          fi
+  # AUT-2052: the Flutter pub-audit job was removed. The previous fallback
+  # was a `flutter pub outdated` regex that flagged any outdated pub package
+  # as a finding — not a real CVE gate. A real Flutter CVE scanner
+  # (osv-scanner against `dart pub deps --json`, or dart-lang/dart-pub-canaudit)
+  # is tracked separately (AUT-2053). Until then, the gate covers secrets,
+  # IaC misconfig, and Python deps only; Flutter deps are covered indirectly
+  # by the weekly security-scan.yml full-resolution run.
 
-  # (6) AUT-1881 pin-guard — fail any compose `image:` reference that is not
+  # (5) AUT-1881 pin-guard — fail any compose `image:` reference that is not
   # pinned by `@sha256` digest. Complements the postgres/nginx/python pin
   # guards in trivy-image-scan.yml and ensures the floating `:hosted` /
   # `:latest` tags cannot re-appear in compose without a digest pin.
@@ -178,17 +163,17 @@ jobs:
   report-status:
     name: Report gate result to Discord #status
     if: always()
-    needs: [gitleaks, trivy-config, pip-audit, flutter-audit, pin-guard]
+    needs: [gitleaks, trivy-config, pip-audit, pin-guard]
     runs-on: [self-hosted, linux, x64]
     steps:
       - name: Report to Discord #status
         env:
-          RESULT: ${{ needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.flutter-audit.result == 'success' && needs.pin-guard.result == 'success' && 'clean' || 'findings' }}
-          COLOR: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.flutter-audit.result == 'success' && needs.pin-guard.result == 'success') && '0x57F287' || '0xED4245' }}
-          TITLE: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.flutter-audit.result == 'success' && needs.pin-guard.result == 'success') && 'PR security gate clean' || 'PR security gate found issues' }}
+          RESULT: ${{ needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.pin-guard.result == 'success' && 'clean' || 'findings' }}
+          COLOR: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.pin-guard.result == 'success') && '0x57F287' || '0xED4245' }}
+          TITLE: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.pin-guard.result == 'success') && 'PR security gate clean' || 'PR security gate found issues' }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
             -H "Content-Type: application/json" \
             -d "$(jq -nc --arg c status --arg t "$TITLE" --arg col "$COLOR" --arg u "$RUN_URL" \
-              '{channel:$c,title:$t,description:"AUT-1746 PR gate: gitleaks + trivy config + pip-audit + flutter pub audit.",color:$col,author:"Security Scan",fields:[{name:"Scope",value:"secrets, IaC, python, flutter",inline:true},{name:"Run",value:$u,inline:true}]}')"
+              '{channel:$c,title:$t,description:"AUT-1746 PR gate: gitleaks + trivy config + pip-audit + pin-guard (flutter CVE gate deferred — AUT-2053).",color:$col,author:"Security Scan",fields:[{name:"Scope",value:"secrets, IaC, python, pins",inline:true},{name:"Run",value:$u,inline:true}]}')"
