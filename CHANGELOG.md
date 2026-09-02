@@ -8,6 +8,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > user-facing change ships with an entry here under `[Unreleased]` — see
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
+## [Unreleased]
+
+### Fixed
+- CI (AUT-2097): fix buildx cache contamination in `build-hosted.yml` that shipped
+  amd64 layer blobs inside arm64 manifests. Scoped GHA buildx cache per-architecture,
+  disabled cache import for arm64 builds, added pre- and post-build arch verification
+  steps, and gated manifest assembly on both arch checks passing.
+
 
 
 
