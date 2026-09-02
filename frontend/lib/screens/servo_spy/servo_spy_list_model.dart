@@ -13,6 +13,8 @@ class ServoStationRow {
   final double? distanceKm;
   final double? priceCents;
   final String? fuelType;
+  final double? costPerKm;  // AUT-2053: $/km projection
+  final double? avgFillCost;  // AUT-2053: avg fill cost projection
   final List<ServoFuelPrice> prices;
 
   const ServoStationRow({
@@ -22,6 +24,8 @@ class ServoStationRow {
     this.distanceKm,
     this.priceCents,
     this.fuelType,
+    this.costPerKm,
+    this.avgFillCost,
     this.prices = const [],
   });
 
@@ -42,7 +46,14 @@ class ServoStationRow {
 class ServoFuelPrice {
   final String fuelType;
   final double? priceCents;
-  const ServoFuelPrice({required this.fuelType, this.priceCents});
+  final double? costPerKm;  // AUT-2053: $/km at this station price
+  final double? avgFillCost;  // AUT-2053: avg fill cost at this station price
+  const ServoFuelPrice({
+    required this.fuelType,
+    this.priceCents,
+    this.costPerKm,
+    this.avgFillCost,
+  });
 }
 
 /// Sorts [rows] in place by [metric], ascending, and returns it.
@@ -69,11 +80,18 @@ List<ServoStationRow> sortStationRows(
 /// The list view (AUT-1821) used to always take `prices[0]`, which could be a
 /// different fuel than the one the user selected (AUT-2070). Centralising the
 /// rule here keeps the parser deterministic and unit-testable.
-({double? priceCents, String? fuelType}) pickPriceForFuel(
+({
+  double? priceCents,
+  String? fuelType,
+  double? costPerKm,
+  double? avgFillCost,
+}) pickPriceForFuel(
   List<dynamic> prices,
   String? fuelType,
 ) {
-  if (prices.isEmpty) return (priceCents: null, fuelType: null);
+  if (prices.isEmpty) {
+    return (priceCents: null, fuelType: null, costPerKm: null, avgFillCost: null);
+  }
   double? _toDouble(Object? v) {
     if (v is num) return v.toDouble();
     if (v is String) return double.tryParse(v);
@@ -86,7 +104,12 @@ List<ServoStationRow> sortStationRows(
     if (p is! Map) continue;
     final ft = _toFuelType(p['fuel_type']);
     if (fuelType != null && ft == fuelType) {
-      return (priceCents: _toDouble(p['price']), fuelType: ft);
+      return (
+        priceCents: _toDouble(p['price']),
+        fuelType: ft,
+        costPerKm: _toDouble(p['cost_per_km']),
+        avgFillCost: _toDouble(p['avg_fill_cost']),
+      );
     }
   }
   for (final p in prices) {
@@ -94,10 +117,15 @@ List<ServoStationRow> sortStationRows(
     final ft = _toFuelType(p['fuel_type']);
     final price = _toDouble(p['price']);
     if (ft != null || price != null) {
-      return (priceCents: price, fuelType: ft);
+      return (
+        priceCents: price,
+        fuelType: ft,
+        costPerKm: _toDouble(p['cost_per_km']),
+        avgFillCost: _toDouble(p['avg_fill_cost']),
+      );
     }
   }
-  return (priceCents: null, fuelType: null);
+  return (priceCents: null, fuelType: null, costPerKm: null, avgFillCost: null);
 }
 
 /// Parses one raw API station map into a [ServoStationRow], picking the price
@@ -115,5 +143,7 @@ ServoStationRow stationRowFromApi(
     distanceKm: (m['distance_km'] as num?)?.toDouble(),
     priceCents: picked.priceCents,
     fuelType: picked.fuelType,
+    costPerKm: picked.costPerKm,
+    avgFillCost: picked.avgFillCost,
   );
 }

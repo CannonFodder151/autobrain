@@ -24,6 +24,10 @@ class FuelPriceOut(BaseModel):
     fuel_type: str
     price: float  # cents per litre
     effective_at: datetime
+    # Per-station projection of the vehicle's own fuel stats (AUT-2053). Null
+    # when the request omits ?vehicle_id or the vehicle has no stats yet.
+    cost_per_km: float | None = None  # $/km at this station's price
+    avg_fill_cost: float | None = None  # $ for one avg fill at this station
 
     model_config = {"from_attributes": True}
 
