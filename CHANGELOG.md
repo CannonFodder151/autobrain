@@ -32,6 +32,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   breaking command substitution. Use single `$` for `$(...)` so it flows
   through unchanged to the runtime shell (AUT-2056).
 
+### Security
+- Disable `/docs`, `/openapi.json`, and `/redoc` on the `market-data` FastAPI
+  service in production (AUT-1745). CWE-200 information disclosure — these
+  endpoints previously exposed the full API surface (endpoints, parameters,
+  schemas) without authentication, matching the backend's pattern. Adds
+  `test_docs_disabled.py` regression test. Docs remain available when
+  `ENVIRONMENT` is set to a non-production value for local debugging.
+
 ## [0.3.199] - 2026-09-02
 
 ### Fixed
