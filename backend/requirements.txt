@@ -16,7 +16,7 @@ bcrypt==4.0.1
 PyJWT[crypto]==2.13.0
 httpx==0.28.1
 reportlab==4.2.5
-pypdf==6.15.0
+pypdf==6.16.1
 python-dateutil==2.9.0.post0
 orjson==3.11.9
 pillow==12.3.0
@@ -28,6 +28,16 @@ structlog==24.4.0
 pyotp==2.9.0
 qrcode[pil]==8.0
 stripe==15.4.0
+
+# AUT-1189: pin transitives flagged by osv-scanner so the PR-time pip-audit
+# gate (security-pr-gate.yml, `--no-deps` mode) catches a known-vulnerable
+# resolved version — the gate audits direct pins only, so an unpinned
+# transitive inherits any build-time resolution. pyjwt[crypto] pulls
+# pycryptodome via the `crypto` extra; httpx pulls idna; reportlab/jinja2
+# pull pygments. Pinned to current safe resolutions (>= the published fix).
+idna==3.18
+pycryptodome==3.23
+pygments==2.20
 
 # Test/dev
 pytest==9.1.1

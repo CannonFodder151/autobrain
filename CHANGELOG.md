@@ -27,6 +27,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security
+- **AUT-1189:** Pin three previously-unpinned transitives flagged by osv-scanner
+  (idna 3.18, pycryptodome 3.23, pygments 2.20) plus bump `pypdf` 6.15.0 →
+  6.16.1 across `backend/requirements.txt` and `ai/requirements.txt`. The
+  PR-time `pip-audit` gate (`security-pr-gate.yml`) audits direct pins in
+  `--no-deps` mode, so an unpinned transitive inherits any build-time
+  resolution. Pinning to the current safe release makes a vulnerable
+  build fail the gate instead of silently shipping. Adds
+  `security-pr-gate-rego.yml` so `rego-lookup-api/requirements.txt` gets the
+  same direct-pin gate as the monorepo (weekly full-resolution scan already
+  covers its transitives).
+
 ## [0.3.201] - 2026-09-02
 
 ### Fixed
