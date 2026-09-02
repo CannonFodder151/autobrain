@@ -83,9 +83,76 @@ jobs:
 
   # (3) pip-audit on requirements.txt — extend the existing PR-time gate to cover
   # market-data too (the dockerhub-publish pip-audit-gate only covers backend+ai).
-  pip-audit:
-    name: pip-audit — python dependency CVEs
+  # Two passes per requirements file:
+  #   * direct-deps (`--no-deps`) — fast, only flags exact-pinned versions with
+  #     a published CVE. Catches "I pinned a vulnerable direct dep" in CI seconds.
+  #   * resolved-tree — installs into a throwaway venv then audits it. Catches
+  #     *transitive* CVE drift in transitively-resolved packages (AUT-1189:
+  #     idna / pycryptodome / pygments, unpinned at build time so any upstream
+  #     constraint shift can land a vulnerable transitive in the built image).
+  # market-data is a separate tree and is audited on its own.
+  #
+  # The resolved-tree pass dispatches to the vm2 runner because pip-audit
+  # needs `python3 -m venv` to build a throwaway venv for transitive
+  # resolution; the legacy x64 runner (where the rest of this PR gate runs)
+  # is not guaranteed to have python3-venv. The vm2 runner is already used by
+  # security-scan.yml for the same reason, so we know it works.
+  pip-audit-direct:
+    name: pip-audit — python dependency CVEs (direct deps)
     runs-on: [self-hosted, linux, x64]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pip-audit (+ packaging for PEP 440 version compare in the direct-deps dedup pass)
+        run: |
+          python3 -m pip --version 2>/dev/null || \
+            curl -sS https://bootstrap.pypa.io/get-pip.py | PIP_BREAK_SYSTEM_PACKAGES=1 python3 -
+          PIP_BREAK_SYSTEM_PACKAGES=1 python3 -m pip install --quiet pip-audit
+      - name: Direct-deps pass — fail on known-vuln pinned deps
+        run: |
+          set -euo pipefail
+          # Concat backend + ai + market-data. Filter the AUT-1189 floor pins
+          # (idna/pycryptodome/pygments use `>=` so they can roll forward; they
+          # cannot be audited by the `--no-deps` pass which requires exact pins
+          # — those are covered by the resolved-tree pass below). Dedupe by
+          # package name (keep highest version: stricter cap on a direct
+          # dep means tighter audit) so backend/ai (pydantic 2.10.4) and
+          # market-data (pydantic 2.13.4) don't trip the duplicate-line reject.
+          # Non-exact pins (e.g. `~=`, `>=`) are skipped here and audited in
+          # the resolved-tree pass.
+          TMPREQ="$(mktemp)"
+          python3 - > "$TMPREQ" <<'PY'
+          import re
+          from packaging.version import Version  # transitive dep of pip-audit
+          pkgs = {}
+          float_re = re.compile(r'^([A-Za-z0-9_.+\-]+)\s*(>=|<=|==|!=|~=|>|<)\s*([^\s#]+)(?:\s*#\s*(.*))?$')
+          skip = {'idna', 'pycryptodome', 'pygments'}
+          for f in ('backend/requirements.txt', 'ai/requirements.txt', 'market-data/requirements.txt'):
+              for line in open(f):
+                  line = line.strip()
+                  if not line or line.startswith('#'):
+                      continue
+                  m = float_re.match(line)
+                  if not m:
+                      continue
+                  name, op, ver, comment = m.group(1), m.group(2), m.group(3), m.group(4)
+                  if name.lower() in skip or op != '==':
+                      continue
+                  cur = pkgs.get(name)
+                  if cur is None or Version(ver) > Version(cur[0]):
+                      pkgs[name] = (ver, comment or '')
+          for name in sorted(pkgs):
+              ver, comment = pkgs[name]
+              out = f"{name}=={ver}"
+              if comment:
+                  out += f"  # {comment}"
+              print(out)
+          PY
+          python3 -m pip_audit --disable-pip --no-deps -r "$TMPREQ"
+          rm -f "$TMPREQ"
+
+  pip-audit-resolved:
+    name: pip-audit — resolved tree (transitive CVE drift, AUT-1189)
+    runs-on: [self-hosted, linux, x64, vm2]
     steps:
       - uses: actions/checkout@v4
       - name: Install pip-audit
@@ -93,17 +160,32 @@ jobs:
           python3 -m pip --version 2>/dev/null || \
             curl -sS https://bootstrap.pypa.io/get-pip.py | PIP_BREAK_SYSTEM_PACKAGES=1 python3 -
           PIP_BREAK_SYSTEM_PACKAGES=1 python3 -m pip install --quiet pip-audit
-      - name: Fail on known-vuln pinned deps
+      - name: Resolved-tree pass — fail on transitive CVE drift (AUT-1189)
         run: |
           set -euo pipefail
-          # backend/ and ai/ share pins (fastapi, pydantic, ...); dedupe so
-          # pip-audit scans each package once (avoid the duplicate-line reject).
-          # market-data is a separate tree and is audited on its own.
-          TMPREQ="$(mktemp)"
-          cat backend/requirements.txt ai/requirements.txt | sort -u > "$TMPREQ"
-          python3 -m pip_audit --disable-pip --no-deps -r "$TMPREQ"
-          rm -f "$TMPREQ"
-          python3 -m pip_audit --disable-pip --no-deps -r market-data/requirements.txt
+          # Each service resolves its own tree (backend/ai vs market-data pin
+          # different fastapi major versions and cannot share a venv). Run each
+          # in its own throwaway venv so the resolution is identical to what
+          # `pip install -r` produces at image build time, but never pollutes
+          # the runner env.
+          for req in backend/requirements.txt ai/requirements.txt market-data/requirements.txt; do
+            VENV="$(mktemp -d)/venv"
+            python3 -m venv "$VENV"
+            # shellcheck disable=SC1091
+            source "$VENV/bin/activate"
+            # Quiet install (audit happens after) but show resolution errors so a
+            # bad pin never silently downgrades a transitive under the floor.
+            pip install --quiet -r "$req"
+            # `pip-audit` without --no-deps audits the resolved env (transitives
+            # included). Exit code 1 on any known CVE.
+            pip-audit
+            rc=$?
+            deactivate || true
+            if [ "$rc" -ne 0 ]; then
+              echo "::error::resolved-tree pip-audit failed for $req (AUT-1189 transitive CVE gate)" >&2
+              exit "$rc"
+            fi
+          done
 
   # (5) dart pub audit on the frontend (requires the Flutter toolchain).
   flutter-audit:
@@ -168,17 +250,17 @@ jobs:
   report-status:
     name: Report gate result to Discord #status
     if: always()
-    needs: [gitleaks, trivy-config, pip-audit, flutter-audit, pin-guard]
+    needs: [gitleaks, trivy-config, pip-audit-direct, pip-audit-resolved, flutter-audit, pin-guard]
     runs-on: [self-hosted, linux, x64]
     steps:
       - name: Report to Discord #status
         env:
-          RESULT: ${{ needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.flutter-audit.result == 'success' && needs.pin-guard.result == 'success' && 'clean' || 'findings' }}
-          COLOR: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.flutter-audit.result == 'success' && needs.pin-guard.result == 'success') && '0x57F287' || '0xED4245' }}
-          TITLE: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.flutter-audit.result == 'success' && needs.pin-guard.result == 'success') && 'PR security gate clean' || 'PR security gate found issues' }}
+          RESULT: ${{ needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit-direct.result == 'success' && needs.pip-audit-resolved.result == 'success' && needs.flutter-audit.result == 'success' && needs.pin-guard.result == 'success' && 'clean' || 'findings' }}
+          COLOR: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit-direct.result == 'success' && needs.pip-audit-resolved.result == 'success' && needs.flutter-audit.result == 'success' && needs.pin-guard.result == 'success') && '0x57F287' || '0xED4245' }}
+          TITLE: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit-direct.result == 'success' && needs.pip-audit-resolved.result == 'success' && needs.flutter-audit.result == 'success' && needs.pin-guard.result == 'success') && 'PR security gate clean' || 'PR security gate found issues' }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
             -H "Content-Type: application/json" \
             -d "$(jq -nc --arg c status --arg t "$TITLE" --arg col "$COLOR" --arg u "$RUN_URL" \
-              '{channel:$c,title:$t,description:"AUT-1746 PR gate: gitleaks + trivy config + pip-audit + flutter pub audit.",color:$col,author:"Security Scan",fields:[{name:"Scope",value:"secrets, IaC, python, flutter",inline:true},{name:"Run",value:$u,inline:true}]}')"
+              '{channel:$c,title:$t,description:"AUT-1746 PR gate: gitleaks + trivy config + pip-audit (direct + resolved tree) + flutter pub audit + image digest-pin guard.",color:$col,author:"Security Scan",fields:[{name:"Scope",value:"secrets, IaC, python (direct+transitive), flutter, image pins",inline:true},{name:"Run",value:$u,inline:true}]}')"
