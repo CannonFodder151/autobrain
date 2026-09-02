@@ -108,7 +108,8 @@ jobs:
   # (5) Flutter dependency audit. `flutter pub audit` and `dart pub audit` do
   # not exist on current Flutter/Dart stable; use `osv-scanner` against the
   # committed `pubspec.lock` so the gate still blocks on known CVEs in the
-  # transitive Dart/Flutter tree (per AUT-1746 / AUT-2066).
+  # transitive Dart/Flutter tree (per AUT-1746 / AUT-2066). osv-scanner v2.x
+  # asset naming is `osv-scanner_linux_amd64` (no version prefix).
   flutter-audit:
     name: Flutter — osv-scanner (pubspec.lock)
     runs-on: [self-hosted, linux, x64, vm2]
@@ -126,9 +127,12 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$HOME/.local/bin"
-          curl -sfL https://github.com/google/osv-scanner/releases/download/v1.7.3/osv-scanner_1.7.3_linux_amd64 \
+          # v2.x asset naming: `osv-scanner_linux_amd64` (no version prefix in
+          # the binary name). Pinned to v2.5.1 for reproducibility.
+          curl -sfL https://github.com/google/osv-scanner/releases/download/v2.5.1/osv-scanner_linux_amd64 \
             -o "$HOME/.local/bin/osv-scanner"
           chmod +x "$HOME/.local/bin/osv-scanner"
+          "$HOME/.local/bin/osv-scanner" --version
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: osv-scanner against pubspec.lock (exit 1 on any known vuln)
         working-directory: frontend
