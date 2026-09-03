@@ -38,6 +38,13 @@ class ServoSpyScreen extends StatefulWidget {
 class _ServoSpyScreenState extends State<ServoSpyScreen> {
   _ServoSpyView _view = _ServoSpyView.map;
 
+  // AUT-2220: CARTO basemap API key, injected at build time via
+  // --dart-define=CARTO_API_KEY=<key>. CARTO keys are designed to be public
+  // (embedded in tile URLs as ?api_key=...). Empty -> key-less public basemap.
+  static const String _cartoApiKey = String.fromEnvironment('CARTO_API_KEY');
+  static const String _cartoKeyParam =
+      _cartoApiKey.isEmpty ? '' : '?api_key=$_cartoApiKey';
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthState>();
@@ -471,8 +478,8 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
                 children: [
                   TileLayer(
                     urlTemplate: isDark
-                        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-                        : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+                        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png${_cartoKeyParam}'
+                        : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png${_cartoKeyParam}',
                     subdomains: const ['a', 'b', 'c', 'd'],
                     userAgentPackageName: 'com.autobrain',
                   ),

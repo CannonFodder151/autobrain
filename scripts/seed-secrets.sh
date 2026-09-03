@@ -31,6 +31,7 @@ seed() {
             -e 's/^AI_GATEWAY_API_KEY$/ai_gateway_api_key/' \
             -e 's/^REGO_LOOKUP_API_KEY$/rego_lookup_api_key/' \
             -e 's/^MARKET_DATA_API_KEY$/market_data_api_key/' \
+            -e 's/^CARTO_API_KEY$/carto_api_key/' \
             -e 's/^FUEL_NSW_API_KEY$/fuel_nsw_api_key/' \
             -e 's/^FUEL_NSW_API_SECRET$/fuel_nsw_api_secret/' \
             -e 's/^FUEL_VIC_API_KEY$/fuel_vic_api_key/' \

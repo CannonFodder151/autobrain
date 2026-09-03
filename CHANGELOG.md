@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-2220)
+- feat(frontend): wire CARTO basemap API key into the Servo Spy tile URL template. The key is injected at Flutter build time via `--dart-define=CARTO_API_KEY=<key>` (CARTO keys are designed to be public; embedded in tile URLs as `?api_key=…`). Empty key falls back to the key-less public basemap (current behaviour). CI reads the key from the new `CARTO_API_KEY` GitHub Actions secret on `CannonFodder151/autobrain`; `docker-compose.yml` / `docker-compose.prod.yml` plumb it as a build arg; `scripts/seed-secrets.sh` maps `CARTO_API_KEY` → `/data/autobrain/secrets/carto_api_key` on Hosted.
+
 ## [0.3.218] - 2026-09-03
 
 ### Changed (AUT-2231)
@@ -36,7 +39,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed (AUT-2256)
 - workers (`scheduled_backup`): skip-with-loud-log when `MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY` are empty (was previously a silent Celery FAIL on every daily beat tick). The hosted stack runs the same compose service as the in-app worker but the secret-file loader (`docker/lib-load-secrets.sh`) only exports what it finds; missing or misordered `*_FILE` mounts now surface as `scheduled_backup_skipped reason=minio_credentials_missing` instead of opaque stack traces.
 - workers (`scheduled_backup`): isolate retention prune behind a try/except so a transient prune error no longer turns a successful upload into a Celery FAIL — a successful put with a logged prune error is the right outcome.
-- workers (`scheduled_backup`): log `duration_seconds`, `size`, `tables` on success so hosted Grafana / log greps can alert on a stalled backup without parsing stack traces.
+- workers (`scheduled_backup`): log `duration_seconds`, `size`, `tables` on success so hosted Grafana / log greps can alert on a stalled backup without parsing a stack trace.
 - workers (`_run`): recover from a wedged persistent event loop on `RuntimeError` ("Event loop is closed" / "Future attached to a different loop") — recreate the loop on the next call instead of poisoning every subsequent Celery task for the lifetime of the worker process.
 
 ### Added (AUT-2202)
