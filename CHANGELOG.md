@@ -23,6 +23,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Changed (AUT-2231)
 - chore(docker, AUT-2231): add `CORS_ALLOWED_ORIGINS` compose-level default on the `backend` service in `docker-compose.hosted.yml` so a fresh hosted stack never boots with an empty allow-list (was same-origin only by default). Default value: `["https://hosted.autobrainservice.app","https://hub.autobrainservice.app"]`. Override per stack via the Portainer stack env (AUT-2213 follow-up to AUT-2190 F2). No app-code change; `backend/app/core/config.py:CORS_ALLOWED_ORIGINS` already parses JSON-list env values.
 
+### Fixed (AUT-2353)
+- fix(frontend): add `core/debug_banner.dart` (a `kDebugMode`-gated `Banner` overlay on the `MaterialApp` home) that surfaces the resolved `AppConfig.apiBase` and `AppConfig.wsBase` in the top-end corner of the screen. Lets QA/dev confirm the active backend URL at app boot (AC#3 of PR #445). Release/profile builds are untouched (the widget short-circuits to its child when `!kDebugMode`).
+
 ## [0.3.215] - 2026-09-03
 
 ### Security (AUT-1608)

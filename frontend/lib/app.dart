@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'core/auth_state.dart';
 import 'core/config.dart';
+import 'core/debug_banner.dart';
 import 'core/theme.dart';
 import 'community_garage/screens/share_link_view.dart';
 import 'screens/auth/login_screen.dart';
@@ -100,7 +101,7 @@ class AutoBrainApp extends StatelessWidget {
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       themeMode: auth.darkMode ? ThemeMode.dark : ThemeMode.light,
-      home: home,
+      home: DebugBanner(child: home),
     );
   }
 }
