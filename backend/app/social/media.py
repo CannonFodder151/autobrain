@@ -8,7 +8,7 @@ import uuid
 from io import BytesIO
 
 from pillow_heif import register_heif_opener
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 from app.core.storage import ensure_bucket, presigned_url, upload_object
 
@@ -39,11 +39,14 @@ def compress_to_webp(data: bytes, content_type: str | None = None) -> bytes:
     Raises MediaError for anything Pillow cannot decode (including
     DecompressionBombError). Images larger than 2048px on their longest side
     are downscaled to fit. RGBA is preserved (webp supports alpha); other
-    modes are flattened to RGB.
+    modes are flattened to RGB. EXIF orientation (typical iPhone portrait
+    shots) is normalized before re-encoding so the stored webp is right-way
+    up regardless of source orientation.
     """
     try:
         img = Image.open(BytesIO(data))
         img.load()
+        img = ImageOps.exif_transpose(img)
     except Image.DecompressionBombError as exc:
         raise MediaError("Image exceeds the maximum allowed pixel dimensions") from exc
     except (UnidentifiedImageError, OSError) as exc:
