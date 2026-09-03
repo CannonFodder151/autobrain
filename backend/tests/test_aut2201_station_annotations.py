@@ -45,9 +45,9 @@ def test_station_out_without_stats_does_not_annotate() -> None:
 
 
 def test_station_out_with_stats_annotates_cost_per_km_and_fill() -> None:
-    # avg_l_per_100km=8.0, avg_litres_per_fill=45.0; price=190 c/L
-    # cost_per_km = 8.0 * 190 / 100 = 15.2
-    # avg_fill_cost = 190 * 45 / 100 = 85.5
+    # avg_l_per_100km=8.0, avg_litres_per_fill=45.0; price=190 c/L ($1.90/L)
+    # cost_per_km = 8.0 * 190 / 10000 = 0.152   ($/km)
+    # avg_fill_cost = 190 * 45 / 100 = 85.5     ($)
     stats = FuelStats(
         total_litres=180.0, total_cost=342.0,
         avg_l_per_100km=8.0, avg_cost_per_km=0.19,
@@ -56,7 +56,7 @@ def test_station_out_with_stats_annotates_cost_per_km_and_fill() -> None:
     )
     out = _station_out(_station(), [_price(190.0)], 5.0, stats)
     p = out.prices[0]
-    assert p.cost_per_km == 15.2
+    assert p.cost_per_km == 0.152
     assert p.avg_fill_cost == 85.5
 
 
@@ -69,7 +69,7 @@ def test_station_out_annotates_each_price_independently() -> None:
     )
     prices = [_price(180.0, "91"), _price(200.0, "95"), _price(220.0, "98")]
     out = _station_out(_station(), prices, 1.0, stats)
-    assert [p.cost_per_km for p in out.prices] == [18.0, 20.0, 22.0]
+    assert [p.cost_per_km for p in out.prices] == [0.18, 0.2, 0.22]
     assert [p.avg_fill_cost for p in out.prices] == [90.0, 100.0, 110.0]
 
 
@@ -83,5 +83,5 @@ def test_station_out_partial_stats_only_cost_per_km() -> None:
     )
     out = _station_out(_station(), [_price(200.0)], None, stats)
     p = out.prices[0]
-    assert p.cost_per_km == 15.0
+    assert p.cost_per_km == 0.15
     assert p.avg_fill_cost is None
