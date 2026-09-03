@@ -14,12 +14,15 @@ Installed via the `pgvector/pgvector:pg17` image. No manual setup required.
 
 All embedding columns use `vector(1536)` to match OpenAI's `text-embedding-3-small` dimension.
 
-| Table | Column | Content embedded | Purpose |
-|-------|--------|------------------|---------|
-| `diagnostics` | `embedding` | Symptoms + AI response summary | Semantic search for related diagnostics |
-| `service_records` | `embedding` | Description + notes + steps | Find similar service records |
-| `modifications` | `embedding` | Name + notes + category | Search modifications by description |
-| `receipts` | `embedding` | Vendor + extracted line-item names | Search receipts by content |
+| Table | Column | Content embedded | Purpose | Migration |
+|-------|--------|------------------|---------|-----------|
+| `diagnostics` | `embedding` | Symptoms + AI response summary | Semantic search for related diagnostics | `g7h8i9j0k1l2` |
+| `service_records` | `embedding` | Description + notes + steps | Find similar service records | `g7h8i9j0k1l2` |
+| `modifications` | `embedding` | Name + notes + category | Search modifications by description | `g7h8i9j0k1l2` |
+| `receipts` | `embedding` | Vendor + extracted line-item names | Search receipts by content | `g7h8i9j0k1l2` |
+| `social_issue_posts` | `embedding` | Title + body + tags | Search Community Garage help posts | `u1v2w3x4y5z6` |
+
+`social_issue_posts.embedding` was added in the Issues Blog migration (`u1v2w3x4y5z6`) along with the rest of the `social_issue_*` tables. Its entity type in code is `issue` (see `_ENTITY_MAP["issue"]` in `backend/app/services/search.py`); the underlying table is `social_issue_posts`. `issue`-typed rows are community-visible (not scoped to a vehicle) and hidden posts (`status_hidden = true`) are excluded from search results.
 
 ## Index
 
@@ -32,7 +35,7 @@ HNSW (Hierarchical Navigable Small World) chosen over IVFFlat because:
 - Better performance on small per-user tables
 - Faster updates (no reindex needed)
 
-Applied to all four embedding tables in migration `g7h8i9j0k1l2`.
+Applied to all five embedding tables (the four above plus `social_issue_posts`): `g7h8i9j0k1l2` creates the index for the four user-scoped tables; `u1v2w3x4y5z6` creates it for `social_issue_posts`; `h1i2j3k4l5m6` rebuilds all indexes as HNSW on databases that originally applied them as IVFFlat.
 
 ## Embedding pipeline
 
@@ -110,8 +113,9 @@ The query embedding is generated via 9Router. If the router is down, only keywor
 
 | Migration | Description |
 |-----------|-------------|
-| `g7h8i9j0k1l2` | Add `embedding vector(1536)` columns + HNSW indexes |
-| `h1i2j3k4l5m6` | Update vector dimension if model changes |
+| `g7h8i9j0k1l2` | Add `embedding vector(1536)` columns + IVFFlat indexes on `diagnostics`, `service_records`, `modifications`, `receipts`. Installs the `vector` extension. |
+| `u1v2w3x4y5z6` | Add `social_issue_posts` table + `embedding vector(1536)` column + HNSW index for the Community Garage Issues Blog. |
+| `h1i2j3k4l5m6` | Rebuild all embedding indexes as HNSW (`vector_cosine_ops`) for small per-user tables — no list tuning or training pass required. |
 
 ## Fallback behaviour
 
