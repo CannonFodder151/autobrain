@@ -11,6 +11,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-2218)
+- chore(docker): wire `FUEL_QLD_API_KEY` into `docker-compose.prod.yml` backend block (mirrors NSW/VIC pattern; empty value disables the feed, see `backend/app/services/fuel_feeds.py:493`).
+- chore(docker): wire `FUEL_QLD_API_KEY_FILE: /run/secrets/fuel_qld_api_key` into `docker-compose.hosted.yml` backend + worker blocks. The existing `x-secrets` anchor (`<<: *secrets`) already bind-mounts `${SECRETS_DIR}` read-only, so no new volume entry is required; seed `fuel_qld_api_key` via `scripts/seed-secrets.sh` before redeploying the hosted stack.
+
 ## [0.3.214] - 2026-09-03
 
 ### Fix (AUT-2070)

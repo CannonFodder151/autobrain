@@ -47,6 +47,10 @@ x-backend-base: &backend-base
     FUEL_VIC_API_KEY: ${FUEL_VIC_API_KEY:-}
     FUEL_VIC_API_SECRET: ${FUEL_VIC_API_SECRET:-}
     FUEL_VIC_ENABLED: "true"
+    # AUT-2218: QLD DirectAPI subscription token (AUT-1813 phase). Read by
+    # backend/app/core/config.py:110 as settings.FUEL_QLD_API_KEY. Empty key
+    # disables the feed (mirrors the NSW no-key pattern).
+    FUEL_QLD_API_KEY: ${FUEL_QLD_API_KEY:-}
   depends_on:
     postgres:
       condition: service_healthy

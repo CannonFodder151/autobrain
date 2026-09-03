@@ -166,6 +166,11 @@ services:
       FUEL_VIC_API_KEY_FILE: /run/secrets/fuel_vic_api_key
       FUEL_VIC_API_SECRET_FILE: /run/secrets/fuel_vic_api_secret
       FUEL_VIC_ENABLED: "true"
+      # AUT-2218: QLD DirectAPI subscription token (AUT-1813 phase). Pydantic
+      # settings loads FUEL_QLD_API_KEY from FUEL_QLD_API_KEY_FILE at startup;
+      # the secrets anchor below mounts ${SECRETS_DIR} read-only, so the file
+      # resolves when seed-secrets.sh provisions fuel_qld_api_key.
+      FUEL_QLD_API_KEY_FILE: /run/secrets/fuel_qld_api_key
       AI_GATEWAY_API_KEY_FILE: /run/secrets/ai_gateway_api_key
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@autobrain.io}
       ADMIN_DISPLAY_NAME: AutoBrain Admin
@@ -314,6 +319,9 @@ services:
       FUEL_VIC_API_KEY_FILE: /run/secrets/fuel_vic_api_key
       FUEL_VIC_API_SECRET_FILE: /run/secrets/fuel_vic_api_secret
       FUEL_VIC_ENABLED: "true"
+      # AUT-2218: QLD fuel — same wiring as the backend so the celery beat task
+      # in this worker can poll the QLD feed alongside NSW/VIC.
+      FUEL_QLD_API_KEY_FILE: /run/secrets/fuel_qld_api_key
     <<: *secrets
     depends_on:
       postgres:
