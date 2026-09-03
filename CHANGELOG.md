@@ -13,6 +13,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Security (AUT-1745)
 - sec(market-data): `docs_url`, `redoc_url`, and `openapi_url` are now env-gated and default to disabled. When `ENVIRONMENT=production` (the hosted + prod compose default), `/docs`, `/openapi.json`, and `/redoc` all return 404 — closing the unauthenticated API-surface enumeration on the market-data FastAPI service (CWE-200). `/health` and authenticated `/search`, `/sca-parts` are unchanged. Regression covered by `market-data/test_docs_disabled.py` (prod: 404, non-prod: 200, /health always 200). `redoc` remains always-off by design. Companion fix in `CannonFodder151/rego-lookup-api` adds the same gating + test (PR #47).
+## [0.3.222] - 2026-09-03
+
+### Added (AUT-2272)
+- feat(frontend): boot-time API reachability probe. `AppConfig.validate()` hits `${apiOrigin}/healthz` (5s timeout, anonymous GET, body discarded) and sets `lastValidationOk` / `lastValidationError`. `main.dart` awaits the probe before `runApp`; on failure the new `MisconfiguredBackendScreen` mounts so the user can retry. Probe is positional `Uri(scheme, host, port, path:'/healthz')` — no URL-parser confusion, no user-input reach. Closes AUT-2272 M0.
+
+### Fixed (AUT-2272)
+- fix(frontend): import `package:flutter/foundation.dart` in `lib/app.dart` and `lib/main.dart` so `kDebugMode` resolves in release builds. Without it any code path touching the new probe would throw `NoSuchMethodError: 'kDebugMode'` at app boot. Closes AUT-2272 M1.
+- fix(frontend): `MisconfiguredBackendScreen._retry` now uses `pushAndRemoveUntil(MaterialPageRoute(builder: (_) => ChangeNotifierProvider<AuthState>(create: (_) => AuthState(), child: const AutoBrainApp())), (_) => false)` instead of `pushReplacementNamed('/')` — the root `MaterialApp` in `app.dart` has no `routes`/`onGenerateRoute` (autobrain uses an if/else home switch), so the named-route lookup previously threw and trapped the user on the failure screen. Closes AUT-2272 M2.
+- fix(frontend): `_defaultApiBase` / `_defaultWsBase` in `AppConfig` now point at `hosted.autobrainservice.app` (was `https://localhost:8000/api/v1` / `wss://localhost:8000/ws`). A release APK built without `--dart-define=API_BASE_URL` (CI drift, manual local build, future Docker arg omission) now boots against the real hosted backend and the boot-probe passes. `--dart-define` still overrides for self-hosted / demo / default stacks. Closes AUT-2272 M3.
+
+### Added (AUT-2284)
+- test(frontend): `frontend/test/config_validation_test.dart` — 5 reachability cases for `AppConfig.validate()`: 2xx ok, 5xx fail, timeout, connection refused, malformed URL. Uses `package:http/testing.dart` `MockClient` (no live network, runs in `flutter test`). Per-test isolation via `setUp` resetting `apiBase` / `lastValidationOk` / `lastValidationError` so order is independent (AUT-2284 S3). Plain `Exception('connection refused')` — no `SocketExceptionLike` shim (AUT-2284 S2: the validator's `catch (e)` accepts any thrown object; the shim added noise without value). No `AppConfig.buildInfo()` ever added — the QA comment flagged the dead `buildInfo()` from PR #445 (AUT-2284 S1); the debug banner reads `AppConfig.apiBase` / `lastValidationOk` / `lastValidationError` directly. Closes AUT-2284 S1/S2/S3.
+
+### Added (AUT-2284 N1)
+- fix(backend): expose `/healthz` as an alias of `/health` at the API root (FastAPI convention used by the Flutter boot-probe). Same handler, hidden from `/docs` (`include_in_schema=False`), no extra surface. The probe in `AppConfig.validate()` now hits a route that actually exists on this backend — without this, every release boot against `hosted.autobrainservice.app` would fail the reachability check and mount `MisconfiguredBackendScreen`. Closes AUT-2284 N1.
+
+### Added (AUT-2284 N2)
+- feat(frontend): boot-config debug banner now fires under `kDebugMode || kProfileMode` (was `kDebugMode` only). Profile-mode testers — Flutter DevTools / profilers, perf runs — no longer lose API-base visibility just because the build is a `flutter run --profile` rather than `--debug`. Overlay in `AutoBrainApp.build` shows `api: <host> probe: <ok|fail|not run>` via a translucent black bar across the top of every screen. Release builds still hide it. Closes AUT-2284 N2.
 
 ## [0.3.221] - 2026-09-03
 ### Added
