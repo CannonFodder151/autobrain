@@ -27,6 +27,7 @@ from app.schemas.fuel_servo import (
 )
 from app.services import fuel_feeds as feeds
 from app.services.fuel import compute_fuel_stats
+from app.services.fuel_servo import annotate_price
 from app.services.ownership import get_accessible_vehicle
 
 logger = get_logger(__name__)
@@ -187,16 +188,13 @@ def _station_out(
     dist: float | None,
     stats: "FuelStats | None" = None,
 ) -> FuelStationOut:
-    avg_l_100 = stats.avg_l_per_100km if stats else None
-    avg_litres = stats.avg_litres_per_fill if stats else None
     out_prices: list[FuelPriceOut] = []
     for p in prices:
-        cost_per_km = None
-        avg_fill_cost = None
-        if avg_l_100 is not None:
-            cost_per_km = round(avg_l_100 * p.price / 100, 4)
-        if avg_litres is not None:
-            avg_fill_cost = round(p.price * avg_litres / 100, 2)
+        cost_per_km, avg_fill_cost = annotate_price(
+            p.price,
+            avg_l_per_100km=stats.avg_l_per_100km if stats else None,
+            avg_litres_per_fill=stats.avg_litres_per_fill if stats else None,
+        )
         out_prices.append(
             FuelPriceOut(
                 fuel_type=p.fuel_type,

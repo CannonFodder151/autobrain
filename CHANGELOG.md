@@ -12,9 +12,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 ### Added
 - Servo Spy: `/api/v1/fuel/stations` accepts an optional `vehicle_id` query param. When supplied, every `FuelPriceOut` is annotated with `cost_per_km` ($/km, derived from the vehicle's avg L/100km) and `avg_fill_cost` ($, derived from the vehicle's avg litres/fill). Deterministic, no AI. Vehicle is ownership-checked via the standard accessible-vehicle helper. Closes AUT-2201.
+- New `app/services/fuel_servo.py` pure helper (`annotate_price`, `annotate_prices`) so the per-station cost math is unit-tested without FastAPI/DB. DB-free tests in `tests/test_aut2203_station_annotations.py` cover the full-stats / no-vehicle / no-logs / partial-stats cases. Closes AUT-2203.
 ### Changed
 - Servo Spy QLD feed switched to FuelPricesQLD DirectAPI v1.5 (Bearer subscription token). Old open-data parser kept behind `FUEL_QLD_USE_OPEN_FALLBACK` flag for one cycle.
 - `FuelStats` now exposes `avg_litres_per_fill` (mean litres across all fills for the vehicle) so the Servo Spy annotations can be computed without an extra DB round-trip.
+- Servo Spy per-station `cost_per_km` now divided by 10000 (cents/L → $/km) so it matches the existing per-fill `FuelLog.cost_per_km` units ($/km) — previously it returned cents/km, e.g. 14.03 instead of 0.14. Closes the unit-mismatch in AUT-2201 surfaced by the AUT-2203 issue description.
 
 ## [0.3.216] - 2026-09-03
 
