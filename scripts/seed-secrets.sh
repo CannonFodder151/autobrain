@@ -37,6 +37,7 @@ seed() {
             -e 's/^FUEL_NSW_API_SECRET$/fuel_nsw_api_secret/' \
             -e 's/^FUEL_VIC_API_KEY$/fuel_vic_api_key/' \
             -e 's/^FUEL_VIC_API_SECRET$/fuel_vic_api_secret/' \
+            -e 's/^FUEL_QLD_API_KEY$/fuel_qld_api_key/' \
             -e 's/^ADMIN_INITIAL_PASSWORD$/admin_initial_password/' \
             -e 's/^ADMIN_API_KEY$/admin_api_key/' \
             -e 's/^SMTP_USERNAME$/smtp_username/' \
