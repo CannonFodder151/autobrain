@@ -99,6 +99,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [0.3.203] - 2026-09-02
 
 ### Fixed
+- fix(market-data): tighten valuation year window from ±2y to ±1y so the
+  median stops anchoring on listings too new for the target vehicle. When
+  the exact-year sample is <3, the fallback "nearby" set now includes only
+  listings within 1 year of the target year (was 2). CarsGuide + BikesGuide
+  both share the helper. Below the ±1y floor the unscraped wider set is
+  still returned so the valuation pipeline never collapses to 0 listings
+  (AUT-2079).
 - fix(servo-spy): map view no longer renders a second inner `Scaffold` +
   `AppBar`, which was duplicating the back button and constraining the
   map so tiles failed to lay out. The map view now sits directly under
