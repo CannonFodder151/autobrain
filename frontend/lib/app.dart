@@ -101,6 +101,46 @@ class AutoBrainApp extends StatelessWidget {
       darkTheme: AppTheme.dark(),
       themeMode: auth.darkMode ? ThemeMode.dark : ThemeMode.light,
       home: home,
+      builder: (context, child) {
+        // Visible under debug AND profile mode so performance testers can
+        // confirm the resolved API base + boot-probe result without
+        // attaching DevTools. (AUT-2284 N2.) Never shown in release.
+        if (!(kDebugMode || kProfileMode)) return child!;
+        final ok = AppConfig.lastValidationOk;
+        final validation = ok == null
+            ? 'not run'
+            : ok
+                ? 'ok'
+                : 'fail';
+        final apiHost = Uri.tryParse(AppConfig.apiBase)?.host ?? AppConfig.apiBase;
+        return Stack(
+          children: [
+            child!,
+            Positioned(
+              left: 0,
+              right: 0,
+              top: 0,
+              child: SafeArea(
+                bottom: false,
+                child: Container(
+                  width: double.infinity,
+                  color: Colors.black.withValues(alpha: 0.55),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 2),
+                  child: Text(
+                    'api: $apiHost  probe: $validation',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
