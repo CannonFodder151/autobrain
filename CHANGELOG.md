@@ -11,6 +11,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-2192)
+- fix(frontend): pin `BACKEND_URL`/`API_BASE` to a single source of truth (`--dart-define=API_BASE_URL` / `WS_BASE_URL`, already wired through `docker/frontend/Dockerfile` and both `build-hosted` / `dockerhub-publish` workflows). `AppConfig.apiBase` / `wsBase` now stay aligned with the build-time value unless explicitly overridden by the mobile server picker.
+- fix(frontend): on release builds, `AppConfig.validate()` now probes `${apiOrigin}/healthz` at app boot and mounts a `MisconfiguredBackendScreen` (with retry) instead of letting the first API call fail with a confusing network error. The probe is skipped in `kDebugMode` to keep hot-reload snappy.
+- test(frontend): add `config_validation_test.dart` covering reachable 2xx, 5xx, timeout, connection error, and malformed URL paths.
+
 ## [0.3.215] - 2026-09-03
 
 ### Fixed

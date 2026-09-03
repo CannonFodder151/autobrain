@@ -99,6 +99,33 @@ class AutoBrainApp extends StatelessWidget {
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       themeMode: auth.darkMode ? ThemeMode.dark : ThemeMode.light,
+      // AUT-2192: in debug builds show a persistent banner with the resolved
+      // API base so the developer can see at a glance which server this
+      // build is pointed at and whether the boot probe succeeded.
+      builder: kDebugMode
+          ? (context, child) => Column(
+              children: [
+                Material(
+                  color: AppConfig.lastValidationOk == false
+                      ? Colors.red.shade100
+                      : Colors.blueGrey.shade50,
+                  child: SafeArea(
+                    bottom: false,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      child: Text(
+                        'API: ${AppConfig.apiBase}'
+                        '${AppConfig.lastValidationOk == null ? "" : "  •  ${AppConfig.lastValidationOk! ? "reachable" : "UNREACHABLE: ${AppConfig.lastValidationError ?? ""}"}"}',
+                        style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ),
+                if (child != null) Expanded(child: child),
+              ],
+            )
+          : null,
       home: home,
     );
   }
