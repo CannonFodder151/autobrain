@@ -354,6 +354,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Added (AUT-2284 N2)
 - feat(frontend): boot-config debug banner now fires under `kDebugMode || kProfileMode` (was `kDebugMode` only). Profile-mode testers — Flutter DevTools / profilers, perf runs — no longer lose API-base visibility just because the build is a `flutter run --profile` rather than `--debug`. Overlay in `AutoBrainApp.build` shows `api: <host> probe: <ok|fail|not run>` via a translucent black bar across the top of every screen. Release builds still hide it. Closes AUT-2284 N2.
 
+### Security (AUT-1745)
+- sec(market-data): `docs_url`, `redoc_url`, and `openapi_url` are now env-gated and default to disabled. When `ENVIRONMENT=production` (the hosted + prod compose default), `/docs`, `/openapi.json`, and `/redoc` all return 404 — closing the unauthenticated API-surface enumeration on the market-data FastAPI service (CWE-200). `/health` and authenticated `/search`, `/sca-parts` are unchanged. Regression covered by `market-data/test_docs_disabled.py` (prod: 404, non-prod: 200, /health always 200). `redoc` remains always-off by design. Companion fix in `CannonFodder151/rego-lookup-api` adds the same gating + test (PR #47).
+
 ## [0.3.221] - 2026-09-03
 ### Added
 - Servo Spy: `/api/v1/fuel/stations` accepts an optional `vehicle_id` query param. When supplied, every `FuelPriceOut` is annotated with `cost_per_km` ($/km, derived from the vehicle's avg L/100km) and `avg_fill_cost` ($, derived from the vehicle's avg litres/fill). Deterministic, no AI. Vehicle is ownership-checked via the standard accessible-vehicle helper. Closes AUT-2201.
