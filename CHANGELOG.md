@@ -8,7 +8,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > user-facing change ships with an entry here under `[Unreleased]` — see
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
-
 ## [Unreleased]
 
 ## [0.3.214] - 2026-09-03
@@ -97,6 +96,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   the arm64 hosted VM (`exec format error`, restart loop every ~60s). The
   new pin (`sha256:8937c2bb…`) is a true OCI image index with both amd64
   and arm64 manifests (AUT-2077).
+## [Unreleased]
+
+### AUT-1868: petrol price map + servo-spy favourites selector (frontend)
+- Petrol price map screen added with NSW Fuel API integration (AUT-1813)
+- Servo-spy favourites selector: users can favourite fuel types on stations
+- FuelPrice / FuelPriceWatchlist models added
+- FuelPricesApi service wrapping GET/POST/DELETE /fuel-prices endpoints
+- PetrolPriceMapScreen with flutter_map markers from cached NSW feed
+
+### Security
+- Bump `pypdf` 6.15.0 → 6.16.1 in `backend/requirements.txt` and
+  `ai/requirements.txt` to close CVE-2026-84309, CVE-2026-84310 and
+  CVE-2026-84311 (AUT-1894 PR-gate blocker).
+- Suppress 2 HIGH libexpat CVEs (CVE-2026-66046, CVE-2026-76641) in
+  `nginxinc/nginx-unprivileged:stable-alpine` via `.trivyignore` (AUT-1894).
+  nginx image not yet rebuilt with expat 2.8.4-r0; time-boxed 2026-12-28.
+- Re-add CVE-2026-14456 (OpenSSL QUIC DoS) to `.trivyignore` (AUT-1793/AUT-1894).
+  python:3.13-slim ships openssl 3.5.6-1~deb13u2; no newer digest exists.
+  AutoBrain never enables QUIC; time-boxed 2026-11-28.
+
+### Fixed
+- ci(code-review): make "Auto-approve PR on OCR stall (AUT-1814)" step
+  `continue-on-error` so a 422 from the GitHub Reviews API (e.g.
+  `Review Can not approve your own pull request` when the same
+  identity opens and approves the PR) never turns the advisory OCR
+  gate red. The Discord report still surfaces the OCR outcome
+  unchanged (AUT-1894).
+
 
 ## [0.3.200] - 2026-09-02
 
@@ -131,6 +158,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   (`* -B *` was parsed by bash as `PATTERN OPTIONS PATTERN`). Clears the
   2000+ failing-strike healthcheck backlog on EP5 `autobrain-hosted-worker-1`
   (AUT-2056).
+- fix(worker): switch HEALTHCHECK shell from `sh` to `bash` so the embedded
+  `"$(find ...)"` pattern parses cleanly under busybox/dash. Clears the 2000+
+  failing-strike healthcheck backlog on EP5 `autobrain-hosted-worker-1` (AUT-2056).
+- fix(hosted): bump worker image digest to the latest `:hosted` build carrying
+  the AUT-2056 bash healthcheck.
+
 
 ## [0.3.198] - 2026-09-01
 

@@ -255,3 +255,78 @@ def run_due_checks() -> None:
             for vid in vehicle_ids:
                 await check_vehicle_notifications(db, vid)
     _run(_run())
+
+
+# --- Servo-spy fuel price alerts (AUT-1859) ----------------------------------
+
+async def _resolve_user_pref(db, user_id: str) -> NotificationPreference:
+    """Find a user's notification preference for channel reuse.
+
+    Preference order: the user-global row (vehicle_id IS NULL, used by servo
+    spy), then any per-vehicle row, then an in-memory default (email + push).
+    The alert reuses the same channels the user already configured in the
+    notification menu rather than inventing its own settings.
+    """
+    pref = await db.scalar(
+        select(NotificationPreference).where(
+            NotificationPreference.user_id == user_id,
+            NotificationPreference.vehicle_id.is_(None),
+        )
+    )
+    if pref is None:
+        pref = await db.scalar(
+            select(NotificationPreference).where(NotificationPreference.user_id == user_id)
+        )
+    if pref is None:
+        pref = NotificationPreference(user_id=user_id)  # defaults: email+push on, discord off
+    return pref
+
+
+async def deliver_fuel_price_alert(
+    db, user_id: str, kind: str, title: str, description: str
+) -> None:
+    """Send a servo-spy price alert on the user's configured channels (once/day).
+
+    Deduplicated per (user_id, kind) so a price that stays past threshold only
+    fires once per calendar day. Reuses the user's existing notification
+    channels (email / Discord / push) and tokens from their preferences.
+    """
+    existing = await db.scalar(
+        select(NotificationDelivery).where(
+            NotificationDelivery.user_id == user_id,
+            NotificationDelivery.kind == kind,
+            NotificationDelivery.vehicle_id.is_(None),
+        )
+    )
+    if existing:
+        return
+
+    pref = await _resolve_user_pref(db, user_id)
+    channels: list[str] = []
+    user = await db.get(User, user_id)
+
+    if pref.email_enabled and user:
+        subject = title
+        safe_name = html.escape(user.display_name)
+        text = f"Hi {user.display_name},\n\n{description}"
+        html_body = mail._branding(
+            f'<p style="color:#F5F7FA">Hi <b>{safe_name}</b>,</p>'
+            f'<p style="color:#E5ECF5">{description.replace("**", "")}</p>'
+        )
+        if await _send_email(user.email, user.display_name, subject, html_body, text):
+            channels.append("email")
+    if pref.discord_enabled and pref.discord_webhook_url:
+        if await _send_discord(pref.discord_webhook_url, title, description):
+            channels.append("discord")
+    if pref.push_enabled and pref.fcm_token:
+        if await _send_push(pref.fcm_token, title, description.replace("**", "")):
+            channels.append("push")
+
+    if channels:
+        db.add(
+            NotificationDelivery(
+                user_id=user_id, vehicle_id=None, kind=kind, channels=",".join(channels)
+            )
+        )
+        await db.commit()
+        logger.info("fuel_price_alert_sent", user_id=user_id, kind=kind, channels=channels)

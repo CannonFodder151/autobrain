@@ -11,10 +11,14 @@ os.environ["DATABASE_URL"] = "postgresql+asyncpg://autobrain:autobrain@localhost
 os.environ["SECRET_KEY"] = "test-secret"
 os.environ["SEVEN_ELEVEN_API_URL"] = "https://example.test/api.php?format=json"
 
-import httpx  # noqa: E402
-import pytest  # noqa: E402
+import base64  # noqa: E402
+from datetime import datetime, timedelta, timezone  # noqa: E402
 from unittest import mock  # noqa: E402
 
+import httpx  # noqa: E402
+import pytest  # noqa: E402
+
+from app.core.config import settings  # noqa: E402
 from app.services import fuel_prices as fp_svc  # noqa: E402
 
 FIXTURE = {
@@ -52,6 +56,22 @@ FIXTURE = {
             {"type": "U91", "price": 195.5, "name": "11-Seven Pitt", "state": "NSW",
              "postcode": "2000", "suburb": "Sydney", "lat": -33.8688, "lng": 151.2093},
         ]},
+    ],
+}
+
+SAMPLE_NSW_PAYLOAD = {
+    "lastUpdated": "2026-08-29T01:00:00Z",
+    "stations": [
+        {"code": "NSW001", "name": "Shell Sydney", "brand": "Shell", "address": "1 Main St",
+         "location": {"latitude": -33.86, "longitude": 151.2}},
+        {"code": "NSW002", "name": "BP Alexandria", "brand": "BP", "address": "2 Oyster St",
+         "location": {"latitude": -33.93, "longitude": 151.2}},
+    ],
+    "prices": [
+        {"stationcode": "NSW001", "fueltype": "E10", "price": 168.9, "lastupdated": "2026-08-29T01:00:00Z"},
+        {"stationcode": "NSW001", "fueltype": "P98", "price": 189.5, "lastupdated": "2026-08-29T01:00:00Z"},
+        {"stationcode": "NSW002", "fueltype": "E10", "price": 170.2, "lastupdated": "2026-08-29T01:00:00Z"},
+        {"stationcode": "NOPE", "fueltype": "E10", "price": 1.0, "lastupdated": "2026-08-29T01:00:00Z"},
     ],
 }
 
@@ -171,3 +191,48 @@ async def test_fetch_raises_when_cache_empty_and_upstream_fails() -> None:
     with mock.patch.object(fp_svc.httpx, "AsyncClient", _BoomClient):
         with pytest.raises(RuntimeError):
             await fp_svc.fetch_7eleven_prices(force=True)
+
+
+def test_normalise_nsw_joins_prices_to_stations_and_skips_unknown():
+    rows = fp_svc._normalise_nsw(SAMPLE_NSW_PAYLOAD)
+    codes = {(r["station_code"], r["fuel_type"]) for r in rows}
+    assert codes == {("NSW001", "E10"), ("NSW001", "P98"), ("NSW002", "E10")}
+    e10 = next(r for r in rows if r["station_code"] == "NSW001" and r["fuel_type"] == "E10")
+    assert e10["price"] == 168.9
+    assert e10["station_name"] == "Shell Sydney"
+    assert e10["brand"] == "Shell"
+    assert e10["latitude"] == -33.86
+    assert e10["currency"] == "AUD"
+
+
+def test_normalise_nsw_empty_payload():
+    assert fp_svc._normalise_nsw({}) == []
+
+
+def test_basic_auth_header_builds_from_key_secret(monkeypatch):
+    monkeypatch.setattr(settings, "FUEL_NSW_API_KEY", "BqKey")
+    monkeypatch.setattr(settings, "FUEL_NSW_API_SECRET", "SecRet")
+    hdr = fp_svc._basic_auth_header()
+    scheme, cred = hdr.split(" ", 1)
+    assert scheme == "Basic"
+    decoded = base64.b64decode(cred).decode()
+    assert decoded == "BqKey:SecRet"
+
+
+def test_enabled_only_when_configured_and_on(monkeypatch):
+    monkeypatch.setattr(settings, "FUEL_NSW_ENABLED", True)
+    monkeypatch.setattr(settings, "FUEL_NSW_API_KEY", "k")
+    monkeypatch.setattr(settings, "FUEL_NSW_API_SECRET", "s")
+    assert fp_svc.enabled() is True
+    monkeypatch.setattr(settings, "FUEL_NSW_ENABLED", False)
+    assert fp_svc.enabled() is False
+
+
+def test_poll_due_gate_enforces_once_per_day():
+    now = datetime.now(timezone.utc)
+    # no prior poll -> due
+    assert fp_svc.poll_due(None, hours=24) is True
+    # within 24h -> not due
+    assert fp_svc.poll_due(now - timedelta(hours=23), hours=24) is False
+    # exactly 24h+ -> due
+    assert fp_svc.poll_due(now - timedelta(hours=24, minutes=1), hours=24) is True

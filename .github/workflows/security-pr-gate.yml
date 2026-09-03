@@ -105,11 +105,12 @@ jobs:
           rm -f "$TMPREQ"
           python3 -m pip_audit --disable-pip --no-deps -r market-data/requirements.txt
 
-  # (5) Flutter dependency audit. `flutter pub audit` and `dart pub audit` do
-  # not exist on current Flutter/Dart stable; the mainline choice (AUT-1746
-  # / AUT-2066) is `flutter pub outdated` with a heuristic regex that flags
-  # any data row. Add osv-scanner against `pubspec.lock` once the runner
-  # image carries it for proper CVE coverage.
+
+  # (5) Dependency vulnerability audit on the frontend (requires the Flutter
+  #     toolchain). `flutter pub audit` / `dart pub audit` were removed from the
+  #     Dart stable SDK (Dart 3.13 / Flutter 3.47), so we audit pubspec.lock with
+  #     Google's OSV-Scanner instead (AUT-1746 follow-up, AUT-1859 PR gate).
+
   flutter-audit:
     name: Flutter — pub outdated (heuristic CVE placeholder)
     runs-on: [self-hosted, linux, x64]
@@ -120,24 +121,28 @@ jobs:
         with:
           channel: stable
           cache: true
-      - name: Flutter pub audit (frontend)
+
+      - name: Resolve dependencies
+        working-directory: frontend
+        run: flutter pub get
+      - name: Install OSV-Scanner
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+          OSV_VER="1.9.2"
+          curl -sfL "https://github.com/google/osv-scanner/releases/download/v${OSV_VER}/osv-scanner_linux_amd64" \
+            -o "$HOME/.local/bin/osv-scanner"
+          chmod +x "$HOME/.local/bin/osv-scanner"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: OSV-Scanner dependency audit (frontend)
         working-directory: frontend
         run: |
           set -euo pipefail
-          flutter pub get
-          # `flutter pub audit` and `dart pub audit` were both removed upstream
-          # (AUT-1746 originally pointed at the dart variant, which also no
-          # longer exists in current stable SDK). `flutter pub outdated`
-          # prints an "outdated packages" table only when at least one
-          # dependency is out of date; "All packages are up to date" otherwise.
-          # We treat any data row as a finding. Add osv-scanner once the
-          # runner image carries it for proper CVE coverage.
-          OUT="$(flutter pub outdated 2>&1 || true)"
-          echo "$OUT"
-          if echo "$OUT" | grep -qE '^[[:space:]]+[A-Za-z][A-Za-z0-9_]+[[:space:]]+[0-9]'; then
-            echo "::error::Outdated Flutter dependencies found — refresh before merge (AUT-1746)."
-            exit 1
-          fi
+          # `flutter pub audit` / `dart pub audit` were removed from the Dart
+          # stable SDK (Dart 3.13 / Flutter 3.47), so we audit pubspec.lock with
+          # Google's OSV-Scanner instead (AUT-1746 follow-up, AUT-1859 PR gate).
+          osv-scanner --format=table pubspec.lock
+
 
   # (6) AUT-1881 pin-guard — fail any compose `image:` reference that is not
   # pinned by `@sha256` digest. Complements the postgres/nginx/python pin
@@ -179,6 +184,7 @@ jobs:
             exit 1
           fi
           echo "OK: every compose image: reference carries an @sha256 digest (AUT-1881)."
+
   report-status:
     name: Report gate result to Discord #status
     if: always()
@@ -195,4 +201,4 @@ jobs:
           curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
             -H "Content-Type: application/json" \
             -d "$(jq -nc --arg c status --arg t "$TITLE" --arg col "$COLOR" --arg u "$RUN_URL" \
-              '{channel:$c,title:$t,description:"AUT-1746 PR gate: gitleaks + trivy config + pip-audit + flutter pub audit.",color:$col,author:"Security Scan",fields:[{name:"Scope",value:"secrets, IaC, python, flutter",inline:true},{name:"Run",value:$u,inline:true}]}')"
+              '{channel:$c,title:$t,description:"AUT-1746 PR gate: gitleaks + trivy config + pip-audit + flutter deps (osv-scanner) + compose pin guard.",color:$col,author:"Security Scan",fields:[{name:"Scope",value:"secrets, IaC, python, flutter",inline:true},{name:"Run",value:$u,inline:true}]}')"

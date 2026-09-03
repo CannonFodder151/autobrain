@@ -81,6 +81,10 @@ jobs:
         # sign-off; this only removes the OCR-stall human-approval wait. We check the
         # raw step result (outcome, pre-continue-on-error) so a soft-exited stall still
         # triggers the auto-approve.
+        # continue-on-error: this step is best-effort; approval failures (e.g. branch
+        # protection, token permissions) must not block the PR. The Discord report
+        # still surfaces the OCR outcome.
+        continue-on-error: true
         if: steps.review.outcome != 'success'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -98,8 +102,9 @@ jobs:
             curl -fsS -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
               -H "Content-Type: application/json" \
               -d '{"event":"APPROVE","body":"Auto-approved: OCR (Open Code Review) gate stalled/failed (AUT-1814). OCR review is advisory, not merge-blocking, so the stall no longer waits on manual approval."}' \
-              "https://api.github.com/repos/$REPO/pulls/$PR_NUM/reviews"
-            echo "Auto-approved PR #$PR_NUM after OCR stall (AUT-1814)."
+              "https://api.github.com/repos/$REPO/pulls/$PR_NUM/reviews" && \
+              echo "Auto-approved PR #$PR_NUM after OCR stall (AUT-1814)." || \
+              echo "Auto-approve failed (non-blocking) — continuing."
           fi
 
       - name: Report to Discord #updates
