@@ -14,11 +14,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 class AppConfig {
   static const String _defaultApiBase = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://localhost:8000/api/v1',
+    defaultValue: 'https://hosted.autobrainservice.app/api/v1',
   );
   static const String _defaultWsBase = String.fromEnvironment(
     'WS_BASE_URL',
-    defaultValue: 'wss://localhost:8000/ws',
+    defaultValue: 'wss://hosted.autobrainservice.app/ws',
   );
 
   static const String _prefsKey = 'server_config';
@@ -105,8 +105,8 @@ class AppConfig {
   /// obvious without grepping build logs.
   static ConfigSource describe() {
     final api = apiBase;
-    final fromDefine =
-        api == _defaultApiBase && _defaultApiBase != 'https://localhost:8000/api/v1';
+    final fromDefine = api == _defaultApiBase &&
+        _defaultApiBase != 'https://hosted.autobrainservice.app/api/v1';
     return ConfigSource(
       apiBase: api,
       wsBase: wsBase,
@@ -146,10 +146,9 @@ class AppConfig {
       return v;
     }
     final healthUri = parsed.resolve('/health');
+    final client = http.Client();
     try {
-      final resp = await http
-          .get(healthUri, headers: const {'Accept': 'application/json'})
-          .timeout(_probeTimeout);
+      final resp = await client.get(healthUri).timeout(_probeTimeout);
       final ok = resp.statusCode >= 200 && resp.statusCode < 300;
       final v = ConfigValidation(
         ok: ok,
@@ -176,6 +175,8 @@ class AppConfig {
       );
       lastValidation = v;
       return v;
+    } finally {
+      client.close();
     }
   }
 

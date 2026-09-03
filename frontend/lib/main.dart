@@ -16,10 +16,15 @@ void main() async {
   await AppConfig.load();
   // AUT-2192: fail-fast on a misconfigured build. Web/desktop have no server
   // picker so a wrong URL silently talks to a wrong host; we surface it now.
-  final v = await AppConfig.validate();
-  if (!v.ok) {
-    runApp(_MisconfigApp(error: v.error ?? 'unknown', apiBase: v.apiBase));
-    return;
+  // On mobile a release build only runs the probe when the user has not yet
+  // picked a server; once the picker has stored a value, an in-app outage
+  // surfaces via the existing error banners instead of a hard boot block.
+  if (AppConfig.serverConfigured) {
+    final v = await AppConfig.validate();
+    if (!v.ok) {
+      runApp(_MisconfigApp(error: v.error ?? 'unknown', apiBase: v.apiBase));
+      return;
+    }
   }
   runApp(
     ChangeNotifierProvider(

@@ -131,7 +131,7 @@ class _BuildInfoBanner extends StatelessWidget {
         ? 'compiled'
         : (source.apiOverriddenAtRuntime ? 'override' : 'default');
     return Material(
-      color: Colors.black.withValues(alpha: 0.85),
+      color: Colors.black.withOpacity(0.85),
       child: SafeArea(
         bottom: false,
         child: Padding(

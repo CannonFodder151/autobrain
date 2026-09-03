@@ -12,6 +12,13 @@ import 'package:autobrain/core/config.dart';
 
 void main() {
   group('AppConfig.validate (AUT-2192)', () {
+    setUp(() {
+      // Reset static config so prior tests don't leak into this one.
+      AppConfig.apiBase = 'http://localhost/api/v1';
+      AppConfig.wsBase = 'ws://localhost/ws';
+      AppConfig.lastValidation = null;
+    });
+
     test('reachable /health returns ok with status + body snapshot', () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       server.listen((req) async {
@@ -50,7 +57,7 @@ void main() {
       expect(v.error, contains('503'));
     });
 
-    test('closed port times out and surfaces a clear error', () async {
+    test('closed port fails fast with a connection error', () async {
       // bind+immediately-close so the OS releases the port; probe will fail
       // with a socket error rather than a TimeoutException. Either outcome is
       // a validation failure — that is what we assert.
@@ -63,6 +70,15 @@ void main() {
       final v = await AppConfig.validate();
       expect(v.ok, isFalse);
       expect(v.error, isNotNull);
+    });
+
+    test('non-routable host times out and surfaces TimeoutException', () async {
+      // RFC 5737 TEST-NET-1: guaranteed not to be in any local routing table.
+      // The probe will hit the _probeTimeout (4s) and report a timeout.
+      AppConfig.apiBase = 'http://192.0.2.1:1/api/v1';
+      final v = await AppConfig.validate();
+      expect(v.ok, isFalse);
+      expect(v.error, contains('timed out'));
     });
 
     test('host-less URL fails fast without a network call', () async {
