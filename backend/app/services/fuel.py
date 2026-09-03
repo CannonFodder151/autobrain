@@ -105,11 +105,13 @@ async def compute_fuel_stats(db: AsyncSession, vehicle_id: str) -> FuelStats:
         for r in rows
     ]
     last = rows[-1] if rows else None
+    avg_litres = round(sum(r.litres for r in rows) / len(rows), 2) if rows else None
     return FuelStats(
         total_litres=round(total_litres, 2),
         total_cost=round(total_cost, 2),
         avg_l_per_100km=round(sum(x.l_per_100km for x in eff) / len(eff), 2) if eff else None,
         avg_cost_per_km=round(sum(x.cost_per_km for x in costk) / len(costk), 4) if costk else None,
+        avg_litres_per_fill=avg_litres,
         last_log=FuelLogOut.model_validate(last) if last else None,
         series=series,
     )
