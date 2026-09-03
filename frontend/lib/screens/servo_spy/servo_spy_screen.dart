@@ -374,6 +374,10 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
           ),
         ),
     ];
+    final showEmpty = !_loading &&
+        _error == null &&
+        _userLoc != null &&
+        _stations.isEmpty;
     return Column(
       children: [
         if (_locationDenied)
@@ -432,6 +436,7 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
         Expanded(
           child: Stack(
             children: [
+              Container(color: scheme.surfaceContainerHighest),
               FlutterMap(
                 mapController: _mapController,
                 options: MapOptions(
@@ -454,21 +459,75 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
               ),
               if (_loading)
                 const Positioned.fill(
-                  child: Center(child: CircularProgressIndicator()),
+                  child: ColoredBox(
+                    color: Color(0x66000000),
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                ),
+              if (showEmpty)
+                Positioned.fill(
+                  child: Center(
+                    child: Container(
+                      margin: const EdgeInsets.all(24),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: scheme.surface.withValues(alpha: 0.95),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.local_gas_station_outlined,
+                              size: 40, color: scheme.onSurfaceVariant),
+                          const SizedBox(height: 8),
+                          Text(
+                            'No fuel stations within ${_maxDistanceKm.toInt()} km.',
+                            style: Theme.of(context).textTheme.titleSmall,
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Try increasing the distance in Filters.',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: scheme.onSurfaceVariant),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 12),
+                          FilledButton.tonal(
+                            onPressed: _openFilter,
+                            child: const Text('Adjust filters'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               if (_error != null && !_loading)
                 Positioned(
                   left: 16,
                   right: 16,
-                  bottom: 16,
+                  top: 16,
                   child: Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: scheme.error.withValues(alpha: 0.9),
+                      color: scheme.errorContainer,
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Text('Prices unavailable: $_error',
-                        style: TextStyle(color: scheme.onError)),
+                    child: Row(
+                      children: [
+                        Icon(Icons.error_outline, color: scheme.onErrorContainer),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Prices unavailable: $_error',
+                            style: TextStyle(color: scheme.onErrorContainer),
+                          ),
+                        ),
+                        TextButton(onPressed: _bootstrap, child: const Text('Retry')),
+                      ],
+                    ),
                   ),
                 ),
               Positioned(
