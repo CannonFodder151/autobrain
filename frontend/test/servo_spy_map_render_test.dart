@@ -168,6 +168,41 @@ void main() {
         reason: 'empty-state overlay must render so the user is never left '
             'looking at a blank screen');
   });
+
+  testWidgets(
+      'recenter FAB only appears after the map drifts from the user (AUT-2237)',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(_app(_FakePaidAuth()));
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    expect(find.byIcon(Icons.my_location), findsNothing,
+        reason: 'recenter FAB must stay hidden while the map is centered');
+
+    final mapState =
+        tester.state<State<FlutterMap>>(find.byType(FlutterMap));
+    final controller = mapState.widget.mapController;
+    controller.move(const LatLng(-33.8688, 151.2093), 12);
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    expect(find.byIcon(Icons.my_location), findsOneWidget,
+        reason: 'recenter FAB must appear once the user pans the map');
+
+    await tester.tap(find.byIcon(Icons.my_location));
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    expect(find.byIcon(Icons.my_location), findsNothing,
+        reason: 'recenter FAB must hide once the map is back on the user');
+  });
 }
 
 class _Stations500Api extends ApiClient {

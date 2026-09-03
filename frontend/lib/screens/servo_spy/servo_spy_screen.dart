@@ -166,6 +166,27 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
   String? _vehicleId;
   double _maxDistanceKm = 25;
   final MapController _mapController = MapController();
+  LatLng? _mapCenter;
+  bool _drifted = false;
+
+  void _onMapEvent(MapEvent event) {
+    if (event is MapEventMoveEnd) {
+      final c = event.camera.center;
+      _mapCenter = c;
+      if (_userLoc != null) {
+        final d = _userLoc!.latitude - c.latitude;
+        final e = _userLoc!.longitude - c.longitude;
+        _drifted = d * d + e * e > 0.0001;
+      }
+      if (mounted) setState(() {});
+    }
+  }
+
+  void _recenter() {
+    if (_userLoc == null) return;
+    _mapController.move(_userLoc!, _mapController.camera.zoom);
+    _drifted = false;
+  }
 
   @override
   void initState() {
@@ -445,6 +466,7 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
                   interactionOptions: InteractionOptions(
                     flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
                   ),
+                  onMapEvent: _onMapEvent,
                 ),
                 children: [
                   TileLayer(
@@ -543,6 +565,17 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
                   ),
                 ),
               ),
+              if (_drifted && _userLoc != null)
+                Positioned(
+                  right: 16,
+                  bottom: 28,
+                  child: FloatingActionButton.small(
+                    heroTag: 'servoSpyRecenter',
+                    tooltip: 'Center on your location',
+                    onPressed: _recenter,
+                    child: const Icon(Icons.my_location),
+                  ),
+                ),
             ],
           ),
         ),
