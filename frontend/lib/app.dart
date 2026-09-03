@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -93,6 +94,20 @@ class AutoBrainApp extends StatelessWidget {
       home = const LoginScreen();
     }
 
+    // AUT-2192: surface the resolved backend URL in debug builds so a
+    // misconfigured build is obvious at a glance. Web-only query (?debug=1)
+    // shows it in release too.
+    final showDebugBanner = kDebugMode ||
+        Uri.base.queryParameters['debug'] == '1';
+    if (showDebugBanner) {
+      home = Column(
+        children: [
+          _BuildInfoBanner(source: AppConfig.describe()),
+          Expanded(child: home),
+        ],
+      );
+    }
+
     return MaterialApp(
       title: 'AutoBrain',
       debugShowCheckedModeBanner: false,
@@ -100,6 +115,37 @@ class AutoBrainApp extends StatelessWidget {
       darkTheme: AppTheme.dark(),
       themeMode: auth.darkMode ? ThemeMode.dark : ThemeMode.light,
       home: home,
+    );
+  }
+}
+
+/// AUT-2192 — small banner showing the resolved API/WS base + source. Debug
+/// builds only. Tappable to dump the JSON into the navigator for QA.
+class _BuildInfoBanner extends StatelessWidget {
+  final ConfigSource source;
+  const _BuildInfoBanner({required this.source});
+
+  @override
+  Widget build(BuildContext context) {
+    final tag = source.apiFromDartDefine
+        ? 'compiled'
+        : (source.apiOverriddenAtRuntime ? 'override' : 'default');
+    return Material(
+      color: Colors.black.withValues(alpha: 0.85),
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Text(
+            'API [$tag]: ${source.apiBase}\nWS: ${source.wsBase}',
+            style: const TextStyle(
+              color: Colors.white,
+              fontFamily: 'monospace',
+              fontSize: 11,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

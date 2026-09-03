@@ -11,6 +11,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-2192)
+- fix(frontend): pin + validate `BACKEND_URL` / `API_BASE_URL` so a misconfigured
+  build fails fast at boot instead of silently talking to the wrong host.
+  Single source of truth remains `--dart-define=API_BASE_URL=...` /
+  `WS_BASE_URL=...` (Dockerfile + `scripts/publish-images.sh`). At startup
+  `AppConfig.validate()` parses the resolved URL, rejects host-less values,
+  and probes `/health` with a 4s timeout. On failure `main()` mounts a
+  diagnostic screen showing the URL + error + rebuild instructions instead
+  of an infinite spinner. Debug builds (or `?debug=1` on web) show a small
+  monospace banner above the app shell with the resolved API/WS base and a
+  `compiled`/`override`/`default` source tag. New test
+  `frontend/test/app_config_validate_test.dart` asserts the probe reaches a
+  loopback server, surfaces non-2xx as a failure, and rejects host-less URLs
+  without a network call.
+
 ## [0.3.217] - 2026-09-03
 ### Security
 - **CI security gate / AUT-2066:** replace the broken `dart pub audit` step in

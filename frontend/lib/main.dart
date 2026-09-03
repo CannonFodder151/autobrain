@@ -14,6 +14,13 @@ void main() async {
   // which licenseRequested() would read an empty fragment (AUT-629).
   AutoBrainApp.initialFragment = Uri.base.fragment;
   await AppConfig.load();
+  // AUT-2192: fail-fast on a misconfigured build. Web/desktop have no server
+  // picker so a wrong URL silently talks to a wrong host; we surface it now.
+  final v = await AppConfig.validate();
+  if (!v.ok) {
+    runApp(_MisconfigApp(error: v.error ?? 'unknown', apiBase: v.apiBase));
+    return;
+  }
   runApp(
     ChangeNotifierProvider(
       create: (_) => AuthState(),
@@ -28,4 +35,49 @@ void main() async {
   // monitor on the same recorder, so a drive starts logging without Android
   // Auto approval or an OBD adapter.
   CarKitTripMonitorService.instance.start();
+}
+
+/// Minimal app shown when AppConfig.validate() fails at boot. Renders the
+/// resolved URL + error so a misconfigured build is obvious without reading
+/// build logs (AUT-2192).
+class _MisconfigApp extends StatelessWidget {
+  final String error;
+  final String apiBase;
+  const _MisconfigApp({required this.error, required this.apiBase});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'AutoBrain — misconfigured',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData.light(),
+      dark: ThemeData.dark(),
+      home: Scaffold(
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'AutoBrain is misconfigured',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 16),
+                Text('API base: $apiBase'),
+                const SizedBox(height: 8),
+                Text('Error: $error'),
+                const SizedBox(height: 24),
+                const Text(
+                  'Rebuild with the correct --dart-define=API_BASE_URL=... '
+                  'and --dart-define=WS_BASE_URL=... (see docker/frontend/Dockerfile '
+                  'or scripts/publish-images.sh).',
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
