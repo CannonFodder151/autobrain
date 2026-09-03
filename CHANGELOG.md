@@ -13,6 +13,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [0.3.215] - 2026-09-03
 
+### Security (AUT-1608)
+- k8s: add `resources.requests`/`limits` to autobrain-backend, autobrain-frontend, autobrain-ai, autobrain-worker, autobrain-beat, autobrain-postgres (D8). Prevents a single pod from exhausting node resources.
+- frontend: add `Strict-Transport-Security: max-age=31536000; includeSubDomains` to every response (D12).
+
+## [0.3.207] - 2026-09-02
+
+## [0.3.206] - 2026-09-02
+
+## [0.3.205] - 2026-09-02
+
+## [0.3.204] - 2026-09-02
+
 ### Fixed
 - fix(docker, AUT-1978): rename typo `AUTOBRIAN_BACKEND_URL` → `AUTOBRAIN_BACKEND_URL` in `docker-compose.hosted.yml` dongle-server block (typo silently broke backend→dongle backchannel since the AUT-1673 dongle-server wiring landed).
 - fix(docker, AUT-1978): remove the duplicated `dongle-server` service definition in `docker-compose.hosted.yml`. Docker Compose takes the LAST occurrence on duplicate keys, so the first block (plain `DONGLE_SERVER_API_KEY`, no MinIO/SECRETS_FILE wiring) was dead config; only the second block (with `_FILE` secrets anchor, AUT-2211 overrides) was live. Single source of truth restored.
