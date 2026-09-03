@@ -11,6 +11,10 @@ FROM ${FLUTTER_IMAGE} AS build
 # CI should pass --build-arg API_BASE_URL / WS_BASE_URL explicitly.
 ARG API_BASE_URL=http://localhost:8000/api/v1
 ARG WS_BASE_URL=ws://localhost:8000/ws
+# AUT-2220: CARTO basemap API key. CARTO keys are designed to be public
+# (embedded in tile URLs as ?api_key=...). CI must pass --build-arg CARTO_API_KEY
+# explicitly. Empty value falls back to the key-less public basemap.
+ARG CARTO_API_KEY=
 
 WORKDIR /build
 # Copy the lockfile too so `pub get` resolves the exact pinned dependency set
@@ -20,7 +24,8 @@ RUN flutter pub get
 COPY frontend ./
 RUN flutter build web \
     --dart-define=API_BASE_URL=${API_BASE_URL} \
-    --dart-define=WS_BASE_URL=${WS_BASE_URL}
+    --dart-define=WS_BASE_URL=${WS_BASE_URL} \
+    --dart-define=CARTO_API_KEY=${CARTO_API_KEY}
 
 FROM nginxinc/nginx-unprivileged:stable-alpine@sha256:45ce1e2e699234253d1def7baa96218a5d00b498d1ba0cbb1a17b6bdf73d1351
 COPY --from=build /build/build/web /usr/share/nginx/html
