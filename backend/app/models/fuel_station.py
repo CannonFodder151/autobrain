@@ -3,6 +3,10 @@
 Normalised station registry + price observations from WA FuelWatch, NSW
 FuelCheck and QLD Fuel Prices. Radius queries are done in Python (great-circle
 distance), so no PostGIS column is needed (see ``app.services.fuel_feeds``).
+
+The servo-spy price row lives in its own ``fuel_station_prices`` table to avoid
+colliding with the AUT-1813 NSW snapshot row in ``fuel_prices`` (different
+schema: FK to ``fuel_stations`` here, state+station_code unique there). AUT-2277.
 """
 
 import uuid
@@ -31,13 +35,13 @@ class FuelStation(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    prices: Mapped[list["FuelPrice"]] = relationship(
+    prices: Mapped[list["FuelStationPrice"]] = relationship(
         back_populates="station", lazy="selectin", cascade="all, delete-orphan"
     )
 
 
-class FuelPrice(Base):
-    __tablename__ = "fuel_prices"
+class FuelStationPrice(Base):
+    __tablename__ = "fuel_station_prices"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     station_id: Mapped[str] = mapped_column(

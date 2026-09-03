@@ -1,0 +1,95 @@
+# AUT-2277: backend pytest collection smoke gate.
+# Catches ORM metadata collisions and import-time breakage on every PR before
+# review. Cheap (collection-only, no DB), runs on the public ubuntu-latest
+# pool so the self-hosted arm64/x64 runners stay free for the heavy
+# dockerhub-publish / security-scan / build-hosted jobs.
+name: Backend pytest collection (smoke)
+
+on:
+  pull_request:
+    paths:
+      - "backend/**"
+      - "backend/pyproject.toml"
+      - "backend/requirements.txt"
+      - ".github/workflows/backend-pytest-smoke.yml"
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "backend/pyproject.toml"
+      - "backend/requirements.txt"
+      - ".github/workflows/backend-pytest-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-pytest-smoke-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  collect:
+    name: pytest --collect-only + duplicate-tablename guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend deps
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: pytest --collect-only
+        working-directory: backend
+        env:
+          # conftest.py requires these to import app.config; offline-only run.
+          DATABASE_URL: postgresql+asyncpg://u:p@localhost/db
+          SECRET_KEY: test-secret
+          MINIO_ACCESS_KEY: k
+          MINIO_SECRET_KEY: s
+          POSTGRES_USER: u
+          POSTGRES_PASSWORD: p
+          POSTGRES_DB: db
+          MARKET_DATA_URL: ""
+          MARKET_DATA_API_KEY: ""
+          ENVIRONMENT: development
+        run: |
+          set -euo pipefail
+          python -m pytest --collect-only -q tests/ 2>&1 | tail -200
+          # Fail if any test module errored during collection (AUT-2277
+          # originally manifested here as "Table 'fuel_prices' is already
+          # defined for this MetaData instance.").
+          python -m pytest --collect-only -q --co -q tests/ \
+            | tee /tmp/collect.log
+          if grep -E '^(ERROR|errors during collection|Interrupted)' /tmp/collect.log; then
+            echo "pytest collection failed; see log above"
+            exit 1
+          fi
+
+      - name: Run ORM duplicate-tablename guard (AUT-2277)
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+asyncpg://u:p@localhost/db
+          SECRET_KEY: test-secret
+          MINIO_ACCESS_KEY: k
+          MINIO_SECRET_KEY: s
+          POSTGRES_USER: u
+          POSTGRES_PASSWORD: p
+          POSTGRES_DB: db
+          MARKET_DATA_URL: ""
+          MARKET_DATA_API_KEY: ""
+          ENVIRONMENT: development
+        run: |
+          set -euo pipefail
+          python -m pytest -q tests/test_no_duplicate_tablename.py tests/test_alembic_heads.py

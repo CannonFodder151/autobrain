@@ -32,7 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.logging import get_logger
-from app.models.fuel_station import FuelPrice, FuelStation
+from app.models.fuel_station import FuelStation, FuelStationPrice
 
 logger = get_logger(__name__)
 
@@ -281,7 +281,7 @@ def _parse_qld_direct_prices(
             if price_dollars is not None:
                 # DirectAPI returns integer cents/litre; WA/NSW already in
                 # dollars. Caller may pass dollars or cents via the upstream
-                # shape; downstream columns store dollars (FuelPrice.price).
+                # shape; downstream columns store dollars (FuelStationPrice.price).
                 # Heuristic: if value looks like cents (> 50 with no decimal)
                 # divide by 100, otherwise keep as-is. Real-world AU fuel
                 # is always > 100 cents/litre, so this is safe.
@@ -406,9 +406,9 @@ async def _upsert_station(db: AsyncSession, s: dict) -> FuelStation:
 
 
 async def _replace_station_prices(db: AsyncSession, station_id: str, prices: list[tuple[str, float, datetime]]) -> int:
-    await db.execute(delete(FuelPrice).where(FuelPrice.station_id == station_id))
+    await db.execute(delete(FuelStationPrice).where(FuelStationPrice.station_id == station_id))
     for ft, price, eff in prices:
-        db.add(FuelPrice(station_id=station_id, fuel_type=ft, price=price, effective_at=eff))
+        db.add(FuelStationPrice(station_id=station_id, fuel_type=ft, price=price, effective_at=eff))
     return len(prices)
 
 

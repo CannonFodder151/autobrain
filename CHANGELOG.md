@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-2277)
+- fix(backend): break the SERVO SPY / NSW-snapshot `fuel_prices` table collision that crashed `pytest --collect-only` with `Table 'fuel_prices' is already defined for this MetaData instance.` Renamed the SERVO SPY model (`app.models.fuel_station.FuelPrice` → `FuelStationPrice`) to its own `fuel_station_prices` table; the NSW snapshot row keeps `fuel_prices`. Added new Alembic migration `aut2277_fuel_station_prices_table` that renames a pre-existing servo-spy `fuel_prices` to `fuel_station_prices` (or creates the new table fresh) and updated `f0a1b2c3d4e5` so greenfield deploys land on the right name. Added `tests/test_no_duplicate_tablename.py` (asserts every ORM class has a unique `__tablename__`) and `.github/workflows/backend-pytest-smoke.yml` so the regression fails fast on PR.
+
 ## [0.3.223] - 2026-09-03
 
 ### Security (AUT-1745)

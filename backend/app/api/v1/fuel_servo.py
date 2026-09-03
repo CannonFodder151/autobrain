@@ -3,7 +3,7 @@
 Read-only, deterministic, PREMIUM-GATED. Every route depends on
 ``require_fuel_access`` (free/demo accounts get 403, see the gating comment on
 AUT-1813). No 9Router/AI — the data is the normalised ``fuel_stations`` /
-``fuel_prices`` tables populated by the Celery ingest task.
+``fuel_station_prices`` tables populated by the Celery ingest task.
 
 Open-data attribution is attached to every response via the
 ``X-Fuel-Data-Attribution`` header and the ``/attribution`` endpoint.
@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.core.logging import get_logger
 from app.db.session import get_db
-from app.models.fuel_station import FuelPrice, FuelStation
+from app.models.fuel_station import FuelStation, FuelStationPrice
 from app.models.user import User
 from app.schemas.fuel import FuelStats  # noqa: F401  (type hint in _station_out)
 from app.schemas.fuel_servo import (
@@ -68,7 +68,7 @@ async def fuel_types(
 ):
     """Catalogue of fuel types observed across feeds (data-driven dropdown)."""
     _set_attribution(response)
-    rows = list((await db.scalars(select(distinct(FuelPrice.fuel_type)).order_by(FuelPrice.fuel_type))).all())
+    rows = list((await db.scalars(select(distinct(FuelStationPrice.fuel_type)).order_by(FuelStationPrice.fuel_type))).all())
     types = [t for t in rows if t]
     if not types:
         types = list(feeds.DEFAULT_FUEL_TYPES)
@@ -130,7 +130,7 @@ async def fuel_stations(
 
     out: list[FuelStationOut] = []
     for dist, s in hits[:limit]:
-        prices: list[FuelPrice] = []
+        prices: list[FuelStationPrice] = []
         if fuel_type:
             price = await _latest_price(db, s.id, fuel_type)
             if price is None:
@@ -138,8 +138,8 @@ async def fuel_stations(
             prices = [price]
         else:
             prices = list((await db.scalars(
-                select(FuelPrice).where(FuelPrice.station_id == s.id)
-                .order_by(FuelPrice.fuel_type, FuelPrice.effective_at.desc())
+                select(FuelStationPrice).where(FuelStationPrice.station_id == s.id)
+                .order_by(FuelStationPrice.fuel_type, FuelStationPrice.effective_at.desc())
             )).all())
         out.append(_station_out(s, prices, dist, stats))
     return out
@@ -158,8 +158,8 @@ async def station_prices(
     if not station:
         raise HTTPException(status_code=404, detail="Station not found")
     prices = list((await db.scalars(
-        select(FuelPrice).where(FuelPrice.station_id == station_id)
-        .order_by(FuelPrice.fuel_type, FuelPrice.effective_at.desc())
+        select(FuelStationPrice).where(FuelStationPrice.station_id == station_id)
+        .order_by(FuelStationPrice.fuel_type, FuelStationPrice.effective_at.desc())
     )).all())
     return _station_out(station, prices, None, None)
 
@@ -174,17 +174,17 @@ async def fuel_attribution(
     return AttributionOut(attribution=FUEL_ATTRIBUTION, sources=["wa", "nsw", "qld"])
 
 
-async def _latest_price(db: AsyncSession, station_id: str, fuel_type: str) -> FuelPrice | None:
+async def _latest_price(db: AsyncSession, station_id: str, fuel_type: str) -> FuelStationPrice | None:
     return (await db.scalars(
-        select(FuelPrice)
-        .where(FuelPrice.station_id == station_id, FuelPrice.fuel_type == fuel_type)
-        .order_by(FuelPrice.effective_at.desc())
+        select(FuelStationPrice)
+        .where(FuelStationPrice.station_id == station_id, FuelStationPrice.fuel_type == fuel_type)
+        .order_by(FuelStationPrice.effective_at.desc())
     )).first()
 
 
 def _station_out(
     s: FuelStation,
-    prices: list[FuelPrice],
+    prices: list[FuelStationPrice],
     dist: float | None,
     stats: "FuelStats | None" = None,
 ) -> FuelStationOut:
