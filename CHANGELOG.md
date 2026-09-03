@@ -9,49 +9,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
 
-
-
-
-
-
-
-
-
-
 ## [Unreleased]
 
-## [0.3.213] - 2026-09-03
+## [0.3.214] - 2026-09-03
 
-## [0.3.212] - 2026-09-03
-### Changed
-- Servo Spy QLD feed switched to FuelPricesQLD DirectAPI v1.5 (Bearer subscription token). Old open-data parser kept behind `FUEL_QLD_USE_OPEN_FALLBACK` flag for one cycle.
-
-## [0.3.211] - 2026-09-03
-
-## [0.3.210] - 2026-09-02
-
-## [0.3.209] - 2026-09-02
-
-## [0.3.208] - 2026-09-02
-
-## [0.3.207] - 2026-09-02
-
-## [0.3.206] - 2026-09-02
-
-## [0.3.205] - 2026-09-02
-
-## [0.3.204] - 2026-09-02
-
-### Fixed
-- CI (AUT-2097): fix buildx cache contamination in `build-hosted.yml` that shipped
-  amd64 layer blobs inside arm64 manifests. Scoped GHA buildx cache per-architecture,
-  disabled cache import for arm64 builds, added pre- and post-build arch verification
-  steps, and gated manifest assembly on both arch checks passing.
-
-
-## [Unreleased]
-
-<<<<<<< HEAD
 ### Fix (AUT-2070)
 - fix(docker): pin `nginxinc/nginx-unprivileged:stable-alpine` in `docker/frontend/Dockerfile` to the multi-arch manifest digest `sha256:45ce1e2e…` so the `Pin guard — frontend nginx image` gate stays green (was floating `:stable-alpine`).
 - fix(frontend): Servo Spy list view now exposes an inline fuel-type chip bar so the fuel filter is visible without opening the filter sheet. The selected-fuel price-match fix from PR #410 (AUT-2105) already shipped in 0.3.203.
@@ -74,6 +35,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   on Hosted, or `FUEL_VIC_API_KEY` on Default; absent the key the source
   silently skips per the existing `enabled()` check (AUT-1932).
 - **Stack/docker-compose (AUT-1853):** `docker-compose.hosted.yml` and `scripts/seed-secrets.sh` now default `SECRETS_DIR` to `/data/autobrain/secrets` instead of `/opt/autobrain/secrets`. The snap dockerd on the Oracle VM masks `/opt` from a read-only core24 squashfs, so the old bind-mount failed with `read-only file system` and took the hosted stack down; `/data` is daemon-visible and never masked. `docs/security.md` and `docs/deployment-guide.md` updated for the path migration (the live HostED cutover — re-seed + redeploy — is tracked separately in AUT-1853-live).
+
+## [0.3.212] - 2026-09-03
+### Changed
+- Servo Spy QLD feed switched to FuelPricesQLD DirectAPI v1.5 (Bearer subscription token). Old open-data parser kept behind `FUEL_QLD_USE_OPEN_FALLBACK` flag for one cycle.
+
+## [0.3.204] - 2026-09-02
+
+### Fixed
+- CI (AUT-2097): fix buildx cache contamination in `build-hosted.yml` that shipped
+  amd64 layer blobs inside arm64 manifests. Scoped GHA buildx cache per-architecture,
+  disabled cache import for arm64 builds, added pre- and post-build arch verification
+  steps, and gated manifest assembly on both arch checks passing.
 
 ## [0.3.203] - 2026-09-02
 
@@ -159,7 +132,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   2000+ failing-strike healthcheck backlog on EP5 `autobrain-hosted-worker-1`
   (AUT-2056).
 
-
 ## [0.3.198] - 2026-09-01
 
 ### Security
@@ -187,28 +159,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   hosted.autobrainservice.app. Use the `stable-alpine` tag so buildx resolves
   the correct architecture-specific manifest per build platform.
 
-## [0.3.196] - 2026-08-30
-
 ## [0.3.195] - 2026-08-30
 - fix(ci): use GHCR_PAT secret for GHCR authentication in build-hosted.yml (AUT-1937). The `github_pat` secret name was invalid (GitHub blocks `github_*` prefix), causing 403 Forbidden on multi-arch image push, which broke the auto-update and deploy pipeline.
-
-## [0.3.194] - 2026-08-30
-
-## [0.3.193] - 2026-08-30
-
-## [0.3.192] - 2026-08-30
-
-## [0.3.191] - 2026-08-30
-
-## [0.3.190] - 2026-08-30
-
-## [0.3.189] - 2026-08-30
 
 ## [0.3.188] - 2026-08-30
 
 - fix(backend): register fuel_servo router — Servo Spy API was dead code (AUT-1817).
-
-## [0.3.187] - 2026-08-30
 
 ## [0.3.186] - 2026-08-30
 
@@ -221,48 +177,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   vehicle's fuel-type price, highlights the cheapest station, and shows a
   bottom sheet with all fuel-type prices + one-tap Navigate (Google Maps).
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-## [0.3.184] - 2026-08-30
-
-## [0.3.183] - 2026-08-30
-
-## [0.3.182] - 2026-08-30
-
-## [0.3.181] - 2026-08-30
-
-## [0.3.180] - 2026-08-30
-
-## [0.3.179] - 2026-08-30
-
 ## [0.3.178] - 2026-08-30
 
 ### Added
@@ -271,22 +185,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed
 - **Servo Spy filter safety (AUT-1821 follow-up):** the fuel-type dropdown now seeds with the static defaults before the `GET /fuel/types` response lands, so the filter sheet remains valid if the vehicle list request fails first — no empty-dropdown crash.
 
-## [0.3.177] - 2026-08-29
-
 ## [0.3.176] - 2026-08-29
 
 ### Added
 - **Vehicle fuel-type dropdown (AUT-1819):** the vehicle edit/add screen now has a data-driven `Fuel type` dropdown sourced from `GET /api/fuel/types` (canonical tokens E10/91/95/98/Diesel/LPG), falling back to a static list when the API is unavailable or premium-gated. The selection persists on `vehicles.fuel_type` and is exposed on the vehicle record for the map/list default-price behaviour. Backend adds the `fuel_type` column (migration `aut1819_fuel_type`, which also merges the six outstanding alembic heads so `alembic upgrade head` stays single-headed).
 - **Servo Spy tab shell + Map/List selector (AUT-1818):** new premium-gated `Servo Spy` entry in the home feature grid opening a screen with a `Map`/`List` segmented control. The map is theme-aware (CARTO light basemap in light mode, dark basemap in dark mode) and follows the app light/dark theme. Free-tier accounts are shown the shared `PremiumGate` paywall and never see map or list data (gating requirement from AUT-1813). Live station markers/list rows are deferred to the backend fuel-price API (AUT-1817).
 
-## [0.3.175] - 2026-08-29
-
 ## [0.3.174] - 2026-08-29
 
 ### Added
 - **Servo Spy fuel-price pipeline (AUT-1817):** deterministic, no-AI ingest of public open-data feeds — WA FuelWatch, NSW FuelCheck, QLD Fuel Prices — into new `fuel_stations` / `fuel_prices` Postgres tables (Alembic migration `f0a1b2c3d4e5`), with a Celery beat task (`ingest_fuel_prices`, every 6h). Premium-gated read API at `/api/fuel/*` (`/types`, `/brands`, `/stations?lat&lon&radiusKm&fuelType`, `/station/{id}/prices`, `/attribution`) — free accounts get 403 "Fuel prices are a premium feature. Upgrade to enable it." Open-data attribution is attached to every response (`X-Fuel-Data-Attribution`).
-
-## [0.3.173] - 2026-08-29
 
 ## [0.3.172] - 2026-08-29
 
@@ -296,12 +204,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 - **SCA parts lookup 405 (AUT-1903):** the `/vehicles/{id}/parts/sca-lookup` route was registered as `GET` while the app `POST`s a JSON body, so every lookup failed with 405 Method Not Allowed. Switched to `POST` so the vehicle-driven lookup actually returns results.
-
-## [0.3.171] - 2026-08-29
-
-## [0.3.170] - 2026-08-29
-
-## [0.3.169] - 2026-08-29
 
 ## [0.3.168] - 2026-08-29
 
@@ -326,38 +228,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   button now opens the device camera directly (ImagePicker) with a "Choose from
   files" gallery option, instead of always launching the file picker.
 
-## [0.3.167] - 2026-08-29
-
 ## [0.3.166] - 2026-08-29
 
 ### Security
 - **CI security gate / AUT-1746:** new `security-pr-gate.yml` runs on every PR and push to `main`: (1) **gitleaks detect** — blocks on any committed secret (`.gitleaks.toml` extends the vendored `gitleaks` v8.18.1 default ruleset + an AutoBrain allowlist of known non-secret fixtures/examples so the gate survives the squash-merge workflow); (2) **trivy config (misconfig)** on every Dockerfile build target (`docker/frontend`, `docker/backend`, `docker/ai`, `docker/worker`, `market-data`) — fails on HIGH/CRITICAL; (3) **pip-audit** on `backend/`, `ai/` and `market-data/` requirements (extends the existing PR gate to market-data); (4) **flutter pub audit** (`dart pub audit`) on `frontend/`. Compose misconfig is covered by the existing `trivy-image-scan.yml` (digest-pin + base-image CVE scan of the postgres/nginx/python images compose references) rather than a structural compose gate — current trivy has no compose misconfig scanner, and `docker compose config` false-errors on the working dev/hosted stacks, so it was intentionally not added to avoid blocking on non-issues. Combined with the existing `security-scan.yml` (weekly full-resolution pip-audit + external image scans), this closes the "no visible CI security gate" gap. Residual risk drops from Medium toward Low once these jobs are set as required status checks in branch protection.
 - **Security reporting / AUT-1882:** `docs/security.md` now classifies the 9Router `:20128` port as **source-restricted, NOT internet-exposed** (reachable only from the allow-listed dev egress IP `122.199.30.128/32` + the internal docker subnet `172.18.0.0/16`, all else dropped by `fw-keeper`). Added explicit false-positive guidance: a scan launched from the allow-listed egress IP sees the port open *by design* and must not be reported as "accessible from the internet"; confirm non-exposure with multi-source external probes (e.g. check-host.net nodes), which time out. Stops the recurring false "9Router is internet-accessible" finding.
 
-## [0.3.165] - 2026-08-29
-
 ## [0.3.164] - 2026-08-29
 
 ### Added
 - Fuel: accurate 7-Eleven fuel prices via projectzerothree.info (`GET /vehicles/{id}/fuel/prices/7eleven`) — deterministic, no AI. Cheapest-by-region and nearest-store modes for auto-filling price-per-litre (AUT-1887).
-
-## [0.3.163] - 2026-08-29
-
-## [0.3.162] - 2026-08-29
 
 ## [0.3.161] - 2026-08-29
 
 ### Security
 - Backend (market-data): `_client_ip()` now honors `X-Forwarded-For` only when the direct socket peer is in the `TRUSTED_PROXIES` allowlist (mirroring `rego-lookup-api`), so spoofed `X-Forwarded-For` headers can no longer rotate per-IP rate-limit buckets (CWE-602, AUT-1741). Default (no `TRUSTED_PROXIES`) is unchanged: the socket peer keys the IP bucket and XFF is ignored.
 
-## [0.3.160] - 2026-08-29
-
 ## [0.3.159] - 2026-08-29
 
 ### Fixed
 - Backend: full-DB JSON backup now emits strict RFC-8259 JSON — non-finite Postgres `FLOAT` values (NaN/`Infinity` from `0/0` or divide-by-zero) are coerced to `null` instead of writing the invalid `NaN`/`Infinity` tokens that off-box backup agents reject (the "failed backup jobs for hosted" failure, AUT-1854). `scheduled_backup` also honours `BACKUP_ENABLED`.
-
-## [0.3.158] - 2026-08-29
 
 ## [0.3.157] - 2026-08-29
 
@@ -379,18 +269,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   them failed compose interpolation. Now defaulted to `autobrain`, so a redeploy
   can never fail at interpolation.
 
-
-
-
-
-
-
-## [0.3.156] - 2026-08-29
-
-## [0.3.155] - 2026-08-29
-
-## [0.3.154] - 2026-08-28
-
 ## [0.3.153] - 2026-08-28
 
 ### Changed
@@ -401,7 +279,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed
 - feat: add autobrain-dongle-server to hosted stack (AUT-1673) (gardened, AUT-1777).
 
-
 - API: rego-lookup endpoint now enforces a per-user hourly rate limit (default 20/hour, configurable via `REGO_RATE_LIMIT_PER_HOUR`, fail-open on Redis outage) to protect the downstream AU rego service (AUT-1607).
 
 - IAP: gracefully fall back to Stripe checkout when product IDs are not configured in the Play Store — prevents Google Play's native "in-app purchases not available" overlay from blocking the upgrade flow (AUT-1149).
@@ -409,15 +286,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed
 - **AI gateway (AUT-1810):** AI router URL normalised to the corporate 9Router endpoint `http://10.0.3.17:20128/v1` (env `AI_ROUTER_URL` canonicalised) so OCR/AI calls never drift to a wrong/blank router.
 
-
 ### Security
 - Hardened Redis in `docker-compose.prod.yml` — added `--requirepass` and updated healthcheck to authenticate; environment variable `REDIS_PASSWORD` is now required (AUT-1600).
 - **Security (AUT-1600):** hardened Redis healthcheck — `redis-cli` now receives `REDIS_PASSWORD` via the `REDISCLI_AUTH` env var instead of `redis-cli -a`, so the broker password never appears in the container process list (`docker-compose.yml`, `docker-compose.prod.yml`).
 
-
 ### Security
 - **Security (AUT-1735):** Bumped `docker/backend`, `docker/ai`, `docker/worker` and `market-data` Dockerfiles off the vulnerable `python:3.12-slim` base (trivy reported 18 HIGH/CRITICAL CVEs: CVE-2026-13221 perl RCE, CVE-2026-42496 perl-Archive-Tar path traversal, CVE-2026-8376 perl heap overflow, CVE-2026-14456 OpenSSL QUIC DoS, CVE-2026-11822/11824 SQLite FTS5 code exec, CVE-2025-7458 SQLite integer overflow, CVE-2023-45853 zlib heap overflow). All python bases now pin `python:3.13-slim@sha256:...` by digest. Added a python base-image scan to `.github/workflows/trivy-image-scan.yml` (`--severity HIGH,CRITICAL --exit-code 1`) plus a pin guard that fails any floating `FROM python:*` tag. `rego-lookup-api/Dockerfile` (separate private repo) tracked in follow-up AUT-1735-r1.
-
 
 ### Security
 - (AUT-1181) Fail-closed secret defaults (HIGH): `SECRET_KEY` no longer has a
@@ -429,10 +303,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   is set, an empty `STRIPE_WEBHOOK_SECRET` now crashes at startup so forged
   webhooks cannot mutate subscriptions.
 
-
 ### Fixed
 - AI: rate limiter evicts stale buckets on overflow instead of clearing all entries, preventing 10K+ IP rotation from keeping limits perpetually ineffective (AUT-1605).
-
 
 ### Fixed
 - **AUT-1185** AI gateway OOM DoS + auth bypass + prompt injection (security):
@@ -452,7 +324,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Regression tests: `test_run_clamps_oversized_dimensions`, `test_validate_nested_depth_and_length`,
   `test_ai_env_development_no_longer_bypasses_auth`, `test_enhance_drops_nested_too_deep`.
 
-
 ### Fixed
 - **App (AUT-1771):** The 7-day free trial now appears on the Android (and iOS) app. The trial chip/Copy/CTA were previously hidden whenever the store (IAP) purchase path was active — and the hosted instance reports IAP as enabled, so Android users never saw the offer. The trial is now surfaced for both the Stripe checkout path and the store path, driven by the per-account `trial_available`/`trial_days` flags from `GET /auth/me`. Note: for the store path the native Google Play / App Store subscription base plan must be configured with the 7-day free trial for it to apply; the Stripe monthly checkout already grants it via `trial_period_days`.
 
@@ -468,8 +339,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed
 - **CI/Ops (AUT-1720):** The x64 self-hosted runner no longer freezes indefinitely during heavy `docker buildx build --push` publishes. Root cause was an intermittent dockerd wedge (publish job would hang until GitHub killed it with `context deadline exceeded`); the new watchdog restarts the daemon proactively before it wedges the next job.
 
-
-
 ## [0.3.150] - 2026-08-28
 
 - Market-data rate limiting now keys the per-IP limit on the socket remote address instead of `X-Forwarded-For`, so a forged forwarded header can no longer rotate the bucket and evade the limit (AUT-1326).
@@ -479,7 +348,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed
 - Deployment (hosted): `9Router` on `:20128` is now reachable at the public IP `http://152.69.188.133:20128/` from the allow-listed dev egress IP `122.199.30.128` (e.g. home). It was previously bound to `127.0.0.1` (ops via SSH tunnel only), making it unreachable. `docker-compose.hosted.yml` rebinds `:20128` to `0.0.0.0`; the host firewall (`fw-keeper`) now allows `:20128` from the dev IP + the internal docker subnet `172.18.0.0/16` and drops everything else. Backend/ai still call 9Router over docker DNS (`http://9router:20128/v1`) — the internal-subnet allow is required, since a blanket `DOCKER-USER` drop silently broke `backend → 9router`. AUT-1754.
 ## [0.3.148] - 2026-08-28
-
 
 - Backend: SSRF hardening for Discord webhook URLs (AUT-1603). `discord_webhook_url` now allowlists `https://discord.com/api/webhooks/{id}/{token}` at two layers — a Pydantic `field_validator` on the notification-preference schema rejects non-Discord URLs at input time, and `_send_discord` re-checks the pattern before the outbound `httpx` call as defense-in-depth (rejecting internal/loopback addresses). `NotificationPreferenceOut` response schema restored so the preferences API keeps working.
 
@@ -511,8 +379,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 - CI: wired `CI_TRIAGE_WEBHOOK_SECRET`, `CI_TRIAGE_PARENT_ISSUE_ID`, `CI_TRIAGE_GOAL_ID`, `CI_TRIAGE_AGENT_ID`, and `PAPERCLIP_*` env into the AutoBrain-Hosted backend service in `docker-compose.hosted.yml`, so the merged CI triage webhook receiver (`backend/app/api/v1/ci.py`) is configured and reachable and can relay GitHub Actions CI failures into Paperclip (AUT-1751).
-
-
 
 ### Added
 - CI: added CI triage webhook receiver at `POST /api/v1/ci/webhook` with bearer auth, fail-closed PAPERCLIP config validation, and `repo`/`ref` payload validation to create Paperclip issues from GitHub Actions CI failures, replacing the broken n8n webhook (AUT-1669).
