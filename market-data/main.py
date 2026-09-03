@@ -27,14 +27,24 @@ from bikesguide import search_bikesguide
 from carsguide import search_carsguide
 from sca import search_sca
 
-docs_url_open = "/docs" if os.getenv("ENVIRONMENT", "production") != "production" else None
-redoc_url_open = None if os.getenv("ENVIRONMENT", "production") != "production" else None
-openapi_url_open = None if os.getenv("ENVIRONMENT", "production") == "production" else "/openapi.json"
-
-app = FastAPI(title="Market Data API", version="1.2.0", docs_url=docs_url_open, redoc_url=redoc_url_open, openapi_url=openapi_url_open)
-
 APP_VERSION = "1.2.0"
 API_KEY = os.getenv("API_KEY", "")
+
+# AUT-1745: disable OpenAPI docs in production (CWE-200 information disclosure).
+# Mirrors the backend + rego-lookup-api pattern. Default to production so
+# unset ENVIRONMENT does not accidentally expose /docs in prod.
+ENVIRONMENT = os.getenv("ENVIRONMENT", "production")
+docs_url_open = "/docs" if ENVIRONMENT != "production" else None
+redoc_url_open = None if ENVIRONMENT != "production" else None
+openapi_url_open = None if ENVIRONMENT == "production" else "/openapi.json"
+
+app = FastAPI(
+    title="Market Data API",
+    version=APP_VERSION,
+    docs_url=docs_url_open,
+    redoc_url=redoc_url_open,
+    openapi_url=openapi_url_open,
+)
 
 # Per-IP and per-API-key limits on /search (each search scrapes listing sites).
 # In-memory buckets are fine: each deployment runs a single uvicorn worker.
