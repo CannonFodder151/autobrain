@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+
+## [0.3.217] - 2026-09-03
 ### Security
 - **CI security gate / AUT-2066:** replace the broken `dart pub audit` step in
   `.github/workflows/security-pr-gate.yml` (the subcommand does not exist on
