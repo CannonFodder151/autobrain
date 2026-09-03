@@ -11,6 +11,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- fix(docker, AUT-1978): rename typo `AUTOBRIAN_BACKEND_URL` → `AUTOBRAIN_BACKEND_URL` in `docker-compose.hosted.yml` dongle-server block (typo silently broke backend→dongle backchannel since the AUT-1673 dongle-server wiring landed).
+- fix(docker, AUT-1978): remove the duplicated `dongle-server` service definition in `docker-compose.hosted.yml`. Docker Compose takes the LAST occurrence on duplicate keys, so the first block (plain `DONGLE_SERVER_API_KEY`, no MinIO/SECRETS_FILE wiring) was dead config; only the second block (with `_FILE` secrets anchor, AUT-2211 overrides) was live. Single source of truth restored.
+
 ## [0.3.214] - 2026-09-03
 
 ### Added (AUT-2218)
