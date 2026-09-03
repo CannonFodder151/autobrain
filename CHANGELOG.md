@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.220] - 2026-09-03
+
 ### Fixed (AUT-1946)
 - fix(backend): community garage photos are now auto-rotated to match their EXIF orientation before being re-encoded as webp. iPhone portrait shots previously displayed sideways/upside-down in the garage feed because the upload pipeline (Pillow → webp at 2048px) dropped the EXIF Orientation tag. `PIL.ImageOps.exif_transpose()` is applied in `compress_to_webp()` (`backend/app/social/media.py`); the tag is stripped from the stored object. Deterministic, no AI. Fixes uploads from every client path (mobile + web) and runs at the existing `/social/uploads` surface used by `edit_build`, `my_builds`, and the garage feed.
 
