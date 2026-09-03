@@ -17,6 +17,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - workers (`scheduled_backup`): log `duration_seconds`, `size`, `tables` on success so hosted Grafana / log greps can alert on a stalled backup without parsing stack traces.
 - workers (`_run`): recover from a wedged persistent event loop on `RuntimeError` ("Event loop is closed" / "Future attached to a different loop") — recreate the loop on the next call instead of poisoning every subsequent Celery task for the lifetime of the worker process.
 
+### Changed (AUT-1968)
+- **AI gateway reliability — less AI, more reliable:**
+  - Tighten the per-call 9Router timeout from 120s to 25s (configurable via `AI_ROUTER_TIMEOUT_SECONDS`). 120s was an unbounded synchronous wait that could freeze the gateway whenever the router degraded; 25s is a generous safety ceiling well above the 3-8s typical reply time.
+  - Add a circuit breaker around 9Router. After `AI_ROUTER_BREAKER_THRESHOLD` (default 3) consecutive failures the router is short-circuited for `AI_ROUTER_BREAKER_COOLDOWN_SECONDS` (default 60), so a degraded router can never add latency to every request in the fleet. The breaker closes on the next successful probe call.
+  - Skip the 9Router call when the deterministic baseline already covers every field the router is allowed to enrich (per the per-module schema). No network call, no quota burn, no added latency for an enrichment that cannot change the result. `parts-guide` (per-item refinement) bypasses the short-circuit.
+  - New tests in `ai/tests/test_router_reliability.py` cover the breaker transitions and the short-circuit branches.
+  - `.env.example`: document `AI_ROUTER_TIMEOUT_SECONDS`, `AI_ROUTER_BREAKER_THRESHOLD`, `AI_ROUTER_BREAKER_COOLDOWN_SECONDS`.
+
 ## [0.3.215] - 2026-09-03
 
 ### Security (AUT-1608)
