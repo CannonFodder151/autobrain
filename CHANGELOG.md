@@ -13,6 +13,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [0.3.219] - 2026-09-03
 
+### Fixed (AUT-2295)
+- fix(frontend): Servo Spy map recenter FAB is now visible whenever the user has a GPS fix, not only after the map has drifted. Previously the FAB hid until the user panned, so on first open (or after returning to the map from another tab) the only way to recenter was to pan away first. Drift-tracking state removed (no remaining readers). Behaviour-gate test `servo_spy_map_render_test.dart` updated; `_DeniedGeo` stub added so the no-location case still hides the FAB.
+
 ### Added (AUT-2220)
 - feat(frontend): wire CARTO basemap API key into the Servo Spy tile URL template. The key is injected at Flutter build time via `--dart-define=CARTO_API_KEY=<key>` (CARTO keys are designed to be public; embedded in tile URLs as `?api_key=…`). Empty key falls back to the key-less public basemap (current behaviour). CI reads the key from the new `CARTO_API_KEY` GitHub Actions secret on `CannonFodder151/autobrain`; `docker-compose.yml` / `docker-compose.prod.yml` plumb it as a build arg; `scripts/seed-secrets.sh` maps `CARTO_API_KEY` → `/data/autobrain/secrets/carto_api_key` on Hosted.
 

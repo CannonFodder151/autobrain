@@ -174,17 +174,10 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
   double _maxDistanceKm = 25;
   final MapController _mapController = MapController();
   LatLng? _mapCenter;
-  bool _drifted = false;
 
   void _onMapEvent(MapEvent event) {
     if (event is MapEventMoveEnd) {
-      final c = event.camera.center;
-      _mapCenter = c;
-      if (_userLoc != null) {
-        final d = _userLoc!.latitude - c.latitude;
-        final e = _userLoc!.longitude - c.longitude;
-        _drifted = d * d + e * e > 0.0001;
-      }
+      _mapCenter = event.camera.center;
       if (mounted) setState(() {});
     }
   }
@@ -192,7 +185,6 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
   void _recenter() {
     if (_userLoc == null) return;
     _mapController.move(_userLoc!, _mapController.camera.zoom);
-    _drifted = false;
   }
 
   @override
@@ -572,7 +564,7 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
                   ),
                 ),
               ),
-              if (_drifted && _userLoc != null)
+              if (_userLoc != null)
                 Positioned(
                   right: 16,
                   bottom: 28,
