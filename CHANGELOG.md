@@ -28,6 +28,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Re-pin frontend nginx base image (`nginxinc/nginx-unprivileged:stable-alpine`) by
   `@sha256` digest in `docker/frontend/Dockerfile` (AUT-1600 branch rebase — the
   AUT-2087 digest re-pin was missing on the Redis-healthcheck branch).
+- Bump `pypdf` from `6.15.0` → `6.16.1` in `backend/requirements.txt` and
+  `ai/requirements.txt` to clear CVE-2026-84309 / CVE-2026-84310 / CVE-2026-84311
+  flagged by the PR-time pip-audit gate (AUT-1600 branch rebase — main was
+  already on 6.16.1).
 
 ## [0.3.198] - 2026-09-01
 
