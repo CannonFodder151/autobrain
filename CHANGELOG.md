@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Removed (AUT-2294)
+- fix(frontend): remove the unwanted top-level `Petrol Prices` tile from the home feature grid (`frontend/lib/screens/home/home_screen.dart`). The user-reported bug asked for it not to be surfaced as a separate window. The standalone `PetrolPriceMapScreen` and its import had no remaining callers, so the dead file `frontend/lib/screens/fuel/petrol_price_map_screen.dart` is deleted. Fuel-price map functionality remains available via the premium `Servo Spy` tile.
+
 ### Added (AUT-2220)
 - feat(frontend): wire CARTO basemap API key into the Servo Spy tile URL template. The key is injected at Flutter build time via `--dart-define=CARTO_API_KEY=<key>` (CARTO keys are designed to be public; embedded in tile URLs as `?api_key=…`). Empty key falls back to the key-less public basemap (current behaviour). CI reads the key from the new `CARTO_API_KEY` GitHub Actions secret on `CannonFodder151/autobrain`; `docker-compose.yml` / `docker-compose.prod.yml` plumb it as a build arg; `scripts/seed-secrets.sh` maps `CARTO_API_KEY` → `/data/autobrain/secrets/carto_api_key` on Hosted.
 
