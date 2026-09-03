@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.223] - 2026-09-03
+
 ### Security (AUT-1745)
 - sec(market-data): `docs_url`, `redoc_url`, and `openapi_url` are now env-gated and default to disabled. When `ENVIRONMENT=production` (the hosted + prod compose default), `/docs`, `/openapi.json`, and `/redoc` all return 404 — closing the unauthenticated API-surface enumeration on the market-data FastAPI service (CWE-200). `/health` and authenticated `/search`, `/sca-parts` are unchanged. Regression covered by `market-data/test_docs_disabled.py` (prod: 404, non-prod: 200, /health always 200). `redoc` remains always-off by design. Companion fix in `CannonFodder151/rego-lookup-api` adds the same gating + test (PR #47).
 ## [0.3.222] - 2026-09-03
