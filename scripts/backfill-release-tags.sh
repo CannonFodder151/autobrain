@@ -87,14 +87,26 @@ done <<<"$COMMITS"
 
 echo "==> summary: would_create=$CREATED skipped=$SKIPPED failed=$FAILED"
 
-if [[ "$CREATE_RELEASES" == "1" && "$DRY_RUN" == "0" && "$CREATED" -gt 0 ]]; then
-  echo "==> creating GitHub Releases for new tags..."
+# Always refresh the release list — covers the case where tags were created
+# in a previous run (so CREATED=0 here) but GitHub Releases were never cut.
+REMOTE_RELEASES="$(mktemp)"
+trap 'rm -f "$REMOTE_TAGS" "$REMOTE_RELEASES"' EXIT
+if [[ "$DRY_RUN" == "0" ]]; then
+  gh release list --repo "$GITHUB_REPOSITORY" --json tagName -q '.[].tagName' 2>/dev/null > "$REMOTE_RELEASES" || : > "$REMOTE_RELEASES"
+fi
+
+if [[ "$CREATE_RELEASES" == "1" && "$DRY_RUN" == "0" ]]; then
+  echo "==> creating GitHub Releases for any missing tags..."
   while IFS= read -r line; do
     sha="$(awk '{print $1}' <<<"$line")"
     ver="$(awk '{print $2}' <<<"$line")"
     tag="v$ver"
-    # Skip tags that don't exist on origin (we just created them above)
+    # Skip tags that don't exist on origin
     if ! grep -Fxq "$tag" "$REMOTE_TAGS"; then
+      continue
+    fi
+    # Skip tags that already have a GitHub Release
+    if grep -Fxq "$tag" "$REMOTE_RELEASES"; then
       continue
     fi
     # Body: CHANGELOG section for this version, or empty fallback
