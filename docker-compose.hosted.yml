@@ -333,11 +333,14 @@ services:
       AUTOBRIAN_BACKEND_URL: http://backend:8000
       DONGLE_SERVER_API_KEY_FILE: /run/secrets/dongle_server_api_key
       MINIO_ENDPOINT: minio:9000
-      MINIO_EXTERNAL_ENDPOINT: ${MINIO_EXTERNAL_ENDPOINT:-}
+      # AUT-2211: default to the hosted public URL + TLS so signed-URL host
+      # headers resolve on first deploy. Stack env (Portainer EP5) can still
+      # override via MINIO_EXTERNAL_ENDPOINT/MINIO_SECURE if needed.
+      MINIO_EXTERNAL_ENDPOINT: ${MINIO_EXTERNAL_ENDPOINT:-${APP_BASE_URL:-https://hosted.autobrainservice.app}}
       MINIO_BUCKET: ${MINIO_BUCKET:-autobrain-assets}
       MINIO_ACCESS_KEY_FILE: /run/secrets/minio_access_key
       MINIO_SECRET_KEY_FILE: /run/secrets/minio_secret_key
-      MINIO_SECURE: ${MINIO_SECURE:-false}
+      MINIO_SECURE: ${MINIO_SECURE:-true}
       WEB_UI_BASIC_USER: ${WEB_UI_BASIC_USER:-admin}
       WEB_UI_BASIC_PASSWORD_FILE: /run/secrets/dongle_web_basic_password
       FIRMWARE_BUCKET_PREFIX: dongle_firmware
