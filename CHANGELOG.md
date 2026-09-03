@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.218] - 2026-09-03
+
 ### Changed (AUT-2231)
 - chore(docker, AUT-2231): add `CORS_ALLOWED_ORIGINS` compose-level default on the `backend` service in `docker-compose.hosted.yml` so a fresh hosted stack never boots with an empty allow-list (was same-origin only by default). Default value: `["https://hosted.autobrainservice.app","https://hub.autobrainservice.app"]`. Override per stack via the Portainer stack env (AUT-2213 follow-up to AUT-2190 F2). No app-code change; `backend/app/core/config.py:CORS_ALLOWED_ORIGINS` already parses JSON-list env values.
 
