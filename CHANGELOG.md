@@ -24,6 +24,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security
+- Re-pin frontend nginx base image (`nginxinc/nginx-unprivileged:stable-alpine`) by
+  `@sha256` digest in `docker/frontend/Dockerfile` (AUT-1600 branch rebase — the
+  AUT-2087 digest re-pin was missing on the Redis-healthcheck branch).
+
 ## [0.3.198] - 2026-09-01
 
 ### Security
