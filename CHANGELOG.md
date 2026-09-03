@@ -11,6 +11,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-2272)
+- feat(frontend): boot-time API reachability probe. `AppConfig.validate()` hits `${apiOrigin}/healthz` (5s timeout, anonymous GET, body discarded) and sets `lastValidationOk` / `lastValidationError`. `main.dart` awaits the probe before `runApp`; on failure the new `MisconfiguredBackendScreen` mounts so the user can retry. Probe is positional `Uri(scheme, host, port, path:'/healthz')` — no URL-parser confusion, no user-input reach. Closes AUT-2272 M0.
+
+### Fixed (AUT-2272)
+- fix(frontend): import `package:flutter/foundation.dart` in `lib/app.dart` and `lib/main.dart` so `kDebugMode` resolves in release builds. Without it any code path touching the new probe would throw `NoSuchMethodError: 'kDebugMode'` at app boot. Closes AUT-2272 M1.
+- fix(frontend): `MisconfiguredBackendScreen._retry` now uses `pushAndRemoveUntil(MaterialPageRoute(builder: (_) => ChangeNotifierProvider<AuthState>(create: (_) => AuthState(), child: const AutoBrainApp())), (_) => false)` instead of `pushReplacementNamed('/')` — the root `MaterialApp` in `app.dart` has no `routes`/`onGenerateRoute` (autobrain uses an if/else home switch), so the named-route lookup previously threw and trapped the user on the failure screen. Closes AUT-2272 M2.
+- fix(frontend): `_defaultApiBase` / `_defaultWsBase` in `AppConfig` now point at `hosted.autobrainservice.app` (was `https://localhost:8000/api/v1` / `wss://localhost:8000/ws`). A release APK built without `--dart-define=API_BASE_URL` (CI drift, manual local build, future Docker arg omission) now boots against the real hosted backend and the boot-probe passes. `--dart-define` still overrides for self-hosted / demo / default stacks. Closes AUT-2272 M3.
+
 ## [0.3.221] - 2026-09-03
 ### Added
 - Servo Spy: `/api/v1/fuel/stations` accepts an optional `vehicle_id` query param. When supplied, every `FuelPriceOut` is annotated with `cost_per_km` ($/km, derived from the vehicle's avg L/100km) and `avg_fill_cost` ($, derived from the vehicle's avg litres/fill). Deterministic, no AI. Vehicle is ownership-checked via the standard accessible-vehicle helper. Closes AUT-2201.
