@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+
+## [0.3.221] - 2026-09-03
 ### Added
 - Servo Spy: `/api/v1/fuel/stations` accepts an optional `vehicle_id` query param. When supplied, every `FuelPriceOut` is annotated with `cost_per_km` ($/km, derived from the vehicle's avg L/100km) and `avg_fill_cost` ($, derived from the vehicle's avg litres/fill). Deterministic, no AI. Vehicle is ownership-checked via the standard accessible-vehicle helper. Closes AUT-2201.
 - New `app/services/fuel_servo.py` pure helper (`annotate_price`, `annotate_prices`) so the per-station cost math is unit-tested without FastAPI/DB. DB-free tests in `tests/test_aut2203_station_annotations.py` cover the full-stats / no-vehicle / no-logs / partial-stats cases. Closes AUT-2203.
