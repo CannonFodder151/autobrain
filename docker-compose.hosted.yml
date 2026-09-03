@@ -184,6 +184,10 @@ services:
       SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-no-reply@autobrainservice.app}
       SMTP_FROM_NAME: AutoBrain
       APP_BASE_URL: ${APP_BASE_URL:-https://hosted.autobrainservice.app}
+      # AUT-2231: compose-level default so a fresh hosted stack never boots with an
+      # empty CORS allow-list (same-origin only). Override per environment via the
+      # Portainer stack env. JSON list shape required by app/core/config.py.
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-["https://hosted.autobrainservice.app","https://hub.autobrainservice.app"]}
       MFA_ENFORCED: "true"
       LOGIN_MAX_ATTEMPTS: 5
       LOGIN_WINDOW_SECONDS: 10800
