@@ -125,8 +125,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$HOME/.local/bin"
-          # Pin to a known-good release; bump deliberately when ready.
-          curl -sfL https://github.com/google/osv-scanner/releases/download/v1.7.3/osv-scanner_1.7.3_linux_amd64 \
+          # AUT-2312: v1.7.3's asset name was `osv-scanner_linux_amd64`, not the
+          # `osv-scanner_1.7.3_linux_amd64` filename this step used (404).
+          # Pin v1.9.2 with the correct asset name; bump deliberately when ready.
+          OSV_VER="1.9.2"
+          curl -sfL "https://github.com/google/osv-scanner/releases/download/v${OSV_VER}/osv-scanner_linux_amd64" \
             -o "$HOME/.local/bin/osv-scanner"
           chmod +x "$HOME/.local/bin/osv-scanner"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
@@ -135,14 +138,13 @@ jobs:
         run: |
           set -euo pipefail
           flutter pub get
-      - name: osv-scanner — fail on HIGH/CRITICAL
+      - name: osv-scanner — fail on any finding
         working-directory: frontend
         run: |
           set -euo pipefail
-          # osv-scanner reads pubspec.lock directly; no need for a manifest.
-          # `--fail-on-level high` exits non-zero on HIGH or CRITICAL findings
-          # so the PR gate blocks on real vulns, not noise.
-          osv-scanner scan --lockfile=pubspec.lock --fail-on-level high
+          # v1.x CLI: `osv-scanner scan` is the v1 entrypoint; v1.x exits
+          # non-zero automatically on any finding (no `--exit-code` flag in v1).
+          osv-scanner scan --format=table --lockfile=pubspec.lock
 
   # (6) AUT-1881 pin-guard — fail any compose `image:` reference that is not
   # pinned by `@sha256` digest. Complements the postgres/nginx/python pin
