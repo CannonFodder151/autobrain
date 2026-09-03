@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.222] - 2026-09-03
+
 ### Added (AUT-2272)
 - feat(frontend): boot-time API reachability probe. `AppConfig.validate()` hits `${apiOrigin}/healthz` (5s timeout, anonymous GET, body discarded) and sets `lastValidationOk` / `lastValidationError`. `main.dart` awaits the probe before `runApp`; on failure the new `MisconfiguredBackendScreen` mounts so the user can retry. Probe is positional `Uri(scheme, host, port, path:'/healthz')` — no URL-parser confusion, no user-input reach. Closes AUT-2272 M0.
 
