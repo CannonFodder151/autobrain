@@ -247,6 +247,13 @@ upgrade path):
   (`PAPERCLIP_API_KEY`, `CI_TRIAGE_WEBHOOK_SECRET`). `docker-compose.hosted.yml`
   now defaults the DB vars so a redeploy never fails at interpolation even if
   the env is incomplete.
+- Secret path (AUT-1853): `docker-compose.hosted.yml` defaults `SECRETS_DIR` to
+  `/data/autobrain/secrets`. The HostED Portainer stack env should set
+  `SECRETS_DIR=/data/autobrain/secrets` (or rely on the compose default); never
+  `/opt/autobrain/secrets` — the snap dockerd masks `/opt` read-only. Before
+  redeploying the HostED stack, provision + re-seed `/data/autobrain/secrets`
+  (see docs/security.md "Oracle VM path migration (AUT-1853)"), then remove the
+  legacy `autobrain-opt-guard.sh` `/opt` remount cron workaround.
 
 ### Nginx Proxy Manager + the hosted frontend (AUT-372)
 

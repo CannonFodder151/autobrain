@@ -1,0 +1,97 @@
+# Build rego-lookup-api arm64 image natively on the Oracle VM runner.
+# AUT-2158: QEMU cross-build on the x64 runner (gh-runner-autobrain-rego-2)
+# produces arm64 images whose /bin/dash ELF is x86_64 (exec format error on
+# the Oracle VM). This workflow builds arm64 natively on gh-runner-autobrain-arm64
+# (the same ARM64-labeled runner the autobrain build-hosted.yml uses) and pushes
+# :hosted-arm64 to ghcr. The deploy job in rego-lookup-api/build.yml already
+# updates stack 85 (EP5) with pullImage:true; the stack file in EP5 is pinned to
+# a multi-arch digest, so the deploy path will pick the corrected arm64 variant
+# once that variant's digest is published.
+#
+# Also publishes a per-arch verification step (mirrors autobrain build-hosted.yml
+# AUT-2097) to catch the same class of bug on future builds.
+#
+# Trigger: workflow_dispatch (manual). Once a healthy arm64 image is published,
+# the existing rego-lookup-api/build.yml deploy job will redeploy stack 85 on the
+# next push to main — no further action required from this workflow.
+
+name: Build rego-lookup-api arm64 (native)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Image tag
+        required: true
+        default: hosted-arm64
+      ref:
+        description: rego-lookup-api git ref to build
+        required: true
+        default: main
+
+concurrency:
+  group: rego-arm64-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-arm64:
+    runs-on: [self-hosted, linux, ARM64]
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout rego-lookup-api
+        # AUT-2158: this runs on the autobrain repo's arm64 runner, so the
+        # workflow-scoped GITHUB_TOKEN does NOT grant access to the separate
+        # rego-lookup-api repo. Use the repo-level github_pat secret instead.
+        env:
+          GITHUB_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          set -euo pipefail
+          rm -rf rego-lookup-api
+          git clone --depth 1 --branch "${{ inputs.ref }}" \
+            "https://x-access-token:${GITHUB_PAT}@github.com/CannonFodder151/rego-lookup-api.git" rego-lookup-api
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          # AUT-2158: ghcr packages for rego-lookup belong to the autobrain
+          # owner's namespace; the autobrain repo's GITHUB_TOKEN can't push
+          # to it. Use GHCR_PAT (classic PAT) which has packages:write on the
+          # owner. Classic PATs work as both username and password at ghcr.io.
+          username: ${{ secrets.GHCR_PAT }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Build and push :hosted-arm64 natively (linux/arm64)
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          cd rego-lookup-api
+          # AUT-2158: only push to ghcr.io. The DockerHub mirror under
+          # cannonfodder151/ is owned by Nathan's personal account, and the
+          # autobrain repo's DOCKERHUB_TOKEN is not authorized for it.
+          docker buildx build --platform linux/arm64 --push \
+            -t "ghcr.io/cannonfodder151/rego-lookup:${TAG}" \
+            -t "ghcr.io/cannonfodder151/rego-lookup-api:${TAG}" .
+
+      - name: Verify pushed image arch (AUT-2097 pattern)
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          for img in \
+            "ghcr.io/cannonfodder151/rego-lookup:${TAG}" \
+            "ghcr.io/cannonfodder151/rego-lookup-api:${TAG}"; do
+            echo "==> verifying $img"
+            got="$(docker run --rm --platform linux/arm64 "$img" uname -m)"
+            if [ "$got" != "aarch64" ]; then
+              echo "::error::$img reports arch=$got, expected aarch64"
+              exit 1
+            fi
+            docker run --rm --platform linux/arm64 "$img" /bin/sh -c 'true'
+          done
+          echo "==> arm64 image verified"

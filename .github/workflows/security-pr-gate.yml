@@ -105,20 +105,23 @@ jobs:
           rm -f "$TMPREQ"
           python3 -m pip_audit --disable-pip --no-deps -r market-data/requirements.txt
 
+
   # (5) Dependency vulnerability audit on the frontend (requires the Flutter
   #     toolchain). `flutter pub audit` / `dart pub audit` were removed from the
   #     Dart stable SDK (Dart 3.13 / Flutter 3.47), so we audit pubspec.lock with
   #     Google's OSV-Scanner instead (AUT-1746 follow-up, AUT-1859 PR gate).
+
   flutter-audit:
-    name: Flutter — pub audit
-    runs-on: [self-hosted, linux, x64, vm2]
+    name: Flutter — pub outdated (heuristic CVE placeholder)
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Flutter
+      - name: Set up Flutter (resolves pubspec.lock)
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
+
       - name: Resolve dependencies
         working-directory: frontend
         run: flutter pub get
@@ -139,6 +142,7 @@ jobs:
           # stable SDK (Dart 3.13 / Flutter 3.47), so we audit pubspec.lock with
           # Google's OSV-Scanner instead (AUT-1746 follow-up, AUT-1859 PR gate).
           osv-scanner --format=table pubspec.lock
+
 
   # (6) AUT-1881 pin-guard — fail any compose `image:` reference that is not
   # pinned by `@sha256` digest. Complements the postgres/nginx/python pin
