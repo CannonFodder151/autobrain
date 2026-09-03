@@ -84,6 +84,8 @@ void main() {
     final p = pickPriceForFuel(const [], '91');
     expect(p.priceCents, isNull);
     expect(p.fuelType, isNull);
+    expect(p.costPerKm, isNull);
+    expect(p.avgFillCost, isNull);
   });
 
   test('stationRowFromApi fills name + distance and the right price', () {
@@ -164,5 +166,61 @@ void main() {
     expect(row.name, 'No Prices');
     expect(row.priceCents, isNull);
     expect(row.fuelType, isNull);
+  });
+
+  // AUT-2202: backend attaches cost_per_km + avg_fill_cost per price entry when
+  // vehicle_id is provided. Frontend must surface them; falls back to null
+  // when vehicle_id omitted or vehicle has no fuel logs.
+  test('pickPriceForFuel surfaces cost_per_km + avg_fill_cost for the matched entry', () {
+    final prices = [
+      {
+        'fuel_type': '91',
+        'price': 178.9,
+        'cost_per_km': 0.121,
+        'avg_fill_cost': 82.45,
+      },
+      {
+        'fuel_type': '95',
+        'price': 184.0,
+        'cost_per_km': 0.124,
+        'avg_fill_cost': 84.71,
+      },
+    ];
+    final p = pickPriceForFuel(prices, '95');
+    expect(p.priceCents, 184.0);
+    expect(p.costPerKm, 0.124);
+    expect(p.avgFillCost, 84.71);
+  });
+
+  test('pickPriceForFuel returns nulls for cost/avg-fill when annotations missing', () {
+    final prices = [
+      {'fuel_type': '91', 'price': 178.9},
+    ];
+    final p = pickPriceForFuel(prices, '91');
+    expect(p.priceCents, 178.9);
+    expect(p.costPerKm, isNull);
+    expect(p.avgFillCost, isNull);
+  });
+
+  test('stationRowFromApi surfaces cost_per_km + avg_fill_cost from the API', () {
+    final row = stationRowFromApi(
+      {
+        'name': 'BP Cluden',
+        'brand': 'BP',
+        'distance_km': 2.4,
+        'prices': [
+          {
+            'fuel_type': '95',
+            'price': 184.0,
+            'cost_per_km': 0.124,
+            'avg_fill_cost': 84.71,
+          },
+        ],
+      },
+      selectedFuelType: '95',
+    );
+    expect(row.priceCents, 184.0);
+    expect(row.costPerKm, 0.124);
+    expect(row.avgFillCost, 84.71);
   });
 }
