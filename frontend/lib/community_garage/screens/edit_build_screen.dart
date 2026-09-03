@@ -3,6 +3,7 @@
 library;
 
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -93,6 +94,43 @@ class _EditBuildScreenState extends State<EditBuildScreen> {
       return;
     }
     if (mounted) setState(() {});
+  }
+
+  /// Rotate a picked photo 90° clockwise so portrait shots that came in
+  /// sideways display correctly (AUT-1946). Stored photos (URL only, no
+  /// bytes) are skipped — the backend already bakes EXIF orientation on
+  /// upload, so they render right-side up.
+  Future<void> _rotatePhoto(int index) async {
+    final entry = _photos[index];
+    final src = entry.bytes;
+    if (src == null) return;
+    try {
+      final rotated = await _rotateBytes90(src);
+      setState(() {
+        entry.bytes = rotated;
+        entry.id = null; // force re-upload on save
+      });
+    } catch (_) {
+      _toast('Could not rotate that photo.');
+    }
+  }
+
+  static Future<Uint8List> _rotateBytes90(Uint8List bytes) async {
+    final codec = await ui.instantiateImageCodec(bytes);
+    final frame = await codec.getNextFrame();
+    final src = frame.image;
+    final recorder = ui.PictureRecorder();
+    final canvas = ui.Canvas(recorder);
+    final paint = ui.Paint()..filterQuality = ui.FilterQuality.high;
+    canvas.translate(src.width.toDouble(), 0);
+    canvas.rotate(0.5 * 3.141592653589793);
+    canvas.drawImage(src, ui.Offset.zero, paint);
+    final picture = recorder.endRecording();
+    final out = await picture.toImage(src.height, src.width);
+    final png = await out.toByteData(format: ui.ImageByteFormat.png);
+    src.dispose();
+    out.dispose();
+    return png!.buffer.asUint8List();
   }
 
   Future<void> _save() async {
@@ -269,8 +307,21 @@ class _EditBuildScreenState extends State<EditBuildScreen> {
                         ),
                       ),
                       Positioned(
-                        bottom: 2,
+                        top: 2,
                         left: 2,
+                        child: InkWell(
+                          onTap: () => _rotatePhoto(index),
+                          child: const CircleAvatar(
+                            radius: 10,
+                            backgroundColor: Colors.black54,
+                            child: Icon(Icons.rotate_90_degrees_ccw,
+                                size: 14, color: Colors.white),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        bottom: 2,
+                        right: 2,
                         child: ReorderableDragStartListener(
                           index: index,
                           child: const CircleAvatar(

@@ -10,6 +10,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-1946)
+- fix(backend): bake EXIF orientation into pixels on social photo uploads (`ImageOps.exif_transpose`) so phone portraits stored as webp no longer display sideways — webp has no EXIF, so the orientation must be baked at upload time.
+- fix(frontend): add a per-photo rotate (90° CW) button in the Edit Build screen so portrait shots that come in sideways can be rotated before saving. Existing-stored photos (URL only) skip rotate since the backend fix already corrects them at upload time.
+
 ## [0.3.214] - 2026-09-03
 
 ### Fix (AUT-2070)
