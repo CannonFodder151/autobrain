@@ -102,7 +102,17 @@ class Settings(BaseSettings):
     FUEL_VIC_API_KEY: str = ""
     FUEL_VIC_API_SECRET: str = ""
     FUEL_VIC_ENABLED: bool = False
-    FUEL_QLD_API_URL: str = "https://www.fuelpricesqld.com.au/"
+    # QLD direct fuel API (FuelPricesQLD DirectAPI v1.5). Bearer-auth bearer
+    # subscription token from QLD; bound from QLD_FUEL_API_KEY env. When empty
+    # the QLD feed is skipped (mirrors the NSW no-key pattern). Open-data
+    # fallback (www.fuelpricesqld.com.au) can be kept for one cycle behind the
+    # FUEL_QLD_USE_OPEN_FALLBACK flag for partial-outage resilience.
+    FUEL_QLD_API_KEY: str = ""
+    FUEL_QLD_API_URL: str = "https://fppdirectapi-prod.fuelpricesqld.com.au"
+    FUEL_QLD_OPEN_DATA_URL: str = "https://www.fuelpricesqld.com.au/"
+    FUEL_QLD_COUNTRY_ID: int = 21  # Australia
+    FUEL_QLD_REGION_LEVEL: int = 3  # state
+    FUEL_QLD_USE_OPEN_FALLBACK: bool = False
     FUEL_WA_SITES_URL: str = "https://industryprd.fuelwatch.wa.gov.au/api/sites"
     FUEL_WA_PRICES_URL: str = "https://industryprd.fuelwatch.wa.gov.au/api/report/weekly-retail-prices"
     FUEL_NSW_URL: str = "https://api.transport.nsw.gov.au/v1/fuel"

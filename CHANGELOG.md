@@ -17,6 +17,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Changed
+- Servo Spy QLD feed switched to FuelPricesQLD DirectAPI v1.5 (Bearer subscription token). Old open-data parser kept behind `FUEL_QLD_USE_OPEN_FALLBACK` flag for one cycle.
 
 ## [0.3.211] - 2026-09-03
 
