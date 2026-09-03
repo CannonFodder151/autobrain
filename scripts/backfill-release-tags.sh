@@ -28,9 +28,11 @@ if [[ "$DRY_RUN" == "1" ]]; then
 fi
 
 # Map every chore:release vX.Y.Z commit to its SHA + version
-# Use git log with %s and pick out the version from the subject.
+# Each line is "<sha> <subject>"; the subject starts with "chore: release vX.Y.Z".
+# Pull the version out by regex so older commits without "[skip ci]" still match.
 COMMITS="$(git log --format='%H %s' HEAD 2>/dev/null | \
-  awk '/^[^ ]+ chore: release v[0-9]+\.[0-9]+\.[0-9]+ / { print }')"
+  grep -E '^[^ ]+ chore: release v[0-9]+\.[0-9]+\.[0-9]+( |$)' | \
+  awk '{ sha=$1; sub(/^[^ ]+ chore: release v/, "", $0); sub(/ .*/, "", $0); print sha " " $0 }')"
 
 if [[ -z "$COMMITS" ]]; then
   echo "==> no auto-bump release commits found on origin/main"
@@ -53,7 +55,7 @@ FAILED=0
 
 while IFS= read -r line; do
   sha="$(awk '{print $1}' <<<"$line")"
-  ver="$(awk '{print $4}' <<<"$line" | sed 's/^v//')"
+  ver="$(awk '{print $2}' <<<"$line")"
   tag="v$ver"
   if git rev-parse "$tag" >/dev/null 2>&1; then
     echo "skip $tag — exists locally"
@@ -89,7 +91,7 @@ if [[ "$CREATE_RELEASES" == "1" && "$DRY_RUN" == "0" && "$CREATED" -gt 0 ]]; the
   echo "==> creating GitHub Releases for new tags..."
   while IFS= read -r line; do
     sha="$(awk '{print $1}' <<<"$line")"
-    ver="$(awk '{print $4}' <<<"$line" | sed 's/^v//')"
+    ver="$(awk '{print $2}' <<<"$line")"
     tag="v$ver"
     # Skip tags that don't exist on origin (we just created them above)
     if ! grep -Fxq "$tag" "$REMOTE_TAGS"; then
