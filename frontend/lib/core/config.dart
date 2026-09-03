@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Runtime configuration.
@@ -85,4 +86,34 @@ class AppConfig {
   /// Hosted subscription target.
   static const hostedApi = 'https://hosted.autobrainservice.app/api/v1';
   static const hostedWs = 'wss://hosted.autobrainservice.app/ws';
+
+  /// Result of the most recent [validate] call. `true` means the
+  /// configured API origin answered `/healthz` with a 2xx response.
+  static bool lastValidationOk = false;
+
+  /// Human-readable error from the most recent [validate] call. `null`
+  /// when validation succeeded.
+  static String? lastValidationError;
+
+  /// Probes `<apiOrigin>/healthz` with a short timeout. Populates
+  /// [lastValidationOk] / [lastValidationError]. Called once at startup
+  /// outside debug builds (AC#2) so a misconfigured backend fails fast
+  /// into [MisconfiguredBackendScreen] instead of silent 5xx.
+  static Future<void> validate({Duration timeout = const Duration(seconds: 5)}) async {
+    final origin = apiBase.replaceFirst(RegExp(r'/api/v1/?$'), '');
+    final uri = Uri.parse('$origin/healthz');
+    try {
+      final resp = await http.get(uri).timeout(timeout);
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        lastValidationOk = true;
+        lastValidationError = null;
+      } else {
+        lastValidationOk = false;
+        lastValidationError = 'HTTP ${resp.statusCode}';
+      }
+    } catch (e) {
+      lastValidationOk = false;
+      lastValidationError = e.toString();
+    }
+  }
 }

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'app.dart';
 import 'core/auth_state.dart';
 import 'core/config.dart';
+import 'core/misconfigured_backend_screen.dart';
 import 'services/car/car_kit_service.dart';
 import 'services/obd/obd_trip_monitor.dart';
 
@@ -15,6 +16,13 @@ void main() async {
   // which licenseRequested() would read an empty fragment (AUT-629).
   AutoBrainApp.initialFragment = Uri.base.fragment;
   await AppConfig.load();
+  if (!kDebugMode) {
+    await AppConfig.validate();
+    if (!AppConfig.lastValidationOk) {
+      runApp(const MisconfiguredBackendScreen());
+      return;
+    }
+  }
   runApp(
     ChangeNotifierProvider(
       create: (_) => AuthState(),
