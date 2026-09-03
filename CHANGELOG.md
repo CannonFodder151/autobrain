@@ -10,6 +10,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-2218)
+- feat(docker): wire `FUEL_QLD_API_KEY` into `docker-compose.prod.yml` (Default env-var pattern, mirrors NSW/VIC) and `FUEL_QLD_API_KEY_FILE=/run/secrets/fuel_qld_api_key` into `docker-compose.hosted.yml` (backend + Celery worker, served by the existing `x-secrets` dir bind). `scripts/seed-secrets.sh` now maps `FUEL_QLD_API_KEY` → `fuel_qld_api_key`. QLD FuelPricesQLD DirectAPI bearer token can now be provisioned on both managed tiers (AUT-1813 phase, AUT-2197 redeploy unblock).
+
 ## [0.3.214] - 2026-09-03
 
 ### Fix (AUT-2070)
