@@ -22,6 +22,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Added (AUT-2284)
 - test(frontend): `frontend/test/config_validation_test.dart` — 5 reachability cases for `AppConfig.validate()`: 2xx ok, 5xx fail, timeout, connection refused, malformed URL. Uses `package:http/testing.dart` `MockClient` (no live network, runs in `flutter test`). Per-test isolation via `setUp` resetting `apiBase` / `lastValidationOk` / `lastValidationError` so order is independent (AUT-2284 S3). Plain `Exception('connection refused')` — no `SocketExceptionLike` shim (AUT-2284 S2: the validator's `catch (e)` accepts any thrown object; the shim added noise without value). No `AppConfig.buildInfo()` ever added — the QA comment flagged the dead `buildInfo()` from PR #445 (AUT-2284 S1); the debug banner reads `AppConfig.apiBase` / `lastValidationOk` / `lastValidationError` directly. Closes AUT-2284 S1/S2/S3.
 
+### Added (AUT-2284 N1)
+- fix(backend): expose `/healthz` as an alias of `/health` at the API root (FastAPI convention used by the Flutter boot-probe). Same handler, hidden from `/docs` (`include_in_schema=False`), no extra surface. The probe in `AppConfig.validate()` now hits a route that actually exists on this backend — without this, every release boot against `hosted.autobrainservice.app` would fail the reachability check and mount `MisconfiguredBackendScreen`. Closes AUT-2284 N1.
+
 ## [0.3.221] - 2026-09-03
 ### Added
 - Servo Spy: `/api/v1/fuel/stations` accepts an optional `vehicle_id` query param. When supplied, every `FuelPriceOut` is annotated with `cost_per_km` ($/km, derived from the vehicle's avg L/100km) and `avg_fill_cost` ($, derived from the vehicle's avg litres/fill). Deterministic, no AI. Vehicle is ownership-checked via the standard accessible-vehicle helper. Closes AUT-2201.
