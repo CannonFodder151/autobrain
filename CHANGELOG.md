@@ -17,6 +17,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - workers (`scheduled_backup`): log `duration_seconds`, `size`, `tables` on success so hosted Grafana / log greps can alert on a stalled backup without parsing stack traces.
 - workers (`_run`): recover from a wedged persistent event loop on `RuntimeError` ("Event loop is closed" / "Future attached to a different loop") — recreate the loop on the next call instead of poisoning every subsequent Celery task for the lifetime of the worker process.
 
+### Security (AUT-2067)
+- bump `python:3.13-slim` digest to `sha256:cc9dffa47c8294ba9bb795a8dfaeb7b76f2b30acade2c52a461a2999d127eb00` across `docker/ai/Dockerfile`, `docker/backend/Dockerfile`, `docker/worker/Dockerfile`, `market-data/Dockerfile` (and `PYTHON_BASE_IMAGE` in `.github/workflows/trivy-image-scan.yml`). Closes 3 HIGH CVEs in libffi/libssl/libsecret shipped by the previous digest (AUT-2067).
+
 ## [0.3.215] - 2026-09-03
 
 ### Security (AUT-1608)
