@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -100,6 +101,26 @@ class AutoBrainApp extends StatelessWidget {
       darkTheme: AppTheme.dark(),
       themeMode: auth.darkMode ? ThemeMode.dark : ThemeMode.light,
       home: home,
+      // AUT-2353: debug-only MaterialBanner surfacing the resolved API/WS
+      // base URLs and the boot-time validation result. Release builds render
+      // `null` here so there is zero overhead and no banner in production.
+      builder: kDebugMode ? _wrapWithDebugBanner : null,
     );
   }
+}
+
+/// Wraps [child] in a [Banner] that surfaces the resolved `apiBase`/`wsBase`
+/// (and the last `AppConfig.validate()` result) for QA/dev to confirm at
+/// app boot. Only used when `kDebugMode` is true (see `MaterialApp.builder`
+/// above); release builds render `null` from the builder slot.
+Widget _wrapWithDebugBanner(BuildContext context, Widget? child) {
+  final validation = AppConfig.lastValidationOk == null
+      ? 'not-run'
+      : (AppConfig.lastValidationOk! ? 'ok' : 'fail');
+  return Banner(
+    location: BannerLocation.topEnd,
+    message:
+        'API: ${AppConfig.apiBase}  WS: ${AppConfig.wsBase}  boot=$validation',
+    child: child ?? const SizedBox.shrink(),
+  );
 }
