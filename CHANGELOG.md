@@ -452,6 +452,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - chore(docker): wire `FUEL_QLD_API_KEY` into `docker-compose.prod.yml` backend block (mirrors NSW/VIC pattern; empty value disables the feed, see `backend/app/services/fuel_feeds.py:493`).
 - chore(docker): wire `FUEL_QLD_API_KEY_FILE: /run/secrets/fuel_qld_api_key` into `docker-compose.hosted.yml` backend + worker blocks. The existing `x-secrets` anchor (`<<: *secrets`) already bind-mounts `${SECRETS_DIR}` read-only, so no new volume entry is required; seed `fuel_qld_api_key` via `scripts/seed-secrets.sh` before redeploying the hosted stack.
 
+### Fixed (AUT-1946)
+- fix(backend): bake EXIF orientation into pixels on social photo uploads (`ImageOps.exif_transpose`) so phone portraits stored as webp no longer display sideways — webp has no EXIF, so the orientation must be baked at upload time.
+- fix(frontend): add a per-photo rotate (90° CW) button in the Edit Build screen so portrait shots that come in sideways can be rotated before saving. Existing-stored photos (URL only) skip rotate since the backend fix already corrects them at upload time.
+
 ## [0.3.214] - 2026-09-03
 
 ### Fix (AUT-2070)
