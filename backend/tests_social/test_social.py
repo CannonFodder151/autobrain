@@ -347,6 +347,11 @@ def test_compress_to_webp_applies_exif_orientation() -> None:
     img.save(out_buf, format="JPEG", exif=exif.tobytes())
     jpeg_with_exif = out_buf.getvalue()
 
+    # Confirm the input really carries Orientation=6 — if Pillow silently
+    # drops it on re-save, the test below would exercise the wrong code path.
+    raw = Image.open(io.BytesIO(jpeg_with_exif))
+    assert raw.getexif().get(0x0112) == 6, "test setup lost the EXIF orientation tag"
+
     webp = compress_to_webp(jpeg_with_exif, "image/jpeg")
     decoded = Image.open(io.BytesIO(webp))
     # 32x24 source with rotate-90° CW becomes 24x32 (portrait pixels stored).
