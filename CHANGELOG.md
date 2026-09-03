@@ -11,6 +11,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-2233)
+- fix(docker): bump `autobrain-dongle-server:hosted` digest in `docker-compose.hosted.yml` to `sha256:c5768948…`. The new image contains the `AUTOBRIAN_BACKEND_URL` → `AUTOBRAIN_BACKEND_URL` rename at the pydantic-settings source (AUT-1978 follow-up); the running container now reads the field by its canonical spelling and any caller that drops the env override falls back to `http://backend:8006` (the field default, harmless because the running stack sets `AUTOBRAIN_BACKEND_URL=http://backend:8000`).
+- chore(ci, autobrain-dongle-server): fix `build-and-push` push to the private GHCR package by falling back to the `GHCR_PAT` secret (mirrors autobrain monorepo `build-hosted.yml`). The default GITHUB_TOKEN lacks cross-package write scope; without the fallback, every `hosted`-tag push failed with `permission_denied: read_package`. Repo secret `GHCR_PAT` populated.
+
 ### Fixed (AUT-2256)
 - workers (`scheduled_backup`): skip-with-loud-log when `MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY` are empty (was previously a silent Celery FAIL on every daily beat tick). The hosted stack runs the same compose service as the in-app worker but the secret-file loader (`docker/lib-load-secrets.sh`) only exports what it finds; missing or misordered `*_FILE` mounts now surface as `scheduled_backup_skipped reason=minio_credentials_missing` instead of opaque stack traces.
 - workers (`scheduled_backup`): isolate retention prune behind a try/except so a transient prune error no longer turns a successful upload into a Celery FAIL — a successful put with a logged prune error is the right outcome.

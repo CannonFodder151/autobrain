@@ -298,7 +298,7 @@ services:
   # whitelist (paid-account gate), and the ops web GUI. Shares the hosted
   # stack's MinIO and Postgres where applicable (SQLite in the local compose).
   dongle-server:
-    image: ghcr.io/cannonfodder151/autobrain-dongle-server:hosted@sha256:aaa00cf3b98425939f372003ba7198c0ad483afe6cbb9bbf096d1c82da928e9c
+    image: ghcr.io/cannonfodder151/autobrain-dongle-server:hosted@sha256:c5768948a9dfd85f2b6e513896b3cbf2b77f6046576cd39152327f2ce9d47b28
     restart: unless-stopped
     environment:
       <<: *core-env
