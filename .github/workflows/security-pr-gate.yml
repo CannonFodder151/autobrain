@@ -1,5 +1,5 @@
 # AUT-1746: x64 jobs (gitleaks, trivy config, pip-audit) dispatch to the bare
-# x64 self-hosted runner; the flutter pub-audit job uses the vm2 x64 runner
+# x64 self-hosted runner; the flutter osv-scanner job uses the vm2 x64 runner
 # (AUT-1798/AUT-1802). This is the missing PR/push-time security gate called for
 # in AUT-1746: a pre-merge gate that blocks on findings so the CVEs /
 # misconfigurations from the review cannot recur silently.
@@ -105,9 +105,14 @@ jobs:
           rm -f "$TMPREQ"
           python3 -m pip_audit --disable-pip --no-deps -r market-data/requirements.txt
 
-  # (5) dart pub audit on the frontend (requires the Flutter toolchain).
+  # (5) Flutter/Dart dependency vulnerability scan (AUT-2066).
+  # `flutter pub audit` and `dart pub audit` do not exist on current Flutter/Dart
+  # stable — the subcommand was never shipped, so every PR was failing this step
+  # regardless of diff content (blocking AUT-1899 and any other PR that touched
+  # `frontend/`). Use osv-scanner against `pubspec.lock` (the canonical
+  # ecosystem-aware vuln source for Dart/Flutter), gated to fail on HIGH/CRITICAL.
   flutter-audit:
-    name: Flutter — pub audit
+    name: Flutter — osv-scanner (pubspec.lock)
     runs-on: [self-hosted, linux, x64, vm2]
     steps:
       - uses: actions/checkout@v4
@@ -116,14 +121,30 @@ jobs:
         with:
           channel: stable
           cache: true
-      - name: dart pub audit (frontend)
+      - name: Install osv-scanner
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+          # AUT-2312: v1.7.3's asset name was `osv-scanner_linux_amd64`, not the
+          # `osv-scanner_1.7.3_linux_amd64` filename this step used (404).
+          # Pin v1.9.2 with the correct asset name; bump deliberately when ready.
+          OSV_VER="1.9.2"
+          curl -sfL "https://github.com/google/osv-scanner/releases/download/v${OSV_VER}/osv-scanner_linux_amd64" \
+            -o "$HOME/.local/bin/osv-scanner"
+          chmod +x "$HOME/.local/bin/osv-scanner"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: flutter pub get (frontend)
         working-directory: frontend
         run: |
           set -euo pipefail
           flutter pub get
-          # `flutter pub audit` was removed; the canonical Dart/Flutter audit
-          # subcommand is `dart pub audit` (per AUT-1746 recommendation).
-          dart pub audit
+      - name: osv-scanner — fail on any finding
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          # v1.x CLI: `osv-scanner scan` is the v1 entrypoint; v1.x exits
+          # non-zero automatically on any finding (no `--exit-code` flag in v1).
+          osv-scanner scan --format=table --lockfile=pubspec.lock
 
   # (6) AUT-1881 pin-guard — fail any compose `image:` reference that is not
   # pinned by `@sha256` digest. Complements the postgres/nginx/python pin
@@ -181,4 +202,4 @@ jobs:
           curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
             -H "Content-Type: application/json" \
             -d "$(jq -nc --arg c status --arg t "$TITLE" --arg col "$COLOR" --arg u "$RUN_URL" \
-              '{channel:$c,title:$t,description:"AUT-1746 PR gate: gitleaks + trivy config + pip-audit + flutter pub audit.",color:$col,author:"Security Scan",fields:[{name:"Scope",value:"secrets, IaC, python, flutter",inline:true},{name:"Run",value:$u,inline:true}]}')"
+              '{channel:$c,title:$t,description:"AUT-1746 PR gate: gitleaks + trivy config + pip-audit + flutter osv-scanner (pubspec.lock).",color:$col,author:"Security Scan",fields:[{name:"Scope",value:"secrets, IaC, python, flutter",inline:true},{name:"Run",value:$u,inline:true}]}')"
