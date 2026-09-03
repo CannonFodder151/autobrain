@@ -10,37 +10,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Fixed (AUT-2192)
+- fix(frontend): pin `BACKEND_URL`/`API_BASE` to a single source of truth (`--dart-define=API_BASE_URL` / `WS_BASE_URL`, already wired through `docker/frontend/Dockerfile` and both `build-hosted` / `dockerhub-publish` workflows). `AppConfig.apiBase` / `wsBase` now stay aligned with the build-time value unless explicitly overridden by the mobile server picker.
+- fix(frontend): on release builds, `AppConfig.validate()` now probes `${apiOrigin}/healthz` at app boot and mounts a `MisconfiguredBackendScreen` (with retry) instead of letting the first API call fail with a confusing network error. The probe is skipped in `kDebugMode` to keep hot-reload snappy.
+- test(frontend): add `config_validation_test.dart` covering reachable 2xx, 5xx, timeout, connection error, and malformed URL paths.
+
+### Fixed (AUT-2272)
+- fix(frontend): add missing `package:flutter/foundation.dart` import to `app.dart` and `main.dart` — release builds were throwing `NoSuchMethodError: 'kDebugMode'` at app boot on the debug banner + boot-probe paths. Restores the QA-cited `flutter analyze` 0-error and `flutter test` green gate (unblocked `config_validation_test.dart` and the 4 misconfigured-backend paths).
+- fix(frontend): `MisconfiguredBackendScreen._retry` no longer calls the broken `pushReplacementNamed('/')` (app root `MaterialApp` defines no `routes`/`onGenerateRoute`); retries now `pushAndRemoveUntil` a fresh `AutoBrainApp` wrapped in `ChangeNotifierProvider<AuthState>` so the user actually leaves the failure screen.
+- fix(frontend): release `defaultValue` for `API_BASE_URL` / `WS_BASE_URL` now points at the hosted subscription endpoint (`hosted.autobrainservice.app`) instead of `https://localhost:8000`, so a release APK built without `--dart-define=API_BASE_URL` boots against a real backend instead of mounting `MisconfiguredBackendScreen` on every launch.
 
 ### Changed (AUT-2231)
 - chore(docker, AUT-2231): add `CORS_ALLOWED_ORIGINS` compose-level default on the `backend` service in `docker-compose.hosted.yml` so a fresh hosted stack never boots with an empty allow-list (was same-origin only by default). Default value: `["https://hosted.autobrainservice.app","https://hub.autobrainservice.app"]`. Override per stack via the Portainer stack env (AUT-2213 follow-up to AUT-2190 F2). No app-code change; `backend/app/core/config.py:CORS_ALLOWED_ORIGINS` already parses JSON-list env values.
-
-## [0.3.217] - 2026-09-03
-### Security
-- **CI security gate / AUT-2066:** replace the broken `dart pub audit` step in
-  `.github/workflows/security-pr-gate.yml` (the subcommand does not exist on
-  current Flutter/Dart stable and was failing every PR at the audit step,
-  blocking [AUT-1899](/AUT/issues/AUT-1899) and any other PR touching
-  `frontend/`) with `osv-scanner` against `frontend/pubspec.lock`, gated to
-  fail on HIGH/CRITICAL. Pinned to osv-scanner v1.7.3 for reproducibility.
-  No more phantom Flutter gate failure; the gate now fails only on real
-  package vulnerabilities.
-
-## [0.3.216] - 2026-09-03
-
-### Fixed (AUT-2233)
-- fix(docker): bump `autobrain-dongle-server:hosted` digest in `docker-compose.hosted.yml` to `sha256:c5768948…`. The new image contains the `AUTOBRIAN_BACKEND_URL` → `AUTOBRAIN_BACKEND_URL` rename at the pydantic-settings source (AUT-1978 follow-up); the running container now reads the field by its canonical spelling and any caller that drops the env override falls back to `http://backend:8006` (the field default, harmless because the running stack sets `AUTOBRAIN_BACKEND_URL=http://backend:8000`).
-- chore(ci, autobrain-dongle-server): fix `build-and-push` push to the private GHCR package by falling back to the `GHCR_PAT` secret (mirrors autobrain monorepo `build-hosted.yml`). The default GITHUB_TOKEN lacks cross-package write scope; without the fallback, every `hosted`-tag push failed with `permission_denied: read_package`. Repo secret `GHCR_PAT` populated.
-
-### Fixed (AUT-2256)
-- workers (`scheduled_backup`): skip-with-loud-log when `MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY` are empty (was previously a silent Celery FAIL on every daily beat tick). The hosted stack runs the same compose service as the in-app worker but the secret-file loader (`docker/lib-load-secrets.sh`) only exports what it finds; missing or misordered `*_FILE` mounts now surface as `scheduled_backup_skipped reason=minio_credentials_missing` instead of opaque stack traces.
-- workers (`scheduled_backup`): isolate retention prune behind a try/except so a transient prune error no longer turns a successful upload into a Celery FAIL — a successful put with a logged prune error is the right outcome.
-- workers (`scheduled_backup`): log `duration_seconds`, `size`, `tables` on success so hosted Grafana / log greps can alert on a stalled backup without parsing stack traces.
-- workers (`_run`): recover from a wedged persistent event loop on `RuntimeError` ("Event loop is closed" / "Future attached to a different loop") — recreate the loop on the next call instead of poisoning every subsequent Celery task for the lifetime of the worker process.
-
-### Added (AUT-2202)
-- Servo Spy: surface backend per-vehicle `cost_per_km` ($/km) and `avg_fill_cost` ($ per fill) in the list rows and station detail sheet alongside the existing $/L price. List + detail requests now send the active `vehicle_id`; metrics fall back to `—` when the API omits them (no vehicle selected or no fuel logs). Tests extended in `servo_spy_list_sort_test.dart`.
-### Fixed (AUT-2208)
-- fix(frontend): Servo Spy map can no longer render as a blank white screen. Added a `surfaceContainerHighest` background under the `FlutterMap` so the map area is never pure white, surfaced a centred empty-state overlay ("No fuel stations within N km — Try increasing the distance in Filters") when `/fuel/stations` returns `[]`, and moved the fetch-error banner from the bottom of the map to the top with a Retry action so it is impossible to look at the map and miss a station-fetch failure. Loading spinner now sits on a translucent scrim so the user always sees the map area behind it. New tests: `frontend/test/servo_spy_map_render_test.dart` covers render-with-stations, stations-fetch-error banner, and empty-state overlay paths.
 
 ## [0.3.215] - 2026-09-03
 
