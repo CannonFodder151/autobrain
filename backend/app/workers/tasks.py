@@ -4,6 +4,7 @@ import asyncio
 import base64
 import io
 import json
+import time
 from celery import shared_task
 
 from app.core.logging import get_logger
@@ -37,6 +38,20 @@ def _run(coro):
             _loop = asyncio.new_event_loop()
             asyncio.set_event_loop(_loop)
         return _loop.run_until_complete(coro)
+    except RuntimeError as exc:
+        # "Event loop is closed" / "Future attached to a different loop" — the
+        # persistent loop is wedged (e.g. one task killed the loop). Recreate
+        # it on the next call so a single bad task does not poison the rest
+        # of the worker (AUT-2256: hosted scheduled_backup failure class).
+        if "closed" in str(exc).lower() or "different loop" in str(exc).lower():
+            logger.warning("async_task_loop_recreate", error=str(exc))
+            try:
+                _loop.close()
+            except Exception:
+                pass
+            _loop = None
+        logger.exception("async_task_failed")
+        raise
     except Exception:
         logger.exception("async_task_failed")
         raise
@@ -296,17 +311,33 @@ def _minio_put_with_retry(client, bucket: str, key: str, data: bytes, content_ty
             if attempt == _MINIO_PUT_ATTEMPTS - 1:
                 raise
             logger.warning("minio_put_retry", attempt=attempt + 1, key=key, error=str(exc))
-            import time
             time.sleep(_MINIO_PUT_BACKOFF * (attempt + 1))
 
 
 @shared_task
 def scheduled_backup() -> None:
-    """Daily full-DB snapshot stored to MinIO. Admin backup safety-net."""
+    """Daily full-DB snapshot stored to MinIO. Admin backup safety-net.
+
+    AUT-2256: hosted backups were silently failing because (a) minio secrets
+    missing on the worker → empty creds raise on every put, (b) one bad task
+    poisoned the persistent event loop so subsequent tasks ran on a wedged
+    loop, (c) the prune path raised on transient errors and turned the whole
+    job into a Celery FAIL with no recoverable signal. Now: skip-with-loud-log
+    on missing config (no Celery failure spam), reset a wedged loop, and
+    isolate the prune so a prune error never fails the upload.
+    """
     from app.core.config import settings
 
     if not settings.BACKUP_ENABLED:
         logger.info("scheduled_backup_skipped", reason="BACKUP_ENABLED is False")
+        return
+    if not settings.MINIO_ACCESS_KEY or not settings.MINIO_SECRET_KEY:
+        logger.error(
+            "scheduled_backup_skipped",
+            reason="minio_credentials_missing",
+            bucket=settings.MINIO_BUCKET,
+            endpoint=settings.MINIO_ENDPOINT,
+        )
         return
 
     import io as _io
@@ -316,14 +347,27 @@ def scheduled_backup() -> None:
     from app.services.backup import dump_backup, serialize_all
 
     async def _do():
+        started = time.monotonic()
         async with SessionLocal() as db:
             data = await serialize_all(db)
             stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
             key = f"backups/autobrain-backup-{stamp}.json"
             payload = dump_backup(data)
             _minio_put_with_retry(get_minio(), settings.MINIO_BUCKET, key, payload, "application/json")
-            await _prune_backups()
-            logger.info("scheduled_backup_done", key=key, size=len(payload))
+            try:
+                await _prune_backups()
+            except Exception:
+                # Prune is best-effort retention, never let it fail the daily
+                # snapshot upload — a successful put with a prune error is
+                # better than a Celery FAIL that loses the snapshot.
+                logger.exception("backup_prune_top_level_failed")
+            logger.info(
+                "scheduled_backup_done",
+                key=key,
+                size=len(payload),
+                tables=len(data.get("data") or {}),
+                duration_seconds=round(time.monotonic() - started, 3),
+            )
 
     async def _prune_backups():
         from datetime import timedelta

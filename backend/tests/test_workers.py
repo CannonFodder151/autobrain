@@ -103,6 +103,8 @@ def test_scheduled_backup_stores_snapshot(monkeypatch) -> None:
     bucket = FakeBucket()
     monkeypatch.setattr(tasks, "SessionLocal", lambda: fake_db)
     monkeypatch.setattr(settings, "MINIO_BUCKET", "test-minio-bucket")
+    monkeypatch.setattr(settings, "MINIO_ACCESS_KEY", "ak")
+    monkeypatch.setattr(settings, "MINIO_SECRET_KEY", "sk")
 
     async def fake_serialize(db):
         assert db is fake_db
@@ -119,3 +121,104 @@ def test_scheduled_backup_stores_snapshot(monkeypatch) -> None:
     assert bkt == "test-minio-bucket", f"bucket={bkt!r}"
     assert key.startswith("backups/autobrain-backup-"), key
     assert ctype == "application/json", ctype
+
+
+def test_scheduled_backup_skips_on_missing_minio_credentials(monkeypatch, caplog) -> None:
+    """AUT-2256: missing MINIO_* keys must skip-with-log, never Celery-FAIL.
+
+    A bare worker (lib-load-secrets.sh never sourced, or secret file unmounted)
+    must not turn every daily beat tick into a Celery FAIL with stack traces
+    that hide the real config issue.
+    """
+    import logging
+
+    from app.core.config import settings
+
+    bucket = FakeBucket()
+    monkeypatch.setattr(settings, "MINIO_ACCESS_KEY", "")
+    monkeypatch.setattr(settings, "MINIO_SECRET_KEY", "")
+    monkeypatch.setattr(settings, "MINIO_BUCKET", "test-minio-bucket")
+    monkeypatch.setattr(tasks, "SessionLocal", lambda: FakeDB())
+
+    import app.core.storage as storage
+    monkeypatch.setattr(storage, "get_minio", lambda: bucket)
+
+    with caplog.at_level(logging.ERROR, logger="autobrain.workers"):
+        tasks.scheduled_backup()
+
+    assert bucket.written == [], "must not write without credentials"
+    assert any(
+        "minio_credentials_missing" in rec.message for rec in caplog.records
+    ), f"expected minio_credentials_missing log, got: {[r.message for r in caplog.records]}"
+
+
+def test_scheduled_backup_recovers_from_prune_error(monkeypatch) -> None:
+    """AUT-2256: a prune failure must not fail the snapshot upload.
+
+    Retention pruning is best-effort. The snapshot landed in MinIO; logging
+    the prune error is the right outcome, not a Celery FAIL that loses the
+    day's backup.
+    """
+    import app.core.storage as storage
+    import app.services.backup as svc_backup
+    from app.core.config import settings
+
+    fake_db = FakeDB()
+    bucket = FakeBucket()
+
+    class FlakyPruneBucket(FakeBucket):
+        def list_objects(self, bucket, prefix=""):
+            raise RuntimeError("minio unreachable during prune")
+
+    bucket = FlakyPruneBucket()
+    monkeypatch.setattr(tasks, "SessionLocal", lambda: fake_db)
+    monkeypatch.setattr(settings, "MINIO_BUCKET", "test-minio-bucket")
+    monkeypatch.setattr(settings, "MINIO_ACCESS_KEY", "ak")
+    monkeypatch.setattr(settings, "MINIO_SECRET_KEY", "sk")
+
+    async def fake_serialize(db):
+        return {"users": [], "vehicles": []}
+
+    monkeypatch.setattr(svc_backup, "serialize_all", fake_serialize)
+    monkeypatch.setattr(svc_backup, "dump_backup", lambda data: b'{"ok":true}')
+    monkeypatch.setattr(storage, "get_minio", lambda: bucket)
+
+    tasks.scheduled_backup()
+
+    assert bucket.written, "snapshot upload must succeed even when prune errors"
+
+
+def test_run_recreates_wedged_persistent_loop(monkeypatch) -> None:
+    """AUT-2256: a RuntimeError('Event loop is closed') from a prior task
+    must recreate the loop on the next call instead of poisoning the worker.
+    """
+    closed_loop = tasks._loop
+    # Pretend the persistent loop was killed by a previous task.
+    if closed_loop is None or not closed_loop.is_closed():
+        # Force-create one and immediately close it to simulate the wedge.
+        import asyncio as _aio
+
+        tmp = _aio.new_event_loop()
+        tmp.close()
+        tasks._loop = tmp
+
+    import app.services.backup as svc_backup
+
+    async def fake_serialize(db):
+        return {}
+
+    monkeypatch.setattr(svc_backup, "serialize_all", fake_serialize)
+    monkeypatch.setattr(svc_backup, "dump_backup", lambda d: b"{}")
+
+    class _Bucket(FakeBucket):
+        pass
+
+    import app.core.storage as storage
+    monkeypatch.setattr(storage, "get_minio", lambda: _Bucket())
+    monkeypatch.setattr(tasks, "SessionLocal", lambda: FakeDB())
+
+    # Must not raise; _loop must be replaced with a fresh live one.
+    tasks.scheduled_backup()
+    assert tasks._loop is not None and not tasks._loop.is_closed(), (
+        "persistent loop must be replaced when wedged"
+    )
