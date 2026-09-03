@@ -196,7 +196,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.logging import get_logger
-from app.models.fuel_price import FuelPrice, FuelPricePollState
+from app.models.fuel_price import FuelPricePollState, FuelPriceSnapshot
 
 logger = get_logger(__name__)
 
@@ -295,10 +295,10 @@ async def store_nsw_prices(db: AsyncSession, records: list[dict], state: str = "
         if not fuel_type or not station_code:
             continue
         existing = await db.scalar(
-            select(FuelPrice).where(
-                FuelPrice.state == state,
-                FuelPrice.station_code == station_code,
-                FuelPrice.fuel_type == fuel_type,
+            select(FuelPriceSnapshot).where(
+                FuelPriceSnapshot.state == state,
+                FuelPriceSnapshot.station_code == station_code,
+                FuelPriceSnapshot.fuel_type == fuel_type,
             )
         )
         if existing:
@@ -313,7 +313,7 @@ async def store_nsw_prices(db: AsyncSession, records: list[dict], state: str = "
             existing.fetched_at = fetched_at
         else:
             db.add(
-                FuelPrice(
+                FuelPriceSnapshot(
                     state=state,
                     station_code=station_code,
                     station_name=r.get("station_name"),
@@ -345,8 +345,8 @@ async def mark_polled(db: AsyncSession, instance_id: str, state: str = "NSW") ->
     await db.commit()
 
 
-async def get_cached_prices(db: AsyncSession, state: str, max_age_hours: int = CACHE_MAX_AGE_HOURS) -> list[FuelPrice]:
+async def get_cached_prices(db: AsyncSession, state: str, max_age_hours: int = CACHE_MAX_AGE_HOURS) -> list[FuelPriceSnapshot]:
     """Return the latest cached snapshot for a state (offline-safe read path)."""
     return list(
-        (await db.scalars(select(FuelPrice).where(FuelPrice.state == state))).all()
+        (await db.scalars(select(FuelPriceSnapshot).where(FuelPriceSnapshot.state == state))).all()
     )

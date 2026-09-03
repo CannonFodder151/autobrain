@@ -1,0 +1,49 @@
+# AUT-2277: smoke-run pytest (model-metadata + alembic-graph regression guards)
+# on every push and PR so duplicate table-name registrations and other model
+# definition regressions get caught before they reach main or break pytest
+# collection in developer environments.
+name: Backend — pytest smoke (model metadata + alembic heads)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pytest-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest-smoke:
+    name: pytest — model metadata + alembic heads
+    runs-on: [self-hosted, linux, x64]
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install backend deps
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+      - name: Run pytest smoke (model metadata + alembic heads)
+        run: |
+          set -euo pipefail
+          python -m pytest \
+            tests/test_alembic_heads.py \
+            tests/test_aut2201_station_annotations.py \
+            tests/test_aut2203_station_annotations.py \
+            -q

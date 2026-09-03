@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- `backend/app/models/fuel_price.py`: drop the dead `FuelPrice` class (duplicate `__tablename__ = "fuel_prices"` colliding with `fuel_station.FuelPrice`) that was silently breaking pytest collection / Alembic metadata registration. The intended class is `FuelPriceSnapshot` (already present, docstring-correct). `app/services/fuel_prices.py` now imports `FuelPriceSnapshot` explicitly. Adds `test_no_duplicate_table_names` to `tests/test_alembic_heads.py` so this regresses immediately if reintroduced. Closes AUT-2277.
+
 ## [0.3.221] - 2026-09-03
 ### Added
 - Servo Spy: `/api/v1/fuel/stations` accepts an optional `vehicle_id` query param. When supplied, every `FuelPriceOut` is annotated with `cost_per_km` ($/km, derived from the vehicle's avg L/100km) and `avg_fill_cost` ($, derived from the vehicle's avg litres/fill). Deterministic, no AI. Vehicle is ownership-checked via the standard accessible-vehicle helper. Closes AUT-2201.

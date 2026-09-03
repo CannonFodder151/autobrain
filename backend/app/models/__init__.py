@@ -16,7 +16,7 @@ from app.models.valuation import ValuationSnapshot
 from app.models.market_listing import MarketListingCache
 from app.models.sca_parts import SCAPartsCache
 from app.models.fuel_station import FuelStation, FuelPrice
-from app.models.fuel_price import FuelPrice, FuelPricePollState
+from app.models.fuel_price import FuelPricePollState, FuelPriceSnapshot, FuelPriceWatchlist
 from app.models.notification import NotificationPreference, NotificationDelivery
 from app.models.share import VehicleShare
 from app.models.refresh_token import RevokedRefreshToken
@@ -53,6 +53,8 @@ __all__ = [
     "SCAPartsCache",
     "FuelStation",
     "FuelPrice",
+    "FuelPriceSnapshot",
+    "FuelPriceWatchlist",
     "FuelPricePollState",
     "NotificationPreference",
     "NotificationDelivery",
