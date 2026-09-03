@@ -422,10 +422,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - workers (`scheduled_backup`): log `duration_seconds`, `size`, `tables` on success so hosted Grafana / log greps can alert on a stalled backup without parsing a stack trace.
 - workers (`_run`): recover from a wedged persistent event loop on `RuntimeError` ("Event loop is closed" / "Future attached to a different loop") — recreate the loop on the next call instead of poisoning every subsequent Celery task for the lifetime of the worker process.
 
+<<<<<<< HEAD
 ### Added (AUT-2202)
 - Servo Spy: surface backend per-vehicle `cost_per_km` ($/km) and `avg_fill_cost` ($ per fill) in the list rows and station detail sheet alongside the existing $/L price. List + detail requests now send the active `vehicle_id`; metrics fall back to `—` when the API omits them (no vehicle selected or no fuel logs). Tests extended in `servo_spy_list_sort_test.dart`.
 ### Fixed (AUT-2208)
 - fix(frontend): Servo Spy map can no longer render as a blank white screen. Added a `surfaceContainerHighest` background under the `FlutterMap` so the map area is never pure white, surfaced a centred empty-state overlay ("No fuel stations within N km — Try increasing the distance in Filters") when `/fuel/stations` returns `[]`, and moved the fetch-error banner from the bottom of the map to the top with a Retry action so it is impossible to look at the map and miss a station-fetch failure. Loading spinner now sits on a translucent scrim so the user always sees the map area behind it. New tests: `frontend/test/servo_spy_map_render_test.dart` covers render-with-stations, stations-fetch-error banner, and empty-state overlay paths.
+=======
+### Changed (AUT-1968)
+- **AI gateway reliability — less AI, more reliable:**
+  - Tighten the per-call 9Router timeout from 120s to 25s (configurable via `AI_ROUTER_TIMEOUT_SECONDS`). 120s was an unbounded synchronous wait that could freeze the gateway whenever the router degraded; 25s is a generous safety ceiling well above the 3-8s typical reply time.
+  - Add a circuit breaker around 9Router. After `AI_ROUTER_BREAKER_THRESHOLD` (default 3) consecutive failures the router is short-circuited for `AI_ROUTER_BREAKER_COOLDOWN_SECONDS` (default 60), so a degraded router can never add latency to every request in the fleet. The breaker closes on the next successful probe call.
+  - Skip the 9Router call when the deterministic baseline already covers every field the router is allowed to enrich (per the per-module schema). No network call, no quota burn, no added latency for an enrichment that cannot change the result. `parts-guide` (per-item refinement) bypasses the short-circuit.
+  - New tests in `ai/tests/test_router_reliability.py` cover the breaker transitions and the short-circuit branches.
+  - `.env.example`: document `AI_ROUTER_TIMEOUT_SECONDS`, `AI_ROUTER_BREAKER_THRESHOLD`, `AI_ROUTER_BREAKER_COOLDOWN_SECONDS`.
+>>>>>>> 39e0d4e2 (fix(ai): router timeout, circuit breaker, no-op short-circuit (AUT-1968))
 
 ## [0.3.215] - 2026-09-03
 
