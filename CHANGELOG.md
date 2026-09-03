@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- fix(docker, AUT-2212): remove the dead duplicate `dongle-server` service block (and orphan `dongle-server-data` volume) from `docker-compose.hosted.yml`. Two blocks existed with conflicting config (`:8012`+plain-env vs `:8000`+`*_FILE`); compose v2 uses the last def, so the older one was shadowed and the canonical block (the one AUT-2211 patched) is now the sole definition. Audit follow-up to AUT-2190.
+
 ## [0.3.214] - 2026-09-03
 
 ### Fix (AUT-2070)
