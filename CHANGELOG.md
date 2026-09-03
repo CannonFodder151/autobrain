@@ -10,6 +10,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Security
+- **CI security gate / AUT-2066:** replace the broken `dart pub audit` step in
+  `.github/workflows/security-pr-gate.yml` (the subcommand does not exist on
+  current Flutter/Dart stable and was failing every PR at the audit step,
+  blocking [AUT-1899](/AUT/issues/AUT-1899) and any other PR touching
+  `frontend/`) with `osv-scanner` against `frontend/pubspec.lock`, gated to
+  fail on HIGH/CRITICAL. Pinned to osv-scanner v1.7.3 for reproducibility.
+  No more phantom Flutter gate failure; the gate now fails only on real
+  package vulnerabilities.
 
 ## [0.3.216] - 2026-09-03
 
