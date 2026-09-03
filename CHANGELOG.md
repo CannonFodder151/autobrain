@@ -25,6 +25,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Changed
 - Servo Spy QLD feed switched to FuelPricesQLD DirectAPI v1.5 (Bearer subscription token). Old open-data parser kept behind `FUEL_QLD_USE_OPEN_FALLBACK` flag for one cycle.
 - `FuelStats` now exposes `avg_litres_per_fill` (mean litres across all fills for the vehicle) so the Servo Spy annotations can be computed without an extra DB round-trip.
+- Servo Spy router: drop dead `FuelStats` import (`# noqa: F401` was only used by a string forward-ref that's never evaluated at runtime; the helper module already imports the symbol).
 - Servo Spy per-station `cost_per_km` now divided by 10000 (cents/L → $/km) so it matches the existing per-fill `FuelLog.cost_per_km` units ($/km) — previously it returned cents/km, e.g. 14.03 instead of 0.14. Closes the unit-mismatch in AUT-2201 surfaced by the AUT-2203 issue description.
 
 ## [0.3.213] - 2026-09-03

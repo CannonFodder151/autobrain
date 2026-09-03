@@ -18,7 +18,6 @@ from app.core.logging import get_logger
 from app.db.session import get_db
 from app.models.fuel_station import FuelPrice, FuelStation
 from app.models.user import User
-from app.schemas.fuel import FuelStats  # noqa: F401  (type hint in _station_out)
 from app.schemas.fuel_servo import (
     AttributionOut,
     FuelBrandOut,
