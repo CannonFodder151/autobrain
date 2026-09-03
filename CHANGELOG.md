@@ -16,6 +16,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - fix(frontend): on release builds, `AppConfig.validate()` now probes `${apiOrigin}/healthz` at app boot and mounts a `MisconfiguredBackendScreen` (with retry) instead of letting the first API call fail with a confusing network error. The probe is skipped in `kDebugMode` to keep hot-reload snappy.
 - test(frontend): add `config_validation_test.dart` covering reachable 2xx, 5xx, timeout, connection error, and malformed URL paths.
 
+### Fixed (AUT-2272)
+- fix(frontend): add missing `package:flutter/foundation.dart` import to `app.dart` and `main.dart` — release builds were throwing `NoSuchMethodError: 'kDebugMode'` at app boot on the debug banner + boot-probe paths. Restores the QA-cited `flutter analyze` 0-error and `flutter test` green gate (unblocked `config_validation_test.dart` and the 4 misconfigured-backend paths).
+- fix(frontend): `MisconfiguredBackendScreen._retry` no longer calls the broken `pushReplacementNamed('/')` (app root `MaterialApp` defines no `routes`/`onGenerateRoute`); retries now `pushAndRemoveUntil` a fresh `AutoBrainApp` wrapped in `ChangeNotifierProvider<AuthState>` so the user actually leaves the failure screen.
+- fix(frontend): release `defaultValue` for `API_BASE_URL` / `WS_BASE_URL` now points at the hosted subscription endpoint (`hosted.autobrainservice.app`) instead of `https://localhost:8000`, so a release APK built without `--dart-define=API_BASE_URL` boots against a real backend instead of mounting `MisconfiguredBackendScreen` on every launch.
+
 ## [0.3.215] - 2026-09-03
 
 ### Fixed

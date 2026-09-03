@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../app.dart';
+import '../core/auth_state.dart';
 import 'config.dart';
 
 /// Shown when the configured BACKEND_URL is unreachable at boot
@@ -20,7 +23,15 @@ class _MisconfiguredBackendScreenState extends State<MisconfiguredBackendScreen>
     if (!mounted) return;
     setState(() => _retrying = false);
     if (AppConfig.lastValidationOk == true) {
-      Navigator.of(context).pushReplacementNamed('/');
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => ChangeNotifierProvider(
+            create: (_) => AuthState(),
+            child: const AutoBrainApp(),
+          ),
+        ),
+        (_) => false,
+      );
     }
   }
 
