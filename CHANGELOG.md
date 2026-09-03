@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security (AUT-1745)
+- sec(market-data): `docs_url`, `redoc_url`, and `openapi_url` are now env-gated and default to disabled. When `ENVIRONMENT=production` (the hosted + prod compose default), `/docs`, `/openapi.json`, and `/redoc` all return 404 — closing the unauthenticated API-surface enumeration on the market-data FastAPI service (CWE-200). `/health` and authenticated `/search`, `/sca-parts` are unchanged. Regression covered by `market-data/test_docs_disabled.py` (prod: 404, non-prod: 200, /health always 200). `redoc` remains always-off by design. Companion fix in `CannonFodder151/rego-lookup-api` adds the same gating + test (PR #47).
 ## [0.3.222] - 2026-09-03
 
 ### Added (AUT-2272)
@@ -331,6 +333,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 - **Servo Spy fuel-price pipeline (AUT-1817):** deterministic, no-AI ingest of public open-data feeds — WA FuelWatch, NSW FuelCheck, QLD Fuel Prices — into new `fuel_stations` / `fuel_prices` Postgres tables (Alembic migration `f0a1b2c3d4e5`), with a Celery beat task (`ingest_fuel_prices`, every 6h). Premium-gated read API at `/api/fuel/*` (`/types`, `/brands`, `/stations?lat&lon&radiusKm&fuelType`, `/station/{id}/prices`, `/attribution`) — free accounts get 403 "Fuel prices are a premium feature. Upgrade to enable it." Open-data attribution is attached to every response (`X-Fuel-Data-Attribution`).
+
+## [0.3.173] - 2026-08-29
+
+### Security
+- Suppress trivy 0.70 placeholder CVE-2026-80256 in `.trivyignore` — the
+  nginx frontend image's vuln DB entry has no metadata yet (trivy logs
+  "no vulnerability details" and exits 1 on the metadata miss). Trivy 0.74 +
+  a fully populated DB will resolve it; this entry can be dropped after.
 
 ## [0.3.172] - 2026-08-29
 
