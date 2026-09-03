@@ -41,6 +41,21 @@ class _FakeGeo extends GeolocatorPlatform {
       );
 }
 
+class _DeniedGeo extends GeolocatorPlatform {
+  @override
+  Future<bool> isLocationServiceEnabled() async => false;
+
+  @override
+  Future<LocationPermission> checkPermission() async => LocationPermission.denied;
+
+  @override
+  Future<LocationPermission> requestPermission() async => LocationPermission.denied;
+
+  @override
+  Future<Position> getCurrentPosition({LocationSettings? locationSettings}) async =>
+      throw Exception('location denied');
+}
+
 class _FakeApi extends ApiClient {
   _FakeApi() : super(null);
 
@@ -170,7 +185,7 @@ void main() {
   });
 
   testWidgets(
-      'recenter FAB only appears after the map drifts from the user (AUT-2237)',
+      'recenter FAB is always visible when user location is known (AUT-2295)',
       (tester) async {
     tester.view.physicalSize = const Size(800, 1200);
     tester.view.devicePixelRatio = 1.0;
@@ -181,8 +196,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
 
-    expect(find.byIcon(Icons.my_location), findsNothing,
-        reason: 'recenter FAB must stay hidden while the map is centered');
+    expect(find.byIcon(Icons.my_location), findsOneWidget,
+        reason:
+            'recenter FAB must be present whenever the user has a location fix');
 
     final mapState =
         tester.state<State<FlutterMap>>(find.byType(FlutterMap));
@@ -193,15 +209,33 @@ void main() {
     }
 
     expect(find.byIcon(Icons.my_location), findsOneWidget,
-        reason: 'recenter FAB must appear once the user pans the map');
+        reason: 'recenter FAB stays visible after the user pans');
 
     await tester.tap(find.byIcon(Icons.my_location));
     for (var i = 0; i < 10; i++) {
       await tester.pump(const Duration(milliseconds: 100));
     }
 
+    expect(find.byIcon(Icons.my_location), findsOneWidget,
+        reason:
+            'recenter FAB remains after returning to the user location');
+  });
+
+  testWidgets(
+      'recenter FAB is hidden when user location is denied (AUT-2295)',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    GeolocatorPlatform.instance = _DeniedGeo();
+    await tester.pumpWidget(_app(_FakePaidAuth()));
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
     expect(find.byIcon(Icons.my_location), findsNothing,
-        reason: 'recenter FAB must hide once the map is back on the user');
+        reason: 'recenter FAB stays hidden when there is no user location');
   });
 }
 
