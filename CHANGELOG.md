@@ -32,6 +32,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   `ai/requirements.txt` to clear CVE-2026-84309 / CVE-2026-84310 / CVE-2026-84311
   flagged by the PR-time pip-audit gate (AUT-1600 branch rebase — main was
   already on 6.16.1).
+- Suppress trivy 0.70 placeholder CVE-2026-80256 in `.trivyignore` — the
+  nginx frontend image's vuln DB entry has no metadata yet (trivy logs
+  "no vulnerability details" and exits 1 on the metadata miss). Trivy 0.74 +
+  a fully populated DB will resolve it; this entry can be dropped after.
 
 ## [0.3.198] - 2026-09-01
 
