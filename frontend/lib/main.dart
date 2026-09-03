@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'app.dart';
 import 'core/auth_state.dart';
 import 'core/config.dart';
+import 'screens/auth/misconfigured_backend_screen.dart';
 import 'services/car/car_kit_service.dart';
 import 'services/obd/obd_trip_monitor.dart';
 
@@ -14,6 +15,17 @@ void main() async {
   // which licenseRequested() would read an empty fragment (AUT-629).
   AutoBrainApp.initialFragment = Uri.base.fragment;
   await AppConfig.load();
+  // Fail-fast startup reachability check (AUT-2192). If the BACKEND_URL baked
+  // into the build is wrong or the host is down, show a clear error screen
+  // instead of a forever-loading spinner.
+  await AppConfig.validate();
+  if (!AppConfig.validated) {
+    runApp(MisconfiguredBackendScreen(
+      apiBase: AppConfig.apiBase,
+      error: AppConfig.lastValidationError,
+    ));
+    return;
+  }
   runApp(
     ChangeNotifierProvider(
       create: (_) => AuthState(),

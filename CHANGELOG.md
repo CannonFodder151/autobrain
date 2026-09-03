@@ -17,6 +17,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - workers (`scheduled_backup`): log `duration_seconds`, `size`, `tables` on success so hosted Grafana / log greps can alert on a stalled backup without parsing stack traces.
 - workers (`_run`): recover from a wedged persistent event loop on `RuntimeError` ("Event loop is closed" / "Future attached to a different loop") — recreate the loop on the next call instead of poisoning every subsequent Celery task for the lifetime of the worker process.
 
+### Added (AUT-2192)
+- feat(frontend): Pin `API_BASE_URL` / `WS_BASE_URL` to a single source of truth (`AppConfig` in `lib/core/config.dart`) and fail-fast on misconfiguration at startup (was: silent CORS/404 swirl). Adds a `MisconfiguredBackendScreen` debug surface so build issues are obvious in QA / demo. New `config_validation_test.dart` covers the URL validation rules.
+
 ## [0.3.215] - 2026-09-03
 
 ### Security (AUT-1608)

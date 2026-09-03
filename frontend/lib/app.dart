@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -99,7 +100,54 @@ class AutoBrainApp extends StatelessWidget {
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       themeMode: auth.darkMode ? ThemeMode.dark : ThemeMode.light,
-      home: home,
+      home: kDebugMode
+          ? _BuildInfoBanner(
+              apiBase: AppConfig.apiBase,
+              wsBase: AppConfig.wsBase,
+              child: home,
+            )
+          : home,
+    );
+  }
+}
+
+/// Top-of-screen Material banner (DEBUG ONLY) showing the resolved
+/// BACKEND_URL / WS_BASE_URL so mis-baked builds are obvious at a glance
+/// (AUT-2192). Stripped in release via kDebugMode.
+class _BuildInfoBanner extends StatelessWidget {
+  const _BuildInfoBanner({
+    required this.apiBase,
+    required this.wsBase,
+    required this.child,
+  });
+
+  final String apiBase;
+  final String wsBase;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      child: Column(
+        children: [
+          Container(
+            width: double.infinity,
+            color: const Color(0xFFFFE082),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Text(
+              'DEBUG  api=$apiBase  ws=$wsBase',
+              style: const TextStyle(
+                color: Color(0xFF6D4C00),
+                fontSize: 11,
+                fontFamily: 'monospace',
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Expanded(child: child),
+        ],
+      ),
     );
   }
 }

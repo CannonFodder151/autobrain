@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Runtime configuration.
@@ -24,6 +25,14 @@ class AppConfig {
 
   static String apiBase = _defaultApiBase;
   static String wsBase = _defaultWsBase;
+
+  /// Latest validation error message (null = last validation succeeded).
+  /// Surfaced via the misconfigured-backend screen so the user sees a clear
+  /// error instead of a silent connection-refused loop.
+  static String? lastValidationError;
+
+  /// Result of the last [validate] call.
+  static bool validated = false;
 
   /// Whether running natively on Android/iOS (as opposed to web/desktop).
   static bool get isMobile =>
@@ -52,6 +61,65 @@ class AppConfig {
     // Demo build is pre-wired to the demo instance — no picker needed.
     if (_defaultApiBase.contains('demo.autobrainservice.app')) {
       serverConfigured = true;
+    }
+  }
+
+  /// Fail-fast startup reachability check.
+  ///
+  /// Probes the resolved [apiBase] with a short GET against the nearest
+  /// backend endpoint that exists for every release (`/api/v1/openapi.json`,
+  /// with `/health` as a fallback). Sets [lastValidationError] on failure so
+  /// [MisconfiguredBackendScreen] can render a clear message instead of the
+  /// user staring at a forever-loading spinner.
+  ///
+  /// Returns true when the URL is reachable, false otherwise. Never throws —
+  /// all network/parse errors are captured into [lastValidationError].
+  static Future<bool> validate({
+    http.Client? client,
+    Duration timeout = const Duration(seconds: 4),
+  }) async {
+    final parsed = Uri.tryParse(apiBase);
+    if (parsed == null || !parsed.hasScheme || parsed.host.isEmpty) {
+      lastValidationError =
+          'API_BASE_URL is not a valid absolute URL: "$apiBase"';
+      validated = false;
+      return false;
+    }
+    final origin = parsed.replace(
+      path: '',
+      query: '',
+      fragment: '',
+    );
+    final probes = <Uri>[
+      origin.replace(path: '${parsed.path}/openapi.json'),
+      origin.replace(path: '${parsed.path}/health'),
+      origin,
+    ];
+    final httpClient = client ?? http.Client();
+    try {
+      for (final probe in probes) {
+        try {
+          final resp = await httpClient
+              .get(probe, headers: const {'Accept': 'application/json'})
+              .timeout(timeout);
+          if (resp.statusCode >= 200 && resp.statusCode < 500) {
+            // 2xx = real backend, 3xx = redirect, 4xx = auth/method but the
+            // host answered. All prove the URL is resolvable + reachable.
+            lastValidationError = null;
+            validated = true;
+            return true;
+          }
+        } catch (_) {
+          // try the next probe shape
+        }
+      }
+      lastValidationError =
+          'Could not reach API at $apiBase (tried openapi.json, /health, origin). '
+          'Check BACKEND_URL/API_BASE_URL was baked at build time and the host is up.';
+      validated = false;
+      return false;
+    } finally {
+      if (client == null) httpClient.close();
     }
   }
 
