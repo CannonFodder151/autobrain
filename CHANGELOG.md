@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.234] - 2026-09-04
+
 ### Fixed (AUT-2484)
 - redeploy(homed): bump autobrain-backend :hosted-arm64 digest to include AUT-2277 duplicate-FuelPrice-class fix. EP5 was crash-looping on the pre-fix image (two `FuelPrice` classes claiming `fuel_prices` in `Base.metadata`). Source fix is already merged (f7db5b6d); rebuilt arm64 image from main `6e394007` and pinned the new digest in `docker-compose.hosted.yml`.
 
