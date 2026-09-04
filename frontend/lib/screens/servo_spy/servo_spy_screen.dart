@@ -28,6 +28,15 @@ import 'servo_spy_list_model.dart';
 
 enum _ServoSpyView { map, list }
 
+// AUT-2220: CARTO basemap API key, injected at build time via
+// --dart-define=CARTO_API_KEY=<key>. CARTO keys are designed to be public
+// (embedded in tile URLs as ?api_key=...). Empty -> key-less public basemap.
+// File-private top-level so both State classes can share them; the param
+// string cannot be `const` because `isEmpty` is not a constant expression.
+const String _cartoApiKey = String.fromEnvironment('CARTO_API_KEY');
+final String _cartoKeyParam =
+    _cartoApiKey.isEmpty ? '' : '?api_key=$_cartoApiKey';
+
 class ServoSpyScreen extends StatefulWidget {
   const ServoSpyScreen({super.key});
 
@@ -37,13 +46,6 @@ class ServoSpyScreen extends StatefulWidget {
 
 class _ServoSpyScreenState extends State<ServoSpyScreen> {
   _ServoSpyView _view = _ServoSpyView.map;
-
-  // AUT-2220: CARTO basemap API key, injected at build time via
-  // --dart-define=CARTO_API_KEY=<key>. CARTO keys are designed to be public
-  // (embedded in tile URLs as ?api_key=...). Empty -> key-less public basemap.
-  static const String _cartoApiKey = String.fromEnvironment('CARTO_API_KEY');
-  static const String _cartoKeyParam =
-      _cartoApiKey.isEmpty ? '' : '?api_key=$_cartoApiKey';
 
   @override
   Widget build(BuildContext context) {
