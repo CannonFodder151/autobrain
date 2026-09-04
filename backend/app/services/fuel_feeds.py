@@ -8,6 +8,9 @@ Ingests three public open-data feeds into ``fuel_stations`` / ``fuel_prices``:
     AUT-2195). Optional open-data fallback (www.fuelpricesqld.com.au) for one
     cycle behind FUEL_QLD_USE_OPEN_FALLBACK so a partial direct-API outage
     does not break Servo Spy.
+  * 7-Eleven (projectzerothree.info) : free, no-auth, Cloudflare-cached JSON
+    snapshot, refreshed daily (AUT-2392). Folded in alongside the gov feeds
+    so the price map covers a major retail chain in VIC/NSW/QLD/WA.
 
 Design: pure fetch + parse + upsert. Nothing is guessed, so the whole pipeline
 is deterministic and costs zero 9Router spend (Phase 1c: deterministic first).
@@ -547,6 +550,72 @@ def _parse_qld(raw: Any) -> tuple[list[dict], dict[str, list[tuple[str, float, d
 
 
 # --------------------------------------------------------------------------- #
+# 7-Eleven (projectzerothree.info) — free chain feed, AUT-2392
+# --------------------------------------------------------------------------- #
+
+# Raw feed uses "U91/U95/U98" + "E10/Diesel/LPG" for fuel type. We collapse
+# them into the canonical catalogue the rest of the pipeline uses, so the
+# frontend dropdown and DB column tokens line up.
+_7ELEVEN_FUEL_TYPE_MAP: dict[str, str] = {
+    "u91": "91", "u95": "95", "u98": "98",
+    "e10": "E10", "diesel": "Diesel", "lpg": "LPG",
+}
+
+
+def _parse_7eleven(raw: Any, *, allowed_states: tuple[str, ...] | list[str] = ()) -> tuple[list[dict], dict[str, list[tuple[str, float, datetime]]]]:
+    """Parse the projectzerothree.info 7-Eleven snapshot.
+
+    Shape: ``{"updated": <unix>, "regions": [{"region": "All"|state, "prices":
+    [{name, type, price, suburb, state, postcode, lat, lng}, ...]}, ...]}``.
+
+    Stations are identified by ``name + postcode`` (the feed has no numeric
+    site id, and the same name appears once per postcode with one row per fuel
+    type). Prices are stored in cents per litre in the feed; we keep the
+    cents-per-litre convention the rest of the Servo Spy pipeline already uses
+    (see fuel_servo.annotate_price).
+    """
+    allowed = {s.upper() for s in allowed_states}
+    if not isinstance(raw, dict):
+        return [], {}
+    updated_unix = raw.get("updated")
+    base_ts = _to_dt(updated_unix) if updated_unix is not None else _now()
+
+    stations: dict[str, dict] = {}
+    prices: dict[str, list[tuple[str, float, datetime]]] = {}
+    for region in raw.get("regions", []) or []:
+        if not isinstance(region, dict):
+            continue
+        for p in region.get("prices", []) or []:
+            if not isinstance(p, dict):
+                continue
+            state = (p.get("state") or "").upper()
+            if allowed and state and state not in allowed:
+                continue
+            name = str(p.get("name") or "").strip()
+            postcode = str(p.get("postcode") or "").strip()
+            if not name or not postcode:
+                continue
+            sid = f"{name}|{postcode}"
+            raw_type = str(p.get("type") or "").strip()
+            ft = _7ELEVEN_FUEL_TYPE_MAP.get(raw_type.lower()) or _normalise_fuel_type(raw_type)
+            price = _to_float(p.get("price"))
+            if not ft or price is None:
+                continue
+            if sid not in stations:
+                stations[sid] = {
+                    "source": "7eleven",
+                    "source_id": sid,
+                    "brand": "7-Eleven",
+                    "name": name,
+                    "address": ", ".join(filter(None, [str(p.get("suburb") or "").strip(), postcode, state])),
+                    "lat": _to_float(p.get("lat")),
+                    "lon": _to_float(p.get("lng")),
+                }
+            prices.setdefault(sid, []).append((ft, price, base_ts))
+    return list(stations.values()), prices
+
+
+# --------------------------------------------------------------------------- #
 # Persistence
 # --------------------------------------------------------------------------- #
 
@@ -713,6 +782,30 @@ async def _fetch_json(url: str, *, headers: dict | None = None, params: dict | N
         return resp.json()
 
 
+async def ingest_7eleven(db: AsyncSession, *, client: httpx.AsyncClient | None = None) -> dict:
+    """7-Eleven chain feed (projectzerothree.info) — AUT-2392.
+
+    Free, no-auth, Cloudflare-cached JSON snapshot. Filtered to the four
+    states the feed actually covers (VIC/NSW/QLD/WA). Each station appears
+    once per (name, postcode) with one price row per fuel type.
+    """
+    if not settings.FUEL_7ELEVEN_ENABLED:
+        return {"source": "7eleven", "stations": 0, "prices": 0, "skipped": "disabled"}
+    raw = await _fetch_json(
+        "https://projectzerothree.info/api.php?format=json",
+        headers={"User-Agent": settings.SEVEN_ELEVEN_USER_AGENT},
+        client=client,
+    )
+    stations, prices = _parse_7eleven(raw, allowed_states=settings.FUEL_7ELEVEN_STATES)
+    logger.info(
+        "fuel_7eleven_ok",
+        stations=len(stations),
+        prices=sum(len(v) for v in prices.values()),
+        states=list(settings.FUEL_7ELEVEN_STATES),
+    )
+    return await _ingest(db, "7eleven", stations, prices)
+
+
 # --------------------------------------------------------------------------- #
 # Public ingest entrypoints
 # --------------------------------------------------------------------------- #
@@ -790,6 +883,7 @@ async def ingest_all_fuel(db: AsyncSession) -> dict:
         ("wa", ingest_wa_fuelwatch),
         ("nsw", ingest_nsw_fuelcheck),
         ("qld", ingest_qld_fuel_prices),
+        ("7eleven", ingest_7eleven),
     ):
         try:
             summary[name] = await fn(db)
