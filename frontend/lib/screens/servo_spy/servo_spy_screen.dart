@@ -20,24 +20,28 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../community_garage/widgets/premium_gate.dart';
 import '../../core/api_client.dart';
-import '../../widgets/responsive.dart';
 import '../../core/auth_state.dart';
 import '../../core/fuel_types.dart';
 import '../../core/geoloc.dart';
 import '../../core/models.dart';
 import 'servo_spy_list_model.dart';
-import 'servo_spy_station_history_screen.dart';
 
 enum _ServoSpyView { map, list }
 
-// AUT-2220: CARTO basemap API key, injected at build time via
-// --dart-define=CARTO_API_KEY=<key>. CARTO keys are designed to be public
-// (embedded in tile URLs as ?key=...). Empty -> key-less public basemap.
-// File-private top-level so both State classes can share them; the param
-// string cannot be `const` because `isEmpty` is not a constant expression.
-final String _cartoApiKey = String.fromEnvironment('CARTO_API_KEY');
-final String _cartoKeyParam =
-    _cartoApiKey.isEmpty ? '' : '?key=$_cartoApiKey';
+// AUT-2220/2383: CARTO basemap API key, injected at build time via
+// --dart-define=CARTO_API_KEY=<key>. CARTO raster basemaps require ?key=.
+// flutter_map's BuiltInMapCachingProvider handles disk tile caching.
+const String _cartoApiKey = String.fromEnvironment('CARTO_API_KEY');
+
+/// Compose the CARTO basemap query string from a key.
+///
+/// Empty key -> empty string. Non-empty key -> `?key=<key>` (CARTO's
+/// required parameter name for raster basemaps; `api_key` is silently
+/// ignored, leaving the "API key required" watermark).
+@visibleForTesting
+String cartoKeyParam(String key) => key.isEmpty ? '' : '?key=$key';
+
+final String _cartoKeyParam = cartoKeyParam(_cartoApiKey);
 
 class ServoSpyScreen extends StatefulWidget {
   const ServoSpyScreen({super.key});
@@ -415,56 +419,46 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
               style: TextStyle(fontSize: 12),
             ),
           ),
-        Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1100),
-            child: Row(
-              children: [
-                if (_locationDenied)
-                  IconButton(
-                    tooltip: 'Enable location',
-                    icon: const Icon(Icons.location_disabled),
-                    onPressed: _bootstrap,
-                  ),
-                const Spacer(),
-                IconButton(
-                  tooltip: 'Refresh',
-                  icon: const Icon(Icons.refresh),
-                  onPressed: _bootstrap,
-                ),
-                IconButton(
-                  tooltip: 'Filters',
-                  icon: const Icon(Icons.filter_alt_outlined),
-                  onPressed: _openFilter,
-                ),
-              ],
+        Row(
+          children: [
+            if (_locationDenied)
+              IconButton(
+                tooltip: 'Enable location',
+                icon: const Icon(Icons.location_disabled),
+                onPressed: _bootstrap,
+              ),
+            const Spacer(),
+            IconButton(
+              tooltip: 'Refresh',
+              icon: const Icon(Icons.refresh),
+              onPressed: _bootstrap,
             ),
-          ),
+            IconButton(
+              tooltip: 'Filters',
+              icon: const Icon(Icons.filter_alt_outlined),
+              onPressed: _openFilter,
+            ),
+          ],
         ),
         if (_selectedFuelType != null)
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1100),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                child: Row(
-                  children: [
-                    for (final ft in _fuelTypes)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: ChoiceChip(
-                          label: Text(ft),
-                          selected: ft == _selectedFuelType,
-                          onSelected: (_) {
-                            setState(() => _selectedFuelType = ft);
-                            _fetchStations();
-                          },
-                        ),
-                      ),
-                  ],
-                ),
-              ),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            child: Row(
+              children: [
+                for (final ft in _fuelTypes)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(ft),
+                      selected: ft == _selectedFuelType,
+                      onSelected: (_) {
+                        setState(() => _selectedFuelType = ft);
+                        _fetchStations();
+                      },
+                    ),
+                  ),
+              ],
             ),
           ),
         Expanded(
@@ -544,33 +538,24 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
                   left: 16,
                   right: 16,
                   top: 16,
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 600),
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: scheme.errorContainer,
-                          borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: scheme.errorContainer,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.error_outline, color: scheme.onErrorContainer),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Prices unavailable: $_error',
+                            style: TextStyle(color: scheme.onErrorContainer),
+                          ),
                         ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.error_outline,
-                                color: scheme.onErrorContainer),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Prices unavailable: $_error',
-                                style:
-                                    TextStyle(color: scheme.onErrorContainer),
-                              ),
-                            ),
-                            TextButton(
-                                onPressed: _bootstrap,
-                                child: const Text('Retry')),
-                          ],
-                        ),
-                      ),
+                        TextButton(onPressed: _bootstrap, child: const Text('Retry')),
+                      ],
                     ),
                   ),
                 ),
@@ -763,15 +748,6 @@ class _StationSheet extends StatelessWidget {
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
-            child: FilledButton.tonalIcon(
-              onPressed: () => _openHistory(context),
-              icon: const Icon(Icons.show_chart),
-              label: const Text('30-day price history'),
-            ),
-          ),
-          const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
             child: FilledButton.icon(
               onPressed: () => _navigate(context),
               icon: const Icon(Icons.navigation),
@@ -887,33 +863,6 @@ class _ServoSpyListState extends State<_ServoSpyList> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
-  }
-
-  void _openHistory(BuildContext context) {
-    final stationId = station.id;
-    final stationName = station.name ?? 'Station';
-    Navigator.of(context, rootNavigator: true).pop();
-    Navigator.of(context, rootNavigator: true).push(
-      MaterialPageRoute(
-        builder: (_) => ServoSpyStationHistoryScreen(
-          stationId: stationId,
-          stationName: stationName,
-        ),
-      ),
-    );
-  }
-
-  void _openHistory(ServoStationRow s) {
-    final stationId = s.id;
-    if (stationId == null || stationId.isEmpty) return;
-    Navigator.of(context, rootNavigator: true).push(
-      MaterialPageRoute(
-        builder: (_) => ServoSpyStationHistoryScreen(
-          stationId: stationId,
-          stationName: s.name,
-        ),
-      ),
-    );
   }
 
   void _openFilter() {
@@ -1094,7 +1043,6 @@ class _ServoSpyListState extends State<_ServoSpyList> {
                                 ? 'fill \$${s.avgFillCost!.toStringAsFixed(2)}'
                                 : '';
                             return ListTile(
-                              onTap: () => _openHistory(s),
                               leading: CircleAvatar(
                                 backgroundColor: scheme.surfaceContainerHighest,
                                 child: s.logoUrl != null

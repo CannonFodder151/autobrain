@@ -148,6 +148,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed (AUT-2383)
 - fix(frontend,servo-spy): CARTO basemap tile URL query param was `?api_key=` but CARTO requires `?key=` — the watermark persisted because the API silently ignored the wrong parameter. Updated tile URL template in `frontend/lib/screens/servo_spy/servo_spy_screen.dart` to use `?key=$_cartoApiKey`; updated comment in `docker/frontend/Dockerfile`. Caching is already optimal: tiles are immutable `{z}/{x}/{y}` hashes so CDN/browser cache-hit rate is naturally high — no extra layer needed.
 
+### Fixed (AUT-2383)
+- fix(frontend): CARTO basemap tile URL now uses `?key=` instead of `?api_key=`. The legacy `?api_key=` parameter is silently ignored by CARTO raster basemaps, leaving the "API key required" watermark on Servo Spy's map even with `CARTO_API_KEY` injected. `?key=` is CARTO's required parameter name; `flutter_map`'s `BuiltInMapCachingProvider` handles disk tile caching to keep request volume low. Regression test in `frontend/test/servo_spy_carto_key_test.dart`.
+
+
 ## [0.3.234] - 2026-09-04
 
 ### Fixed (AUT-2484)
