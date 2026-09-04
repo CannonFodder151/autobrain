@@ -513,6 +513,14 @@ def ingest_fuel_all() -> None:
     _run(_ingest())
 
 
+@shared_task
+def ingest_fuel_sa() -> None:
+    """AUT-2406: per-source manual-trigger ingest (SA SAFPIS)."""
+    from app.services.fuel_feeds import ingest_sa_fuel
+
+    return _run_single_source_ingest("sa", ingest_sa_fuel)
+
+
 # Backwards-compat alias so older dispatch sites / dashboards keep working
 # while the beat schedule migrates. Will be removed once no caller is left.
 ingest_fuel_prices = ingest_fuel_all

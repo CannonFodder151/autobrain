@@ -107,6 +107,14 @@ class Settings(BaseSettings):
     # the QLD feed is skipped (mirrors the NSW no-key pattern). Open-data
     # fallback (www.fuelpricesqld.com.au) can be kept for one cycle behind the
     # FUEL_QLD_USE_OPEN_FALLBACK flag for partial-outage resilience.
+    # AUT-2406: SA SAFPIS ingester (Informed Sources aggregator — same
+    # platform as the QLD DirectAPI). Mirror the QLD/NSW "empty key = skip"
+    # pattern: FUEL_SA_API_KEY holds the SAFPIS Subscriber Token GUID; when
+    # unset the SA feed is skipped (no crash, no partial rows).
+    FUEL_SA_API_KEY: str = ""
+    FUEL_SA_API_URL: str = "https://api.safuelprices.com.au"
+    FUEL_SA_GEO_REGION_ID: int = 4  # SA state geo region
+    FUEL_SA_ENABLED: bool = False
     FUEL_QLD_API_KEY: str = ""
     FUEL_QLD_API_URL: str = "https://fppdirectapi-prod.fuelpricesqld.com.au"
     FUEL_QLD_OPEN_DATA_URL: str = "https://www.fuelpricesqld.com.au/"
