@@ -33,7 +33,7 @@ enum _ServoSpyView { map, list }
 // (embedded in tile URLs as ?api_key=...). Empty -> key-less public basemap.
 // File-private top-level so both State classes can share them; the param
 // string cannot be `const` because `isEmpty` is not a constant expression.
-const String _cartoApiKey = String.fromEnvironment('CARTO_API_KEY');
+final String _cartoApiKey = String.fromEnvironment('CARTO_API_KEY');
 final String _cartoKeyParam =
     _cartoApiKey.isEmpty ? '' : '?api_key=$_cartoApiKey';
 
