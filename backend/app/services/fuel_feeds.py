@@ -23,7 +23,9 @@ VIC/SA/TAS/NT are intentionally out of MVP — they need a paid aggregator
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from enum import IntEnum
 from typing import Any
 
 import httpx
@@ -37,6 +39,167 @@ from app.models.fuel_station import FuelPrice, FuelStation
 logger = get_logger(__name__)
 
 DEFAULT_FUEL_TYPES = ["E10", "91", "95", "98", "Diesel", "LPG"]
+
+# --------------------------------------------------------------------------- #
+# Multi-source arbitration (AUT-2381)
+# --------------------------------------------------------------------------- #
+
+# Tunables. Kept module-level so a follow-up admin override can be wired
+# without a code change.
+ARBITRATION_STALE_HOURS = 2.0      # freshness weight hits 0 after this age
+ARBITRATION_OUTLIER_CPL = 30.0     # > this gap from regional median -> flag
+ARBITRATION_SCORE_FRESHNESS_W = 2  # weight on freshness_weight
+ARBITRATION_SCORE_TRUST_W = 3      # weight on source_trust
+ARBITRATION_SCORE_CONSISTENCY_W = 1  # weight on consistency_bonus
+
+
+class SourceTrust(IntEnum):
+    """Authoritative rank of upstream fuel-price sources. Higher = more trusted.
+
+    GOVERNMENT_FREE is the strongest signal (official open-data, no key, CC
+    licence, paid for by taxpayers). RETAIL_FREE covers free, keyless third
+    parties (projectzerothree, FuelPricesQLD open-data). GOVERNMENT_PAID is a
+    government feed behind a paid subscription (FuelPricesQLD DirectAPI). The
+    IntEnum value IS the score (so we don't carry a separate column).
+    """
+
+    CROWDSCRAPED = 1
+    GOVERNMENT_PAID = 2
+    RETAIL_FREE = 3
+    GOVERNMENT_FREE = 4
+
+
+# Map of canonical upstream id -> SourceTrust. Keep keys in sync with the
+# ``source`` column we write into ``fuel_prices.source``.
+SOURCE_TRUST: dict[str, SourceTrust] = {
+    # Government free, no key required.
+    "wa": SourceTrust.GOVERNMENT_FREE,        # WA FuelWatch
+    "nsw": SourceTrust.GOVERNMENT_FREE,       # NSW FuelCheck
+    # Government paid (Bearer subscription).
+    "qld_direct": SourceTrust.GOVERNMENT_PAID,
+    # Retail free (third party, no key).
+    "qld": SourceTrust.RETAIL_FREE,           # QLD open-data fallback
+    "7eleven": SourceTrust.RETAIL_FREE,       # projectzerothree.info
+    # Crowdscraped (rescue-the-moment override; reserved for a future AUT).
+    "crowd": SourceTrust.CROWDSCRAPED,
+}
+
+
+@dataclass(frozen=True)
+class PriceCandidate:
+    """One upstream price observation for the arbitration step."""
+
+    source: str               # "wa", "nsw", "qld_direct", "7eleven", "crowd"
+    price: float              # dollars per litre (matches FuelPrice.price)
+    fuel_type: str            # canonical: 91, 95, 98, E10, Diesel, LPG
+    effective_at: datetime    # upstream's "as of" timestamp (tz-aware)
+    station_id: str | None = None  # optional — only used for logging
+
+
+@dataclass(frozen=True)
+class ArbitrationResult:
+    """Outcome of the per-(station, fuel_type, day) arbitration."""
+
+    best_source: str
+    best_price: float
+    best_effective_at: datetime
+    source_score: float
+    flagged_sources: frozenset[str]  # candidates marked as consistency outliers
+
+
+def _freshness_weight(candidate: PriceCandidate, *, now: datetime | None = None) -> float:
+    """Linear decay from 1.0 (now) to 0.0 (>= ARBITRATION_STALE_HOURS old).
+
+    Naive timestamps are treated as UTC. Naive ``now`` is also treated as UTC
+    so the helper is safe to call from a test that has not faked tzinfo.
+    """
+    ts = candidate.effective_at
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    current = (now or datetime.now(timezone.utc))
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    age_h = max(0.0, (current - ts).total_seconds() / 3600.0)
+    if age_h >= ARBITRATION_STALE_HOURS:
+        return 0.0
+    return round(1.0 - (age_h / ARBITRATION_STALE_HOURS), 4)
+
+
+def _consistency_bonus(candidate: PriceCandidate, all_candidates: list[PriceCandidate]) -> float:
+    """Return 1.0 if the price is within ARBITRATION_OUTLIER_CPL of the regional
+    median (other candidates), 0.0 if it is an outlier, 0.5 if it is alone.
+
+    A single candidate cannot be inconsistent with itself, so a lone row gets
+    a neutral 0.5 rather than 0.0 (we still want to surface a "trust" answer).
+    """
+    if len(all_candidates) <= 1:
+        return 0.5
+    others = [c.price for c in all_candidates if c is not candidate]
+    if not others:
+        return 0.5
+    others_sorted = sorted(others)
+    mid = len(others_sorted) // 2
+    if len(others_sorted) % 2:
+        median = others_sorted[mid]
+    else:
+        median = 0.5 * (others_sorted[mid - 1] + others_sorted[mid])
+    if abs(candidate.price - median) > ARBITRATION_OUTLIER_CPL:
+        return 0.0
+    return 1.0
+
+
+def _score_candidate(candidate: PriceCandidate, all_candidates: list[PriceCandidate], *, now: datetime | None = None) -> float:
+    """Composite score per the AUT-2381 formula.
+
+    ``score = freshness_weight * 2 + source_trust * 3 + consistency * 1``.
+
+    Higher is better. Trust dominates freshness dominates consistency, but
+    a stale-but-trusted source can still lose to a fresh-but-less-trusted one
+    when the gap is wide enough (e.g. 4*3=12 vs 1.0*2+2*3=8).
+    """
+    trust = SOURCE_TRUST.get(candidate.source, SourceTrust.CROWDSCRAPED)
+    freshness = _freshness_weight(candidate, now=now)
+    consistency = _consistency_bonus(candidate, all_candidates)
+    return (
+        freshness * ARBITRATION_SCORE_FRESHNESS_W
+        + int(trust) * ARBITRATION_SCORE_TRUST_W
+        + consistency * ARBITRATION_SCORE_CONSISTENCY_W
+    )
+
+
+def select_best_price(candidates: list[PriceCandidate], *, now: datetime | None = None) -> ArbitrationResult | None:
+    """Pick the best candidate by AUT-2381's score. Pure, deterministic, no I/O.
+
+    Returns ``None`` for an empty input. Ties break on (higher source trust,
+    fresher timestamp, lexicographic source id) so the answer is stable across
+    runs — important because the winner is persisted to ``fuel_prices``.
+    """
+    if not candidates:
+        return None
+    scored = [(c, _score_candidate(c, candidates, now=now)) for c in candidates]
+    # Sort: highest score, then higher trust, then fresher, then stable id.
+    scored.sort(
+        key=lambda pair: (
+            -pair[1],
+            -int(SOURCE_TRUST.get(pair[0].source, SourceTrust.CROWDSCRAPED)),
+            -pair[0].effective_at.timestamp(),
+            pair[0].source,
+        )
+    )
+    winner, score = scored[0]
+    flagged = frozenset(
+        c.source
+        for c in candidates
+        if c is not winner and _consistency_bonus(c, candidates) == 0.0
+    )
+    return ArbitrationResult(
+        best_source=winner.source,
+        best_price=winner.price,
+        best_effective_at=winner.effective_at,
+        source_score=round(float(score), 4),
+        flagged_sources=flagged,
+    )
+
 
 # Canonical fuel-type map. Keys are lowercased raw labels seen across feeds.
 _FUEL_TYPE_MAP: dict[str, str] = {
@@ -405,20 +568,108 @@ async def _upsert_station(db: AsyncSession, s: dict) -> FuelStation:
     return station
 
 
-async def _replace_station_prices(db: AsyncSession, station_id: str, prices: list[tuple[str, float, datetime]]) -> int:
-    await db.execute(delete(FuelPrice).where(FuelPrice.station_id == station_id))
+async def _replace_station_prices(
+    db: AsyncSession,
+    station_id: str,
+    source: str,
+    prices: list[tuple[str, float, datetime]],
+) -> int:
+    """Replace the rows for (station_id, source) with the freshly fetched set.
+
+    AUT-2381: we keep one row per (station, fuel_type, source) instead of
+    dropping all rows on every ingest, so the arbitration step can see what
+    *every* upstream said this cycle. The arbitration itself lives in
+    ``arbitrate_station_prices`` (called once per station by ``_ingest``).
+    """
+    await db.execute(
+        delete(FuelPrice).where(FuelPrice.station_id == station_id, FuelPrice.source == source)
+    )
     for ft, price, eff in prices:
-        db.add(FuelPrice(station_id=station_id, fuel_type=ft, price=price, effective_at=eff))
+        db.add(
+            FuelPrice(
+                station_id=station_id,
+                fuel_type=ft,
+                price=price,
+                effective_at=eff,
+                source=source,
+            )
+        )
     return len(prices)
+
+
+async def arbitrate_station_prices(db: AsyncSession, station_id: str) -> int:
+    """Run AUT-2381 arbitration across every (fuel_type) for a station.
+
+    Looks at every FuelPrice row currently attached to the station, builds
+    PriceCandidate objects, calls ``select_best_price`` per fuel_type, and
+    writes the winner's (best_source, source_score, flag_reason) back to each
+    row in that group. Returns the number of fuel types arbitrated.
+
+    Pure SQL + in-memory arithmetic; no network, no AI. Safe to call inside
+    an existing transaction.
+    """
+    rows = list(
+        (
+            await db.scalars(
+                select(FuelPrice).where(FuelPrice.station_id == station_id)
+            )
+        ).all()
+    )
+    by_fuel: dict[str, list[FuelPrice]] = {}
+    for r in rows:
+        by_fuel.setdefault(r.fuel_type, []).append(r)
+
+    arbitrated = 0
+    now = _now()
+    for fuel_type, group in by_fuel.items():
+        candidates = [
+            PriceCandidate(
+                source=r.source or "unknown",
+                price=r.price,
+                fuel_type=fuel_type,
+                effective_at=r.effective_at,
+                station_id=station_id,
+            )
+            for r in group
+        ]
+        result = select_best_price(candidates, now=now)
+        if result is None:
+            continue
+        winner_id = None
+        for r in group:
+            r.best_source = result.best_source
+            r.source_score = result.source_score
+            if r.source in result.flagged_sources:
+                r.flag_reason = "outlier>30cpl"
+            elif r.source == result.best_source:
+                r.flag_reason = None
+                winner_id = r.id
+            else:
+                r.flag_reason = None
+        arbitrated += 1
+        logger.info(
+            "fuel_arbitration",
+            station_id=station_id,
+            fuel_type=fuel_type,
+            best_source=result.best_source,
+            best_price=result.best_price,
+            score=result.source_score,
+            flagged=sorted(result.flagged_sources),
+        )
+    return arbitrated
 
 
 async def _ingest(db: AsyncSession, source: str, stations: list[dict], prices: dict[str, list]) -> dict:
     count_s, count_p = 0, 0
+    arbitrated_stations: set[str] = set()
     for s in stations:
         station = await _upsert_station(db, s)
         ps = prices.get(s["source_id"], [])
-        count_p += await _replace_station_prices(db, station.id, ps)
+        count_p += await _replace_station_prices(db, station.id, source, ps)
+        arbitrated_stations.add(station.id)
         count_s += 1
+    for sid in arbitrated_stations:
+        await arbitrate_station_prices(db, sid)
     return {"source": source, "stations": count_s, "prices": count_p}
 
 
