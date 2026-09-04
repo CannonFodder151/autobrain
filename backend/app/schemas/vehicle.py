@@ -4,6 +4,8 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
+from app.models.vehicle import PowertrainType
+
 
 class RegoLookupRequest(BaseModel):
     rego: str = Field(min_length=1, max_length=20)
@@ -49,6 +51,7 @@ class VehicleCreate(BaseModel):
     club_reg: bool = False
     auto_suggest_service: bool = False
     fuel_type: str | None = None
+    powertrain: PowertrainType = PowertrainType.ICE
 
 
 class VehicleUpdate(BaseModel):
@@ -70,6 +73,7 @@ class VehicleUpdate(BaseModel):
     club_reg: bool | None = None
     auto_suggest_service: bool | None = None
     fuel_type: str | None = None
+    powertrain: PowertrainType | None = None
 
 
 class VehicleOut(BaseModel):
@@ -92,6 +96,7 @@ class VehicleOut(BaseModel):
     club_reg: bool = False
     auto_suggest_service: bool = False
     fuel_type: str | None = None
+    powertrain: PowertrainType = PowertrainType.ICE
     is_shared: bool = False
     shared_by: str | None = None  # owner display name when viewed via a share
     created_at: datetime
