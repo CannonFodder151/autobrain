@@ -6,6 +6,7 @@ import 'app.dart';
 import 'core/auth_state.dart';
 import 'core/config.dart';
 import 'core/misconfigured_backend_screen.dart';
+import 'core/offline_cache.dart';
 import 'services/car/car_kit_service.dart';
 import 'services/obd/obd_trip_monitor.dart';
 
@@ -16,6 +17,10 @@ void main() async {
   // which licenseRequested() would read an empty fragment (AUT-629).
   AutoBrainApp.initialFragment = Uri.base.fragment;
   await AppConfig.load();
+  // Drop expired SQLite cache rows before the first screen reads them.
+  // Best-effort; never blocks boot on failure.
+  // ignore: discarded_futures
+  OfflineCache.instance.clearExpired();
   // Boot-time reachability probe (AUT-2272 M0). Failures do not throw — we
   // mount MisconfiguredBackendScreen so the user can retry instead of
   // staring at a blank window. Server picker + login still work once the
