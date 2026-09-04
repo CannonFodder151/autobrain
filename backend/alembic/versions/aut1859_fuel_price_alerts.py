@@ -104,7 +104,7 @@ def upgrade() -> None:
                 existing_type=sa.String(36), nullable=True,
             )
         # partial unique index on user_id for the single user-global row.
-        idx = op.get_inspector().get_indexes("notification_preferences") or []
+        idx = sa.inspect(op.get_bind()).get_indexes("notification_preferences") or []
         names = {i.get("name") for i in idx}
         if "uq_notif_user_global" not in names:
             if is_pg:
@@ -128,7 +128,7 @@ def upgrade() -> None:
                 "notification_deliveries", "vehicle_id",
                 existing_type=sa.String(36), nullable=True,
             )
-        idx = op.get_inspector().get_indexes("notification_deliveries") or []
+        idx = sa.inspect(op.get_bind()).get_indexes("notification_deliveries") or []
         names = {i.get("name") for i in idx}
         if "uq_notif_delivery_user_kind" not in names:
             if is_pg:
