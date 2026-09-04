@@ -249,12 +249,12 @@ async def _check_pref(db, pref: NotificationPreference, vehicle: Vehicle) -> Non
 
 def run_due_checks() -> None:
     """Called by Celery beat (daily) to re-evaluate all vehicles."""
-    async def _run():
+    async def _coro():
         async with SessionLocal() as db:
             vehicle_ids = list((await db.scalars(select(Vehicle.id))).all())
             for vid in vehicle_ids:
                 await check_vehicle_notifications(db, vid)
-    _run(_run())
+    _run(_coro())
 
 
 # --- Servo-spy fuel price alerts (AUT-1859) ----------------------------------
