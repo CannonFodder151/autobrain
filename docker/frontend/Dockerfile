@@ -12,7 +12,7 @@ FROM ${FLUTTER_IMAGE} AS build
 ARG API_BASE_URL=http://localhost:8000/api/v1
 ARG WS_BASE_URL=ws://localhost:8000/ws
 # AUT-2220: CARTO basemap API key. CARTO keys are designed to be public
-# (embedded in tile URLs as ?api_key=...). CI must pass --build-arg CARTO_API_KEY
+# (embedded in tile URLs as ?key=...). CI must pass --build-arg CARTO_API_KEY
 # explicitly. Empty value falls back to the key-less public basemap.
 ARG CARTO_API_KEY=
 

@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-2383)
+- fix(frontend,servo-spy): CARTO basemap tile URL query param was `?api_key=` but CARTO requires `?key=` — the watermark persisted because the API silently ignored the wrong parameter. Updated tile URL template in `frontend/lib/screens/servo_spy/servo_spy_screen.dart` to use `?key=$_cartoApiKey`; updated comment in `docker/frontend/Dockerfile`. Caching is already optimal: tiles are immutable `{z}/{x}/{y}` hashes so CDN/browser cache-hit rate is naturally high — no extra layer needed.
+
 ## [0.3.234] - 2026-09-04
 
 ### Fixed (AUT-2484)
