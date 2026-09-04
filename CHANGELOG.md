@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+
+## [0.3.235] - 2026-09-04
 ### Fixed (AUT-2467)
 - fix(backend): resolve structlog `source` kwarg collision in `ingest_fuel_prices` (`app/workers/tasks.py:509`). `res` dict from `ingest_all_fuel` already contains a `source` key; passing `source=source` as a separate kwarg caused `TypeError: got multiple values for keyword argument 'source'`. Now logged as `logger.info("fuel_ingest_summary", **res)`. Also fixed `_run(_run())` in `run_due_checks` (`app/services/notify.py:257`) — inner `_run` had no args, so the coroutine was never scheduled. Renamed to `_coro` and routed through `tasks._run()`. Adds regression tests `test_ingest_fuel_prices_no_typeerror_when_source_in_result` and `test_run_due_checks_calls_check_for_each_vehicle`.
 
