@@ -1,4 +1,4 @@
-"""Ownership Advisor API surface (AUT-2425, AUT-2445-VALUE).
+"""Ownership Advisor API surface (AUT-2425, AUT-2445-VALUE, AUT-2448-FINANCE).
 
 Frozen route layout per ADR 0001
 (``docs/adr/0001-ownership-advisor.md``):
@@ -6,13 +6,13 @@ Frozen route layout per ADR 0001
 - ``GET  /api/v1/advisor/value``   — AUT-2445 (this module)
 - ``GET  /api/v1/advisor/replace`` — AUT-2446
 - ``GET  /api/v1/advisor/upgrade`` — AUT-2447
-- ``POST /api/v1/advisor/finance`` — AUT-2448
+- ``POST /api/v1/advisor/finance`` — AUT-2448 (this module)
 - ``POST /api/v1/advisor/dream``   — AUT-2449
 - ``POST /api/v1/advisor/ai``      — AUT-2450 (only module that hits 9Router)
 
-This router file ships the ``value`` sub-module only. Other sub-modules
-land in their own PRs so they can ship in parallel behind the frozen
-envelope.
+This router file ships the ``value`` + ``finance`` sub-modules. Other
+sub-modules land in their own PRs so they can ship in parallel behind
+the frozen envelope.
 
 Value is deterministic: it anchors on the cached market median
 (``app.services.market_data``), applies a condition multiplier + km
@@ -20,8 +20,13 @@ adjustment, surfaces a low / mid / high band, and lists comparables
 (same make/model, year ±3) from the same cache. Trade-in band is the
 industry-standard 75 / 82 / 90% of mid private-sale value.
 
+Finance (AUT-2448) is also fully deterministic: pure-function amortisation
+on top of the value module's mid price. No 9Router call. The novated-lease
+block is future-flagged (``status="coming_soon"``) until the EV / FBT
+rules land in a follow-up ADR.
+
 Entitlement: free accounts get ``403``; demo accounts are allowed (value
-is deterministic, no AI). Sharing rules reuse the existing
++ finance are deterministic, no AI). Sharing rules reuse the existing
 ``get_accessible_vehicle`` helper from ``app.services.ownership``.
 """
 
@@ -36,12 +41,15 @@ from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.advisor import (
+    AdvisorFinanceData,
+    AdvisorFinanceRequest,
     AdvisorResponse,
     AdvisorValueData,
     ComparableListing,
     TradeInBand,
 )
 from app.services.advisor import (
+    compute_finance_plan,
     compute_market_value,
     find_comparables,
     trade_in_band,
@@ -109,6 +117,72 @@ async def advisor_value(
 
     return AdvisorResponse(
         module="value",
+        vehicle_id=vehicle.id,
+        generated_at=datetime.now(timezone.utc),
+        model="rule-based-fallback",
+        data=data.model_dump(),
+        factors=factors,
+    )
+
+
+@router.post("/finance", response_model=AdvisorResponse)
+async def advisor_finance(
+    payload: AdvisorFinanceRequest,
+    vehicle_id: str = Query(..., description="Vehicle UUID (owner or accepted share)"),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> AdvisorResponse:
+    """Buy / finance / lease (and novated toggle, future-flagged) plan.
+
+    Deterministic only. ``vehicle_price`` is anchored on the value
+    module's ``mid`` (cached market median × condition × km adjustment),
+    so the finance block never invents a price and the value + finance
+    modules stay internally consistent. Falls back to ``0.0`` for
+    ``vehicle_price`` when the value module has no market data — the
+    response then carries a ``note`` explaining the gap so the UI can
+    render a graceful empty state instead of fabricating numbers.
+    """
+    _enforce_entitlement(user)
+    vehicle = await get_accessible_vehicle(db, vehicle_id, user)
+
+    value = await compute_market_value(db, vehicle)
+    vehicle_price = float(value.get("mid") or 0.0)
+
+    plan = compute_finance_plan(
+        vehicle_price=vehicle_price,
+        down_payment=payload.down_payment,
+        term_months=payload.term_months,
+        rate_pct=payload.rate_pct,
+        novated=payload.novated,
+    )
+    plan["vehicle_price"] = vehicle_price
+
+    data = AdvisorFinanceData(**plan)
+    factors = {
+        "vehicle": {
+            "id": vehicle.id,
+            "make": vehicle.make,
+            "model": vehicle.model,
+            "year": vehicle.year,
+            "condition": vehicle.condition,
+            "vehicle_type": vehicle.vehicle_type,
+        },
+        "input": {
+            "down_payment": payload.down_payment,
+            "term_months": data.modes[1]["term_months"] if len(data.modes) > 1 else payload.term_months,
+            "rate_pct": payload.rate_pct,
+            "novated": payload.novated,
+        },
+        "anchored_value": {
+            "mid": value.get("mid"),
+            "source": value.get("source"),
+            "as_of": value.get("as_of"),
+            "stale": value.get("stale"),
+        },
+    }
+
+    return AdvisorResponse(
+        module="finance",
         vehicle_id=vehicle.id,
         generated_at=datetime.now(timezone.utc),
         model="rule-based-fallback",
