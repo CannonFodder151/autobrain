@@ -441,7 +441,6 @@ volumes:
    hub-data:
    9router-data:
      external: true
-   dongle-server-data:
 
 # AUT-372: pin the default network subnet + a static frontend IP. The host-level
 # nginx-proxy-manager (npm) caches the resolved frontend container IP, so a
