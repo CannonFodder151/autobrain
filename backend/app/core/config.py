@@ -113,6 +113,10 @@ class Settings(BaseSettings):
     FUEL_QLD_COUNTRY_ID: int = 21  # Australia
     FUEL_QLD_REGION_LEVEL: int = 3  # state
     FUEL_QLD_USE_OPEN_FALLBACK: bool = False
+    # SA DirectAPI subscription token (Informed Sources / SAFPIS).
+    # Empty key = skip feed (mirrors NSW no-key pattern).
+    FUEL_SA_API_KEY: str = ""
+    FUEL_SA_GEO_REGION_ID: int = 4  # South Australia
     FUEL_WA_SITES_URL: str = "https://industryprd.fuelwatch.wa.gov.au/api/sites"
     FUEL_WA_PRICES_URL: str = "https://industryprd.fuelwatch.wa.gov.au/api/report/weekly-retail-prices"
     FUEL_NSW_URL: str = "https://api.transport.nsw.gov.au/v1/fuel"

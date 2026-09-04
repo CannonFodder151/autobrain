@@ -557,6 +557,14 @@ def ingest_fuel_qld() -> None:
 
 
 @shared_task
+def ingest_fuel_sa() -> None:
+    """AUT-2375/AUT-2406: per-source manual-trigger ingest (SA SAFPIS)."""
+    from app.services.fuel_feeds import ingest_sa_fuel
+
+    return _run_single_source_ingest("sa", ingest_sa_fuel)
+
+
+@shared_task
 def refresh_sca_parts_cache() -> dict:
     """Nightly SCA parts cache prewarm (AUT-2419).
 
