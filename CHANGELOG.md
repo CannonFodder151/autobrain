@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.226] - 2026-09-04
+
 ### Fixed
 - fix(docker, AUT-2212): remove the orphan `dongle-server-data` named volume from `docker-compose.hosted.yml` (the service block was already removed by PR #443 / AUT-1978; this finishes the dedupe). No service references the volume, so compose v2 never mounted it; the entry was dead config. No Portainer redeploy needed. Audit follow-up to AUT-2190.
 
