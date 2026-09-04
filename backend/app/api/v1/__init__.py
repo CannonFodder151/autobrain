@@ -16,6 +16,7 @@ from app.api.v1 import (
     fuel,
     fuel_prices,
     fuel_servo,
+    ev_spy,
     ha,
     issues,
     logbook,
@@ -44,6 +45,7 @@ api_router.include_router(shares.router)
 api_router.include_router(services.router)
 api_router.include_router(fuel.router)
 api_router.include_router(fuel_servo.router)
+api_router.include_router(ev_spy.router)
 api_router.include_router(fuel_prices.router)
 api_router.include_router(diagnostics.router)
 api_router.include_router(logbook.router)
