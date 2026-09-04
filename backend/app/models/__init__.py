@@ -7,6 +7,7 @@ from app.models.vehicle import Vehicle, VehicleEvent
 from app.models.logbook import LogEntry
 from app.models.obd import ObdCode
 from app.models.service import ServiceRecord, ServiceItem
+from app.models.electricity import ElectricityLog
 from app.models.fuel import FuelLog
 from app.models.diagnostic import Diagnostic
 from app.models.mod import Modification
@@ -42,6 +43,7 @@ __all__ = [
     "ServiceRecord",
     "ServiceItem",
     "FuelLog",
+    "ElectricityLog",
     "Diagnostic",
     "Modification",
     "Part",
