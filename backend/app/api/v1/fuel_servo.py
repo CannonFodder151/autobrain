@@ -24,8 +24,10 @@ from app.schemas.fuel import FuelStats  # noqa: F401  (type hint in _station_out
 from app.schemas.fuel_servo import (
     AttributionOut,
     FuelBrandOut,
+    FuelHistoryPoint,
     FuelPriceHistoryOut,
     FuelPriceOut,
+    FuelStationHistoryOut,
     FuelStationOut,
 )
 from app.services import fuel_feeds as feeds
@@ -175,6 +177,53 @@ async def fuel_attribution(
     """Open-data attribution for the aggregated feeds."""
     _set_attribution(response)
     return AttributionOut(attribution=FUEL_ATTRIBUTION, sources=["wa", "nsw", "qld"])
+
+
+@router.get("/stations/{station_id}/history", response_model=FuelStationHistoryOut)
+async def station_history(
+    station_id: str,
+    response: Response,
+    fuel_type: str | None = Query(default=None, description="Optional canonical fuel filter (91/95/98/E10/Diesel/LPG)"),
+    days: int = Query(default=feeds.PRICE_HISTORY_DAYS, ge=1, le=feeds.PRICE_HISTORY_DAYS),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_fuel_access),
+):
+    """AUT-2375: 30-day price history for a single station, served from cache.
+
+    Reads exclusively from ``fuel_prices`` — never fans out to the upstream
+    fuel APIs. The daily Celery beat task (``fuel-ingest-all-daily``) is the
+    only thing that refreshes these rows.
+    """
+    _set_attribution(response)
+    station = await db.get(FuelStation, station_id)
+    if not station:
+        raise HTTPException(status_code=404, detail="Station not found")
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    q = (
+        select(FuelPrice)
+        .where(
+            FuelPrice.station_id == station_id,
+            FuelPrice.effective_at >= cutoff,
+        )
+        .order_by(FuelPrice.fuel_type, FuelPrice.effective_at.asc())
+    )
+    if fuel_type:
+        q = q.where(FuelPrice.fuel_type == fuel_type)
+    rows = list((await db.scalars(q)).all())
+    return FuelStationHistoryOut(
+        station_id=station_id,
+        source=station.source,
+        fuel_type=fuel_type,
+        days=days,
+        series=[
+            FuelHistoryPoint(
+                fuel_type=p.fuel_type,
+                price=p.price,
+                effective_at=p.effective_at,
+            )
+            for p in rows
+        ],
+    )
 
 
 async def _latest_price(db: AsyncSession, station_id: str, fuel_type: str) -> FuelPrice | None:

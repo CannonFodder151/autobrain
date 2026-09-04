@@ -489,13 +489,17 @@ def fire_and_forget(task, *args, **kwargs) -> None:
 
 
 @shared_task
-def ingest_fuel_prices() -> None:
-    """Scheduled fuel-price pipeline (Servo Spy, AUT-1817).
+def ingest_fuel_all() -> None:
+    """Scheduled fuel-price pipeline (Servo Spy, AUT-1817 + AUT-2375).
 
-    Pulls WA FuelWatch, NSW FuelCheck and QLD Fuel Prices into Postgres. Each
-    feed is independent — a single feed's failure is logged and does not abort
-    the others (see ``app.services.fuel_feeds.ingest_all_fuel``). Deterministic,
-    no AI, no spend.
+    Runs every enabled feed (WA FuelWatch, NSW FuelCheck, QLD DirectAPI, and
+    SA/TAS/NT once AUT-2374 ships them) into Postgres. Each feed is independent
+    — a single feed's failure is logged and does not abort the others (see
+    ``app.services.fuel_feeds.ingest_all_fuel``). Deterministic, no AI, no spend.
+
+    Beat fires this ONCE per day at 02:00 AEST (off-peak); the /fuel/stations and
+    /fuel/stations/{id}/history endpoints only serve cached DB rows so they
+    never fan out to upstream APIs on a client request.
     """
     from app.services.fuel_feeds import ingest_all_fuel
 
@@ -507,6 +511,49 @@ def ingest_fuel_prices() -> None:
             await db.commit()
 
     _run(_ingest())
+
+
+# Backwards-compat alias so older dispatch sites / dashboards keep working
+# while the beat schedule migrates. Will be removed once no caller is left.
+ingest_fuel_prices = ingest_fuel_all
+
+
+def _run_single_source_ingest(source: str, fn) -> dict:
+    """Run a single ``ingest_<source>_*`` ingestor and return its summary."""
+    from app.services import fuel_feeds as feeds
+
+    async def _ingest():
+        async with SessionLocal() as db:
+            res = await fn(db)
+            logger.info("fuel_ingest_summary", source=source, **res)
+            await db.commit()
+            return res
+
+    return _run(_ingest())
+
+
+@shared_task
+def ingest_fuel_wa() -> None:
+    """AUT-2375: per-source manual-trigger ingest (WA FuelWatch)."""
+    from app.services.fuel_feeds import ingest_wa_fuelwatch
+
+    return _run_single_source_ingest("wa", ingest_wa_fuelwatch)
+
+
+@shared_task
+def ingest_fuel_nsw() -> None:
+    """AUT-2375: per-source manual-trigger ingest (NSW FuelCheck)."""
+    from app.services.fuel_feeds import ingest_nsw_fuelcheck
+
+    return _run_single_source_ingest("nsw", ingest_nsw_fuelcheck)
+
+
+@shared_task
+def ingest_fuel_qld() -> None:
+    """AUT-2375: per-source manual-trigger ingest (QLD Fuel Prices)."""
+    from app.services.fuel_feeds import ingest_qld_fuel_prices
+
+    return _run_single_source_ingest("qld", ingest_qld_fuel_prices)
 
 
 @shared_task
