@@ -1,4 +1,4 @@
-"""Schemas for the Ownership Advisor surface (AUT-2425 / AUT-2445-VALUE).
+"""Schemas for the Ownership Advisor surface (AUT-2425 / AUT-2445-VALUE / AUT-2448-FINANCE / AUT-2450-AI).
 
 Envelope is shared across all six sub-modules (value / replace / upgrade /
 finance / dream / ai) per ADR 0001 (docs/adr/0001-ownership-advisor.md):
@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 AdvisorModule = Literal["value", "replace", "upgrade", "finance", "dream", "ai"]
 AdvisorModel = Literal["rule-based-fallback", "rule-based+ai", "9router/<combo>"]
 AdvisorDecision = Literal["keep", "upgrade", "delay", "strategy"]
+AdvisorFinanceMode = Literal["buy", "finance", "lease", "novated"]
 
 
 class ComparableListing(BaseModel):
@@ -64,6 +65,111 @@ class AdvisorValueData(BaseModel):
     comparables: list[ComparableListing] = Field(default_factory=list)
     trade_in: TradeInBand = Field(default_factory=TradeInBand)
     note: str | None = None
+
+
+class AmortizationRow(BaseModel):
+    """One row of a loan amortization schedule.
+
+    ``balance_end`` is the outstanding principal after the period's payment.
+    All monetary values are in the response currency (AUD).
+    """
+
+    period: int = Field(ge=1, description="1-indexed payment period (month)")
+    payment: float = Field(ge=0, description="Scheduled payment for this period")
+    interest: float = Field(ge=0, description="Interest portion of the payment")
+    principal: float = Field(ge=0, description="Principal portion of the payment")
+    balance_end: float = Field(ge=0, description="Outstanding principal after this period")
+
+
+class AdvisorFinanceModeBuy(BaseModel):
+    mode: Literal["buy"] = "buy"
+    status: Literal["ok"] = "ok"
+    currency: str = "AUD"
+    purchase_price: float
+    effective_monthly: float
+    total_cost: float
+    total_interest: float = 0.0
+    note: str | None = None
+
+
+class AdvisorFinanceModeFinance(BaseModel):
+    mode: Literal["finance"] = "finance"
+    status: Literal["ok"] = "ok"
+    currency: str = "AUD"
+    principal: float
+    term_months: int = Field(ge=1, le=120)
+    annual_rate_pct: float
+    monthly_payment: float
+    effective_monthly: float
+    total_cost: float
+    total_interest: float
+    amortization: list[AmortizationRow]
+    note: str | None = None
+
+
+class AdvisorFinanceModeLease(BaseModel):
+    mode: Literal["lease"] = "lease"
+    status: Literal["ok"] = "ok"
+    currency: str = "AUD"
+    principal: float
+    term_months: int = Field(ge=12, le=60)
+    residual_pct: float
+    residual_value: float
+    effective_monthly: float
+    total_cost: float
+    money_factor: float
+    note: str | None = None
+
+
+class AdvisorFinanceModeNovated(BaseModel):
+    mode: Literal["novated"] = "novated"
+    status: Literal["coming_soon"] = "coming_soon"
+    currency: str = "AUD"
+    effective_monthly: float | None = None
+    total_cost: float | None = None
+    note: str = "Novated lease calculator is coming soon. The toggle is reserved in the UI."
+
+
+AdvisorFinanceModeResult = (
+    AdvisorFinanceModeBuy | AdvisorFinanceModeFinance | AdvisorFinanceModeLease | AdvisorFinanceModeNovated
+)
+
+
+class AdvisorFinanceData(BaseModel):
+    """Structured output for ``POST /advisor/finance`` (AUT-2448).
+
+    Deterministic only: the body accepts ``{down_payment, term_months,
+    rate_pct}`` (plus an optional ``novated`` toggle) and returns four mode
+    blocks: buy, finance, lease, and novated. The novated mode is
+    future-flagged and returns ``status="coming_soon"`` until the EV / FBT
+    rules land in a later ADR.
+    """
+
+    currency: str = "AUD"
+    vehicle_price: float
+    down_payment: float
+    modes: list[AdvisorFinanceModeResult]
+    note: str | None = None
+
+
+class AdvisorFinanceRequest(BaseModel):
+    """Request body for ``POST /advisor/finance``.
+
+    The same body shape is reused by the Dream Car module (AUT-2449) so the
+    frontend can drive both screens with one form.
+    """
+
+    down_payment: float = Field(ge=0, description="Upfront cash contribution (AUD)")
+    term_months: int = Field(ge=12, le=84, description="Loan / lease term in months")
+    rate_pct: float = Field(
+        ge=0,
+        le=40,
+        description="Nominal annual interest rate, percentage points (e.g. 7.5)",
+    )
+    novated: bool = Field(
+        default=False,
+        description="When true, also include the novated-lease block (currently coming_soon).",
+    )
 
 
 class AdvisorAIBasedOn(BaseModel):
