@@ -121,6 +121,11 @@ class Settings(BaseSettings):
     FUEL_VIC_URL: str = "https://api.servosaver.com.au/v1/prices"
     FUEL_INGEST_USER_AGENT: str = "AutoBrain Servo Spy (+https://autobrainservice.app)"
 
+    # Electric Spy (AUT-2435) — Open Charge Map. Anonymous calls still return
+    # limited results; the key lifts rate limits when present.
+    OCM_API_KEY: str = ""
+    OCM_USER_AGENT: str = "AutoBrain Electric Spy (+https://autobrainservice.app)"
+
     # Bootstrap admin account (created on first boot if missing)
     ADMIN_EMAIL: str = ""
     ADMIN_DISPLAY_NAME: str = "AutoBrain Admin"
