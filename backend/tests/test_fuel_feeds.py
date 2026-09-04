@@ -167,3 +167,85 @@ def test_ingest_qld_skips_when_no_key() -> None:
     res = asyncio.run(feeds.ingest_qld_fuel_prices(db=None))  # type: ignore[arg-type]
     assert res["skipped"] == "no_api_key"
     assert res["stations"] == 0
+
+
+# 7-Eleven (projectzerothree.info) AUT-2392 -------------------------------- #
+
+# Realistic snapshot shape: a state per region + an "All" rollup. One station
+# appears once per fuel type, so multiple fuel types share the same (name,
+# postcode) and must collapse into a single station row.
+SEVEN_ELEVEN_RAW = {
+    "updated": 1700000000,
+    "regions": [
+        {"region": "All", "prices": []},
+        {"region": "QLD", "prices": [
+            {"name": "7-Eleven Tingalpa", "type": "U91", "price": 192.9,
+             "suburb": "Tingalpa", "state": "QLD", "postcode": "4173",
+             "lat": -27.47168, "lng": 153.11046},
+            {"name": "7-Eleven Tingalpa", "type": "U95", "price": 209.9,
+             "suburb": "Tingalpa", "state": "QLD", "postcode": "4173",
+             "lat": -27.47168, "lng": 153.11046},
+            {"name": "7-Eleven Tingalpa", "type": "Diesel", "price": 219.9,
+             "suburb": "Tingalpa", "state": "QLD", "postcode": "4173",
+             "lat": -27.47168, "lng": 153.11046},
+        ]},
+        {"region": "WA", "prices": [
+            {"name": "7-Eleven Osborne Park", "type": "E10", "price": 189.9,
+             "suburb": "Osborne Park", "state": "WA", "postcode": "6017",
+             "lat": -31.90, "lng": 115.82},
+        ]},
+        {"region": "VIC", "prices": [
+            {"name": "7-Eleven Clayton", "type": "LPG", "price": 91.9,
+             "suburb": "Clayton", "state": "VIC", "postcode": "3168",
+             "lat": -37.92, "lng": 145.12},
+        ]},
+    ],
+}
+
+
+def test_parse_7eleven_collapses_multi_fuel_into_one_station() -> None:
+    stations, prices = feeds._parse_7eleven(SEVEN_ELEVEN_RAW, allowed_states=("VIC", "NSW", "QLD", "WA"))
+    # Three distinct (name, postcode) stations: Tingalpa / Osborne Park / Clayton.
+    assert len(stations) == 3
+    tingalpa = next(s for s in stations if s["source_id"] == "7-Eleven Tingalpa|4173")
+    assert tingalpa["source"] == "7eleven"
+    assert tingalpa["brand"] == "7-Eleven"
+    assert "4173" in tingalpa["address"]
+    # All three fuel types land on the same station_id and the canonical
+    # "U91/U95/Diesel" labels are normalised to "91/95/Diesel".
+    fts = {ft for (ft, _, _) in prices["7-Eleven Tingalpa|4173"]}
+    assert fts == {"91", "95", "Diesel"}
+
+
+def test_parse_7eleven_filters_disallowed_states() -> None:
+    stations, prices = feeds._parse_7eleven(SEVEN_ELEVEN_RAW, allowed_states=("QLD",))
+    assert {s["source_id"] for s in stations} == {"7-Eleven Tingalpa|4173"}
+    assert list(prices.keys()) == ["7-Eleven Tingalpa|4173"]
+
+
+def test_parse_7eleven_handles_garbage() -> None:
+    assert feeds._parse_7eleven(None) == ([], {})  # type: ignore[arg-type]
+    assert feeds._parse_7eleven({"regions": "nope"}, allowed_states=("VIC",)) == ([], {})
+    stations, prices = feeds._parse_7eleven(
+        {"regions": [{"region": "QLD", "prices": [{"name": "", "type": "U91", "price": 1.0}]}]},
+        allowed_states=("QLD",),
+    )
+    assert stations == [] and prices == {}
+
+
+def test_ingest_7eleven_skips_when_disabled() -> None:
+    feeds.settings.FUEL_7ELEVEN_ENABLED = False
+    res = asyncio.run(feeds.ingest_7eleven(db=None))  # type: ignore[arg-type]
+    assert res["skipped"] == "disabled"
+    assert res["stations"] == 0
+    feeds.settings.FUEL_7ELEVEN_ENABLED = True  # restore
+
+
+def test_ingest_7eleven_is_in_all_chain() -> None:
+    chain = {name: fn for name, fn in (
+        ("wa", feeds.ingest_wa_fuelwatch),
+        ("nsw", feeds.ingest_nsw_fuelcheck),
+        ("qld", feeds.ingest_qld_fuel_prices),
+        ("7eleven", feeds.ingest_7eleven),
+    )}
+    assert "7eleven" in chain

@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-2392)
+- feat(backend): 7-Eleven free chain feed (projectzerothree.info) folded into `ingest_all_fuel` alongside the gov feeds. New `ingest_7eleven()` in `app/services/fuel_feeds.py`: pulls the public no-auth JSON, normalises the `U91/U95/U98/E10/Diesel/LPG` labels into the canonical catalogue, collapses the per-fuel-type rows into one station keyed on `name|postcode`, and upserts via the existing `_ingest` helper so `fuel_stations`/`fuel_prices` get populated with `source = "7eleven"`. Filtered to VIC/NSW/QLD/WA via `FUEL_7ELEVEN_STATES` and gated by `FUEL_7ELEVEN_ENABLED` (default on). No AI, no new dep, no schema change. Tests: `tests/test_fuel_feeds.py` gets 5 new cases (multi-fuel collapse, state filter, garbage input, disabled-flag skip, all-chain wiring). Closes AUT-2392.
+
 ### Fixed
 - Servo Spy map: CARTO raster basemap watermark ("API key required") returns. The query parameter was wrong (`?api_key=...`); CARTO expects `?key=...` per the upstream email/setup doc, so the public basemap layer kept rendering its no-key watermark even when `CARTO_API_KEY` was injected via `--dart-define`. Single-line change in `servo_spy_screen.dart` (param name + comment). No new dep, no cache code: `flutter_map` 8.3.1's default `NetworkTileProvider` already pipes tiles through `BuiltInMapCachingProvider`, which keeps an in-memory LRU plus a disk cache (default 1 GB) keyed on the tile URL — so once a tile is loaded, the client never re-asks CARTO for the same `{z}/{x}/{y}` until freshness expires. Closes AUT-2383.
 
