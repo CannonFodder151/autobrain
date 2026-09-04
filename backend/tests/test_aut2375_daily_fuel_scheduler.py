@@ -22,12 +22,17 @@ os.environ["ENVIRONMENT"] = "development"
 
 
 def test_celery_app_beat_uses_sydney_timezone_for_off_peak_cron() -> None:
-    """AUT-2375: 02:00 AEST off-peak window means the Celery timezone must be
-    Australia/Sydney, not UTC. Without this, the cron would fire at 02:00 UTC
-    = 13:00 AEST and miss the off-peak window."""
+    """AUT-2375 + AUT-2402 B1: 02:00 AEST off-peak window means the Celery
+    timezone must be Australia/Sydney AND ``enable_utc`` must be False. Without
+    both, crontab(hour=2) fires at 02:00 UTC = 13:00 AEST and misses the
+    off-peak window."""
     from app.workers.celery_app import celery_app
 
     assert celery_app.conf.timezone == "Australia/Sydney"
+    assert celery_app.conf.enable_utc is False, (
+        "enable_utc=True makes crontab interpret schedules in UTC regardless "
+        "of the timezone setting (AUT-2402 B1)."
+    )
 
 
 def test_celery_app_daily_fuel_ingest_is_a_cron_at_02_00() -> None:

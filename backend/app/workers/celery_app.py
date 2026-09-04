@@ -17,7 +17,10 @@ celery_app.conf.update(
     accept_content=["json"],
     result_serializer="json",
     timezone="Australia/Sydney",
-    enable_utc=True,
+    # AUT-2402 B1: enable_utc=False so crontab(hour=2) is 02:00 Australia/Sydney,
+    # not 02:00 UTC (= 13:00 AEST). enable_utc=True forces Celery to interpret
+    # crontab schedules in UTC regardless of the `timezone` setting.
+    enable_utc=False,
     task_track_started=True,
     beat_schedule={
         "refresh-valuations-daily": {
