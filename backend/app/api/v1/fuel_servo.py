@@ -9,6 +9,8 @@ Open-data attribution is attached to every response via the
 ``X-Fuel-Data-Attribution`` header and the ``/attribution`` endpoint.
 """
 
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import distinct, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +24,7 @@ from app.schemas.fuel import FuelStats  # noqa: F401  (type hint in _station_out
 from app.schemas.fuel_servo import (
     AttributionOut,
     FuelBrandOut,
+    FuelPriceHistoryOut,
     FuelPriceOut,
     FuelStationOut,
 )
@@ -202,6 +205,10 @@ def _station_out(
                 effective_at=p.effective_at,
                 cost_per_km=cost_per_km,
                 avg_fill_cost=avg_fill_cost,
+                source=p.source,
+                best_source=p.best_source,
+                source_score=p.source_score,
+                flag_reason=p.flag_reason,
             )
         )
     return FuelStationOut(
@@ -216,3 +223,41 @@ def _station_out(
         distance_km=round(dist, 2) if dist is not None else None,
         prices=out_prices,
     )
+
+
+@router.get(
+    "/stations/{station_id}/history",
+    response_model=list[FuelPriceHistoryOut],
+)
+async def station_price_history(
+    station_id: str,
+    response: Response,
+    fuel_type: str | None = Query(default=None, description="Filter to one canonical fuel type"),
+    days: int = Query(default=30, ge=1, le=90, description="Look-back window in days"),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_fuel_access),
+) -> list[FuelPriceHistoryOut]:
+    """Price history (per source) for a station.
+
+    AUT-2374: price-history endpoint, last N days per station.
+    AUT-2381: every row carries ``best_source`` and ``source_score`` so the
+    frontend can badge the day's reading (trusted / government / chain).
+
+    Returns one row per (fuel_type, source, day) — newest first. Rows without
+    arbitration metadata (legacy rows from before AUT-2381) still come back;
+    the UI treats missing fields as "uncertified".
+    """
+    _set_attribution(response)
+    station = await db.get(FuelStation, station_id)
+    if not station:
+        raise HTTPException(status_code=404, detail="Station not found")
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    q = (
+        select(FuelPrice)
+        .where(FuelPrice.station_id == station_id, FuelPrice.effective_at >= since)
+        .order_by(FuelPrice.effective_at.desc(), FuelPrice.fuel_type, FuelPrice.source)
+    )
+    if fuel_type:
+        q = q.where(FuelPrice.fuel_type == fuel_type)
+    rows = list((await db.scalars(q)).all())
+    return [FuelPriceHistoryOut.model_validate(r) for r in rows]

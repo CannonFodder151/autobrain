@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- feat(fuel): AUT-2381 multi-source data-quality arbitration (best-price selection per station, SourceTrust enum)
 ## [0.3.231] - 2026-09-04
 ### Added (AUT-2448)
 - backend(advisor): Ownership Advisor Finance module — deterministic buy / finance / lease (and novated-lease toggle, future-flagged). New `POST /api/v1/advisor/finance` route (per ADR 0001) takes `{down_payment, term_months, rate_pct, novated?}`, anchors `vehicle_price` on the value module's deterministic `mid` (so finance and value never disagree), and returns four mode blocks: `buy` (outright, zero monthly / interest), `finance` (standard amortising loan — full per-period schedule + total interest + total cost), `lease` (operating lease — residual % + residual value + money factor + monthly, scaled 25–75% across 12–60 month terms), and `novated` (gated by the `novated` request flag, always returns `status: "coming_soon"` until EV / FBT rules land in a follow-up ADR). Term is clamped per-mode (finance 12–84m, lease 12–60m); down payment caps at the vehicle price; zero-price vehicles emit a `note` instead of fabricating numbers. No 9Router / no AI — pure function `compute_finance_plan()` in `app.services.advisor`. New schemas `AmortizationRow`, `AdvisorFinanceModeBuy/Finance/Lease/Novated`, `AdvisorFinanceData`, `AdvisorFinanceRequest` in `app.schemas.advisor`. New `tests/test_advisor_finance.py` (19 cases: pure-helper amortisation / lease / residual / money-factor; per-mode shape; novated gating; term clamping; zero-price handling; zero-rate promo; textbook formula match).

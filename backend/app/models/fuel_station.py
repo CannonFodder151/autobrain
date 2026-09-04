@@ -1,8 +1,16 @@
-"""Servo Spy fuel-price pipeline models (AUT-1817).
+"""Servo Spy fuel-price pipeline models (AUT-1817) + multi-source arbitration
+(AUT-2381).
 
 Normalised station registry + price observations from WA FuelWatch, NSW
-FuelCheck and QLD Fuel Prices. Radius queries are done in Python (great-circle
-distance), so no PostGIS column is needed (see ``app.services.fuel_feeds``).
+FuelCheck and QLD Fuel Prices (and future SA/TAS/NT per AUT-2374). Radius
+queries are done in Python (great-circle distance), so no PostGIS column is
+needed (see ``app.services.fuel_feeds``).
+
+``FuelPrice`` also carries the arbitration result of AUT-2381: ``source`` is
+the upstream that emitted the row, ``best_source`` is the source that won
+the per-(station,fuel_type,day) arbitration, and ``source_score`` is the
+score the winner received. ``flag_reason`` records any consistency flag
+(>30 cpl disagreement with the regional median) so admin can override.
 """
 
 import uuid
@@ -46,5 +54,14 @@ class FuelPrice(Base):
     fuel_type: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
     price: Mapped[float] = mapped_column(Float, nullable=False)
     effective_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # AUT-2381: which upstream emitted this row ("wa"/"nsw"/"qld"/...).
+    source: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
+    # AUT-2381: arbitration winner for (station_id, fuel_type, day). Same value
+    # across all rows for the same key on a given day; only one row's
+    # ``best_source`` matches ``source`` (the winning row).
+    best_source: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
+    source_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # AUT-2381: consistency flag, e.g. "outlier>30cpl"; null when clean.
+    flag_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     station: Mapped["FuelStation"] = relationship(back_populates="prices")
