@@ -507,7 +507,7 @@ def ingest_fuel_all() -> None:
         async with SessionLocal() as db:
             summary = await ingest_all_fuel(db)
             for source, res in summary.items():
-                logger.info("fuel_ingest_summary", source=source, **res)
+                logger.info("fuel_ingest_summary", **res)
             await db.commit()
 
     _run(_ingest())
@@ -525,7 +525,7 @@ def _run_single_source_ingest(source: str, fn) -> dict:
     async def _ingest():
         async with SessionLocal() as db:
             res = await fn(db)
-            logger.info("fuel_ingest_summary", source=source, **res)
+            logger.info("fuel_ingest_summary", **res)
             await db.commit()
             return res
 
