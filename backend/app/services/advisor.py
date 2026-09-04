@@ -6,6 +6,12 @@ cached market median, comparable-listing search across the existing
 ``market_listing_cache`` table, and the well-known trade-in band (75-90% of
 mid private-sale value).
 
+The sixth module (AI Advisor, AUT-2450) is a thin orchestration layer over
+the other five: its own baseline decision lives in the AI gateway
+(``ai/app/fallbacks/advisor.py``) and is mirrored here as
+``compute_advisor_recommendation`` so the backend can render a useful
+deterministic answer when the gateway is unreachable.
+
 No AI calls. No 9Router. Deterministic-first per the product rule and per
 ADR 0001 (docs/adr/0001-ownership-advisor.md).
 """
@@ -13,7 +19,6 @@ ADR 0001 (docs/adr/0001-ownership-advisor.md).
 from __future__ import annotations
 
 import json
-import math
 from datetime import date
 
 from sqlalchemy import select
@@ -65,21 +70,6 @@ CURRENCY = "AUD"
 # emitting a $0 or $1B result on the screen.
 _MIN_VALUE = 500.0
 _MAX_VALUE = 5_000_000.0
-
-# Finance module (AUT-2448). Lease residual bands are the headline
-# industry averages in Australia; the per-mode calc is the textbook
-# standard amortisation formula. Nothing here is invented.
-FINANCE_MIN_TERM_MONTHS = 12
-FINANCE_MAX_TERM_MONTHS = 84
-LEASE_MIN_TERM_MONTHS = 12
-LEASE_MAX_TERM_MONTHS = 60
-# Default residual % of the original price at end of a 36-month lease;
-# linearly scales with term. Source: AAAA / AFR residual benchmarks.
-_LEASE_RESIDUAL_36M = 0.46
-_LEASE_RESIDUAL_PER_MONTH = 0.0135  # ~+1.35% per month past 36 (toward 60m)
-# Money factor approximation: lease docs use (annual_rate_pct/24)/100 as the
-# "money factor" multiplier on (principal + residual)/2.
-LEASE_MONEY_FACTOR_DIVISOR = 24.0
 
 
 def _safe(value: float | None) -> float | None:
@@ -291,209 +281,152 @@ def trade_in_band(mid_value: float | None) -> dict:
     }
 
 
-# --- Finance module (AUT-2448) --------------------------------------------
-#
-# Deterministic loan amortisation + lease + novated-coming-soon. Lives next
-# to the other Ownership Advisor helpers so the module-level docs read as
-# one file. The frontend posts
-#   { down_payment, term_months, rate_pct, novated? }
-# and gets back four mode blocks (novated gated by the request flag).
+# --- AI Advisor baseline (AUT-2450) ----------------------------------------
+# Mirror of ai/app/fallbacks/advisor.py so the backend can answer the
+# /advisor/ai route when the AI gateway is unreachable. The rule tree is
+# identical so the deterministic answer is consistent end-to-end.
 
-def _clamp_term(term_months: int, *, lease: bool) -> int:
-    if lease:
-        return max(LEASE_MIN_TERM_MONTHS, min(LEASE_MAX_TERM_MONTHS, int(term_months)))
-    return max(FINANCE_MIN_TERM_MONTHS, min(FINANCE_MAX_TERM_MONTHS, int(term_months)))
+_ADVISOR_UPGRADE_GAP_RATIO = 0.25
+_ADVISOR_DELAY_GAP_RATIO = 0.75
+_ADVISOR_UPGRADE_TCO_SAVING = 0.15
+_ADVISOR_RATIONALE_MAX = 280
+_ADVISOR_ACTIONS_MAX = 3
 
 
-def _loan_monthly_payment(principal: float, annual_rate_pct: float, term_months: int) -> float:
-    """Standard amortising-loan monthly payment (P / i over n).
-
-    Falls back to ``principal / term_months`` when the rate is zero so the
-    zero-interest edge case stays sensible on the UI (e.g. manufacturer 0%
-    finance promos).
-    """
-    if principal <= 0 or term_months <= 0:
-        return 0.0
-    monthly_rate = (annual_rate_pct / 100.0) / 12.0
-    if monthly_rate <= 0:
-        return round(principal / term_months, 2)
-    factor = (1.0 + monthly_rate) ** term_months
-    payment = principal * monthly_rate * factor / (factor - 1.0)
-    return round(payment, 2)
+def _advisor_f(value):
+    if value is None:
+        return None
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return None
+    if f != f:
+        return None
+    return f
 
 
-def _amortization_schedule(
-    principal: float, annual_rate_pct: float, term_months: int, monthly_payment: float,
-) -> list[dict]:
-    """Build a per-period amortisation schedule.
-
-    Last period absorbs any floating-point rounding so the balance lands on
-    exactly ``0``. Each row is shaped to match ``AmortizationRow``.
-    """
-    schedule: list[dict] = []
-    if principal <= 0 or term_months <= 0:
-        return schedule
-    monthly_rate = (annual_rate_pct / 100.0) / 12.0
-    balance = float(principal)
-    pay = float(monthly_payment)
-    for period in range(1, term_months + 1):
-        interest = round(balance * monthly_rate, 2) if monthly_rate > 0 else 0.0
-        if period == term_months:
-            principal_paid = round(balance, 2)
-            payment = round(principal_paid + interest, 2)
-            balance = 0.0
-        else:
-            principal_paid = round(pay - interest, 2)
-            if principal_paid > balance:
-                principal_paid = round(balance, 2)
-                payment = round(principal_paid + interest, 2)
-            else:
-                payment = pay
-            balance = round(balance - principal_paid, 2)
-            if balance < 0:
-                balance = 0.0
-        schedule.append({
-            "period": period,
-            "payment": payment,
-            "interest": interest,
-            "principal": principal_paid,
-            "balance_end": balance,
-        })
-    return schedule
+def _advisor_clip(text: str, limit: int) -> str:
+    if not text:
+        return ""
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 1)].rstrip() + "\u2026"
 
 
-def _lease_residual_pct(term_months: int) -> float:
-    """Residual value as a fraction of the original price at end of lease.
-
-    Anchored on a 36-month base of 46%, scaling **upward** for shorter
-    terms and **downward** for longer terms, capped so it never drops
-    below the industry floor of 25% or exceed 75% (i.e. a one-month lease
-    has a near-full residual, a 60-month lease has sunk most of the
-    depreciation).
-    """
-    term = max(LEASE_MIN_TERM_MONTHS, min(LEASE_MAX_TERM_MONTHS, int(term_months)))
-    delta = 36 - term  # positive when shorter than 36, negative when longer
-    pct = _LEASE_RESIDUAL_36M + (_LEASE_RESIDUAL_PER_MONTH * delta)
-    return max(0.25, min(0.75, round(pct, 4)))
+def _advisor_funding_gap(modules: dict) -> float | None:
+    replace = modules.get("replace") or {}
+    val = modules.get("value") or {}
+    gap = _advisor_f(replace.get("funding_gap"))
+    if gap is not None:
+        return gap
+    used = _advisor_f(replace.get("used_replacement_cost"))
+    mid = _advisor_f(val.get("mid") or val.get("estimated_value"))
+    if used is None or mid is None:
+        return None
+    return used - mid
 
 
-def _lease_monthly(principal: float, residual_value: float, term_months: int, annual_rate_pct: float) -> tuple[float, float]:
-    """Return (monthly_payment, money_factor).
-
-    Standard lease payment = (depreciation + finance charge) / months,
-    where depreciation = (principal - residual) / months and finance
-    charge = (principal + residual) * money_factor, money_factor =
-    (annual_rate_pct / 100) / 24.
-    """
-    if term_months <= 0:
-        return 0.0, 0.0
-    depreciation = (principal - residual_value) / term_months
-    money_factor = (annual_rate_pct / 100.0) / LEASE_MONEY_FACTOR_DIVISOR
-    finance_charge = (principal + residual_value) * money_factor
-    return round(depreciation + finance_charge, 2), round(money_factor, 6)
+def _advisor_estimated_value(modules: dict) -> float | None:
+    val = modules.get("value") or {}
+    return _advisor_f(val.get("mid") or val.get("estimated_value"))
 
 
-def compute_finance_plan(
-    *,
-    vehicle_price: float,
-    down_payment: float,
-    term_months: int,
-    rate_pct: float,
-    novated: bool = False,
+def _advisor_monthly(modules: dict) -> float | None:
+    fin = modules.get("finance") or {}
+    for key in ("monthly", "effective_monthly", "payment"):
+        v = _advisor_f(fin.get(key))
+        if v is not None:
+            return v
+    return None
+
+
+def _advisor_decision(modules: dict) -> str:
+    gap = _advisor_funding_gap(modules)
+    est = _advisor_estimated_value(modules)
+    if gap is not None and est not in (None, 0):
+        ratio = gap / est
+        if ratio <= _ADVISOR_UPGRADE_GAP_RATIO:
+            return "upgrade"
+        if ratio > _ADVISOR_DELAY_GAP_RATIO:
+            return "delay"
+    monthly = _advisor_monthly(modules)
+    if monthly is not None and est not in (None, 0) and est > 0:
+        if monthly * 12 < est * _ADVISOR_UPGRADE_TCO_SAVING:
+            return "upgrade"
+    dream = modules.get("dream") or {}
+    if dream and isinstance(dream.get("affordability"), str):
+        if dream["affordability"].strip().lower() in ("affordable", "yes", "within_budget", "ok"):
+            return "strategy"
+    return "keep"
+
+
+def _advisor_rationale(decision: str, modules: dict, missing: list[str]) -> str:
+    parts: list[str] = []
+    est = _advisor_estimated_value(modules)
+    gap = _advisor_funding_gap(modules)
+    if est is not None:
+        parts.append(f"current value ~${est:,.0f}")
+    if gap is not None:
+        parts.append(f"replacement gap ~${gap:,.0f}")
+    head = {
+        "keep": "Your current car is the smart money move.",
+        "upgrade": "A clear trade-up is within reach.",
+        "delay": "Wait — the numbers aren't in your favour yet.",
+        "strategy": "A non-binary play fits this scenario.",
+    }.get(decision, "Your current car is the smart money move.")
+    text = head
+    if parts:
+        text = f"{head} " + ", ".join(parts) + "."
+    if missing:
+        text += f" (limited data: {', '.join(missing)}.)"
+    return _advisor_clip(text, _ADVISOR_RATIONALE_MAX)
+
+
+def _advisor_actions(decision: str) -> list[str]:
+    table = {
+        "keep": [
+            "Stick with the current car; revisit in 6 months.",
+            "Keep up scheduled services to protect residual value.",
+        ],
+        "upgrade": [
+            "Shortlist 2-3 concrete upgrade candidates from the Upgrade tab.",
+            "Get a pre-purchase inspection budget for each shortlist.",
+        ],
+        "delay": [
+            "Re-run the advisor after your next service or in 3 months.",
+            "Track market median for your model weekly on the Value tab.",
+        ],
+        "strategy": [
+            "Compare a novated lease vs outright purchase on the Finance tab.",
+            "Talk to a broker about a 2-3 year hold before committing.",
+        ],
+    }
+    return table.get(decision, table["keep"])[:_ADVISOR_ACTIONS_MAX]
+
+
+async def compute_advisor_recommendation(
+    modules: dict | None,
 ) -> dict:
-    """Compute the four-mode finance plan (AUT-2448).
+    """Pure-deterministic AI-advisor baseline (AUT-2450).
 
-    Pure function — no DB, no AI, no 9Router. Returns a dict shaped to
-    match ``AdvisorFinanceData``. ``vehicle_price`` is the negotiated drive-
-    away price; ``down_payment`` is the cash the user puts in upfront; the
-    financed principal is ``vehicle_price - down_payment`` (clamped at 0 so
-    a deposit >= price produces a buy-outright scenario, not negative
-    principal).
-
-    The ``novated`` block is future-flagged: always returns
-    ``status="coming_soon"`` until the EV / FBT-specific rules land in a
-    follow-up ADR. The request flag gates whether the block is included in
-    the response at all so the UI can hide it cleanly.
+    ``modules`` is the caller's dict of sub-module outputs (value /
+    replace / upgrade / finance / dream). Returns the same
+    ``AdvisorAIData`` shape the AI gateway returns, so the route can
+    render either path through one parser. No 9Router call.
     """
-    price = max(0.0, float(vehicle_price or 0.0))
-    down = max(0.0, min(price, float(down_payment or 0.0)))
-    principal = max(0.0, round(price - down, 2))
-    finance_term = _clamp_term(term_months, lease=False)
-    lease_term = _clamp_term(term_months, lease=True)
-    rate = max(0.0, float(rate_pct or 0.0))
-
-    # --- buy outright ---
-    buy = {
-        "mode": "buy",
-        "status": "ok",
-        "currency": CURRENCY,
-        "purchase_price": round(price, 2),
-        "effective_monthly": 0.0,
-        "total_cost": round(price, 2),
-        "total_interest": 0.0,
-        "note": "Outright purchase — no monthly payments, no interest.",
-    }
-
-    # --- finance (loan) ---
-    monthly = _loan_monthly_payment(principal, rate, finance_term)
-    schedule = _amortization_schedule(principal, rate, finance_term, monthly)
-    total_cost_finance = round(down + sum(row["payment"] for row in schedule), 2)
-    total_interest = round(sum(row["interest"] for row in schedule), 2)
-    finance_block = {
-        "mode": "finance",
-        "status": "ok",
-        "currency": CURRENCY,
-        "principal": principal,
-        "term_months": finance_term,
-        "annual_rate_pct": round(rate, 4),
-        "monthly_payment": monthly,
-        "effective_monthly": monthly,
-        "total_cost": total_cost_finance,
-        "total_interest": total_interest,
-        "amortization": schedule,
-        "note": None,
-    }
-
-    # --- lease (operating lease, residual + finance charge) ---
-    residual_pct = _lease_residual_pct(lease_term)
-    residual_value = round(price * residual_pct, 2)
-    lease_monthly, money_factor = _lease_monthly(principal, residual_value, lease_term, rate)
-    total_cost_lease = round(down + lease_monthly * lease_term, 2)
-    lease_block = {
-        "mode": "lease",
-        "status": "ok",
-        "currency": CURRENCY,
-        "principal": principal,
-        "term_months": lease_term,
-        "residual_pct": round(residual_pct, 4),
-        "residual_value": residual_value,
-        "effective_monthly": lease_monthly,
-        "total_cost": total_cost_lease,
-        "money_factor": money_factor,
-        "note": "Operating lease estimate. Excludes on-road costs, insurance and excess km charges.",
-    }
-
-    modes: list[dict] = [buy, finance_block, lease_block]
-    if novated:
-        modes.append({
-            "mode": "novated",
-            "status": "coming_soon",
-            "currency": CURRENCY,
-            "effective_monthly": None,
-            "total_cost": None,
-            "note": "Novated lease calculator is coming soon. The toggle is reserved in the UI.",
-        })
-
-    note = None
-    if principal <= 0 and price > 0:
-        note = "Down payment covers the full price — finance and lease blocks are zero-principal informational only."
-    elif price <= 0:
-        note = "No vehicle price available — finance block is informational only."
-
+    modules = modules or {}
+    required = ("value", "replace", "upgrade", "finance", "dream")
+    missing = [m for m in required if not modules.get(m)]
+    decision = _advisor_decision(modules)
+    strength = (len(required) - len(missing)) / len(required)
+    confidence = round(max(0.0, min(1.0, 0.5 + 0.4 * strength)), 2)
+    if decision == "delay" and missing:
+        confidence = min(confidence, 0.55)
     return {
-        "currency": CURRENCY,
-        "vehicle_price": round(price, 2),
-        "down_payment": round(down, 2),
-        "modes": modes,
-        "note": note,
+        "decision": decision,
+        "confidence": confidence,
+        "rationale": _advisor_rationale(decision, modules, missing),
+        "next_actions": _advisor_actions(decision),
+        "based_on": {m: bool(modules.get(m)) for m in required},
+        "model": "rule-based-fallback",
     }

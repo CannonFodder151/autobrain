@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 
 AdvisorModule = Literal["value", "replace", "upgrade", "finance", "dream", "ai"]
 AdvisorModel = Literal["rule-based-fallback", "rule-based+ai", "9router/<combo>"]
-AdvisorFinanceMode = Literal["buy", "finance", "lease", "novated"]
+AdvisorDecision = Literal["keep", "upgrade", "delay", "strategy"]
 
 
 class ComparableListing(BaseModel):
@@ -66,109 +66,50 @@ class AdvisorValueData(BaseModel):
     note: str | None = None
 
 
-class AmortizationRow(BaseModel):
-    """One row of a loan amortization schedule.
+class AdvisorAIBasedOn(BaseModel):
+    """Which sub-modules contributed structured data to the AI decision.
 
-    ``balance_end`` is the outstanding principal after the period's payment.
-    All monetary values are in the response currency (AUD).
+    Booleans only; no numbers invented here. Lets the UI surface
+    "Based on: Value, Replace, Finance" instead of guessing.
     """
 
-    period: int = Field(ge=1, description="1-indexed payment period (month)")
-    payment: float = Field(ge=0, description="Scheduled payment for this period")
-    interest: float = Field(ge=0, description="Interest portion of the payment")
-    principal: float = Field(ge=0, description="Principal portion of the payment")
-    balance_end: float = Field(ge=0, description="Outstanding principal after this period")
+    value: bool = False
+    replace: bool = False
+    upgrade: bool = False
+    finance: bool = False
+    dream: bool = False
 
 
-class AdvisorFinanceModeBuy(BaseModel):
-    mode: Literal["buy"] = "buy"
-    status: Literal["ok"] = "ok"
-    currency: str = "AUD"
-    purchase_price: float
-    effective_monthly: float
-    total_cost: float
-    total_interest: float = 0.0
-    note: str | None = None
+class AdvisorAIData(BaseModel):
+    """Structured output for ``POST /advisor/ai`` (AUT-2450).
 
-
-class AdvisorFinanceModeFinance(BaseModel):
-    mode: Literal["finance"] = "finance"
-    status: Literal["ok"] = "ok"
-    currency: str = "AUD"
-    principal: float
-    term_months: int = Field(ge=1, le=120)
-    annual_rate_pct: float
-    monthly_payment: float
-    effective_monthly: float
-    total_cost: float
-    total_interest: float
-    amortization: list[AmortizationRow]
-    note: str | None = None
-
-
-class AdvisorFinanceModeLease(BaseModel):
-    mode: Literal["lease"] = "lease"
-    status: Literal["ok"] = "ok"
-    currency: str = "AUD"
-    principal: float
-    term_months: int = Field(ge=12, le=60)
-    residual_pct: float
-    residual_value: float
-    effective_monthly: float
-    total_cost: float
-    money_factor: float
-    note: str | None = None
-
-
-class AdvisorFinanceModeNovated(BaseModel):
-    mode: Literal["novated"] = "novated"
-    status: Literal["coming_soon"] = "coming_soon"
-    currency: str = "AUD"
-    effective_monthly: float | None = None
-    total_cost: float | None = None
-    note: str = "Novated lease calculator is coming soon. The toggle is reserved in the UI."
-
-
-AdvisorFinanceModeResult = (
-    AdvisorFinanceModeBuy | AdvisorFinanceModeFinance | AdvisorFinanceModeLease | AdvisorFinanceModeNovated
-)
-
-
-class AdvisorFinanceData(BaseModel):
-    """Structured output for ``POST /advisor/finance`` (AUT-2448).
-
-    Deterministic only: the body accepts ``{down_payment, term_months,
-    rate_pct}`` (plus an optional ``novated`` toggle) and returns four mode
-    blocks: buy, finance, lease, and novated. The novated mode is
-    future-flagged and returns ``status="coming_soon"`` until the EV / FBT
-    rules land in a later ADR.
+    The AI advisor is the only module that hits 9Router. The decision
+    is deterministic (rule-based baseline); 9Router may add a richer
+    rationale and sharper next_actions but never invents numbers and
+    never changes the decision.
     """
 
-    currency: str = "AUD"
-    vehicle_price: float
-    down_payment: float
-    modes: list[AdvisorFinanceModeResult]
-    note: str | None = None
+    decision: AdvisorDecision = "keep"
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    rationale: str = ""
+    next_actions: list[str] = Field(default_factory=list)
+    based_on: AdvisorAIBasedOn = Field(default_factory=AdvisorAIBasedOn)
 
 
-class AdvisorFinanceRequest(BaseModel):
-    """Request body for ``POST /advisor/finance``.
+class AdvisorAIRequest(BaseModel):
+    """Request body for ``POST /advisor/ai``.
 
-    The same body shape is reused by the Dream Car module (AUT-2449) so the
-    frontend can drive both screens with one form.
+    The caller (frontend) supplies structured outputs from the other
+    sub-modules — typically fetched via their GET/POST endpoints in the
+    same render. The AI never re-fetches them and never invents numbers.
     """
 
-    down_payment: float = Field(ge=0, description="Upfront cash contribution (AUD)")
-    term_months: int = Field(ge=12, le=84, description="Loan / lease term in months")
-    rate_pct: float = Field(
-        ge=0,
-        le=40,
-        description="Nominal annual interest rate, percentage points (e.g. 7.5)",
-    )
-    novated: bool = Field(
-        default=False,
-        description="When true, also include the novated-lease block (currently coming_soon).",
-    )
+    question: str | None = Field(default=None, max_length=500)
+    value: dict[str, Any] | None = None
+    replace: dict[str, Any] | None = None
+    upgrade: dict[str, Any] | None = None
+    finance: dict[str, Any] | None = None
+    dream: dict[str, Any] | None = None
 
 
 class AdvisorResponse(BaseModel):
