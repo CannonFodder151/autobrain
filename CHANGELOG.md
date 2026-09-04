@@ -11,7 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-## [0.3.233] - 2026-09-04
+### Fixed (AUT-2484)
+- redeploy(homed): bump autobrain-backend :hosted-arm64 digest to include AUT-2277 duplicate-FuelPrice-class fix. EP5 was crash-looping on the pre-fix image (two `FuelPrice` classes claiming `fuel_prices` in `Base.metadata`). Source fix is already merged (f7db5b6d); rebuilt arm64 image from main `6e394007` and pinned the new digest in `docker-compose.hosted.yml`.
 
 ### Fixed (AUT-2469)
 - fix(hosted, ci): replace standalone `myoung34/github-runner:latest` (amd64-only) on EP5 with a compose-managed `gh-runner` service using the official multi-arch `ghcr.io/actions/actions-runner:latest` (includes linux/arm64 binaries). The myoung34 image shipped amd64-only `.NET` binaries (`Runner.Listener`, `libcoreclr.so`); on the aarch64 Oracle VM the runner was in a permanent restart loop (`ldd: ./bin/libcoreclr.so: No such file or directory`), leaving ARM CI on Hosted dead. `build-hosted.yml` arm64 builds are unblocked. `docker/runner/entrypoint.sh` refreshes the short-lived runner registration token on every boot via the PAT secret file (AUT-1533 `*_FILE` pattern). `docker-compose.hosted.yml` now defines the `gh-runner` service; `scripts/seed-secrets.sh` seeds `github_pat` into the secrets dir. Deployment: stop the old standalone container before `docker compose up` to avoid a name collision (`docker stop gh-runner-autobrain-arm64 && docker rm gh-runner-autobrain-arm64`).
