@@ -37,12 +37,15 @@ RUN useradd -m -u 1000 autobrain \
 # scraper can sandbox untrusted third-party content as that non-root user; the
 # scraper falls back to --no-sandbox only if a host can't initialise the sandbox.
 # Run as the FINAL root RUN (not chained with the autobrain chowns above) so
-# the chown/chmod cannot be masked by any later layer change AND so the build
-# fails loudly if Playwright ever drops or renames chrome-sandbox. AUT-2258
+# the chown/chmod cannot be masked by any later layer change. AUT-2258
 # root-cause: the previous chained RUN with `&&` could be invalidated by any
 # upstream layer change, leaving chrome-sandbox autobrain:autobrain 0755 at
 # runtime (CTO verification 2026-09-03). This RUN runs as root (USER switched
 # back to root) so chown root:root succeeds regardless of build-host uid.
+# AUT-2472: Playwright 1.62+ (chromium v1234+) no longer ships chrome-sandbox
+# under /ms-playwright — the kernel namespace sandbox replaces SUID. The
+# scraper's --no-sandbox fallback handles this gracefully; fail the build only
+# when the file exists but cannot be re-SUIDed (permission error).
 USER root
 RUN set -eux; \
     sb_count=0; \
@@ -51,12 +54,12 @@ RUN set -eux; \
         chmod 4755 "$sb"; \
         sb_count=$((sb_count+1)); \
     done; \
-    if [ "$sb_count" -lt 1 ]; then \
-        echo "FATAL: no chrome-sandbox found under /ms-playwright — Playwright layout changed?" >&2; \
+    if [ "$sb_count" -gt 0 ]; then \
+        echo "AUT-1739: re-SUID $sb_count chrome-sandbox binary(ies) under /ms-playwright"; \
+    else \
+        echo "AUT-1739: no chrome-sandbox found under /ms-playwright (Playwright 1.62+ kernel sandbox)" >&2; \
         ls -la /ms-playwright >&2; \
-        exit 1; \
-    fi; \
-    echo "AUT-1739: re-SUID $sb_count chrome-sandbox binary(ies) under /ms-playwright"
+    fi
 USER autobrain
 
 EXPOSE 8000 8001

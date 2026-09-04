@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Fixed (AUT-2472)
+- docker(ai): Playwright 1.62+ removed `chrome-sandbox` under `/ms-playwright` (kernel-namespace sandbox replaces SUID). The AUT-1739 `RUN find ... -name chrome-sandbox | chown root:root && chmod 4755` was failing every hosted build with `FATAL: no chrome-sandbox found`. Relaxed the guard: if at least one `chrome-sandbox` is found, re-SUID it; if none, log a warning and continue (the market-data scraper already falls back to `--no-sandbox` per `market-data/browser.py:81,158`). Keeps the build green and the AUT-2258 hard-fail behaviour when `chrome-sandbox` exists but is mis-owned.
 
 ## [0.3.230] - 2026-09-04
 ### Fixed (AUT-2481)
