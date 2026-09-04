@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Added (AUT-2406)
+- feat(backend, Servo Spy): SA SAFPIS ingester — adds 5th Australian state to the deterministic fuel-price pipeline (no AI). New `ingest_sa_fuel()` in `backend/app/services/fuel_feeds.py` calls the same Informed Sources / DirectAPI endpoint set as QLD (`GetCountryBrands`, `GetFuelTypes`, `GetFullSiteDetails`, `GetSitesPrices`) with `Authorization: FPDAPI SubscriberToken=<GUID>`. Reuses QLD parsers for brands / fuel types / sites; new `_parse_sa_direct_prices` converts SAFPIS's **tenths-of-a-cent** raw values (e.g. `1356.0` = `135.6` c/L) and drops the `9999.0` "product unavailable" sentinel (no `$99.99/L` zeros). `ingest_all_fuel()` now wires SA alongside WA / NSW / QLD so AUT-2375's daily beat picks it up automatically. New `ingest_fuel_sa` Celery task for per-state manual retries. New config: `FUEL_SA_API_KEY` (empty = skip, mirrors NSW pattern), `FUEL_SA_GEO_REGION_ID=4` (South Australia). `FUEL_SA_API_KEY_FILE` added to `docker-compose.prod.yml` + `docker-compose.hosted.yml` (backend + worker blocks); `scripts/seed-secrets.sh` maps `FUEL_SA_API_KEY` → `fuel_sa_api_key`. Trust ranked `GOVERNMENT_PAID` (paid gov subscription) in the AUT-2381 arbitration map. Tests: `backend/tests/test_aut_sa_fuel_ingester.py` (4 cases, DB-free, mirror QLD fixture style) + scheduler test now asserts `ingest_fuel_sa` is registered. SKIPS the feed on Demo/Default until the FUEL_SA_API_KEY secret is provisioned; otherwise the daily beat will pull SA stations and prices on the next 02:00 AEST run.
 
 ## [0.3.233] - 2026-09-04
 
