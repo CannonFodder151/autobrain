@@ -28,6 +28,20 @@ import 'servo_spy_list_model.dart';
 
 enum _ServoSpyView { map, list }
 
+/// Compose the CARTO basemap query string from a key.
+///
+/// Empty key -> empty string. Non-empty key -> `?key=<key>` (CARTO's
+/// required parameter name for raster basemaps; `api_key` is the old name
+/// and is silently ignored, leaving the "API key required" watermark).
+@visibleForTesting
+String cartoKeyParam(String key) => key.isEmpty ? '' : '?key=$key';
+
+// AUT-2220/2383: CARTO basemap API key, injected at build time via
+// --dart-define=CARTO_API_KEY=<key>. CARTO raster basemaps require ?key=.
+// flutter_map's BuiltInMapCachingProvider handles disk tile caching.
+const String _kCartoApiKey = String.fromEnvironment('CARTO_API_KEY');
+final String _kCartoKeyParam = cartoKeyParam(_kCartoApiKey);
+
 class ServoSpyScreen extends StatefulWidget {
   const ServoSpyScreen({super.key});
 
@@ -37,13 +51,6 @@ class ServoSpyScreen extends StatefulWidget {
 
 class _ServoSpyScreenState extends State<ServoSpyScreen> {
   _ServoSpyView _view = _ServoSpyView.map;
-
-  // AUT-2220: CARTO basemap API key, injected at build time via
-  // --dart-define=CARTO_API_KEY=<key>. CARTO keys are designed to be public
-  // (embedded in tile URLs as ?api_key=...). Empty -> key-less public basemap.
-  static const String _cartoApiKey = String.fromEnvironment('CARTO_API_KEY');
-  static const String _cartoKeyParam =
-      _cartoApiKey.isEmpty ? '' : '?api_key=$_cartoApiKey';
 
   @override
   Widget build(BuildContext context) {
@@ -470,8 +477,8 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
                 children: [
                   TileLayer(
                     urlTemplate: isDark
-                        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png${_cartoKeyParam}'
-                        : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png${_cartoKeyParam}',
+                        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png$_kCartoKeyParam'
+                        : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png$_kCartoKeyParam',
                     subdomains: const ['a', 'b', 'c', 'd'],
                     userAgentPackageName: 'com.autobrain',
                   ),

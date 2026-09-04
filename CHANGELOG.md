@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+- Servo Spy map: CARTO raster basemap watermark ("API key required") returns. The query parameter was wrong (`?api_key=...`); CARTO expects `?key=...` per the upstream email/setup doc, so the public basemap layer kept rendering its no-key watermark even when `CARTO_API_KEY` was injected via `--dart-define`. Single-line change in `servo_spy_screen.dart` (param name + comment). No new dep, no cache code: `flutter_map` 8.3.1's default `NetworkTileProvider` already pipes tiles through `BuiltInMapCachingProvider`, which keeps an in-memory LRU plus a disk cache (default 1 GB) keyed on the tile URL — so once a tile is loaded, the client never re-asks CARTO for the same `{z}/{x}/{y}` until freshness expires. Closes AUT-2383.
+
 ## [0.3.224] - 2026-09-04
 
 ### Fixed
