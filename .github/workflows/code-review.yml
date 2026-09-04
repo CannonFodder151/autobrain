@@ -91,21 +91,29 @@ jobs:
           REPO: ${{ github.repository }}
           PR_NUM: ${{ github.event.pull_request.number }}
         run: |
+          set +e
           actor="github-actions[bot]"
           # Skip if we already auto-approved this PR in a prior run.
           approved=$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/$REPO/pulls/$PR_NUM/reviews" \
             | jq -r --arg a "$actor" '.[] | select(.user.login == $a) | .state')
-          if printf '%s\n' "$approved" | grep -qx "APPROVED"; then
+          # AUT-2249: GitHub Actions bash runs with `set -e`; grep -qx exits 1 when
+          # the PR has no prior APPROVED review from the bot, which previously
+          # aborted the step before reaching the else branch (step reported as
+          # failed even with continue-on-error: true). Wrap the guard in an &&/||
+          # chain so the if-test itself cannot fail under set -e.
+          already=$(printf '%s\n' "$approved" | { grep -qx "APPROVED" && echo y || echo n; })
+          if [ "$already" = "y" ]; then
             echo "PR #$PR_NUM already auto-approved by $actor; skipping."
           else
             curl -fsS -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
               -H "Content-Type: application/json" \
               -d '{"event":"APPROVE","body":"Auto-approved: OCR (Open Code Review) gate stalled/failed (AUT-1814). OCR review is advisory, not merge-blocking, so the stall no longer waits on manual approval."}' \
-              "https://api.github.com/repos/$REPO/pulls/$PR_NUM/reviews" && \
-              echo "Auto-approved PR #$PR_NUM after OCR stall (AUT-1814)." || \
-              echo "Auto-approve failed (non-blocking) — continuing."
+              "https://api.github.com/repos/$REPO/pulls/$PR_NUM/reviews" \
+              && echo "Auto-approved PR #$PR_NUM after OCR stall (AUT-1814)." \
+              || echo "Auto-approve failed (non-blocking) — continuing."
           fi
+          exit 0
 
       - name: Report to Discord #updates
         if: always()
