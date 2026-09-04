@@ -268,8 +268,8 @@ services:
       - "8001"
 
   worker:
-    # AUT-2056: digest bumped to include the healthcheck sh→bash fix.
-    image: ghcr.io/cannonfodder151/autobrain-worker:hosted@sha256:442cc84cf0ef64d3de6f3492cc18c7342d92bdd287b14fec84c86891a7d0102f
+    # AUT-2366: pinned to PR #446 (AUT-2256) hosted worker digest (built 2026-09-04 from main 4bf7997).
+    image: ghcr.io/cannonfodder151/autobrain-worker:hosted@sha256:737ab54afa8340de72bf26a495e259234dcde6d9963109af59263f1e95d7e342
     restart: unless-stopped
     # AUT-1242/C1: beat scheduler embedded in the worker (-B), matching the dev
     # compose. Removes the separate beat container.
