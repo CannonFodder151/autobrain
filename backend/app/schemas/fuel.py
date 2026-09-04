@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class FuelLogCreate(BaseModel):
@@ -113,26 +113,37 @@ class SevenElevenPricesOut(BaseModel):
     quotes: list[FuelPriceQuote]
 
 
-# AUT-1859: servo-spy watchlist schemas ------------------------------------------------
-
 class FuelPriceWatchlistIn(BaseModel):
-    """Input for adding a station + fuel type to the watchlist."""
+    """Per-user servo-spy fuel price watch (AUT-1859)."""
 
-    state: str = Field(..., max_length=8)
-    station_code: str = Field(..., max_length=32)
-    fuel_type: str = Field(..., max_length=16)
-    direction: str = Field(default="both", pattern=r"^(up|down|both)$")
-    threshold_pct: float = Field(default=5.0, gt=0)
+    state: str
+    station_code: str
+    fuel_type: str
+    direction: str = "both"  # "up" | "down" | "both"
+    threshold_pct: float = 5.0
+
+    @field_validator("direction")
+    @classmethod
+    def _direction_in_set(cls, v: str) -> str:
+        if v not in ("up", "down", "both"):
+            raise ValueError("direction must be one of up, down, both")
+        return v
+
+    @field_validator("threshold_pct")
+    @classmethod
+    def _threshold_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError("threshold_pct must be > 0")
+        return v
 
 
 class FuelPriceWatchlistOut(BaseModel):
-    """Watchlist item returned to the frontend."""
+    """Persisted servo-spy watch row (AUT-1859)."""
 
-    id: str
+    id: int
+    user_id: int
     state: str
     station_code: str
-    station_name: str | None = None
-    brand: str | None = None
     fuel_type: str
     direction: str
     threshold_pct: float

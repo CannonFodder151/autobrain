@@ -14,7 +14,7 @@ import sqlalchemy as sa
 from alembic import context, op
 
 revision: str = "aut2375_fuel_history_index"
-down_revision: Union[str, None] = "z2a3b4c5d6e7"
+down_revision: Union[str, None] = "aut2381_fuel_source_arbitration"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

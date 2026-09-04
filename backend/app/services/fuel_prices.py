@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """7-Eleven fuel prices (projectzerothree.info) — deterministic, no AI.
 
 The upstream is a public, keyless, server-side *cached* JSON snapshot of every
@@ -42,6 +44,24 @@ _fetch_lock = None  # lazily created inside async funcs to avoid import-time loo
 
 def _now_ts() -> float:
     return datetime.now(timezone.utc).timestamp()
+
+
+def compute_price_change(
+    price: float | None, previous: float | None
+) -> tuple[float | None, str | None]:
+    """Day-over-day % move + up/down direction (AUT-1859).
+
+    Returns (None, None) until both prices are present and previous is
+    non-zero (no division by zero, no direction on the first poll). Zero
+    delta returns (0.0, None) so callers can distinguish 'no move yet' from
+    'no history'. Deterministic — no AI.
+    """
+    if price is None or previous in (None, 0):
+        return (None, None)
+    pct = round((price - previous) / previous * 100, 2)
+    if pct == 0:
+        return (0.0, None)
+    return (pct, "up" if pct > 0 else "down")
 
 
 def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
