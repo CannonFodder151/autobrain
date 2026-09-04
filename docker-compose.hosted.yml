@@ -143,7 +143,7 @@ services:
       retries: 10
 
   backend:
-    image: ghcr.io/cannonfodder151/autobrain-backend:hosted-arm64@sha256:57e96ff81e7e939329e64bc32b0c8379eb4ffca051a026341380a2f55e699658
+    image: ghcr.io/cannonfodder151/autobrain-backend:hosted-arm64@sha256:fefe57e1518614190f3c250ca1a8552b9bfa861715143843aebd13c4a20ec032
     restart: unless-stopped
     command: sh -c "python -m app.db.bootstrap && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
