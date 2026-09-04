@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Added (AUT-2435)
+- mobile+web: Electric Spy — premium EV charging-station explorer. Fork of Servo Spy (AUT-1818) with kWh replacing cents/L, connector type replacing fuel type, and a third "Power" sort metric (highest kW first). New tile on the home feature grid, new `ElectricSpyScreen` (map + list, premium-gated like Servo Spy). Backend: new `/api/ev/*` router (`app/api/v1/ev_spy.py`) mounting `GET /api/ev/stations`, `/api/ev/types`, `/api/ev/station/{id}`, `POST /api/ev/refresh`, `GET /api/ev/attribution`; data is sourced from Open Charge Map (free-tier, key-less fallback) via `app/services/ev_feeds.fetch_ocm` + `refresh_radius`, persisted to `charging_stations` + `charging_connectors` (new Alembic migration `aa1ev2spy3abc`). Pure-Dart list model (`frontend/lib/screens/electric_spy/electric_spy_list_model.dart`) keeps the row parser + sort deterministic and unit-testable; mirror set in `backend/app/services/ev_charging.cheapest_cost_per_kwh`. Attribution header `X-EV-Data-Attribution` set on every response, same pattern as `X-Fuel-Data-Attribution`. Settings: `OCM_API_KEY` (optional rate-limit lift), `OCM_USER_AGENT`. Parent: AUT-2420. Tests: `backend/tests/test_ev_spy_aut_2435.py` (10 cases: parser, status, cost, station extract, attribution) + `frontend/test/electric_spy_list_model_test.dart` (parser + sort).
 
 ## [0.3.255] - 2026-09-08
 
