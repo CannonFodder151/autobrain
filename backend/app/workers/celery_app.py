@@ -1,6 +1,7 @@
 """Celery application."""
 
 from celery import Celery
+from celery.schedules import crontab
 
 from app.core.config import settings
 
@@ -46,6 +47,10 @@ celery_app.conf.update(
         "poll-nsw-fuel-prices": {
             "task": "app.workers.tasks.poll_nsw_fuel_prices",
             "schedule": 60 * 60 * 24,
+        },
+        "refresh-sca-parts-cache": {
+            "task": "app.workers.tasks.refresh_sca_parts_cache",
+            "schedule": crontab(hour=0, minute=0),
         },
     },
 )
