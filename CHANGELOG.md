@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Fixed (AUT-2481)
+- frontend(servo-spy): dart2js compile error on `_cartoApiKey`/`_cartoKeyParam`. The two were declared as instance fields on `_ServoSpyScreenState` but referenced from `_ServoSpyMapState.build()` (different class, so name-resolution failed at compile time). Promoted both to file-private top-level `const` so both widget trees see them; removed the `const` from `_cartoKeyParam` (the runtime `isEmpty` check is not a constant expression).
 
 ## [0.3.229] - 2026-09-04
 ### Added (AUT-2415)
