@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+
+## [0.3.228] - 2026-09-04
 ### Added (AUT-2419)
 - backend(parts): nightly SCA parts cache prewarm. New `app.workers.tasks.refresh_sca_parts_cache` task walks every distinct (make, model, year) in the vehicles table and forces a fresh SCA lookup so the next user click returns from cache. Per-vehicle failures are isolated so one bad vehicle never aborts the run. Wired into `celery_app.conf.beat_schedule` at `crontab(hour=0, minute=0)` UTC. Structured log `sca_cache_prewarm_done` (vehicles/ok/failed/duration_s) so ops can monitor the first few nightly runs. Test: `backend/tests/test_sca_prewarm_aut2419.py` (3 cases).
 
