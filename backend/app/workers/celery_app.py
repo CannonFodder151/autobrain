@@ -48,11 +48,6 @@ celery_app.conf.update(
             "task": "app.workers.tasks.ingest_fuel_all",
             "schedule": crontab(hour=2, minute=0),
         },
-        # AUT-2375: deprecated — replaced by fuel-ingest-all-daily above.
-        "ingest-fuel-prices": {
-            "task": "app.workers.tasks.ingest_fuel_all",
-            "schedule": crontab(hour=2, minute=0),
-        },
         "poll-nsw-fuel-prices": {
             "task": "app.workers.tasks.poll_nsw_fuel_prices",
             "schedule": 60 * 60 * 24,
