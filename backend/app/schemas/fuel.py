@@ -111,3 +111,31 @@ class SevenElevenPricesOut(BaseModel):
     fuel_type: str
     region: str | None = None
     quotes: list[FuelPriceQuote]
+
+
+# AUT-1859: servo-spy watchlist schemas ------------------------------------------------
+
+class FuelPriceWatchlistIn(BaseModel):
+    """Input for adding a station + fuel type to the watchlist."""
+
+    state: str = Field(..., max_length=8)
+    station_code: str = Field(..., max_length=32)
+    fuel_type: str = Field(..., max_length=16)
+    direction: str = Field(default="both", pattern=r"^(up|down|both)$")
+    threshold_pct: float = Field(default=5.0, gt=0)
+
+
+class FuelPriceWatchlistOut(BaseModel):
+    """Watchlist item returned to the frontend."""
+
+    id: str
+    state: str
+    station_code: str
+    station_name: str | None = None
+    brand: str | None = None
+    fuel_type: str
+    direction: str
+    threshold_pct: float
+    created_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
