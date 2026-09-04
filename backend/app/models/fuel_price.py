@@ -39,29 +39,6 @@ def _uuid() -> str:
     return str(uuid.uuid4())
 
 
-class FuelPrice(Base):
-    __tablename__ = "fuel_prices"
-    __table_args__ = (UniqueConstraint("state", "station_code", "fuel_type", name="uq_fuel_price_station_fuel"),)
-
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    state: Mapped[str] = mapped_column(String(8), index=True)
-    station_code: Mapped[str] = mapped_column(String(32), index=True)
-    station_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
-    brand: Mapped[str | None] = mapped_column(String(80), nullable=True)
-    address: Mapped[str | None] = mapped_column(String(240), nullable=True)
-    latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
-    longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
-    fuel_type: Mapped[str] = mapped_column(String(16), index=True)
-    price: Mapped[float | None] = mapped_column(Float, nullable=True)
-    currency: Mapped[str] = mapped_column(String(8), default="AUD")
-    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    # AUT-1859: last *distinct* price, used to compute day-over-day % change.
-    previous_price: Mapped[float | None] = mapped_column(Float, nullable=True)
-    previous_price_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-
 class FuelPriceSnapshot(Base):
     __tablename__ = "fuel_price_snapshots"
     __table_args__ = (UniqueConstraint("state", "station_code", "fuel_type", name="uq_fuel_price_snapshot_station_fuel"),)

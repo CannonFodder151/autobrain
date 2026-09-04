@@ -99,3 +99,15 @@ class FuelPriceOut(BaseModel):
     updated_at: datetime | None = None
 
     model_config = {"from_attributes": True}
+
+
+class SevenElevenPricesOut(BaseModel):
+    """7-Eleven fuel price lookup result (AUT-1887)."""
+
+    source: str = "projectzerothree"
+    updated: str | None = None
+    as_of: str | None = None
+    mode: str  # "cheapest" | "nearest"
+    fuel_type: str
+    region: str | None = None
+    quotes: list[FuelPriceQuote]
