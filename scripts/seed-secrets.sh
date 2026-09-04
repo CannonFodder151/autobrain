@@ -27,6 +27,7 @@ seed() {
             -e 's/^MINIO_ACCESS_KEY$/minio_access_key/' \
             -e 's/^MINIO_SECRET_KEY$/minio_secret_key/' \
             -e 's/^REDIS_PASSWORD$/redis_password/' \
+            -e 's/^GITHUB_PAT$/github_pat/' \
             -e 's/^AI_ROUTER_API_KEY$/ai_router_api_key/' \
             -e 's/^AI_GATEWAY_API_KEY$/ai_gateway_api_key/' \
             -e 's/^REGO_LOOKUP_API_KEY$/rego_lookup_api_key/' \
