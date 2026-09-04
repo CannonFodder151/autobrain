@@ -13,6 +13,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed (AUT-2481)
 - frontend(servo-spy): dart2js compile error on `_cartoApiKey`/`_cartoKeyParam`. The two were declared as instance fields on `_ServoSpyScreenState` but referenced from `_ServoSpyMapState.build()` (different class, so name-resolution failed at compile time). Promoted both to file-private top-level `const` so both widget trees see them; removed the `const` from `_cartoKeyParam` (the runtime `isEmpty` check is not a constant expression).
 
+### Added (AUT-2434)
+- backend: vehicle powertrain field (`ICE | EV | HEV | PHEV`). New `PowertrainType` enum on `Vehicle` model with default `ICE`. Alembic migration `aut2434_vehicle_powertrain` adds `vehicles.powertrain VARCHAR(8) NOT NULL DEFAULT 'ICE'` — all pre-existing rows backfill to ICE. API responses (`VehicleOut`) now include `powertrain`; create/update accept `powertrain` in request bodies. Tests: `backend/tests/test_aut2434_powertrain.py` (6 offline cases: column present, enum locked to 4 tokens, Create/Update/Out serialization, default-ICE contract).
+
 ## [0.3.229] - 2026-09-04
 ### Added (AUT-2415)
 - mobile+web: rego status badge + expiry on every vehicle card. New `Vehicle.regoStatus` / `regoExpiryDate` fields (parsed from `rego_status` / `rego_expiry_date`) drive a green/red `RegoStatusBadge` widget shown on the home hero card and the vehicle-list rows. Forward-compatible with AUT-2414's nightly Celery beat job: when `rego_status` / `rego_expiry_date` are absent the badge is hidden entirely. Gated behind `AuthState.premium` so free accounts see no rego chrome. `formattedRegoExpiry` renders `12 Mar 2027` style dates. Tests: `frontend/test/rego_status_badge_test.dart`.
