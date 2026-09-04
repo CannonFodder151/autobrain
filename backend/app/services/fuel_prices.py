@@ -185,8 +185,6 @@ Deterministic-first design (AUT-1c): no AI here — every path is a pure mapping
 of the upstream payload, so the feature behaves the same on every run.
 """
 
-from __future__ import annotations
-
 import base64
 from datetime import datetime, timedelta, timezone
 
