@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Fixed (AUT-2249)
+- ci: `ocr-review` Auto-approve step (AUT-1814) no longer fails on a fresh PR. GitHub Actions bash runs with `set -e`; `grep -qx APPROVED` exiting 1 previously aborted the step before the auto-approve POST ran, even though the step carried `continue-on-error: true`. Guard now wrapped in an `&&/||` chain with explicit `set +e`/`exit 0` so the if-test cannot fail the script. Adds `backend/tests/test_aut2249_ocr_review_guard.py` covering empty / has-APPROVED / no-APPROVED input paths. PR #437 was the original repro.
 
 ## [0.3.226] - 2026-09-04
 
