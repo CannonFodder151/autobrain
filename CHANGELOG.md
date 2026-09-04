@@ -330,6 +330,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed (AUT-2389)
 - infra(docker): frontend service now healthchecks `${BACKEND_URL}/health` (not just nginx) so Portainer flips the frontend container unhealthy when the backend upstream is unreachable/5xx. nginx-only probes hid AUT-1964 — nginx stays up while the upstream is dead, masking outages from Portainer's stack-health view. Applied to `docker-compose.yml` (local/dev), `docker-compose.prod.yml` (self-host), and `docker-compose.hosted.yml` (Oracle Cloud EP5). Uses the nginx-unprivileged image's `wget` to fetch `${BACKEND_URL:-http://backend:8000}/health` and `grep -q '"status":"ok"'` so a 5xx body or connection failure exits non-zero. `start_period: 30s` gives the backend time to come up on first boot. Closes AUT-2389.
 
+### Fixed
+- Servo Spy map: CARTO raster basemap watermark ("API key required") returns. The query parameter was wrong (`?api_key=...`); CARTO expects `?key=...` per the upstream email/setup doc, so the public basemap layer kept rendering its no-key watermark even when `CARTO_API_KEY` was injected via `--dart-define`. Single-line change in `servo_spy_screen.dart` (param name + comment). No new dep, no cache code: `flutter_map` 8.3.1's default `NetworkTileProvider` already pipes tiles through `BuiltInMapCachingProvider`, which keeps an in-memory LRU plus a disk cache (default 1 GB) keyed on the tile URL — so once a tile is loaded, the client never re-asks CARTO for the same `{z}/{x}/{y}` until freshness expires. Closes AUT-2383.
+
 ## [0.3.224] - 2026-09-04
 
 ### Fixed
