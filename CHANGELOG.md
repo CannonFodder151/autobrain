@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+
+## [0.3.229] - 2026-09-04
 ### Added (AUT-2415)
 - mobile+web: rego status badge + expiry on every vehicle card. New `Vehicle.regoStatus` / `regoExpiryDate` fields (parsed from `rego_status` / `rego_expiry_date`) drive a green/red `RegoStatusBadge` widget shown on the home hero card and the vehicle-list rows. Forward-compatible with AUT-2414's nightly Celery beat job: when `rego_status` / `rego_expiry_date` are absent the badge is hidden entirely. Gated behind `AuthState.premium` so free accounts see no rego chrome. `formattedRegoExpiry` renders `12 Mar 2027` style dates. Tests: `frontend/test/rego_status_badge_test.dart`.
 
