@@ -143,7 +143,7 @@ services:
       retries: 10
 
   backend:
-    image: ghcr.io/cannonfodder151/autobrain-backend:hosted@sha256:68bd25443c40f780e6937c0078956b3f51b0ad86953fa7de138e9ac06352f7df
+    image: ghcr.io/cannonfodder151/autobrain-backend:hosted-arm64@sha256:24ce1c8d3dd7a4606e9e250c0ee731256f3921dd0ea26d4a325baadbfb34b8b7
     restart: unless-stopped
     command: sh -c "python -m app.db.bootstrap && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
@@ -253,7 +253,7 @@ services:
         ipv4_address: 172.18.0.15
 
   ai:
-    image: ghcr.io/cannonfodder151/autobrain-ai:hosted@sha256:fdf5c790e07ea84e004c37699c1fb6c992b7d43a9d01c13928b392729e3568e2
+    image: ghcr.io/cannonfodder151/autobrain-ai:hosted@sha256:ba0f2d194fe0241b8cda5678c6ea79e94ceea67481f6993ba41c338830a698cf
     restart: unless-stopped
     # AUT-1739: adequate /dev/shm for Chromium (market-data scraper).
     shm_size: "256m"
@@ -268,8 +268,8 @@ services:
       - "8001"
 
   worker:
-    # AUT-2366: pinned to PR #446 (AUT-2256) hosted worker digest (built 2026-09-04 from main 4bf7997).
-    image: ghcr.io/cannonfodder151/autobrain-worker:hosted@sha256:ea11d37822185ff1db50648983246e2be3154a33ae8facf52487cf422ba8d6d3
+    # AUT-2482: pinned to post-fix worker digest (built 2026-09-04 from main 16b784c, includes AUT-2506 op.get_inspector fix).
+    image: ghcr.io/cannonfodder151/autobrain-worker:hosted@sha256:47f59cbf2781c5507d9b0d35c52e5959b1e80c0084f22a86ed2e287ccc6185c1
     restart: unless-stopped
     # AUT-1242/C1: beat scheduler embedded in the worker (-B), matching the dev
     # compose. Removes the separate beat container.
@@ -329,7 +329,7 @@ services:
       - "8000"
 
   frontend:
-    image: ghcr.io/cannonfodder151/autobrain-frontend@sha256:c4c72a6b8e9ad857c67d9e2560ad757e41561eabc2b5da0eb104110da0b35ae9
+    image: ghcr.io/cannonfodder151/autobrain-frontend@sha256:f8cde5cdfa2604c852790404e228b91e21d2abc689399c3da578596bba969cc4
     # AUT-2087: pinned to the verified arm64 child manifest digest of the
     # autobrain-frontend :hosted OCI image index. Earlier pin
     # (`@sha256:8937c2bb…`) targeted an arm64 image whose nginx + busybox
