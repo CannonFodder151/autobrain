@@ -1,5 +1,8 @@
 """Worker task regression tests (mocked DB/manager, no live services)."""
 
+import asyncio
+from unittest.mock import patch
+
 import pytest  # noqa: F401
 
 from app.workers import tasks
@@ -222,3 +225,76 @@ def test_run_recreates_wedged_persistent_loop(monkeypatch) -> None:
     assert tasks._loop is not None and not tasks._loop.is_closed(), (
         "persistent loop must be replaced when wedged"
     )
+
+
+class FakeAsyncSession:
+    def __init__(self, vehicle_ids):
+        self.vehicle_ids = vehicle_ids
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return False
+
+    async def scalars(self, stmt):
+        class _R:
+            def all(self_inner):
+                return self.vehicle_ids
+
+        return _R()
+
+
+class _FakeVehicle:
+    id = "v1"
+
+
+def test_ingest_fuel_prices_no_typeerror_when_source_in_result(monkeypatch) -> None:
+    """AUT-2467: result dict from ingest_all_fuel already contains 'source';
+    logger.info must not receive duplicate 'source' kwarg."""
+    from unittest.mock import patch
+
+    import app.services.fuel_feeds as fuel_feeds
+
+    fake_db = FakeDB()
+    monkeypatch.setattr(tasks, "SessionLocal", lambda: fake_db)
+
+    summary = {
+        "wa": {"source": "wa", "stations": 1, "prices": 2},
+        "qld": {"source": "qld", "stations": 3, "prices": 5},
+    }
+
+    async def fake_ingest(db):
+        assert db is fake_db
+        return summary
+
+    monkeypatch.setattr(fuel_feeds, "ingest_all_fuel", fake_ingest)
+
+    with patch.object(tasks.logger, "info") as mock_info:
+        tasks.ingest_fuel_prices()
+
+    assert mock_info.call_count == 2
+    for call in mock_info.call_args_list:
+        args, kwargs = call
+        assert args[0] == "fuel_ingest_summary"
+        assert "source" in kwargs
+        assert kwargs["source"] in ("wa", "qld")
+
+
+def test_run_due_checks_calls_check_for_each_vehicle(monkeypatch) -> None:
+    """AUT-2467: run_due_checks must run the inner coroutine via _run, not
+    _run(_run())."""
+    import app.services.notify as notify
+
+    called = []
+
+    async def fake_check(db, vid):
+        called.append(vid)
+
+    monkeypatch.setattr(notify, "check_vehicle_notifications", fake_check)
+    monkeypatch.setattr(notify, "SessionLocal", lambda: FakeAsyncSession(["v1", "v2", "v3"]))
+
+    with patch.object(notify, "_run", side_effect=lambda coro: asyncio.new_event_loop().run_until_complete(coro)):
+        notify.run_due_checks()
+
+    assert called == ["v1", "v2", "v3"]

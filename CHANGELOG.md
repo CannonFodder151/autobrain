@@ -23,6 +23,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Changed (AUT-2231)
 - chore(docker, AUT-2231): add `CORS_ALLOWED_ORIGINS` compose-level default on the `backend` service in `docker-compose.hosted.yml` so a fresh hosted stack never boots with an empty allow-list (was same-origin only by default). Default value: `["https://hosted.autobrainservice.app","https://hub.autobrainservice.app"]`. Override per stack via the Portainer stack env (AUT-2213 follow-up to AUT-2190 F2). No app-code change; `backend/app/core/config.py:CORS_ALLOWED_ORIGINS` already parses JSON-list env values.
 
+### Fixed (AUT-2467)
+- fix(backend): resolve `TypeError: structlog meth() got multiple values for keyword argument 'source'` in `ingest_fuel_prices` — `logger.info` now passes `**res` only (result dict already contains `source`).
+- fix(backend): resolve `TypeError` in `run_due_checks` caused by `_run(_run())` — renamed inner coroutine to `_coro()` and pass it to module-level `_run(coro)`.
+- test(backend): add `test_ingest_fuel_prices_no_typeerror_when_source_in_result` and `test_run_due_checks_calls_check_for_each_vehicle` covering both paths.
+
 ### Fixed (AUT-2353)
 - fix(frontend): add `core/debug_banner.dart` (a `kDebugMode`-gated `Banner` overlay on the `MaterialApp` home) that surfaces the resolved `AppConfig.apiBase` and `AppConfig.wsBase` in the top-end corner of the screen. Lets QA/dev confirm the active backend URL at app boot (AC#3 of PR #445). Release/profile builds are untouched (the widget short-circuits to its child when `!kDebugMode`).
 
