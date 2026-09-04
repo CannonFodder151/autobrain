@@ -5,7 +5,7 @@ import uuid
 from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
@@ -60,6 +60,12 @@ class Vehicle(Base):
     auto_suggest_service: Mapped[bool] = mapped_column(default=False)  # AUT-1275: suggest next service when odo updates
     fuel_type: Mapped[str | None] = mapped_column(String(16))  # AUT-1819: drives default price shown on map/list
     powertrain: Mapped[str] = mapped_column(String(8), default=PowertrainType.ICE.value)  # AUT-2434: ICE/EV/HEV/PHEV
+    # Rego status (cached from lookup). AUT-2415 surfaces the badge; AUT-2416
+    # uses the expiry date to drive notifications. status is free-text so the
+    # lookup provider can set "registered" / "valid" / "current" / "active" / etc.
+    rego_status: Mapped[str | None] = mapped_column(String(40))
+    rego_expiry_date: Mapped[date | None] = mapped_column(Date, index=True)
+    rego_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
