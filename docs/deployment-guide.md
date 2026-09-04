@@ -368,6 +368,25 @@ First boot runs `python -m app.db.bootstrap` (Alembic, falling back to
 >
 > New columns on existing tables still require a real Alembic migration (never
 > rely on `create_all` — it only creates missing *tables*).
+>
+> **Production must NEVER fall back to `init_db()`.** The bootstrap at
+> `app/db/bootstrap.py` runs `alembic upgrade head`; if that fails (e.g. a
+> broken migration like AUT-2482's `op.get_inspector()` crash on
+> `aut1859_fuel_price_alerts.py`) it silently falls back to
+> `Base.metadata.create_all`, which only emits *missing tables* — it cannot
+> add new columns, partial unique indexes, or any DDL Alembic was meant to
+> apply. The first symptom is a runtime `UndefinedColumnError` (e.g.
+> `column notification_deliveries.user_id does not exist`) on a Celery task
+> that reads the table — not at boot. If you ever see
+> `alembic_failed_falling_back_to_create_all` in backend logs on a hosted
+> environment, the deploy is broken: stop, fix the migration, re-run
+> `alembic upgrade head` via the backend bootstrap path
+> (`python -m app.db.bootstrap`), and verify the worker log carries
+> `alembic_migrations_applied` on the next boot. Do not paper over it with
+> `create_all`. Reproduce the broken state with
+> `docker compose -f docker-compose.hosted.yml run --rm backend alembic
+> upgrade head` from a workstation against a clone of the hosted DB
+> (redacted secrets) before shipping a fix.
 
 ```bash
 docker compose exec backend alembic revision --autogenerate -m "change"
