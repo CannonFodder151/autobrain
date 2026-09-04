@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-2390)
+- ci(security): `compose-config-diff` job in `.github/workflows/security-pr-gate.yml`. When a PR changes any `docker-compose*.yml`, the job runs `docker compose config` on both the PR and main versions (with a stubbed `.env.example`), extracts the set of referenced env-var keys, and blocks the PR on (a) any 1-edit / fuzzy-distance rename of an existing key (catches `AUTOBRIAN_BACKEND_URL` → `AUTOBRAIN_BACKEND_URL` and similar single-character typos that survive multiple deploys because `${NEW}` interpolates empty and `${OLD}` keeps its value), and (b) any new key not declared in `.env.example` (so reviewers know where to put the value). Wired into the `report-status` job's needs + Discord summary. Closes AUT-2390; closes the gap flagged by the AUT-1964 post-mortem.
+
 ## [0.3.225] - 2026-09-04
 
 ### Fixed (AUT-2389)
