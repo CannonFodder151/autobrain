@@ -14,6 +14,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - fix(backend): PDF export table header text was black on dark background (unreadable). Header cells now use a cloned `BodyText` style with `textColor=colors.white` and `fontName=Helvetica-Bold` so the `TEXTCOLOR` table style (which only affects raw strings, not Paragraphs) is no longer relied upon. Applies to both service history and build sheet PDFs.
 - feat(backend,AUT-2960): vehicle rego now included in the PDF title on the front page. Service history: `Service History — {label} — {rego}`; build sheet: `Build Sheet — {label} — {rego}`. When rego is empty, title remains clean (no trailing separator). Updated API callers in `services.py` and `mods.py` to pass `vehicle.rego`. Added `test_pdf_export_rego_in_title` test.
 
+### Fixed (AUT-2481)
+- frontend(servo-spy): dart2js compile error on `_cartoApiKey`/`_cartoKeyParam`. The two were declared as instance fields on `_ServoSpyScreenState` but referenced from `_ServoSpyMapState.build()` (different class, so name-resolution failed at compile time). Promoted both to file-private top-level `const` so both widget trees see them; removed the `const` from `_cartoKeyParam` (the runtime `isEmpty` check is not a constant expression).
+
 ## [0.3.243] - 2026-09-06
 ### Fixed (AUT-2656)
 - fix(frontend): restore flutter web compile on arm64 runner. Three compile errors blocked `flutter build web` in the dockerhub-publish + build-hosted arm64 jobs: (1) `login_screen.dart:199` — `children:` under-indented by 2 spaces; (2) `signup_screen.dart:85` — `child:` under-indented by 2 spaces; (3) `reset_password_web.dart` — `import 'dart:html'` unsupported by Flutter ≥3.22 web builds (CanvasKit renderer), replaced with no-op `clearUrlToken()` (token detection in `app.dart` reads the fragment before navigation, so no data loss).
