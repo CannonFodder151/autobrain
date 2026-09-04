@@ -7,6 +7,7 @@ import '../../core/api_client.dart';
 import '../../core/auth_state.dart';
 import '../../core/models.dart';
 import '../../widgets/vehicle_selector.dart';
+import '../../widgets/rego_status_badge.dart';
 import '../admin/admin_screen.dart';
 import '../analytics/analytics_screen.dart';
 import '../../community_garage/community_garage_screen.dart';
@@ -258,6 +259,14 @@ class _HeroCard extends StatelessWidget {
                         value: vehicle.rego ?? '—'),
                   ],
                 ),
+                if (vehicle.hasRegoData) ...[
+                  const SizedBox(height: 10),
+                  RegoStatusBadge(
+                    vehicle: vehicle,
+                    premium: context.watch<AuthState>().premium,
+                    dense: true,
+                  ),
+                ],
               ],
             ),
           ),
