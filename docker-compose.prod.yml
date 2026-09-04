@@ -154,7 +154,13 @@ services:
     shm_size: "256m"
     tmpfs:
       - /tmp
-      - /ms-playwright
+    # AUT-2258: /ms-playwright is NOT tmpfs-mounted. It used to be, which
+    # shadowed the image's chrome-sandbox SUID binary at runtime (the tmpfs
+    # is empty, the autobrain user can't chown to root, so the sandbox
+    # silently falls back to --no-sandbox). The image's /ms-playwright is
+    # read-only by definition (Playwright browsers + chrome-sandbox helper),
+    # so tmpfs-mounting it served no security purpose; removing the mount
+    # restores the CWE-250 mitigation.
     env_file: .env
     environment:
       AI_ROUTER_URL: ${AI_ROUTER_URL}

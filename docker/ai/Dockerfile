@@ -32,12 +32,31 @@ RUN chmod +x /entrypoint.sh /usr/local/bin/lib-load-secrets.sh
 RUN useradd -m -u 1000 autobrain \
     && chown -R autobrain:autobrain /app \
     && mkdir -p /ms-playwright && chown -R autobrain:autobrain /ms-playwright
-# AUT-1739 (CWE-250): the image already runs as non-root `autobrain`. Re-own
-# Chromium's SUID sandbox helper to root + setuid so the market-data scraper
-# can sandbox untrusted third-party content as that non-root user; the scraper
-# falls back to --no-sandbox only if a host can't initialise the sandbox.
-RUN find /ms-playwright -name chrome-sandbox -exec chown root:root {} \; \
-    && find /ms-playwright -name chrome-sandbox -exec chmod 4755 {} \;
+# AUT-1739 (CWE-250) + AUT-2258: the image already runs as non-root `autobrain`.
+# Re-own Chromium's SUID sandbox helper to root + setuid so the market-data
+# scraper can sandbox untrusted third-party content as that non-root user; the
+# scraper falls back to --no-sandbox only if a host can't initialise the sandbox.
+# Run as the FINAL root RUN (not chained with the autobrain chowns above) so
+# the chown/chmod cannot be masked by any later layer change AND so the build
+# fails loudly if Playwright ever drops or renames chrome-sandbox. AUT-2258
+# root-cause: the previous chained RUN with `&&` could be invalidated by any
+# upstream layer change, leaving chrome-sandbox autobrain:autobrain 0755 at
+# runtime (CTO verification 2026-09-03). This RUN runs as root (USER switched
+# back to root) so chown root:root succeeds regardless of build-host uid.
+USER root
+RUN set -eux; \
+    sb_count=0; \
+    for sb in $(find /ms-playwright -type f -name chrome-sandbox); do \
+        chown root:root "$sb"; \
+        chmod 4755 "$sb"; \
+        sb_count=$((sb_count+1)); \
+    done; \
+    if [ "$sb_count" -lt 1 ]; then \
+        echo "FATAL: no chrome-sandbox found under /ms-playwright — Playwright layout changed?" >&2; \
+        ls -la /ms-playwright >&2; \
+        exit 1; \
+    fi; \
+    echo "AUT-1739: re-SUID $sb_count chrome-sandbox binary(ies) under /ms-playwright"
 USER autobrain
 
 EXPOSE 8000 8001
