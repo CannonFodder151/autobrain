@@ -9,9 +9,10 @@ Spy station map. Data is ingested on a Celery beat schedule
 
 | Feed | URL | Key | Coverage |
 |------|-----|-----|----------|
-| WA FuelWatch | `industryprd.fuelwatch.wa.gov.au` | none (public) | WA |
+| WA Fuelwatch | `industryprd.fuelwatch.wa.gov.au` | none (public) | WA |
 | NSW FuelCheck | `api.transport.nsw.gov.au/v1/fuel` | free key (`FUEL_NSW_API_KEY`) | NSW + ACT |
 | QLD Fuel Prices | `fuelpricesqld.com.au` | none (public) | QLD |
+| SA SAFPIS | `api.safuelprices.com.au` (Informed Sources DirectAPI) | Subscriber Token GUID (`FUEL_SA_API_KEY`) | SA |
 
 These four states + ACT cover ~63% of the Australian population.
 **VIC/SA/TAS/NT have no free feed** and are scoped as a later premium
