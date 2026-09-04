@@ -29,7 +29,7 @@ from enum import IntEnum
 from typing import Any
 
 import httpx
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -568,21 +568,46 @@ async def _upsert_station(db: AsyncSession, s: dict) -> FuelStation:
     return station
 
 
+PRICE_HISTORY_DAYS = 30  # AUT-2375: retain 30 days for /history chart
+
+
 async def _replace_station_prices(
     db: AsyncSession,
     station_id: str,
     source: str,
     prices: list[tuple[str, float, datetime]],
 ) -> int:
-    """Replace the rows for (station_id, source) with the freshly fetched set.
+    """Upsert latest price per (station, fuel_type, source) and keep 30-day history.
 
-    AUT-2381: we keep one row per (station, fuel_type, source) instead of
-    dropping all rows on every ingest, so the arbitration step can see what
-    *every* upstream said this cycle. The arbitration itself lives in
-    ``arbitrate_station_prices`` (called once per station by ``_ingest``).
+    AUT-2381 + AUT-2375 merge:
+      * Source-keyed (AUT-2381): each upstream feed keeps its own row so the
+        arbitration step (``arbitrate_station_prices``) can see what every
+        source said this cycle.
+      * 30-day retention (AUT-2375): don't wipe prior rows on every ingest —
+        prune anything older than PRICE_HISTORY_DAYS in one DELETE so the
+        /api/v1/fuel/stations/{id}/history endpoint serves a real series.
+      * Duplicates re-published with the same (fuel_type, effective_at) for
+        THIS source are deleted before insert (the newer value wins).
     """
+    from datetime import timedelta
+
+    if prices:
+        keys = list({(ft, eff) for ft, _, eff in prices})
+        if keys:
+            conditions = [
+                (FuelPrice.station_id == station_id)
+                & (FuelPrice.source == source)
+                & (FuelPrice.fuel_type == ft)
+                & (FuelPrice.effective_at == eff)
+                for ft, eff in keys
+            ]
+            await db.execute(delete(FuelPrice).where(or_(*conditions)))
+    cutoff = datetime.now(timezone.utc) - timedelta(days=PRICE_HISTORY_DAYS)
     await db.execute(
-        delete(FuelPrice).where(FuelPrice.station_id == station_id, FuelPrice.source == source)
+        delete(FuelPrice).where(
+            FuelPrice.station_id == station_id,
+            FuelPrice.effective_at < cutoff,
+        )
     )
     for ft, price, eff in prices:
         db.add(
