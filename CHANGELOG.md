@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Fixed (AUT-2256)
+- frontend: Flutter web build failure on `servo_spy_screen.dart`. The `static const _cartoKeyParam` was being computed from `String.fromEnvironment('CARTO_API_KEY')` + a ternary, which is not a constant expression in Dart; `TileLayer.urlTemplate` is also not a `const` context, so the getter was unreachable and `flutter build web` failed with `Error: The getter '_cartoKeyParam' isn't defined for the type '_ServoSpyMapState'.` Switched to `static final` so the value is computed once at class-init time. Unblocks the arm64 + amd64 `Build hosted images` run that the hosted worker rebuild was queued behind.
 
 ## [0.3.229] - 2026-09-04
 ### Added (AUT-2415)

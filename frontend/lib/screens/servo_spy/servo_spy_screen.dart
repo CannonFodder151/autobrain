@@ -42,7 +42,7 @@ class _ServoSpyScreenState extends State<ServoSpyScreen> {
   // --dart-define=CARTO_API_KEY=<key>. CARTO keys are designed to be public
   // (embedded in tile URLs as ?api_key=...). Empty -> key-less public basemap.
   static const String _cartoApiKey = String.fromEnvironment('CARTO_API_KEY');
-  static const String _cartoKeyParam =
+  static final String _cartoKeyParam =
       _cartoApiKey.isEmpty ? '' : '?api_key=$_cartoApiKey';
 
   @override
