@@ -399,6 +399,50 @@ services:
       timeout: 5s
       retries: 5
 
+  # AUT-2469: GitHub Actions ARM64 self-hosted runner on EP5.
+  # Replaces the standalone `myoung34/github-runner:latest` container that was
+  # restart-looping on EP5:
+  #   `ldd: ./bin/libcoreclr.so: No such file or directory`
+  #   `./config.sh: line 78: ./bin/Runner.Listener: No such file or directory`
+  # The myoung34 image is amd64-only (libcoreclr.so + Runner.Listener are
+  # amd64 .NET binaries); the Oracle VM (EP5) is aarch64. Official image:
+  # `ghcr.io/actions/actions-runner:latest` (multi-arch, includes linux/arm64).
+  # Registration is re-derived every boot via the PAT in /run/secrets/github_pat
+  # (AUT-1533 *_FILE pattern), so the short-lived runner token never needs to
+  # be persisted across container recreates. ARM CI on Hosted is unblocked.
+  gh-runner:
+    # AUT-2469: the official image ships amd64 + arm64 binaries; on EP5 Docker
+    # pulls the arm64 variant. We build a thin wrapper that only adds the
+    # registration-token-refresh entrypoint; the build runs on the x64 runner,
+    # but buildx cross-builds the arm64 variant (the Oracle VM is aarch64).
+    # Pin the base by digest (AUT-1533); update this digest when rotating.
+    build:
+      context: .
+      dockerfile: docker/runner/Dockerfile
+      args:
+        RUNNER_BASE_IMAGE: ${GH_RUNNER_BASE_IMAGE:-ghcr.io/actions/actions-runner:latest}
+    image: ghcr.io/cannonfodder151/autobrain-gh-runner:arm64-latest
+    pull_policy: always
+    restart: unless-stopped
+    privileged: true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - type: bind
+        source: ${SECRETS_DIR:-/data/autobrain/secrets}
+        target: /run/secrets
+        read_only: true
+    environment:
+      GITHUB_PAT_FILE: /run/secrets/github_pat
+      GITHUB_REPOSITORY: ${GITHUB_REPOSITORY:-CannonFodder151/autobrain}
+      RUNNER_NAME: ${RUNNER_NAME:-gh-runner-autobrain-arm64}
+      RUNNER_LABELS: ${RUNNER_LABELS:-self-hosted,Linux,ARM64}
+      RUNNER_GROUP: ${RUNNER_GROUP:-Default}
+      RUNNER_REPLACE: ${RUNNER_REPLACE:-true}
+      DISABLE_RUNNER_UPDATE: ${DISABLE_RUNNER_UPDATE:-false}
+    # CMD ["/entrypoint.sh", "run"] lives in the wrapper Dockerfile (docker/runner)
+    # so the runner entrypoint can refresh the registration token before
+    # delegating. No command override needed in compose.
+
   # 9Router AI router (AUT-473). Published on `0.0.0.0:20128` so it is reachable
   # on the host's public interface, but the host firewall (`fw-keeper`) restricts
   # :20128 to the allow-listed dev egress IP (`122.199.30.128`, see

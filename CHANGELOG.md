@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-2469)
+- fix(hosted, ci): replace standalone `myoung34/github-runner:latest` (amd64-only) on EP5 with a compose-managed `gh-runner` service using the official multi-arch `ghcr.io/actions/actions-runner:latest` (includes linux/arm64 binaries). The myoung34 image shipped amd64-only `.NET` binaries (`Runner.Listener`, `libcoreclr.so`); on the aarch64 Oracle VM the runner was in a permanent restart loop (`ldd: ./bin/libcoreclr.so: No such file or directory`), leaving ARM CI on Hosted dead. `build-hosted.yml` arm64 builds are unblocked. `docker/runner/entrypoint.sh` refreshes the short-lived runner registration token on every boot via the PAT secret file (AUT-1533 `*_FILE` pattern). `docker-compose.hosted.yml` now defines the `gh-runner` service; `scripts/seed-secrets.sh` seeds `github_pat` into the secrets dir. Deployment: stop the old standalone container before `docker compose up` to avoid a name collision (`docker stop gh-runner-autobrain-arm64 && docker rm gh-runner-autobrain-arm64`).
+
 ## [0.3.232] - 2026-09-04
 ### Fixed (AUT-2472)
 - docker(ai): Playwright 1.62+ removed `chrome-sandbox` under `/ms-playwright` (kernel-namespace sandbox replaces SUID). The AUT-1739 `RUN find ... -name chrome-sandbox | chown root:root && chmod 4755` was failing every hosted build with `FATAL: no chrome-sandbox found`. Relaxed the guard: if at least one `chrome-sandbox` is found, re-SUID it; if none, log a warning and continue (the market-data scraper already falls back to `--no-sandbox` per `market-data/browser.py:81,158`). Keeps the build green and the AUT-2258 hard-fail behaviour when `chrome-sandbox` exists but is mis-owned.
