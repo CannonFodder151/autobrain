@@ -2,9 +2,7 @@
 
 from datetime import date, datetime
 
-from pydantic import BaseModel, Field
-
-from app.models.vehicle import PowertrainType
+from pydantic import BaseModel, Field, field_serializer
 
 
 class RegoLookupRequest(BaseModel):
@@ -26,6 +24,7 @@ class RegoLookupResponse(BaseModel):
     body_type: str | None = None
     colour: str | None = None
     expiry_date: str | None = None
+    status: str | None = None  # AUT-2416: "registered" / "expired" / provider-specific
     description: str | None = None
     state: str | None = None
     source: str = "unknown"
@@ -51,7 +50,6 @@ class VehicleCreate(BaseModel):
     club_reg: bool = False
     auto_suggest_service: bool = False
     fuel_type: str | None = None
-    powertrain: PowertrainType = PowertrainType.ICE
 
 
 class VehicleUpdate(BaseModel):
@@ -97,9 +95,18 @@ class VehicleOut(BaseModel):
     auto_suggest_service: bool = False
     fuel_type: str | None = None
     powertrain: PowertrainType = PowertrainType.ICE
+    rego_status: str | None = None  # AUT-2415/2416: cached lookup status
+    rego_expiry_date: str | None = None  # ISO YYYY-MM-DD; null when unknown
     is_shared: bool = False
     shared_by: str | None = None  # owner display name when viewed via a share
     created_at: datetime
+
+    @field_serializer("rego_expiry_date")
+    def _serialise_expiry(self, v):
+        # Always emit ISO date string (frontend can drop "T00:00:00" cleanly)
+        if isinstance(v, date):
+            return v.isoformat()
+        return v
 
     model_config = {"from_attributes": True}
 

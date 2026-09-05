@@ -220,6 +220,13 @@ def _map_provider(data, plate: str, state: str) -> dict | None:
 
     vin = get("vin", "chassis", "vin_number", "chassis_number", "vin_chassis", "vehicle_vin")
     description = get("description", "detailed_description", "vehicle_description")
+    status_raw = str(get("registration_status", "status", "rego_status") or "").lower()
+    if status_raw in ("valid", "registered", "current", "active"):
+        status_norm = "registered"
+    elif status_raw in ("expired", "unregistered", "cancelled"):
+        status_norm = "expired"
+    else:
+        status_norm = status_raw or "registered"
 
     return {
         "rego": str(get("registration_number", "registration_no", "rego", "plate", "registration") or plate),
@@ -232,6 +239,7 @@ def _map_provider(data, plate: str, state: str) -> dict | None:
         "body_type": str(get("body", "body_type", "body_style", "body_type_description") or ""),
         "colour": str(get("colour", "color", "vehicle_colour") or ""),
         "expiry_date": str(get("expiry_date", "registration_expiry", "rego_expiry") or ""),
+        "status": status_norm,
         "description": str(description) if description else None,
         "state": state,
         "source": "provider",
@@ -314,4 +322,9 @@ def _result(plate: str, hit: tuple, source: str, state: str, matched: str | None
         "state": state,
         "source": source,
         "matched": matched,
+        # Synthetic lookups can't know status; treat as "registered" (heuristic
+        # never claims expired, it just doesn't know). The frontend badge
+        # renders nothing when the cache is empty.
+        "status": "registered",
+        "expiry_date": "",
     }
