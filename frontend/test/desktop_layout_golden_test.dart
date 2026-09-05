@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import 'package:autobrain/core/api_client.dart';
 import 'package:autobrain/core/auth_state.dart';
+import 'package:autobrain/core/theme.dart';
 import 'package:autobrain/core/models.dart';
 import 'package:autobrain/screens/home/home_screen.dart';
 import 'package:autobrain/screens/vehicles/vehicle_list_screen.dart';
