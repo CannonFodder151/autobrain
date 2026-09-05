@@ -384,6 +384,86 @@ class AdvisorReplaceData(BaseModel):
     funding_gap: FundingGapBand = Field(default_factory=FundingGapBand)
     note: str | None = None
 
+
+class UpgradeOption(BaseModel):
+    """Next-tier option for the same model (AUT-2447).
+
+    ``score`` is a deterministic 0..1 relevance ranking (higher = closer
+    tier fit). ``price_mid`` is the cached market median for that year,
+    adjusted by the existing condition + odometer pipeline; ``price_delta``
+    is the cost of stepping up from the user's current vehicle to this
+    option (positive = costs more; negative = cheaper tier / older year).
+    """
+
+    make: str
+    model: str
+    year: int
+    tier_label: str  # "newer (nxt)", "newer (+2)", "older (-1)"
+    price_low: float | None = None
+    price_mid: float | None = None
+    price_high: float | None = None
+    price_delta: float | None = None
+    score: float = 0.0
+    note: str | None = None
+
+class SimilarVehicleSuggestion(BaseModel):
+    """Cross-brand suggestion in the same segment (AUT-2447).
+
+    Ranked by a deterministic relevance score: body_type match × age
+    proximity × price-band proximity (all normalised to [0, 1] and
+    averaged). Excludes the user's current make/model so the list never
+    duplicates the upgrade-options block.
+    """
+
+    make: str
+    model: str
+    year: int | None = None
+    body_type: str | None = None
+    price_mid: float | None = None
+    score: float = 0.0
+    note: str | None = None
+
+class TradeUpDelta(BaseModel):
+    """Current -> upgrade delta + indicative finance delta (AUT-2447).
+
+    The finance delta is a simple indicative repayment using a flat-rate
+    amortization over ``finance_term_months`` (default 60) at ``rate_pct``
+    (default 7.5% p.a.) on ``(upgrade_price - trade_in_mid) * (1 -
+    deposit_pct)``. Deposit default 20%. Constants chosen to match the
+    AU new-car floor (RACV / ATO guides) and documented here so neither
+    the UI nor the AI fallback has to invent them.
+    """
+
+    currency: str = "AUD"
+    finance_term_months: int = 60
+    rate_pct: float = 7.5
+    deposit_pct: float = 20.0
+    principal: float | None = None  # upgrade_price - trade_in_mid
+    monthly_repayment: float | None = None
+    total_interest: float | None = None
+    surplus: bool = False
+    note: str | None = None
+
+class AdvisorUpgradeData(BaseModel):
+    """Structured output for ``GET /advisor/upgrade`` (AUT-2447).
+
+    Three blocks: same-model upgrade options (next 1-2 tiers), similar
+    cross-brand suggestions, and a per-upgrade trade-up delta table
+    (price delta + indicative monthly). All deterministic — anchors on
+    the cached market median the Value module already uses, no AI.
+    """
+
+    currency: str = "AUD"
+    current_value: float | None = None
+    upgrade_options: list[UpgradeOption] = Field(default_factory=list)
+    similar_vehicles: list[SimilarVehicleSuggestion] = Field(default_factory=list)
+    trade_up: list[TradeUpDelta] = Field(default_factory=list)
+    finance_term_months: int = 60
+    rate_pct: float = 7.5
+    deposit_pct: float = 20.0
+    note: str | None = None
+
+
 class AdvisorResponse(BaseModel):
     """Universal Ownership Advisor response envelope."""
 
