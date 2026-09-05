@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.237] - 2026-09-05
+
 ### Fixed (AUT-2108)
 - fix(backend): `Settings` now declares `AI_ROUTER_API_KEY_FILE` and a `model_validator` populates `AI_ROUTER_API_KEY` from the secret file when the plain env var is unset. Compose already set `AI_ROUTER_API_KEY_FILE=/run/secrets/ai_router_api_key` (AUT-1533), but the field did not exist on `Settings`, so the file was never read and embedding requests to the 9Router went unauthenticated. Plain env still wins; missing files are silently skipped. Parent: AUT-2091.
 
