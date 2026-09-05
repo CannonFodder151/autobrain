@@ -131,6 +131,74 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Added (AUT-2445)
 - backend(advisor): Ownership Advisor Vehicle Value module — deterministic market value with comparables and trade-in band. New `GET /api/v1/advisor/value` route (per ADR 0001) anchors on the cached `market_listing_cache` median (24h TTL, same as `/valuation/market`), applies a condition multiplier (excellent/good/fair/poor) and an odometer-vs-benchmark adjustment (±5% per 20k km off 15k km/yr benchmark, capped ±10%), surfaces a tight low/mid/high band, lists comparables (same make/model, year ±3y from the cache), and provides an industry-standard dealer trade-in band (75/82/90% of mid). Free accounts get 403; demo accounts allowed. New files: `backend/app/services/advisor.py` (deterministic helpers + comparables search + trade-in band), `backend/app/schemas/advisor.py` (shared `AdvisorResponse` envelope for all six advisor sub-modules), `backend/app/api/v1/advisor.py` (route). Tests: `backend/tests/test_advisor_value.py` (14 pure-helper tests covering condition/km multipliers, trade-in ratios, entitlement, envelope shape; 2 FastAPI route tests guarded by `pytest.skip` until the pre-existing `fuel_prices.py` `from __future__` syntax error is fixed — see AUT-2496).
 
+### Added (AUT-2541)
+- feat(backend): Home Assistant integration endpoints (`/api/v1/ha/*`). Per-user
+  `abha_<token>` keys with sha256 digest storage + prefix index (mirroring the
+  device-key pattern). User-managed token lifecycle (`POST/GET/DELETE /tokens`);
+  HA-polled read-only sensors: `GET /v1/vehicles`,
+  `/v1/vehicles/{id}/service-intervals`, `/v1/vehicles/{id}/analytics`, and
+  `/v1/service-reminders` (all upcoming services across the user's cars). Auth
+  via `X-HA-API-Key` header; vehicles shared with the user are included.
+- docs: `docs/home-assistant-integration.md` — configuration + sensor/card
+  examples for the `rest` + `rest.sensor` + `rest.select` platforms.
+
+## [0.3.236] - 2026-09-05
+### Fixed (AUT-2568)
+- fix(deploy): frontend healthcheck in `docker-compose.yml`, `docker-compose.prod.yml`, and `docker-compose.hosted.yml` now references `${BACKEND_URL:-http://backend:8000}` (matching the existing `environment:` block) instead of bare `${BACKEND_URL}`, so compose interpolation can never resolve the URL to empty at deploy time (AUT-2350 follow-up: was producing `wget: bad address "/health"` and flipping the Portainer frontend container unhealthy). Also fixes the grep pattern from `"status": "ok"` to `"status":"ok"` so it matches FastAPI/ORJSON compact output `{"status":"ok",...}` — the with-space variant never matched and would silently re-break the healthcheck on a fresh redeploy from main. Repo now matches the stack actually running on EP5 (frontend Healthy).
+
+## [0.3.235] - 2026-09-04
+### Fixed (AUT-2467)
+- fix(backend): resolve structlog `source` kwarg collision in `ingest_fuel_prices` (`app/workers/tasks.py:509`). `res` dict from `ingest_all_fuel` already contains a `source` key; passing `source=source` as a separate kwarg caused `TypeError: got multiple values for keyword argument 'source'`. Now logged as `logger.info("fuel_ingest_summary", **res)`. Also fixed `_run(_run())` in `run_due_checks` (`app/services/notify.py:257`) — inner `_run` had no args, so the coroutine was never scheduled. Renamed to `_coro` and routed through `tasks._run()`. Adds regression tests `test_ingest_fuel_prices_no_typeerror_when_source_in_result` and `test_run_due_checks_calls_check_for_each_vehicle`.
+
+## [0.3.234] - 2026-09-04
+
+### Fixed (AUT-2484)
+- redeploy(homed): bump autobrain-backend :hosted-arm64 digest to include AUT-2277 duplicate-FuelPrice-class fix. EP5 was crash-looping on the pre-fix image (two `FuelPrice` classes claiming `fuel_prices` in `Base.metadata`). Source fix is already merged (f7db5b6d); rebuilt arm64 image from main `6e394007` and pinned the new digest in `docker-compose.hosted.yml`.
+
+### Fixed (AUT-2469)
+- fix(hosted, ci): replace standalone `myoung34/github-runner:latest` (amd64-only) on EP5 with a compose-managed `gh-runner` service using the official multi-arch `ghcr.io/actions/actions-runner:latest` (includes linux/arm64 binaries). The myoung34 image shipped amd64-only `.NET` binaries (`Runner.Listener`, `libcoreclr.so`); on the aarch64 Oracle VM the runner was in a permanent restart loop (`ldd: ./bin/libcoreclr.so: No such file or directory`), leaving ARM CI on Hosted dead. `build-hosted.yml` arm64 builds are unblocked. `docker/runner/entrypoint.sh` refreshes the short-lived runner registration token on every boot via the PAT secret file (AUT-1533 `*_FILE` pattern). `docker-compose.hosted.yml` now defines the `gh-runner` service; `scripts/seed-secrets.sh` seeds `github_pat` into the secrets dir. Deployment: stop the old standalone container before `docker compose up` to avoid a name collision (`docker stop gh-runner-autobrain-arm64 && docker rm gh-runner-autobrain-arm64`).
+
+## [0.3.232] - 2026-09-04
+### Fixed (AUT-2472)
+- docker(ai): Playwright 1.62+ removed `chrome-sandbox` under `/ms-playwright` (kernel-namespace sandbox replaces SUID). The AUT-1739 `RUN find ... -name chrome-sandbox | chown root:root && chmod 4755` was failing every hosted build with `FATAL: no chrome-sandbox found`. Relaxed the guard: if at least one `chrome-sandbox` is found, re-SUID it; if none, log a warning and continue (the market-data scraper already falls back to `--no-sandbox` per `market-data/browser.py:81,158`). Keeps the build green and the AUT-2258 hard-fail behaviour when `chrome-sandbox` exists but is mis-owned.
+
+### Added
+- feat(fuel): AUT-2381 multi-source data-quality arbitration (best-price selection per station, SourceTrust enum)
+### Fixed (AUT-2402 B1)
+- fix(backend): `enable_utc=False` on the Celery app. AUT-2375 set `timezone="Australia/Sydney"` but left `enable_utc=True`, which forces Celery to interpret crontab schedules in UTC regardless of the `timezone` value — so `crontab(hour=2)` was firing at 02:00 UTC = 13:00 AEST, not the intended 02:00 AEST off-peak window. With `enable_utc=False`, the cron resolves in `Australia/Sydney` and the daily ingest lands at the intended wall-clock time. Test `test_celery_app_beat_uses_sydney_timezone_for_off_peak_cron` now asserts both `timezone == "Australia/Sydney"` and `enable_utc is False`.
+
+### Fixed (AUT-2404)
+- fix(backend): drop legacy `ingest-fuel-prices` beat entry from `app/workers/celery_app.py`. AUT-2375 added `fuel-ingest-all-daily` on the same 02:00 cron, so both fired daily and each upstream fuel feed (WA FuelWatch, NSW FuelCheck, QLD Fuel Prices) was hit twice per day for identical rows. Backwards-compat alias `ingest_fuel_prices = ingest_fuel_all` in `tasks.py` is preserved for dashboard / ad-hoc `.delay()` callers.
+
+### Fixed (AUT-2403 rebase follow-ups)
+- fix(backend): `app/services/fuel_prices.py` `from __future__ import annotations` moved to line 1 (was buried after the module docstring, line 188) so test_api / test_fuel_price_alerts can collect the module under Python 3.13. Pre-existing since PR #347 (AUT-1868) — surfaced by the AUT-2403 rebase because the smoke collection now hits the import path.
+- fix(backend): add `FuelPriceWatchlistIn` / `FuelPriceWatchlistOut` pydantic schemas (`direction ∈ {up,down,both}`, `threshold_pct > 0`, defaults `both` / `5.0`). `backend/app/api/v1/fuel_prices.py` imports them since PR #347 but the schema definitions were never added, so 30+ test modules fail pytest collection (`cannot import name 'FuelPriceWatchlistIn'`).
+- feat(backend): add `compute_price_change(price, previous)` pure helper to `app/services/fuel_prices.py` — day-over-day % move + up/down direction (AUT-1859). Returns `(None, None)` until both prices are present and previous is non-zero; zero delta is `(0.0, None)`. Used by `app/workers/tasks.py::check_fuel_price_alerts` (already importing it) and the watchlist unit tests.
+- fix(backend): alembic migration `aut2375_fuel_history_index` `down_revision` rebased from `z2a3b4c5d6e7` to `aut2434_vehicle_powertrain` so the migration chain has a single head after AUT-2434 (vehicle powertrain) landed on main (originally `aut1859_fuel_price_alerts`, then `aut2434_vehicle_powertrain` once that migration reached main).
+
+### Added (AUT-2375)
+- feat(backend): Servo Spy fuel ingest now runs **once per day at 02:00 AEST** via Celery beat (`fuel-ingest-all-daily` cron, `timezone="Australia/Sydney"`, `enable_utc=False` so crontab schedules resolve in `Australia/Sydney` rather than UTC — see AUT-2402 B1). The previous 6-hour interval was over-fetching every upstream fuel API — every client request still served cached rows, but the schedule itself made a fresh API call four times a day for no UX gain. New schedule entries:
+    - `fuel-ingest-all-daily` (`ingest_fuel_all`) — single source of truth for the daily sweep.
+    - `ingest_fuel_wa`, `ingest_fuel_nsw`, `ingest_fuel_qld` — per-state tasks operators can `.delay()` to retry a single feed without re-running the others.
+  - When AUT-2374 lands the SA/TAS/NT ingesters they hook into `ingest_fuel_all` automatically; no further scheduler changes needed.
+- feat(backend): `GET /api/v1/fuel/stations/{station_id}/history?days=30&fuel_type=...` — premium-gated, reads exclusively from the `fuel_prices` cache, never fans out to the upstream APIs. One 30-day series per fuel type, ascending `effective_at`.
+- feat(backend): `_replace_station_prices` now **keeps the last 30 days** of price history instead of wiping the table on every ingest run. Upstream duplicates (same `fuel_type` + `effective_at`) are still replaced with the fresher value, then anything older than the retention window is pruned in one DELETE. Same `(station_id, fuel_type)` upsert semantics for the latest row.
+- chore(backend): alembic migration `aut2375_fuel_history_index` adds `ix_fuel_prices_station_fuel_eff` on `(station_id, fuel_type, effective_at)` so the history endpoint serves without a sort step. Idempotent.
+- test(backend): `tests/test_aut2375_daily_fuel_scheduler.py` is DB-free and asserts the history endpoint is premium-gated, the route is on the router, the beat schedule uses a cron (not a 6-hour interval), the timezone is `Australia/Sydney` with `enable_utc=False` (AUT-2402 B1), and the per-source tasks are registered.
+## [0.3.231] - 2026-09-04
+### Added (AUT-2448)
+- backend(advisor): Ownership Advisor Finance module — deterministic buy / finance / lease (and novated-lease toggle, future-flagged). New `POST /api/v1/advisor/finance` route (per ADR 0001) takes `{down_payment, term_months, rate_pct, novated?}`, anchors `vehicle_price` on the value module's deterministic `mid` (so finance and value never disagree), and returns four mode blocks: `buy` (outright, zero monthly / interest), `finance` (standard amortising loan — full per-period schedule + total interest + total cost), `lease` (operating lease — residual % + residual value + money factor + monthly, scaled 25–75% across 12–60 month terms), and `novated` (gated by the `novated` request flag, always returns `status: "coming_soon"` until EV / FBT rules land in a follow-up ADR). Term is clamped per-mode (finance 12–84m, lease 12–60m); down payment caps at the vehicle price; zero-price vehicles emit a `note` instead of fabricating numbers. No 9Router / no AI — pure function `compute_finance_plan()` in `app.services.advisor`. New schemas `AmortizationRow`, `AdvisorFinanceModeBuy/Finance/Lease/Novated`, `AdvisorFinanceData`, `AdvisorFinanceRequest` in `app.schemas.advisor`. New `tests/test_advisor_finance.py` (19 cases: pure-helper amortisation / lease / residual / money-factor; per-mode shape; novated gating; term clamping; zero-price handling; zero-rate promo; textbook formula match).
+
+## [0.3.230] - 2026-09-04
+### Fixed (AUT-2481)
+- frontend(servo-spy): dart2js compile error on `_cartoApiKey`/`_cartoKeyParam`. The two were declared as instance fields on `_ServoSpyScreenState` but referenced from `_ServoSpyMapState.build()` (different class, so name-resolution failed at compile time). Promoted both to file-private top-level `const` so both widget trees see them; removed the `const` from `_cartoKeyParam` (the runtime `isEmpty` check is not a constant expression).
+
+### Added (AUT-2434)
+- backend: vehicle powertrain field (`ICE | EV | HEV | PHEV`). New `PowertrainType` enum on `Vehicle` model with default `ICE`. Alembic migration `aut2434_vehicle_powertrain` adds `vehicles.powertrain VARCHAR(8) NOT NULL DEFAULT 'ICE'` — all pre-existing rows backfill to ICE. API responses (`VehicleOut`) now include `powertrain`; create/update accept `powertrain` in request bodies. Tests: `backend/tests/test_aut2434_powertrain.py` (6 offline cases: column present, enum locked to 4 tokens, Create/Update/Out serialization, default-ICE contract).
+
+### Added (AUT-2445)
+- backend(advisor): Ownership Advisor Vehicle Value module — deterministic market value with comparables and trade-in band. New `GET /api/v1/advisor/value` route (per ADR 0001) anchors on the cached `market_listing_cache` median (24h TTL, same as `/valuation/market`), applies a condition multiplier (excellent/good/fair/poor) and an odometer-vs-benchmark adjustment (±5% per 20k km off 15k km/yr benchmark, capped ±10%), surfaces a tight low/mid/high band, lists comparables (same make/model, year ±3y from the cache), and provides an industry-standard dealer trade-in band (75/82/90% of mid). Free accounts get 403; demo accounts allowed. New files: `backend/app/services/advisor.py` (deterministic helpers + comparables search + trade-in band), `backend/app/schemas/advisor.py` (shared `AdvisorResponse` envelope for all six advisor sub-modules), `backend/app/api/v1/advisor.py` (route). Tests: `backend/tests/test_advisor_value.py` (14 pure-helper tests covering condition/km multipliers, trade-in ratios, entitlement, envelope shape; 2 FastAPI route tests guarded by `pytest.skip` until the pre-existing `fuel_prices.py` `from __future__` syntax error is fixed — see AUT-2496).
+
 ## [0.3.229] - 2026-09-04
 ### Added (AUT-2415)
 - mobile+web: rego status badge + expiry on every vehicle card. New `Vehicle.regoStatus` / `regoExpiryDate` fields (parsed from `rego_status` / `rego_expiry_date`) drive a green/red `RegoStatusBadge` widget shown on the home hero card and the vehicle-list rows. Forward-compatible with AUT-2414's nightly Celery beat job: when `rego_status` / `rego_expiry_date` are absent the badge is hidden entirely. Gated behind `AuthState.premium` so free accounts see no rego chrome. `formattedRegoExpiry` renders `12 Mar 2027` style dates. Tests: `frontend/test/rego_status_badge_test.dart`.
