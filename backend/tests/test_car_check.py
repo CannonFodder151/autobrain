@@ -97,7 +97,7 @@ class TestParseListingUrl:
         result = parse_listing_url("https://www.carsguide.com.au/buy/2018-mazda-3-touring/abc123")
         assert result is not None
         assert result["make"] == "mazda"
-        assert result["model"] == "touring"
+        assert result["model"] == "3-touring"
         assert result["year"] == 2018
 
     def test_carsales(self):
