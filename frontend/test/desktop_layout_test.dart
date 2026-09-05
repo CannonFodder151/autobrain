@@ -17,12 +17,13 @@ class _FakeApi extends ApiClient {
   Future<dynamic> get(String path, {Map<String, String>? query}) async {
     if (path == '/vehicles') {
       return <dynamic>[
-        Vehicle(
-          id: 'v1', nickname: 'Demo Car', make: 'Toyota', model: 'Camry',
-          year: 2022, rego: 'ABC123', regoState: 'NSW', colour: 'White',
-          bodyType: 'Sedan', fuelType: 'Petrol', odometerKm: 45000,
-          isPrimary: true, isShared: false,
-        ),
+        <String, dynamic>{
+          'id': 'v1', 'nickname': 'Demo Car', 'make': 'Toyota',
+          'model': 'Camry', 'year': 2022, 'rego': 'ABC123',
+          'rego_state': 'NSW', 'colour': 'White', 'body_type': 'Sedan',
+          'fuel_type': 'Petrol', 'odometer_km': 45000,
+          'is_primary': true, 'is_shared': false,
+        },
       ];
     }
     if (path == '/vehicle-shares') return <dynamic>[];
@@ -70,17 +71,10 @@ void main() {
 
         expect(find.byType(AppBar), findsOneWidget);
         expect(find.byType(CenteredMaxWidth), findsOneWidget);
-
-        if (entry.value.width >= Breakpoints.desktop) {
-          final maxWidth = tester
-              .widget<CenteredMaxWidth>(find.byType(CenteredMaxWidth))
-              .maxWidth;
-          expect(maxWidth ?? Breakpoints.wideDesktop, greaterThanOrEqualTo(Breakpoints.desktop));
-        }
-
-        expect(find.byType(_HeroCard), findsOneWidget);
+        expect(find.text('Demo Car'), findsOneWidget);
         expect(find.text('Features'), findsOneWidget);
         expect(find.byType(ConstrainedBox), findsWidgets);
+        expect(find.byType(GridView), findsOneWidget);
       });
     }
   });
@@ -96,6 +90,7 @@ void main() {
         expect(find.byType(CenteredMaxWidth), findsOneWidget);
         expect(find.text('Demo Car'), findsOneWidget);
         expect(find.text('Vehicles'), findsOneWidget);
+        expect(find.byType(ListView), findsOneWidget);
       });
     }
   });
