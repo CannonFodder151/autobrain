@@ -36,6 +36,17 @@ def test_vehicle_create_accepts_ev() -> None:
     assert vc.model_dump()["powertrain"] == "EV"
 
 
+def test_vehicle_create_accepts_phev() -> None:
+    vc = VehicleCreate(nickname="Leaf", powertrain=PowertrainType.PHEV)
+    assert vc.model_dump()["powertrain"] == "PHEV"
+
+
+def test_vehicle_create_roundtrip_all_powertrains() -> None:
+    for p in PowertrainType:
+        vc = VehicleCreate(nickname="V", powertrain=p)
+        assert vc.model_dump()["powertrain"] == p.value
+
+
 def test_vehicle_update_carries_powertrain() -> None:
     assert VehicleUpdate(powertrain=PowertrainType.PHEV).powertrain is PowertrainType.PHEV
     assert VehicleUpdate().powertrain is None

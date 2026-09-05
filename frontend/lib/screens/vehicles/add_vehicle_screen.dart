@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/auth_state.dart';
 import '../../core/fuel_types.dart';
+import '../../core/models.dart';
 import '../../widgets/responsive.dart';
 
 class AddVehicleScreen extends StatefulWidget {
@@ -27,6 +28,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
   int? _year;
   String _state = 'VIC';
   String _vehicleType = 'car';
+  String _powertrain = 'ICE';
   bool _busy = false;
   bool _isPrimary = false;
   bool _clubReg = false;
@@ -156,6 +158,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
         'is_primary': _isPrimary,
         'club_reg': _clubReg,
         'fuel_type': _fuelType,
+        'powertrain': _powertrain,
       });
       if (mounted) Navigator.pop(context);
     } catch (e) {
@@ -234,6 +237,36 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                 ],
                 onChanged: (v) => setState(() => _vehicleType = v ?? 'car'),
               ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: _powertrain,
+                decoration: const InputDecoration(
+                  labelText: 'Powertrain',
+                  hintText: 'ICE / EV / HEV / PHEV',
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'ICE', child: Text('ICE (petrol/diesel)')),
+                  DropdownMenuItem(value: 'EV', child: Text('EV (electric)')),
+                  DropdownMenuItem(value: 'HEV', child: Text('HEV (hybrid)')),
+                  DropdownMenuItem(value: 'PHEV', child: Text('PHEV (plug-in hybrid)')),
+                ],
+                onChanged: (v) => setState(() => _powertrain = v ?? 'ICE'),
+              ),
+              if (PowertrainType.isElectric(_powertrain)) ...[
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(
+                    _powertrain == PowertrainType.ev
+                        ? 'Electric-only vehicle: fuel features hidden, Electric Spy + Electricity logbook shown.'
+                        : 'Plug-in hybrid: fuel and electric features both shown.',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.primary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 12),
               Row(
                 children: [

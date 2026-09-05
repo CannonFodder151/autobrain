@@ -1,5 +1,22 @@
 part of models;
 
+class PowertrainType {
+  static const ice = 'ICE';
+  static const ev = 'EV';
+  static const hev = 'HEV';
+  static const phev = 'PHEV';
+
+  static const all = <String>[
+    PowertrainType.ice,
+    PowertrainType.ev,
+    PowertrainType.hev,
+    PowertrainType.phev,
+  ];
+
+  static bool get isElectric(String? p) =>
+      p == PowertrainType.ev || p == PowertrainType.hev || p == PowertrainType.phev;
+}
+
 class Vehicle {
   final String id;
   final String nickname;
@@ -10,6 +27,7 @@ class Vehicle {
   final bool isPrimary, clubReg;
   final bool autoSuggestService;
   final String? fuelType;
+  final String powertrain;
   final bool isShared;
   final String? sharedBy;
   /// AUT-2415 — populated nightly by the AUT-2414 Celery beat job. Null until
@@ -38,6 +56,7 @@ class Vehicle {
     this.clubReg = false,
     this.autoSuggestService = false,
     this.fuelType,
+    this.powertrain = 'ICE',
     this.isShared = false,
     this.sharedBy,
     this.regoStatus,
@@ -123,7 +142,8 @@ class Vehicle {
         isPrimary: (j['is_primary'] as bool?) ?? false,
         clubReg: (j['club_reg'] as bool?) ?? false,
         autoSuggestService: (j['auto_suggest_service'] as bool?) ?? false,
-        fuelType: (j['fuel_type'] as String?),
+        fuelType: j['fuel_type'] as String?,
+        powertrain: (j['powertrain'] as String?) ?? 'ICE',
         isShared: (j['is_shared'] as bool?) ?? false,
         sharedBy: j['shared_by'] as String?,
         regoStatus: j['rego_status'] as String?,

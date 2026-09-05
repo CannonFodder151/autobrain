@@ -126,4 +126,25 @@ void main() {
       expect(e.isAutoLogged, isFalse);
     });
   });
+
+  group('Vehicle powertrain', () {
+    test('defaults to ICE when absent', () {
+      final v = Vehicle.fromJson(const {'id': 'v1', 'nickname': 'Old'});
+      expect(v.powertrain, 'ICE');
+    });
+
+    test('parses EV', () {
+      final v = Vehicle.fromJson(const {'id': 'v2', 'nickname': 'Tesla', 'powertrain': 'EV'});
+      expect(v.powertrain, 'EV');
+      expect(PowertrainType.isElectric('EV'), isTrue);
+    });
+
+    test('isElectric covers EV/HEV/PHEV, not ICE', () {
+      expect(PowertrainType.isElectric('ICE'), isFalse);
+      expect(PowertrainType.isElectric('EV'), isTrue);
+      expect(PowertrainType.isElectric('HEV'), isTrue);
+      expect(PowertrainType.isElectric('PHEV'), isTrue);
+      expect(PowertrainType.isElectric(null), isFalse);
+    });
+  });
 }

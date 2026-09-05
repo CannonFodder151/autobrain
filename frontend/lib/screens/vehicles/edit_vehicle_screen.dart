@@ -31,6 +31,7 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
   int? _year;
   String _state = 'VIC';
   String _vehicleType = 'car';
+  String _powertrain = 'ICE';
   bool _busy = false;
   bool _isPrimary = false;
   bool _clubReg = false;
@@ -57,6 +58,7 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
     _odometer = TextEditingController(text: '${v.odometerKm ?? ''}');
     _year = v.year;
     _vehicleType = v.vehicleType;
+    _powertrain = v.powertrain;
     _isPrimary = v.isPrimary;
     _clubReg = v.clubReg;
     _autoSuggest = v.autoSuggestService;
@@ -147,6 +149,7 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
         'club_reg': _clubReg,
         'auto_suggest_service': _autoSuggest,
         'fuel_type': _fuelType,
+        'powertrain': _powertrain,
       });
       if (mounted) Navigator.pop(context);
     } catch (e) {
@@ -208,14 +211,44 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
                 onChanged: (v) => setState(() => _vehicleType = v ?? 'car'),
               ),
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _rego,
-                      decoration: const InputDecoration(labelText: 'Rego'),
+              DropdownButtonFormField<String>(
+                value: _powertrain,
+                decoration: const InputDecoration(
+                  labelText: 'Powertrain',
+                  hintText: 'ICE / EV / HEV / PHEV',
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'ICE', child: Text('ICE (petrol/diesel)')),
+                  DropdownMenuItem(value: 'EV', child: Text('EV (electric)')),
+                  DropdownMenuItem(value: 'HEV', child: Text('HEV (hybrid)')),
+                  DropdownMenuItem(value: 'PHEV', child: Text('PHEV (plug-in hybrid)')),
+                ],
+                onChanged: (v) => setState(() => _powertrain = v ?? 'ICE'),
+              ),
+              if (PowertrainType.isElectric(_powertrain)) ...[
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(
+                    _powertrain == PowertrainType.ev
+                        ? 'Electric-only vehicle: fuel features hidden, Electric Spy + Electricity logbook shown.'
+                        : 'Plug-in hybrid: fuel and electric features both shown.',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.primary,
+                      fontSize: 12,
                     ),
                   ),
+                ),
+              ],
+              const SizedBox(height: 12),
+              Row(
+                 children: [
+                   Expanded(
+                     child: TextFormField(
+                       controller: _rego,
+                       decoration: const InputDecoration(labelText: 'Rego'),
+                     ),
+                   ),
                   const SizedBox(width: 8),
                   SizedBox(
                     width: 110,

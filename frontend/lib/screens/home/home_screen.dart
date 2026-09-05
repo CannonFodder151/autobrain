@@ -15,6 +15,7 @@ import '../admin/admin_screen.dart';
 import '../analytics/analytics_screen.dart';
 import '../../community_garage/community_garage_screen.dart';
 import '../diagnostics/diagnostics_screen.dart';
+import '../electricity/electricity_screen.dart';
 import '../electric_spy/electric_spy_screen.dart';
 import '../fuel/fuel_screen.dart';
 import '../fuel/petrol_price_map_screen.dart';
@@ -388,19 +389,21 @@ class _FeatureGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDesktop = context.isDesktop;
+    final isElectric = PowertrainType.isElectric(vehicle.powertrain);
     final items = [
       _Feature('Timeline', Icons.timeline, const Color(0xFF0B6B6A),
           VehicleTimelineScreen(vehicleId: vehicle.id)),
       _Feature('Services', Icons.build, const Color(0xFF2563EB),
           ServiceListScreen(vehicleId: vehicle.id)),
-      _Feature('Fuel', Icons.local_gas_station, const Color(0xFF16A34A),
-          FuelScreen(vehicleId: vehicle.id)),
+      if (!isElectric)
+        _Feature('Fuel', Icons.local_gas_station, const Color(0xFF16A34A),
+            FuelScreen(vehicleId: vehicle.id)),
       if (!vehicle.clubReg)
         _Feature('Logbook', Icons.book, const Color(0xFF0D9488),
             LogbookScreen(vehicleId: vehicle.id)),
       _Feature('Diagnostics', Icons.medical_services, const Color(0xFFEA580C),
           DiagnosticsScreen(vehicleId: vehicle.id)),
-      const _Feature('Petrol Prices', Icons.map, Color(0xFF0E7490),
+      _Feature('Petrol Prices', Icons.map, Color(0xFF0E7490),
           PetrolPriceMapScreen()),
       _Feature('Mods', Icons.tune, const Color(0xFF7C3AED),
           ModsScreen(vehicleId: vehicle.id)),
@@ -422,11 +425,15 @@ class _FeatureGrid extends StatelessWidget {
       _Feature('Ownership Advisor', Icons.insights,
           const Color(0xFF6366F1),
           _AdvisorEntry(vehicle: vehicle)),
-      const _Feature('Servo Spy', Icons.local_gas_station, Color(0xFFF59E0B),
+      _Feature('Servo Spy', Icons.local_gas_station, Color(0xFFF59E0B),
           ServoSpyScreen()),
-      const _Feature('Electric Spy', Icons.ev_station, Color(0xFF0EA5E9),
-          ElectricSpyScreen()),
-      const _Feature('Community Garage', Icons.groups, Color(0xFF0D9488),
+      if (isElectric) ...[
+        _Feature('Electric Spy', Icons.ev_station, Color(0xFF0EA5E9),
+            ElectricSpyScreen()),
+        _Feature('Electricity', Icons.bolt, Color(0xFFCA8A04),
+            ElectricityScreen(vehicleId: vehicle.id)),
+      ],
+      _Feature('Community Garage', Icons.groups, Color(0xFF0D9488),
           CommunityGarageScreen()),
     ];
     final width = MediaQuery.of(context).size.width;
