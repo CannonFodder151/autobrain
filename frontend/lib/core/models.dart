@@ -8,6 +8,7 @@ library models;
 part 'models/vehicle.dart';
 part 'models/service.dart';
 part 'models/fuel.dart';
+part 'models/electricity.dart';
 part 'models/diagnostic.dart';
 part 'models/trip.dart';
 part 'models/obd.dart';
