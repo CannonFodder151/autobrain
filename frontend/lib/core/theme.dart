@@ -44,7 +44,7 @@ class AppTheme {
         scrolledUnderElevation: 0,
         backgroundColor: scaffold,
         titleTextStyle: TextStyle(
-          fontSize: 20,
+          fontSize: 18,
           fontWeight: FontWeight.w700,
           letterSpacing: 0.2,
           color: scheme.onSurface,
@@ -55,51 +55,51 @@ class AppTheme {
         elevation: 0,
         color: card,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(12),
           side: BorderSide(
             color: isDark
-                ? primaryBlue.withOpacity(0.25)
-                : accentBlue.withOpacity(0.20),
+                ? primaryBlue.withOpacity(0.12)
+                : accentBlue.withOpacity(0.10),
           ),
         ),
         margin: EdgeInsets.zero,
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          minimumSize: const Size(0, 52),
+          minimumSize: const Size(0, 44),
           backgroundColor: isDark ? primaryBlue : accentBlue,
           foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: isDark ? const Color(0xFF1C212A) : const Color(0xFFF0F2F5),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide(
             color: isDark
-                ? primaryBlue.withOpacity(0.18)
-                : accentBlue.withOpacity(0.18),
+                ? primaryBlue.withOpacity(0.14)
+                : accentBlue.withOpacity(0.14),
           ),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: scheme.primary, width: 1.6),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: scheme.primary, width: 1.4),
         ),
       ),
       listTileTheme: const ListTileThemeData(iconColor: null),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
       dividerTheme: DividerThemeData(
-        color: (isDark ? primaryBlue : accentBlue).withOpacity(0.15),
+        color: (isDark ? primaryBlue : accentBlue).withOpacity(0.10),
       ),
     );
   }

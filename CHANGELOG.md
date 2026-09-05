@@ -10,7 +10,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
-### Fixed (AUT-2600)
+### Changed (AUT-2527)
+- polish(frontend, desktop): desktop layout polish + visual hierarchy pass for >=1024px viewports. Typography hierarchy: H1 = 20px bold (AppBar titles), H2/Hero = 18px bold (hero nickname), body = 12/13/14px by resolution tier. Spacing rhythm: 4/8/12/16/24px grid (replaced 20/22/24px ad-hoc gaps with 8/16/24 rhythm). Card density: reduced border radius to 12, halved side-border opacity from 0.25→0.12 dark / 0.20→0.10 light, tightened hero card padding 20→16, grid gap 12→10/14 desktop, feature tile icon 46→42 and label 13→12 on desktop. Sidebar/nav: vehicle list row density reduced (16→12 padding), icon size tapers on desktop, secondary text tapers to 12px. Added `Spacing` constant class with 4/8/16/24/32 ladder + `desktopScale()` helper in `widgets/responsive.dart`.
+
 - fix(frontend): add missing `child:` label on the `ConstrainedBox` wrapping `ListView.builder` in `vehicle_timeline_screen.dart` (line 60). The widget was passed as a positional argument, misaligning the formal argument list and tripping dart2js on every `ConstrainedBox` inside the body (the compile error attached to login_screen.dart / home_screen.dart / signup_screen.dart were the downstream effect). Closes the second-half of AUT-2600 (unblocks `build-hosted.yml` amd64+arm64 `flutter build web` for the AUT-2446 Replace + AUT-2447 Upgrade release).
 
 ### Fixed (AUT-2600)
