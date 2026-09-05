@@ -485,7 +485,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: green.withValues(alpha: 0.12),
+        color: green.withOpacity(0.12),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
@@ -536,7 +536,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: isAnswer ? Colors.green.withValues(alpha: 0.08) : null,
+        color: isAnswer ? Colors.green.withOpacity(0.08) : null,
         border: isAnswer ? Border.all(color: Colors.green.shade700) : null,
         borderRadius: BorderRadius.circular(10),
       ),

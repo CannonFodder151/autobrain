@@ -152,7 +152,7 @@ class AutoBrainApp extends StatelessWidget {
                 bottom: false,
                 child: Container(
                   width: double.infinity,
-                  color: Colors.black.withValues(alpha: 0.55),
+                  color: Colors.black.withOpacity(0.55),
                   padding: const EdgeInsets.symmetric(
                       horizontal: 8, vertical: 2),
                   child: Text(

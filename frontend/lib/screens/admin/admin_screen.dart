@@ -495,7 +495,7 @@ class _VersionBanner extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      color: Colors.blueGrey.withValues(alpha: 0.12),
+      color: Colors.blueGrey.withOpacity(0.12),
       child: Row(
         children: [
           Icon(Icons.info_outline, color: Colors.blueGrey, size: 18),

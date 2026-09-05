@@ -230,7 +230,7 @@ class _MarkerIcon extends StatelessWidget {
         clipBehavior: Clip.none,
         children: [
           Icon(Icons.location_on,
-              size: 34, color: colour.withValues(alpha: 0.9)),
+              size: 34, color: colour.withOpacity(0.9)),
           if (isFavourite)
             const Positioned(
               top: -6,
@@ -257,7 +257,7 @@ class _Legend extends StatelessWidget {
             color: Theme.of(context)
                 .colorScheme
                 .surfaceContainerHighest
-                .withValues(alpha: 0.9),
+                .withOpacity(0.9),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
@@ -285,7 +285,7 @@ class _OsmCredit extends StatelessWidget {
             color: Theme.of(context)
                 .colorScheme
                 .surfaceContainerHighest
-                .withValues(alpha: 0.9),
+                .withOpacity(0.9),
             borderRadius: BorderRadius.circular(8),
           ),
           child: const Text('© OpenStreetMap contributors',
@@ -409,7 +409,7 @@ class _CallSheetState extends State<_CallSheet> {
             if (widget.station.address != null)
               Text(widget.station.address!,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant.withValues(alpha: 0.8),
+                        color: scheme.onSurfaceVariant.withOpacity(0.8),
                       )),
             const SizedBox(height: 12),
             Expanded(
@@ -467,7 +467,7 @@ class _FuelRow extends StatelessWidget {
         backgroundColor: Theme.of(context)
             .colorScheme
             .primaryContainer
-            .withValues(alpha: 0.5),
+            .withOpacity(0.5),
         child: Icon(
           delta == null
               ? Icons.show_chart

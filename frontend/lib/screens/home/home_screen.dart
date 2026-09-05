@@ -247,7 +247,7 @@ class _HeroCard extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [scheme.primary, scheme.primary.withValues(alpha: 0.7), scheme.secondary],
+          colors: [scheme.primary, scheme.primary.withOpacity(0.7), scheme.secondary],
         ),
       ),
       child: Row(
@@ -300,7 +300,7 @@ class _HeroCard extends StatelessWidget {
             width: 72,
             height: 72,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.18),
+              color: Colors.white.withOpacity(0.18),
               shape: BoxShape.circle,
             ),
             child: Icon(
@@ -425,7 +425,7 @@ class _FeatureTile extends StatelessWidget {
               width: 46,
               height: 46,
               decoration: BoxDecoration(
-                color: feature.color.withValues(alpha: 0.14),
+                color: feature.color.withOpacity(0.14),
                 shape: BoxShape.circle,
               ),
               child: Icon(feature.icon, color: feature.color, size: 24),

@@ -407,7 +407,7 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
         if (_locationDenied)
           Container(
             width: double.infinity,
-            color: Colors.amber.withValues(alpha: 0.15),
+            color: Colors.amber.withOpacity(0.15),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: const Text(
               'Location off — showing stations in the selected region. '
@@ -506,7 +506,7 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
                       margin: const EdgeInsets.all(24),
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: scheme.surface.withValues(alpha: 0.95),
+                        color: scheme.surface.withOpacity(0.95),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Column(
@@ -579,7 +579,7 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
                 right: 0,
                 bottom: 0,
                 child: Container(
-                  color: scheme.scrim.withValues(alpha: 0.6),
+                  color: scheme.scrim.withOpacity(0.6),
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   child: const Text(
                     '© OpenStreetMap contributors © CARTO',

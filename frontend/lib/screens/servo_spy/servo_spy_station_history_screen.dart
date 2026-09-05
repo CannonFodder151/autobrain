@@ -165,7 +165,7 @@ class _ChartView extends StatelessWidget {
         dotData: const FlDotData(show: false),
         belowBarData: BarAreaData(
           show: true,
-          color: color.withValues(alpha: 0.12),
+          color: color.withOpacity(0.12),
         ),
       ));
       legends.add(_LegendEntry(fuelType: s.fuelType, color: color));
@@ -239,7 +239,7 @@ class _ChartView extends StatelessWidget {
                       drawVerticalLine: false,
                       horizontalInterval: _yInterval(minY, maxY),
                       getDrawingHorizontalLine: (v) => FlLine(
-                        color: scheme.outlineVariant.withValues(alpha: 0.3),
+                        color: scheme.outlineVariant.withOpacity(0.3),
                         strokeWidth: 1,
                       ),
                     ),
