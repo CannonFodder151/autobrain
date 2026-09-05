@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 
 import '../../core/auth_state.dart';
 import '../../core/fuel_types.dart';
-import '../../widgets/responsive.dart';
 
 class AddVehicleScreen extends StatefulWidget {
   const AddVehicleScreen({super.key});
@@ -176,14 +175,14 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
         padding: const EdgeInsets.all(16),
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 640),
+            constraints: const BoxConstraints(maxWidth: 900),
             child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (_maxVehicles != null)
-                Card(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_maxVehicles != null)
+                    Card(
                   color: _atLimit
                       ? Theme.of(context).colorScheme.errorContainer
                       : Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -391,6 +390,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
           ),
           ),
         ),
+      ),
       ),
     );
   }

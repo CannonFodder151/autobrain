@@ -254,10 +254,13 @@ class _LicenseScreenState extends State<LicenseScreen> {
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? _buildErrorState()
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: ListView(
-                    padding: const EdgeInsets.all(16),
+              : Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 900),
+                    child: RefreshIndicator(
+                      onRefresh: _load,
+                      child: ListView(
+                        padding: const EdgeInsets.all(16),
                     children: [
                       _statusCard(context),
                       if (_iapMode) ...[
@@ -313,6 +316,8 @@ class _LicenseScreenState extends State<LicenseScreen> {
                     ],
                   ),
                 ),
+                ),
+              ),
     );
   }
 

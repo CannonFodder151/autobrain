@@ -548,10 +548,10 @@ packages:
     dependency: transitive
     description:
       name: in_app_purchase_storekit
-      sha256: "66aa6db2236aed23d1b0dd508fb33641ed9878d5e5fb6db5fdbd690b7de6fe98"
+      sha256: "130779a608d1d14ad2dcb6983ee7b52de18979b4e10c1b0958b4bde7bfdf6b81"
       url: "https://pub.dev"
     source: hosted
-    version: "0.4.11+2"
+    version: "0.4.12"
   intl:
     dependency: "direct main"
     description:

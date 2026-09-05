@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 
 import '../../core/auth_state.dart';
 import '../../core/models.dart';
-import '../../widgets/responsive.dart';
 
 class ShareVehicleScreen extends StatefulWidget {
   const ShareVehicleScreen({super.key, required this.vehicle});
@@ -21,11 +20,9 @@ class _ShareVehicleScreenState extends State<ShareVehicleScreen> {
   String? _error;
   List<Map<String, dynamic>> _shares = [];
 
-  /// Pending share invites (the 'Invited' section).
   List<Map<String, dynamic>> get _pending =>
       _shares.where((s) => s['status'] == 'pending').toList();
 
-  /// Accepted shares (the 'Shared with' section).
   List<Map<String, dynamic>> get _accepted =>
       _shares.where((s) => s['status'] == 'accepted').toList();
 
@@ -114,47 +111,47 @@ class _ShareVehicleScreenState extends State<ShareVehicleScreen> {
       appBar: AppBar(title: Text('Share ${widget.vehicle.nickname}')),
       body: Padding(
         padding: const EdgeInsets.all(16),
-        child: SingleChildScrollView(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 640),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 900),
+            child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-              TextField(
-                controller: _email,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
-                  labelText: 'Email of the person to share with',
-                ),
-                onSubmitted: (_) => _share(),
-              ),
-              const SizedBox(height: 12),
-              FilledButton(
-                onPressed: _busy ? null : _share,
-                child: const Text('Share vehicle'),
-              ),
-              const SizedBox(height: 20),
-              Text('Invited', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              if (_loading)
-                const Center(child: CircularProgressIndicator())
-              else if (_error != null)
-                Text(_error!,
-                    style: TextStyle(color: Theme.of(context).colorScheme.error))
-              else if (_pending.isEmpty)
-                const Text('No pending invites.')
-              else
-                for (final s in _pending) _inviteTile(s, pending: true),
-              const SizedBox(height: 20),
-              Text('Shared with',
-                  style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              if (!_loading && _error == null && _accepted.isEmpty)
-                const Text('Not shared with anyone yet.')
-              else if (!_loading && _error == null)
-                for (final s in _accepted) _inviteTile(s, pending: false),
-              ],
+                  TextField(
+                    controller: _email,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: const InputDecoration(
+                      labelText: 'Email of the person to share with',
+                    ),
+                    onSubmitted: (_) => _share(),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    onPressed: _busy ? null : _share,
+                    child: const Text('Share vehicle'),
+                  ),
+                  const SizedBox(height: 20),
+                  Text('Invited', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  if (_loading)
+                    const Center(child: CircularProgressIndicator())
+                  else if (_error != null)
+                    Text(_error!,
+                        style: TextStyle(color: Theme.of(context).colorScheme.error))
+                  else if (_pending.isEmpty)
+                    const Text('No pending invites.')
+                  else
+                    for (final s in _pending) _inviteTile(s, pending: true),
+                  const SizedBox(height: 20),
+                  Text('Shared with',
+                      style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  if (!_loading && _error == null && _accepted.isEmpty)
+                    const Text('Not shared with anyone yet.')
+                  else if (!_loading && _error == null)
+                    for (final s in _accepted) _inviteTile(s, pending: false),
+                ],
               ),
             ),
           ),
