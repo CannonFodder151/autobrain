@@ -159,13 +159,18 @@ jobs:
   # because GitHub Actions job outputs cannot cross job boundaries without an
   # intermediate aggregator, and adding one would force a third serial hop.
   github-release:
+    # AUT-2600: vm2 runner (gh-runner-autobrain-2) is offline. Route through the
+    # legacy x64 runner instead so publish is not fully blocked. This job only
+    # needs git/curl/REST API, no docker — the legacy runner's dockerd wedge
+    # (AUT-1720) does not apply here. Once vm2 is restored (AUT-2710) this
+    # should flip back.
+    runs-on: [self-hosted, linux, x64]
     # AUT-2055: cut a GitHub Release whenever auto-bump produced a new
     # v* tag, with the matching CHANGELOG.md section as the body. If the
     # auto-bump job was a no-op (no [Unreleased] bullets) the tag won't
     # exist and this job exits cleanly without creating a release.
     needs: auto-bump
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, linux, x64, vm2]
     permissions:
       contents: write
     steps:
@@ -233,7 +238,13 @@ jobs:
   publish-amd64:
     needs: [auto-bump, github-release]
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux, x64, vm2]
+    # AUT-2600: vm2 runner (gh-runner-autobrain-2) is offline. Route through
+    # the legacy x64 runner (gh-runner-autobrain, id 32) instead so publish
+    # is not fully blocked. AUT-1798 added vm2 to escape the legacy runner's
+    # dockerd wedge (AUT-1720); once vm2 is restored (AUT-2710) flip back.
+    # Risk: the legacy runner has a docker buildx hang history (AUT-1773) —
+    # monitor the first publish through it.
+    runs-on: [self-hosted, linux, x64]
     permissions:
       contents: read
     steps:
@@ -426,7 +437,12 @@ jobs:
     # manifest assembly here as well.
     needs: [publish-amd64, publish-arm64]
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux, x64, vm2]
+    # AUT-2600: vm2 runner (gh-runner-autobrain-2) is offline. Route through
+    # the legacy x64 runner instead so publish is not fully blocked. This job
+    # only runs `docker buildx imagetools` (no buildx build), so the dockerd
+    # wedge risk is lower than publish-amd64. Once vm2 is restored (AUT-2710)
+    # this should flip back.
+    runs-on: [self-hosted, linux, x64]
     permissions:
       contents: read
     steps:
@@ -436,7 +452,6 @@ jobs:
           fetch-depth: 0
 
       - name: Skip publish when the push only cut a version (AUT-240)
-        id: version_only
         run: |
           BEFORE="${{ github.event.before }}"
           if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
@@ -505,7 +520,11 @@ jobs:
   sync-changelog:
     needs: publish-manifest
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux, x64, vm2]
+    # AUT-2600: vm2 runner (gh-runner-autobrain-2) is offline. Route through
+    # the legacy x64 runner instead so publish is not fully blocked. This job
+    # only needs git/curl/REST API, no docker. Once vm2 is restored (AUT-2710)
+    # this should flip back.
+    runs-on: [self-hosted, linux, x64]
     permissions:
       contents: write
     steps:
