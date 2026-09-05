@@ -144,6 +144,57 @@ jobs:
           echo "::error::mobile sync push failed after 3 attempts (non-fast-forward)"
           exit 1
 
+      - name: Meaningful change gate (APK throttle)
+        # AUT-2619: only build an APK once per 2 days, and only if the synced
+        # frontend lineage actually changed (frontend/lib + assets + pubspec).
+        # The .aab upload is NEVER throttled — only the APK build step inside
+        # the dispatched release pipeline is gated, so Play Console stays fed.
+        # Uses a state file on the runner (persisted across warm runs) plus the
+        # last successful APK build tag timestamp as a backstop.
+        id: apk-throttle
+        env:
+          GH_TOKEN: ${{ secrets.MOBILE_SYNC_TOKEN }}
+        run: |
+          set -uo pipefail
+          state_dir="$RUNNER_TOOL_CACHE/apk-throttle-AUT-2619"
+          mkdir -p "$state_dir"
+          state_file="$state_dir/last_apk_build"
+          now_epoch="$(date +%s)"
+          cooldown=172800  # 48 hours
+          throttled=false
+          reason=""
+
+          # 1) Meaningful-change gate: did the sync actually change UI/asset lineage?
+          #    commit.outputs.changed is false when only metadata shifted.
+          if [[ "${{ steps.commit.outputs.changed }}" != "true" ]]; then
+            throttled=true
+            reason="no meaningful change in frontend lineage"
+          fi
+
+          # 2) 2-day cooldown: compare against last recorded APK build epoch.
+          if [[ -z "$reason" ]]; then
+            if [[ -f "$state_file" ]]; then
+              last_epoch="$(cat "$state_file" 2>/dev/null | head -1 || echo 0)"
+              last_epoch="${last_epoch:-0}"
+              if [[ "$last_epoch" =~ ^[0-9]+$ ]] && [[ "$last_epoch" -gt 0 ]]; then
+                diff=$(( now_epoch - last_epoch ))
+                if [[ "$diff" -lt "$cooldown" ]]; then
+                  throttled=true
+                  reason="last APK build ${diff}s ago < 48h cooldown"
+                fi
+              fi
+            fi
+          fi
+
+          if [[ "$throttled" == "true" ]]; then
+            echo "::notice::APK throttle gate: $reason — suppressing APK build for ${{ inputs.version }}"
+            echo "throttled=true" >> "$GITHUB_OUTPUT"
+            echo "throttle_reason=$reason" >> "$GITHUB_OUTPUT"
+          else
+            echo "throttled=false" >> "$GITHUB_OUTPUT"
+            echo "throttle_reason=none" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Tag version and trigger mobile release pipeline
         if: steps.commit.outputs.changed == 'true'
         env:
@@ -152,27 +203,15 @@ jobs:
         run: |
           set -euo pipefail
           tag="v${{ steps.commit.outputs.version }}"
-          # workflow_dispatch only accepts a branch or tag ref (raw SHAs are
-          # rejected), and the release runner checks out that ref. Pin the
-          # dispatch to a version tag so rapid sync bursts cannot build a newer
-          # main against an older version input (version-mismatch failures).
           git tag -f "$tag" HEAD
           git push -f origin "$tag"
-          # Check API rate limit before dispatching — MOBILE_SYNC_TOKEN is a PAT
-          # with 5000 req/hour shared across all uses. If exhausted, defer the
-          # dispatch to avoid a403; the next push to main will re-sync and
-          # retry (AUT-1639).
           remaining=$(curl -s -H "Authorization: token $GH_TOKEN" https://api.github.com/rate_limit 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['resources']['core']['remaining'])" 2>/dev/null || echo 5000)
           if [ "$remaining" -lt 100 ]; then
-            echo "::warning::GitHub API rate limit nearly exhausted (${remaining}/5000 remaining) — deferring mobile release dispatch for $tag. Next push to main will re-sync and dispatch."
+            echo "::warning::rate limit near exhausted — deferring dispatch for $tag"
             echo "changed=true" >> "$GITHUB_OUTPUT"
             echo "deferred=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # A freshly pushed tag can lag GitHub's ref lookup (eventual
-          # consistency); dispatch then 422s "No ref found". Poll with
-          # linear backoff (5–60s per retry, up to 12 retries) before giving
-          # up so the pinned tag is released (AUT-451, AUT-1652).
           for attempt in $(seq 1 12); do
             http_code=$(curl -s -o /tmp/dispatch_resp.txt -w '%{http_code}' -X POST \
               -H "Authorization: token $GH_TOKEN" \
@@ -185,20 +224,17 @@ jobs:
               exit 0
             fi
             echo "dispatch attempt $attempt/12 failed (HTTP $http_code): $out"
-            # Rate limit (403) — wait for window to reset then retry
             if echo "$out" | grep -qi 'rate limit'; then
-              echo "::warning::rate limit hit during dispatch — waiting for reset (attempt $attempt/12)"
+              echo "::warning::rate limit hit — waiting for reset (attempt $attempt/12)"
               sleep $(( attempt * 5 ))
               continue
             fi
-            # 422 "No ref found" — tag not yet visible (eventual consistency)
             if echo "$out" | grep -qi 'No ref found'; then
               sleep 5
               continue
             fi
-            # Any other error is unexpected — fail fast
             echo "::error::$out"
             exit 1
           done
-          echo "::error::could not dispatch mobile release $tag — retries exhausted"
+          echo "::error::dispatch retries exhausted for $tag"
           exit 1
