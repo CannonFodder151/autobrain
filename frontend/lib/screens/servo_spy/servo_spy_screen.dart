@@ -20,6 +20,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../community_garage/widgets/premium_gate.dart';
 import '../../core/api_client.dart';
+import '../../widgets/responsive.dart';
 import '../../core/auth_state.dart';
 import '../../core/fuel_types.dart';
 import '../../core/geoloc.dart';
@@ -413,46 +414,56 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
               style: TextStyle(fontSize: 12),
             ),
           ),
-        Row(
-          children: [
-            if (_locationDenied)
-              IconButton(
-                tooltip: 'Enable location',
-                icon: const Icon(Icons.location_disabled),
-                onPressed: _bootstrap,
-              ),
-            const Spacer(),
-            IconButton(
-              tooltip: 'Refresh',
-              icon: const Icon(Icons.refresh),
-              onPressed: _bootstrap,
-            ),
-            IconButton(
-              tooltip: 'Filters',
-              icon: const Icon(Icons.filter_alt_outlined),
-              onPressed: _openFilter,
-            ),
-          ],
-        ),
-        if (_selectedFuelType != null)
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1100),
             child: Row(
               children: [
-                for (final ft in _fuelTypes)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      label: Text(ft),
-                      selected: ft == _selectedFuelType,
-                      onSelected: (_) {
-                        setState(() => _selectedFuelType = ft);
-                        _fetchStations();
-                      },
-                    ),
+                if (_locationDenied)
+                  IconButton(
+                    tooltip: 'Enable location',
+                    icon: const Icon(Icons.location_disabled),
+                    onPressed: _bootstrap,
                   ),
+                const Spacer(),
+                IconButton(
+                  tooltip: 'Refresh',
+                  icon: const Icon(Icons.refresh),
+                  onPressed: _bootstrap,
+                ),
+                IconButton(
+                  tooltip: 'Filters',
+                  icon: const Icon(Icons.filter_alt_outlined),
+                  onPressed: _openFilter,
+                ),
               ],
+            ),
+          ),
+        ),
+        if (_selectedFuelType != null)
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1100),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                child: Row(
+                  children: [
+                    for (final ft in _fuelTypes)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Text(ft),
+                          selected: ft == _selectedFuelType,
+                          onSelected: (_) {
+                            setState(() => _selectedFuelType = ft);
+                            _fetchStations();
+                          },
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
           ),
         Expanded(
@@ -532,24 +543,33 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
                   left: 16,
                   right: 16,
                   top: 16,
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: scheme.errorContainer,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.error_outline, color: scheme.onErrorContainer),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Prices unavailable: $_error',
-                            style: TextStyle(color: scheme.onErrorContainer),
-                          ),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 600),
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: scheme.errorContainer,
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        TextButton(onPressed: _bootstrap, child: const Text('Retry')),
-                      ],
+                        child: Row(
+                          children: [
+                            Icon(Icons.error_outline,
+                                color: scheme.onErrorContainer),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Prices unavailable: $_error',
+                                style:
+                                    TextStyle(color: scheme.onErrorContainer),
+                              ),
+                            ),
+                            TextButton(
+                                onPressed: _bootstrap,
+                                child: const Text('Retry')),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ),

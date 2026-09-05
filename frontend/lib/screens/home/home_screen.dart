@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/api_client.dart';
 import '../../core/auth_state.dart';
 import '../../core/models.dart';
+import '../../widgets/responsive.dart';
 import '../../widgets/vehicle_selector.dart';
 import '../../widgets/rego_status_badge.dart';
 import '../admin/admin_screen.dart';
@@ -169,39 +170,63 @@ class _HomeScreenState extends State<HomeScreen> {
                 : ListView(
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                     children: [
-                      if (_selected != null) _HeroCard(vehicle: _selected!),
-                      const SizedBox(height: 12),
-                      VehicleSelector(
-                    vehicles: _vehicles,
-                    selected: _selected,
-                    onChanged: (v) => setState(() => _selected = v),
-                    onManage: () async {
-                      await Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const VehicleListScreen(),
+                      if (_selected != null)
+                        Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 600),
+                            child: _HeroCard(vehicle: _selected!),
+                          ),
                         ),
-                      );
-                      _load();
-                    },
-                  ),
-                  if (_selected == null)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 40),
-                      child: Center(
-                        child: Text('Add a vehicle to get started.',
-                            style: TextStyle(color: Colors.grey)),
+                      const SizedBox(height: 12),
+                      Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 600),
+                          child: VehicleSelector(
+                            vehicles: _vehicles,
+                            selected: _selected,
+                            onChanged: (v) => setState(() => _selected = v),
+                            onManage: () async {
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const VehicleListScreen(),
+                                ),
+                              );
+                              _load();
+                            },
+                          ),
+                        ),
                       ),
-                    ),
-                  if (_selected != null) ...[
-                    const SizedBox(height: 20),
-                    Text('Features',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 10),
-                    _FeatureGrid(vehicle: _selected!),
-                  ],
-                ],
-              ),
+                      if (_selected == null)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 40),
+                          child: Center(
+                            child: Text('Add a vehicle to get started.',
+                                style: TextStyle(color: Colors.grey)),
+                          ),
+                        ),
+                      if (_selected != null) ...[
+                        const SizedBox(height: 20),
+                        Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 600),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text('Features',
+                                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.w700)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 600),
+                            child: _FeatureGrid(vehicle: _selected!),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
       ),
     );
   }
@@ -321,6 +346,7 @@ class _FeatureGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = context.isDesktop;
     final items = [
       _Feature('Timeline', Icons.timeline, const Color(0xFF0B6B6A),
           VehicleTimelineScreen(vehicleId: vehicle.id)),
@@ -355,13 +381,17 @@ class _FeatureGrid extends StatelessWidget {
       const _Feature('Community Garage', Icons.groups, Color(0xFF0D9488),
           CommunityGarageScreen()),
     ];
+    final width = MediaQuery.of(context).size.width;
+    final cols = isDesktop
+        ? (width > 1400 ? 4 : 3)
+        : 2;
     return GridView.count(
-      crossAxisCount: 3,
+      crossAxisCount: cols,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       mainAxisSpacing: 12,
       crossAxisSpacing: 12,
-      childAspectRatio: 0.92,
+      childAspectRatio: isDesktop ? 1.1 : 0.92,
       children: [
         for (final f in items)
           _FeatureTile(feature: f),

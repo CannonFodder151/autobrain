@@ -16,15 +16,8 @@ import 'screens/settings/license_screen.dart';
 class AutoBrainApp extends StatelessWidget {
   const AutoBrainApp({super.key});
 
-  /// Deep-link fragment captured at startup, before the Flutter web engine
-  /// normalizes the URL (clears `#/license` via `history.replaceState`
-  /// within ~2-4s of load). Without this, the logged-in rebuild reads an
-  /// already-cleared fragment and Home mounts instead of License. Set once
-  /// from `main()`; null falls back to the live `Uri.base.fragment`.
   static String? initialFragment;
 
-  /// True when the app was opened from a password-reset email link
-  /// (…/reset-password#token=…) — fragment kept out of query logs/history.
   static String? resetTokenFromUrl() {
     final uri = Uri.base;
     if (uri.pathSegments.isEmpty || uri.pathSegments.last != 'reset-password') return null;
@@ -35,14 +28,13 @@ class AutoBrainApp extends StatelessWidget {
     if (frag.isEmpty) return null;
     for (final part in frag.split('&')) {
       final kv = part.split('=');
-      if (kv.length == 2 && kv[0] == 'token' && kv[1].isNotEmpty) return Uri.decodeComponent(kv[1]);
+      if (kv.length == 2 && kv[0] == 'token' && kv[1].isNotEmpty) {
+        return Uri.decodeComponent(kv[1]);
+      }
     }
     return null;
   }
 
-  /// True when opened from a shared-build deep link — routes to the Community
-  /// Garage share viewer. Accepts `{origin}/s/{token}` (design) and the
-  /// server-relative `{origin}/social/share/{token}` forms.
   static String? shareTokenFromUrl() {
     final segs = Uri.base.pathSegments;
     if (segs.length >= 2 && segs.last == 's') {
@@ -56,17 +48,12 @@ class AutoBrainApp extends StatelessWidget {
     return null;
   }
 
-  /// True when opened from a website "Get started" button
-  /// (…/?signup=1) — routes a logged-out user straight to account creation.
   static bool signupRequested() {
     final uri = Uri.base;
     return uri.queryParameters['signup'] == '1' ||
         uri.pathSegments.contains('signup');
   }
 
-  /// True when opened from the mobile app's License link
-  /// ({origin}/#/license) — routes a logged-in user to the License screen so
-  /// purchases happen in the browser, not in the store-published app.
   static bool licenseRequested() {
     final fragment =
         (initialFragment ?? Uri.base.fragment).replaceAll('/', '').toLowerCase();
@@ -102,10 +89,17 @@ class AutoBrainApp extends StatelessWidget {
       themeMode: auth.darkMode ? ThemeMode.dark : ThemeMode.light,
       home: home,
       builder: (context, child) {
-        // Visible under debug AND profile mode so performance testers can
-        // confirm the resolved API base + boot-probe result without
-        // attaching DevTools. (AUT-2284 N2.) Never shown in release.
-        if (!(kDebugMode || kProfileMode)) return child!;
+        final content = child ?? const SizedBox.shrink();
+        // Clamp font scale so desktop zoom can't balloon text beyond a readable
+        // ceiling (AUT-2526). Mobile keeps its OS default through the same path.
+        final wrapped = MediaQuery.withClampedTextScaling(
+          maxScale: 1.5,
+          minScale: 1.0,
+          child: content,
+        );
+        if (!(kDebugMode || kProfileMode)) {
+          return wrapped;
+        }
         final ok = AppConfig.lastValidationOk;
         final validation = ok == null
             ? 'not run'
@@ -115,7 +109,7 @@ class AutoBrainApp extends StatelessWidget {
         final apiHost = Uri.tryParse(AppConfig.apiBase)?.host ?? AppConfig.apiBase;
         return Stack(
           children: [
-            child!,
+            wrapped,
             Positioned(
               left: 0,
               right: 0,
