@@ -303,7 +303,7 @@ def parse_listing_url(url: str) -> dict | None:
         if len(model_tokens) >= 3:
             break
 
-    if not make_token or not model_tokens:
+    if not make_token or not model_tokens or year_match is None:
         return None
 
     model = "-".join(model_tokens[:2])
