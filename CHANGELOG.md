@@ -85,6 +85,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed (AUT-2467)
 - fix(backend): resolve structlog `source` kwarg collision in `ingest_fuel_prices` (`app/workers/tasks.py:509`). `res` dict from `ingest_all_fuel` already contains a `source` key; passing `source=source` as a separate kwarg caused `TypeError: got multiple values for keyword argument 'source'`. Now logged as `logger.info("fuel_ingest_summary", **res)`. Also fixed `_run(_run())` in `run_due_checks` (`app/services/notify.py:257`) — inner `_run` had no args, so the coroutine was never scheduled. Renamed to `_coro` and routed through `tasks._run()`. Adds regression tests `test_ingest_fuel_prices_no_typeerror_when_source_in_result` and `test_run_due_checks_calls_check_for_each_vehicle`.
 
+### Fixed (AUT-2319)
+- fix(backend): `_station_out` body lifted out of `app/api/v1/fuel_servo.py` into `app/services/fuel_servo.py` as the pure function `annotate_station` (no DB/AI/FastAPI). The AUT-2201 station-annotation unit test now imports `annotate_station` directly instead of `app.api.v1.fuel_servo._station_out`, sidestepping the router's transitive imports (`app.models`/`app.services.fuel_feeds`) that were blocking collection. The route keeps a thin `_station_out` compat wrapper that delegates to `annotate_station`. `annotate_station` preserves the current `FuelStationOut` shape including the AUT-2381 `source`/`best_source`/`source_score`/`flag_reason` per-price fields.
+- note: the AUT-2277 duplicate-`FuelPrice`-class fix (already on main as of 0.3.224, deployed to AutoBrain-Hosted arm64 in 0.3.234) supersedes the original `extend_existing=True` approach from AUT-2319's first draft; this rebase keeps only the test/lift refactor.
+
 ## [0.3.234] - 2026-09-04
 
 ### Fixed (AUT-2484)
