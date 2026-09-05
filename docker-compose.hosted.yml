@@ -55,6 +55,11 @@ x-router-env: &router-env
   AI_ROUTER_URL: ${AI_ROUTER_URL:-http://9router:20128/v1}
   AI_ROUTER_API_KEY_FILE: /run/secrets/ai_router_api_key
   AI_ROUTER_MODEL: ${AI_ROUTER_MODEL:-General-Use}
+  # AUT-2091: full OpenRouter model id. The 9Router on Hosted does not resolve
+  # the bare `text-embedding-3-small` alias, so the backend must hit the full
+  # route. Companion fix: backend/worker commands export AI_ROUTER_API_KEY from
+  # the secret file (config.py reads AI_ROUTER_API_KEY, not *_FILE).
+  EMBEDDING_MODEL: ${EMBEDDING_MODEL:-openrouter/openai/text-embedding-3-small}
 
 services:
   postgres:
@@ -145,7 +150,7 @@ services:
   backend:
     image: ghcr.io/cannonfodder151/autobrain-backend:hosted-arm64@sha256:fefe57e1518614190f3c250ca1a8552b9bfa861715143843aebd13c4a20ec032
     restart: unless-stopped
-    command: sh -c "python -m app.db.bootstrap && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    command: sh -c "export AI_ROUTER_API_KEY=$(cat /run/secrets/ai_router_api_key) && python -m app.db.bootstrap && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
       <<: [*db-env, *core-env, *router-env]
       SECRET_KEY_FILE: /run/secrets/backend_secret_key
@@ -273,7 +278,7 @@ services:
     restart: unless-stopped
     # AUT-1242/C1: beat scheduler embedded in the worker (-B), matching the dev
     # compose. Removes the separate beat container.
-    command: celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2
+    command: sh -c "export AI_ROUTER_API_KEY=$(cat /run/secrets/ai_router_api_key) && celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2"
     environment:
       <<: [*db-env, *core-env, *router-env]
       PYTHONPATH: /app
