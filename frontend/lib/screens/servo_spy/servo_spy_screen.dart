@@ -26,6 +26,7 @@ import '../../core/fuel_types.dart';
 import '../../core/geoloc.dart';
 import '../../core/models.dart';
 import 'servo_spy_list_model.dart';
+import 'servo_spy_station_history_screen.dart';
 
 enum _ServoSpyView { map, list }
 
@@ -762,6 +763,15 @@ class _StationSheet extends StatelessWidget {
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
+            child: FilledButton.tonalIcon(
+              onPressed: () => _openHistory(context),
+              icon: const Icon(Icons.show_chart),
+              label: const Text('30-day price history'),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
             child: FilledButton.icon(
               onPressed: () => _navigate(context),
               icon: const Icon(Icons.navigation),
@@ -877,6 +887,33 @@ class _ServoSpyListState extends State<_ServoSpyList> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  void _openHistory(BuildContext context) {
+    final stationId = station.id;
+    final stationName = station.name ?? 'Station';
+    Navigator.of(context, rootNavigator: true).pop();
+    Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute(
+        builder: (_) => ServoSpyStationHistoryScreen(
+          stationId: stationId,
+          stationName: stationName,
+        ),
+      ),
+    );
+  }
+
+  void _openHistory(ServoStationRow s) {
+    final stationId = s.id;
+    if (stationId == null || stationId.isEmpty) return;
+    Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute(
+        builder: (_) => ServoSpyStationHistoryScreen(
+          stationId: stationId,
+          stationName: s.name,
+        ),
+      ),
+    );
   }
 
   void _openFilter() {
@@ -1057,6 +1094,7 @@ class _ServoSpyListState extends State<_ServoSpyList> {
                                 ? 'fill \$${s.avgFillCost!.toStringAsFixed(2)}'
                                 : '';
                             return ListTile(
+                              onTap: () => _openHistory(s),
                               leading: CircleAvatar(
                                 backgroundColor: scheme.surfaceContainerHighest,
                                 child: s.logoUrl != null

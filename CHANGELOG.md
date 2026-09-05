@@ -10,6 +10,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Added (AUT-2376)
+- feat(frontend): Servo Spy station detail — 30-day price history chart. Tapping
+  a station in the Servo Spy **list** view (or the **map** detail sheet) opens
+  a new screen that calls `GET /api/v1/fuel/stations/{id}/history` and renders
+  one `fl_chart` `LineChart` line per fuel type (E10, 91, 95, 98, Diesel, LPG)
+  for the last 30 days, with a legend, a `\$x.xx` Y axis, and tap-to-tooltip.
+  The client groups the flat `(fuel_type, price, effective_at)` response from
+  the AUT-2375 endpoint by fuel type. Cached in-memory per station so a
+  re-open is instant. Empty state ("No price history yet") and 404 fallback
+  handled. New unit tests `frontend/test/fuel_prices_api_test.dart` cover the
+  flat contract and empty/404 cases. Closes AUT-2376.
+
 ### Added (AUT-2416)
 - mobile+web: premium-only **Rego Lookup** tool. New `frontend/lib/screens/rego/rego_lookup_screen.dart` lets premium users type an Australian plate + state, hits the existing `POST /vehicles/rego-lookup` endpoint, and renders VIN + vehicle details + rego status + expiry in a card. Plate input is uppercase / alphanumeric / 8-char max via `TextInputFormatter`. Premium gate via `AuthState.premium`; non-premium sees the `PremiumGate` upgrade prompt (screen never calls the endpoint). New `Rego Lookup` feature tile on the home grid, only inserted for premium users so the entry doesn't appear at all on free plans. Backend result now persists `rego_status` / `rego_expiry_date` / `rego_checked_at` on the Vehicle (new model columns + Alembic migration `a1b2c3d4e5f8`) so the badge + expiry notification both read the cache. Status mapping (`valid`/`registered`/`current`/`active` → `registered`; `expired`/`unregistered`/`cancelled` → `expired`) lives in `app.services.rego._map_provider`. `VehicleOut` schema exposes the new fields (always ISO `YYYY-MM-DD`).
 - mobile+web: premium-only **Rego expiry alert** setting. New `notification_preferences.rego_expiry_days` column (0 = off). The settings card on `NotificationsScreen` adds a "Rego expiry alert" section with a "PREMIUM" chip and a number input; non-premium sees the `PremiumGate` lock instead of the field. The existing `run_daily_notification_checks` Celery beat task now evaluates rego expiry for every premium user: when `vehicle.rego_expiry_date - today <= pref.rego_expiry_days` (and no dedupe row exists) it fires `deliver_rego_expiry` on the user's existing channels (email / Discord / push). Reuses the same delivery + dedupe pattern as `service_due_days`. New `rego_expiry` kind in `NotificationDelivery` and the dedupe `IN` list. `NotificationPreferenceIn` / `NotificationPreferenceOut` schemas accept the field. Migration `a1b2c3d4e5f8` adds both the preference and vehicle columns atomically; merges the AUT-1859 fuel-price-alerts branch so `alembic upgrade head` stays a single linear path (AUT-702 single-head guard). Tests: `backend/tests/test_rego_expiry_notify_aut2416.py` (10 cases) + `frontend/test/rego_lookup_screen_test.dart` (7 cases).
