@@ -13,7 +13,14 @@ import sqlalchemy as sa
 from alembic import context, op
 
 revision: str = "aut2436_electricity_logs"
-down_revision: Union[str, None] = "aut1859_fuel_price_alerts"
+# Merge revision: attaches after BOTH open heads on main (aut2434 and
+# aut2375). aut2375 -> aut2381 -> aut2434, but main still exposes two heads
+# (aut2375 + aut2434) at the merge-base, so this down_revision list re-unifies
+# them into a single head (see also aut1903_rego_state merge pattern).
+down_revision: Union[str, Sequence[str], None] = (
+    "aut2434_vehicle_powertrain",
+    "aut2375_fuel_history_index",
+)
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
