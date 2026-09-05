@@ -169,7 +169,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     onRetry: _load,
                   )
                 : ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
                     children: [
                       if (_selected != null)
                         Center(
@@ -178,7 +178,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             child: _HeroCard(vehicle: _selected!),
                           ),
                         ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 8),
                       Center(
                         child: ConstrainedBox(
                           constraints: const BoxConstraints(maxWidth: 600),
@@ -206,7 +206,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                       if (_selected != null) ...[
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 16),
                         Center(
                           child: ConstrainedBox(
                             constraints: const BoxConstraints(maxWidth: 600),
@@ -218,7 +218,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 8),
                         Center(
                           child: ConstrainedBox(
                             constraints: const BoxConstraints(maxWidth: 600),
@@ -240,10 +240,11 @@ class _HeroCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final isDesktop = context.isDesktop;
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(16),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -259,7 +260,7 @@ class _HeroCard extends StatelessWidget {
                 Text(vehicle.nickname,
                     style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 22,
+                        fontSize: 18,
                         fontWeight: FontWeight.w800)),
                 const SizedBox(height: 2),
                 Text(
@@ -269,16 +270,16 @@ class _HeroCard extends StatelessWidget {
                   '${vehicle.year != null ? ' · ${vehicle.year}' : ''}'
                   '${vehicle.isShared ? ' · Invited by ${vehicle.sharedBy ?? 'Unknown'}' : ''}'
                   .trim(),
-                  style: const TextStyle(color: Colors.white70),
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 10),
                 Row(
                   children: [
                     _HeroStat(
                         icon: Icons.speed,
                         label: 'Odometer',
                         value: '${vehicle.odometerKm ?? 0} km'),
-                    const SizedBox(width: 20),
+                    const SizedBox(width: 16),
                     _HeroStat(
                         icon: Icons.confirmation_number_outlined,
                         label: 'Rego',
@@ -286,7 +287,7 @@ class _HeroCard extends StatelessWidget {
                   ],
                 ),
                 if (vehicle.hasRegoData) ...[
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                   RegoStatusBadge(
                     vehicle: vehicle,
                     premium: context.watch<AuthState>().premium,
@@ -297,8 +298,8 @@ class _HeroCard extends StatelessWidget {
             ),
           ),
           Container(
-            width: 72,
-            height: 72,
+            width: isDesktop ? 44 : 56,
+            height: isDesktop ? 44 : 56,
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.18),
               shape: BoxShape.circle,
@@ -307,7 +308,7 @@ class _HeroCard extends StatelessWidget {
               vehicle.vehicleType == 'motorcycle'
                   ? Icons.two_wheeler
                   : Icons.directions_car,
-              size: 40,
+              size: isDesktop ? 26 : 32,
               color: Colors.white,
             ),
           ),
@@ -393,12 +394,12 @@ class _FeatureGrid extends StatelessWidget {
       crossAxisCount: cols,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      childAspectRatio: isDesktop ? 1.1 : 0.92,
+      mainAxisSpacing: isDesktop ? 10 : 12,
+      crossAxisSpacing: isDesktop ? 10 : 12,
+      childAspectRatio: isDesktop ? 1.35 : 0.92,
       children: [
         for (final f in items)
-          _FeatureTile(feature: f),
+          _FeatureTile(feature: f, isDesktop: isDesktop),
       ],
     );
   }
@@ -410,11 +411,14 @@ class _FeatureTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = context.isDesktop;
+    final iconSize = isDesktop ? 22.0 : 24.0;
+    final labelSize = isDesktop ? 12.0 : 13.0;
     return Material(
       color: Theme.of(context).colorScheme.surface,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(12),
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         onTap: () => Navigator.of(context).push(
           MaterialPageRoute(builder: (_) => feature.screen),
         ),
@@ -422,22 +426,22 @@ class _FeatureTile extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 46,
-              height: 46,
+              width: isDesktop ? 42 : 46,
+              height: isDesktop ? 42 : 46,
               decoration: BoxDecoration(
                 color: feature.color.withOpacity(0.14),
                 shape: BoxShape.circle,
               ),
-              child: Icon(feature.icon, color: feature.color, size: 24),
+              child: Icon(feature.icon, color: feature.color, size: iconSize),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: isDesktop ? 4 : 6),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4),
               child: Text(feature.label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      fontWeight: FontWeight.w600)),
+                      fontWeight: FontWeight.w600, fontSize: labelSize)),
             ),
           ],
         ),
