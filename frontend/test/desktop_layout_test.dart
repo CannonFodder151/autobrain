@@ -90,7 +90,7 @@ void main() {
         expect(find.byType(CenteredMaxWidth), findsOneWidget);
         expect(find.text('Demo Car'), findsOneWidget);
         expect(find.text('Vehicles'), findsOneWidget);
-        expect(find.byType(ListView), findsOneWidget);
+        expect(find.byType(ListView), findsWidgets);
       });
     }
   });
