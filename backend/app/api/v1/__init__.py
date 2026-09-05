@@ -15,6 +15,7 @@ from app.api.v1 import (
     fuel,
     fuel_prices,
     fuel_servo,
+    ha,
     issues,
     logbook,
     mods,
@@ -32,6 +33,7 @@ from app.api.v1 import (
 
 api_router = APIRouter()
 api_router.include_router(auth.router)
+api_router.include_router(ha.router)
 api_router.include_router(billing.router)
 api_router.include_router(admin.router)
 api_router.include_router(admin.admin_ops)
