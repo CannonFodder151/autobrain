@@ -1,0 +1,4 @@
+app_identifier("com.autobrain.autobrain")
+apple_id(ENV["APPLE_ID"] || "release@autobrain.app")
+team_id(ENV["APPLE_TEAM_ID"] || "TEAMID000")
+itc_team_id(ENV["APPLE_ITC_TEAM_ID"] || ENV["APPLE_TEAM_ID"] || "TEAMID000")

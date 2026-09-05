@@ -1,0 +1,166 @@
+default_platform(:ios)
+
+WORKSPACE = "Runner.xcworkspace"
+PROJECT   = "Runner.xcodeproj"
+SCHEME    = "Runner"
+
+XCODEPROJ_SETTINGS = {
+  :workspace => WORKSPACE,
+  :scheme    => SCHEME,
+  :output_directory => "./build/ios",
+  :output_name      => "Autobrain.ipa",
+  :clean            => true,
+}
+
+def load_appstore_api_key
+  key_id    = ENV["APPLE_KEY_ID"]    or raise "APPLE_KEY_ID is required"
+  issuer_id = ENV["APPLE_ISSUER_ID"] or raise "APPLE_ISSUER_ID is required"
+  key_path  = ENV["APPLE_KEY_PATH"]  or raise "APPLE_KEY_PATH is required"
+  app_store_connect_api_key(
+    key_id:     key_id,
+    issuer_id:  issuer_id,
+    key_filepath: key_path,
+    in_house:   false,
+  )
+end
+
+platform :ios do
+  before_all do
+    setup_ci if ENV["CI"]
+  end
+
+  desc "Run Flutter analyze + tests before packaging."
+  lane :tests do
+    Dir.chdir("../..") do
+      sh("flutter", "pub", "get")
+      sh("flutter", "analyze", "--no-pub")
+      sh("flutter", "test", "--no-pub")
+    end
+  end
+
+  desc "Build and upload a TestFlight build."
+  lane :beta do |options|
+    distribute = options[:distribute] || "internal"
+
+    ensure_git_status_clean unless ENV["CI"]
+    load_appstore_api_key
+    match(type: "appstore", readonly: true)
+
+    Dir.chdir("../..") do
+      sh("flutter", "pub", "get")
+      sh("flutter", "clean")
+      sh("flutter", "build", "ios", "--release", "--no-codesign")
+    end
+
+    increment_build_number_in_xcodeproj(xcodeproj: PROJECT, target: SCHEME)
+    version = get_version_number_from_xcodeproj(xcodeproj: PROJECT, target: SCHEME)
+    build   = get_build_number_from_xcodeproj(xcodeproj: PROJECT, target: SCHEME)
+
+    build_app(
+      XCODEPROJ_SETTINGS.merge(
+        :export_options => {
+          :method     => "app-store",
+          :signingStyle => "manual",
+          :teamID     => ENV["APPLE_TEAM_ID"],
+        },
+      ),
+    )
+
+    upload_to_testflight(
+      skip_waiting_for_build_processing: true,
+      distribute_external: distribute == "external",
+      notify_external_testers: distribute == "external",
+      groups: ["internal-qa", "beta-testers"],
+      changelog: File.read("./CHANGELOG_BETA.md", mode: "r:UTF-8") rescue "",
+    )
+
+    if ENV["GITHUB_ACTIONS"]
+      add_git_tag(tag: "ios-beta-#{version}-#{build}")
+    end
+  end
+
+  desc "Promote the latest TestFlight build to the App Store."
+  lane :release do |options|
+    submit_for_review = options.fetch(:submit, false)
+    metadata_path     = options[:metadata_path] || "./fastlane/metadata"
+
+    ensure_git_status_clean unless ENV["CI"]
+    load_appstore_api_key
+    match(type: "appstore", readonly: true)
+
+    increment_version_number_in_xcodeproj(
+      xcodeproj: PROJECT,
+      target:    SCHEME,
+      bump_type: options[:bump] || "minor",
+    )
+    increment_build_number_in_xcodeproj(xcodeproj: PROJECT, target: SCHEME)
+
+    build_app(
+      XCODEPROJ_SETTINGS.merge(
+        :export_options => {
+          :method     => "app-store",
+          :signingStyle => "manual",
+          :teamID     => ENV["APPLE_TEAM_ID"],
+        },
+      ),
+    )
+
+    upload_to_app_store(
+      force:                    false,
+      skip_screenshots:         false,
+      skip_metadata:            false,
+      skip_app_version_update:  false,
+      metadata_path:            metadata_path,
+      precheck_include_in_app_purchases: false,
+      submission_information: {
+        add_id_info_uses_idfa: false,
+      },
+      automatic_release: true,
+      submit_for_review: submit_for_review,
+      reject_if_possible: true,
+    )
+  end
+
+  desc "Sync App Store metadata without uploading a binary."
+  lane :metadata do
+    load_appstore_api_key
+    deliver(
+      metadata_path:           "./fastlane/metadata",
+      skip_binary_upload:      true,
+      skip_app_version_update: true,
+      force:                   true,
+    )
+  end
+
+  desc "Frame and upload localized App Store screenshots."
+  lane :screenshots do
+    frame_screenshots(path: "./fastlane/screenshots")
+    deliver(
+      metadata_path:           "./fastlane/metadata",
+      screenshots_path:        "./fastlane/screenshots",
+      skip_binary_upload:      true,
+      skip_app_version_update: true,
+      skip_metadata:           true,
+      force:                   true,
+    )
+  end
+
+  desc "Re-fetch app-store certificates + provisioning profiles."
+  lane :certs do
+    match(
+      type:                   "appstore",
+      readonly:               false,
+      force_for_new_devices:  true,
+    )
+  end
+
+  error do |lane, exception|
+    if ENV["SLACK_RELEASE_WEBHOOK_URL"]
+      slack(
+        message:        ":rotating_light: iOS lane `#{lane}` failed: #{exception.message}",
+        slack_url:      ENV["SLACK_RELEASE_WEBHOOK_URL"],
+        default_payloads: [:lane, :git_branch],
+      )
+    end
+  end
+end
