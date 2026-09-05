@@ -21,7 +21,6 @@ import '../notifications/notifications_screen.dart';
 import '../obd/obd_screen.dart';
 import '../parts/parts_screen.dart';
 import '../receipts/receipts_screen.dart';
-import '../rego/rego_lookup_screen.dart';
 import '../services/service_list_screen.dart';
 import '../settings/license_screen.dart';
 import '../settings/settings_screen.dart';
@@ -348,4 +347,120 @@ class _FeatureGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final premium = context.watch<AuthState>().premium;
+    final isDesktop = context.isDesktop;
+    final items = [
+      _Feature('Timeline', Icons.timeline, const Color(0xFF0B6B6A),
+          VehicleTimelineScreen(vehicleId: vehicle.id)),
+      _Feature('Services', Icons.build, const Color(0xFF2563EB),
+          ServiceListScreen(vehicleId: vehicle.id)),
+      _Feature('Fuel', Icons.local_gas_station, const Color(0xFF16A34A),
+          FuelScreen(vehicleId: vehicle.id)),
+      if (!vehicle.clubReg)
+        _Feature('Logbook', Icons.book, const Color(0xFF0D9488),
+            LogbookScreen(vehicleId: vehicle.id)),
+      _Feature('Diagnostics', Icons.medical_services, const Color(0xFFEA580C),
+          DiagnosticsScreen(vehicleId: vehicle.id)),
+      const _Feature('Petrol Prices', Icons.map, Color(0xFF0E7490),
+          PetrolPriceMapScreen()),
+      _Feature('Mods', Icons.tune, const Color(0xFF7C3AED),
+          ModsScreen(vehicleId: vehicle.id)),
+      _Feature('Receipts', Icons.receipt_long, const Color(0xFFDB2777),
+          ReceiptsScreen(vehicleId: vehicle.id)),
+      _Feature('Parts', Icons.inventory_2, const Color(0xFF0891B2),
+          PartsScreen(vehicle: vehicle)),
+      _Feature('Valuation', Icons.sell, const Color(0xFF059669),
+          ValuationScreen(vehicleId: vehicle.id)),
+      _Feature('Analytics', Icons.insights, const Color(0xFFCA8A04),
+          AnalyticsScreen(vehicleId: vehicle.id)),
+      _Feature('Notifications', Icons.notifications_active,
+          const Color(0xFF0E7490), NotificationsScreen(vehicleId: vehicle.id)),
+      if (!kIsWeb)
+        _Feature('OBD', Icons.settings_input_component, const Color(0xFF334155),
+            ObdScreen(vehicleId: vehicle.id)),
+      _Feature('Ownership Advisor', Icons.insights,
+          const Color(0xFF6366F1),
+          _AdvisorEntry(vehicle: vehicle)),
+      const _Feature('Servo Spy', Icons.local_gas_station, Color(0xFFF59E0B),
+          ServoSpyScreen()),
+      const _Feature('Community Garage', Icons.groups, Color(0xFF0D9488),
+          CommunityGarageScreen()),
+    ];
+    final width = MediaQuery.of(context).size.width;
+    final cols = isDesktop
+        ? (width > 1400 ? 4 : 3)
+        : 2;
+    return GridView.count(
+      crossAxisCount: cols,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      mainAxisSpacing: 12,
+      crossAxisSpacing: 12,
+      childAspectRatio: isDesktop ? 1.1 : 0.92,
+      children: [
+        for (final f in items)
+          _FeatureTile(feature: f),
+      ],
+    );
+  }
+}
+
+class _FeatureTile extends StatelessWidget {
+  const _FeatureTile({required this.feature});
+  final _Feature feature;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Theme.of(context).colorScheme.surface,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => feature.screen),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: feature.color.withValues(alpha: 0.14),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(feature.icon, color: feature.color, size: 24),
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Text(feature.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w600)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Feature {
+  const _Feature(this.label, this.icon, this.color, this.screen);
+  final String label;
+  final IconData icon;
+  final Color color;
+  final Widget screen;
+}
+
+/// Bridges the home grid to the Ownership Advisor entry point. The overview
+/// screen needs the live vehicleId, which the grid already filters for on
+/// `_Feature`s that need a vehicle; this indirection unpacks the id.
+class _AdvisorEntry extends StatelessWidget {
+  const _AdvisorEntry({required this.vehicle});
+  final Vehicle vehicle;
+
+  @override
+  Widget build(BuildContext context) =>
+      AdvisorOverviewScreen(vehicleId: vehicle.id);
