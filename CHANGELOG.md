@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 ### Fixed (AUT-2600)
+- fix(frontend): add missing `child:` label on the `ConstrainedBox` wrapping `ListView.builder` in `vehicle_timeline_screen.dart` (line 60). The widget was passed as a positional argument, misaligning the formal argument list and tripping dart2js on every `ConstrainedBox` inside the body (the compile error attached to login_screen.dart / home_screen.dart / signup_screen.dart were the downstream effect). Closes the second-half of AUT-2600 (unblocks `build-hosted.yml` amd64+arm64 `flutter build web` for the AUT-2446 Replace + AUT-2447 Upgrade release).
+
+### Fixed (AUT-2600)
 - fix(frontend): Servo Spy map `_StationSheet` 30-day history button was wired to a dead method (`_openHistory(BuildContext)` defined inside `_ServoSpyListState`, which has no `station` field) and the Dart `web` compile failed with `Error: The getter 'station' isn't defined for type '_ServoSpyListState'`, blocking the dockerhub-publish `publish-arm64` / `publish-amd64` jobs (publish #1445 aborted, no new image, containers stale). Moved the navigation into `_StationSheet` (which has `this.station`) and removed the broken overload. List-view history navigation is unchanged.
 
 ### Added (AUT-2449)
