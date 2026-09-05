@@ -1,9 +1,8 @@
-"""Servo Spy fuel-price API schemas (AUT-1817). Premium-gated read endpoints."""
+"""Servo Spy fuel-price API schemas (AUT-1817 + AUT-2386). Premium-gated read endpoints."""
 
 from datetime import datetime
 
 from pydantic import BaseModel, Field
-
 
 class FuelStationOut(BaseModel):
     id: str
@@ -19,42 +18,19 @@ class FuelStationOut(BaseModel):
 
     model_config = {"from_attributes": True}
 
-
 class FuelPriceOut(BaseModel):
     fuel_type: str
     price: float  # cents per litre
     effective_at: datetime
     cost_per_km: float | None = None  # $/km for this price vs vehicle avg L/100km (AUT-2201)
     avg_fill_cost: float | None = None  # $ per fill for this price vs vehicle avg litres/fill
-    # AUT-2381: which upstream emitted this row + the arbitration result for
-    # (station, fuel_type, day). The UI uses ``best_source`` to badge the
-    # reading as "trusted" / "government" / "chain".
+    # AUT-2386: which feed produced this price + its arbitration score, when
+    # the value comes from the per-day arbitration table. Null on legacy rows
+    # ingested before the column existed.
     source: str | None = None
-    best_source: str | None = None
-    source_score: float | None = None
-    flag_reason: str | None = None
+    arbitration_score: float | None = None
 
     model_config = {"from_attributes": True}
-
-
-class FuelPriceHistoryOut(BaseModel):
-    """One row of a station's per-(fuel_type, source, day) price history.
-
-    Used by ``GET /api/v1/fuel/stations/{station_id}/history`` (AUT-2374 +
-    AUT-2381). The UI shows one row per source so the user can see which
-    upstream the day's price came from.
-    """
-
-    fuel_type: str
-    source: str | None = None
-    price: float
-    effective_at: datetime
-    best_source: str | None = None
-    source_score: float | None = None
-    flag_reason: str | None = None
-
-    model_config = {"from_attributes": True}
-
 
 class FuelBrandOut(BaseModel):
     brand: str
@@ -66,21 +42,46 @@ class AttributionOut(BaseModel):
     sources: list[str]
 
 
+class FuelHistoryRawSource(BaseModel):
+    """AUT-2386: one contributing source for a history point.
+
+    Returned in the ``raw_sources`` array so the chart can show, e.g.
+    "NSW FuelCheck 189.9, WA FuelWatch 191.5" and the client knows why the
+    winning value was chosen.
+    """
+
+    source: str
+    price: float
+    effective_at: datetime
+    score: float
+
+
 class FuelHistoryPoint(BaseModel):
-    """AUT-2375: one historical price point in the 30-day series."""
+    """AUT-2375 + AUT-2386: one history point with the winning source + score.
+
+    ``source`` and ``score`` are the per-day arbitration result;
+    ``raw_sources`` is every source that reported a price on the same UTC day
+    for the same fuel so the client can see the inputs.
+    """
 
     fuel_type: str
     price: float
     effective_at: datetime
+    source: str | None = None
+    score: float | None = None
+    raw_sources: list[FuelHistoryRawSource] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 
 
 class FuelStationHistoryOut(BaseModel):
-    """AUT-2375: 30-day price history for a single station (one series per fuel).
+    """AUT-2375 + AUT-2386: 30-day price history for a single station.
 
     Served exclusively from the ``fuel_prices`` cache populated by the daily
     Celery ingest — never fans out to the upstream API on a client request.
+    The per-point ``source``/``score``/``raw_sources`` come from
+    ``fuel_price_arbitrations`` so /history and the live list tell the same
+    story.
     """
 
     station_id: str

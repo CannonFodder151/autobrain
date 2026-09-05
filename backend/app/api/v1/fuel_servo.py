@@ -1,4 +1,4 @@
-"""Servo Spy fuel-price API (AUT-1817).
+"""Servo Spy fuel-price API (AUT-1817 + AUT-2386).
 
 Read-only, deterministic, PREMIUM-GATED. Every route depends on
 ``require_fuel_access`` (free/demo accounts get 403, see the gating comment on
@@ -7,9 +7,16 @@ AUT-1813). No 9Router/AI — the data is the normalised ``fuel_stations`` /
 
 Open-data attribution is attached to every response via the
 ``X-Fuel-Data-Attribution`` header and the ``/attribution`` endpoint.
+
+AUT-2386: ``/stations/{id}/history`` joins ``fuel_prices`` to
+``fuel_price_arbitrations`` so each point shows the chosen source + score
+plus every raw source observation for that day, and the /stations live
+list picks the arbitration winner per (station, fuel_type, day) when one
+exists so the live list and the history chart tell the same story.
 """
 
 from datetime import datetime, timedelta, timezone
+from statistics import median
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import distinct, select
@@ -18,20 +25,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.core.logging import get_logger
 from app.db.session import get_db
-from app.models.fuel_station import FuelPrice, FuelStation
+from app.models.fuel_station import FuelPrice, FuelPriceArbitration, FuelStation
 from app.models.user import User
 from app.schemas.fuel import FuelStats  # noqa: F401  (type hint in _station_out)
 from app.schemas.fuel_servo import (
     AttributionOut,
     FuelBrandOut,
     FuelHistoryPoint,
-    FuelPriceHistoryOut,
+    FuelHistoryRawSource,
     FuelPriceOut,
     FuelStationHistoryOut,
     FuelStationOut,
 )
 from app.services import fuel_feeds as feeds
 from app.services.fuel import compute_fuel_stats
+from app.services.fuel_source_arbitration import source_authority
 from app.services.fuel_servo import annotate_price
 from app.services.ownership import get_accessible_vehicle
 
@@ -114,6 +122,11 @@ async def fuel_stations(
     MVP). When ``fuel_type`` is given, only stations with a price for that fuel
     are returned, and each carries just that fuel's latest price.
 
+    AUT-2386: when a station has an arbitration row for "today", the live
+    list returns the arbitration winner (source + price + score) instead of
+    the latest raw observation, so the live list and the /history chart are
+    consistent across overlapping feeds.
+
     When ``vehicle_id`` is given (must be accessible to ``user``), every price
     carries ``cost_per_km`` ($/km, from avg L/100km) and ``avg_fill_cost`` ($,
     from avg litres/fill) — deterministic, no AI.
@@ -133,11 +146,13 @@ async def fuel_stations(
             hits.append((d, s))
     hits.sort(key=lambda x: x[0])
 
+    today_utc = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     out: list[FuelStationOut] = []
     for dist, s in hits[:limit]:
-        prices: list[FuelPrice] = []
         if fuel_type:
-            price = await _latest_price(db, s.id, fuel_type)
+            price = await _latest_price_arbitrated(
+                db, s.id, fuel_type, today=today_utc
+            )
             if price is None:
                 continue
             prices = [price]
@@ -188,11 +203,16 @@ async def station_history(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_fuel_access),
 ):
-    """AUT-2375: 30-day price history for a single station, served from cache.
+    """AUT-2375 + AUT-2386: 30-day price history for a single station.
 
-    Reads exclusively from ``fuel_prices`` — never fans out to the upstream
-    fuel APIs. The daily Celery beat task (``fuel-ingest-all-daily``) is the
-    only thing that refreshes these rows.
+    Reads exclusively from the ``fuel_prices`` cache and the
+    ``fuel_price_arbitrations`` arbitration table — never fans out to the
+    upstream fuel APIs. The daily Celery beat task
+    (``fuel-ingest-all-daily``) is the only thing that refreshes these rows.
+
+    Each series point carries the winning ``source`` + ``score`` for the
+    (station, fuel_type, day) bucket, plus a ``raw_sources`` array of every
+    contributing feed so the client can show the user the inputs.
     """
     _set_attribution(response)
     station = await db.get(FuelStation, station_id)
@@ -210,20 +230,134 @@ async def station_history(
     if fuel_type:
         q = q.where(FuelPrice.fuel_type == fuel_type)
     rows = list((await db.scalars(q)).all())
+
+    arb_q = (
+        select(FuelPriceArbitration)
+        .where(
+            FuelPriceArbitration.station_id == station_id,
+            FuelPriceArbitration.day >= cutoff - timedelta(days=1),
+        )
+        .order_by(FuelPriceArbitration.fuel_type, FuelPriceArbitration.day.asc())
+    )
+    if fuel_type:
+        arb_q = arb_q.where(FuelPriceArbitration.fuel_type == fuel_type)
+    arb_rows = list((await db.scalars(arb_q)).all())
+    arb_by_key: dict[tuple[str, datetime], FuelPriceArbitration] = {
+        (a.fuel_type, a.day): a for a in arb_rows
+    }
+
+    # Group raw prices by (fuel_type, day) so we can attach the arbitration
+    # winner + score, and a raw_sources list to each winning day.
+    grouped: dict[tuple[str, datetime], list[FuelPrice]] = {}
+    for p in rows:
+        if p.effective_at is None:
+            continue
+        day = p.effective_at.astimezone(timezone.utc).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        grouped.setdefault((p.fuel_type, day), []).append(p)
+
+    series: list[FuelHistoryPoint] = []
+    for (ft, day), day_prices in sorted(grouped.items(), key=lambda kv: (kv[0][0], kv[0][1])):
+        arb = arb_by_key.get((ft, day))
+        if arb is not None:
+            price = arb.price
+            effective_at = day
+            source = arb.source_id
+            score = arb.arbitration_score
+        else:
+            # No arbitration row (e.g. legacy cache or only one source). Fall
+            # back to the latest raw observation for the day so /history still
+            # renders.
+            latest = max(day_prices, key=lambda p: p.effective_at)
+            price = latest.price
+            effective_at = latest.effective_at
+            source = latest.source_id
+            score = latest.arbitration_score
+        raw = [
+            FuelHistoryRawSource(
+                source=p.source_id or "unknown",
+                price=p.price,
+                effective_at=p.effective_at,
+                score=_candidate_score(p, day_prices, effective_at),
+            )
+            for p in day_prices
+        ]
+        series.append(
+            FuelHistoryPoint(
+                fuel_type=ft,
+                price=price,
+                effective_at=effective_at,
+                source=source,
+                score=score,
+                raw_sources=raw,
+            )
+        )
     return FuelStationHistoryOut(
         station_id=station_id,
         source=station.source,
         fuel_type=fuel_type,
         days=days,
-        series=[
-            FuelHistoryPoint(
-                fuel_type=p.fuel_type,
-                price=p.price,
-                effective_at=p.effective_at,
-            )
-            for p in rows
-        ],
+        series=series,
     )
+
+
+def _candidate_score(p: FuelPrice, day_prices: list[FuelPrice], now: datetime) -> float:
+    """Re-derive an approximate score for one raw source on a history point.
+
+    Mirrors :func:`fuel_source_arbitration.arbitrate` exactly so the
+    ``raw_sources`` array lines up with the per-day winner; the only thing
+    it does not repeat is the freshness bonus (we use the row's
+    effective_at as the freshness anchor instead of "now").
+    """
+    if not p.source_id:
+        return 0.0
+    authority = source_authority(p.source_id)
+    authority_score = (1 - authority) * feeds.WEIGHT_AUTHORITY
+    age_hours = max(0.0, (now - p.effective_at).total_seconds() / 3600.0)
+    freshness = 0.0
+    if age_hours <= feeds.FRESHNESS_WINDOW_HOURS:
+        freshness = feeds.WEIGHT_FRESHNESS * (1.0 - age_hours / feeds.FRESHNESS_WINDOW_HOURS)
+    prices = [q.price for q in day_prices if q.price is not None]
+    spread = 0.0
+    if len(prices) >= 2:
+        spread_penalty = abs(p.price - median(prices)) / feeds.SPREAD_THRESHOLD_CPL * feeds.WEIGHT_SPREAD
+        if (max(prices) - min(prices)) > feeds.SPREAD_THRESHOLD_CPL:
+            spread = spread_penalty
+    return round(authority_score + freshness - spread, 4)
+
+
+async def _latest_price_arbitrated(
+    db: AsyncSession,
+    station_id: str,
+    fuel_type: str,
+    *,
+    today: datetime,
+) -> FuelPrice | None:
+    """Latest price for a (station, fuel_type) using the arbitration winner.
+
+    AUT-2386: prefer today's arbitration row, else yesterday's, else the
+    latest raw observation. Keeps the live list consistent with /history.
+    """
+    arb = await db.scalar(
+        select(FuelPriceArbitration).where(
+            FuelPriceArbitration.station_id == station_id,
+            FuelPriceArbitration.fuel_type == fuel_type,
+            FuelPriceArbitration.day == today,
+        )
+    )
+    if arb is not None:
+        synthetic = FuelPrice(
+            id=arb.id,
+            station_id=station_id,
+            fuel_type=fuel_type,
+            price=arb.price,
+            effective_at=arb.day,
+            source_id=arb.source_id,
+            arbitration_score=arb.arbitration_score,
+        )
+        return synthetic
+    return await _latest_price(db, station_id, fuel_type)
 
 
 async def _latest_price(db: AsyncSession, station_id: str, fuel_type: str) -> FuelPrice | None:
@@ -254,10 +388,8 @@ def _station_out(
                 effective_at=p.effective_at,
                 cost_per_km=cost_per_km,
                 avg_fill_cost=avg_fill_cost,
-                source=p.source,
-                best_source=p.best_source,
-                source_score=p.source_score,
-                flag_reason=p.flag_reason,
+                source=p.source_id,
+                arbitration_score=p.arbitration_score,
             )
         )
     return FuelStationOut(
@@ -272,41 +404,3 @@ def _station_out(
         distance_km=round(dist, 2) if dist is not None else None,
         prices=out_prices,
     )
-
-
-@router.get(
-    "/stations/{station_id}/history",
-    response_model=list[FuelPriceHistoryOut],
-)
-async def station_price_history(
-    station_id: str,
-    response: Response,
-    fuel_type: str | None = Query(default=None, description="Filter to one canonical fuel type"),
-    days: int = Query(default=30, ge=1, le=90, description="Look-back window in days"),
-    db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_fuel_access),
-) -> list[FuelPriceHistoryOut]:
-    """Price history (per source) for a station.
-
-    AUT-2374: price-history endpoint, last N days per station.
-    AUT-2381: every row carries ``best_source`` and ``source_score`` so the
-    frontend can badge the day's reading (trusted / government / chain).
-
-    Returns one row per (fuel_type, source, day) — newest first. Rows without
-    arbitration metadata (legacy rows from before AUT-2381) still come back;
-    the UI treats missing fields as "uncertified".
-    """
-    _set_attribution(response)
-    station = await db.get(FuelStation, station_id)
-    if not station:
-        raise HTTPException(status_code=404, detail="Station not found")
-    since = datetime.now(timezone.utc) - timedelta(days=days)
-    q = (
-        select(FuelPrice)
-        .where(FuelPrice.station_id == station_id, FuelPrice.effective_at >= since)
-        .order_by(FuelPrice.effective_at.desc(), FuelPrice.fuel_type, FuelPrice.source)
-    )
-    if fuel_type:
-        q = q.where(FuelPrice.fuel_type == fuel_type)
-    rows = list((await db.scalars(q)).all())
-    return [FuelPriceHistoryOut.model_validate(r) for r in rows]
