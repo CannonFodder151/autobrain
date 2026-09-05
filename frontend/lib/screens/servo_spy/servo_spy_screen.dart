@@ -32,12 +32,12 @@ enum _ServoSpyView { map, list }
 
 // AUT-2220: CARTO basemap API key, injected at build time via
 // --dart-define=CARTO_API_KEY=<key>. CARTO keys are designed to be public
-// (embedded in tile URLs as ?api_key=...). Empty -> key-less public basemap.
+// (embedded in tile URLs as ?key=...). Empty -> key-less public basemap.
 // File-private top-level so both State classes can share them; the param
 // string cannot be `const` because `isEmpty` is not a constant expression.
 final String _cartoApiKey = String.fromEnvironment('CARTO_API_KEY');
 final String _cartoKeyParam =
-    _cartoApiKey.isEmpty ? '' : '?api_key=$_cartoApiKey';
+    _cartoApiKey.isEmpty ? '' : '?key=$_cartoApiKey';
 
 class ServoSpyScreen extends StatefulWidget {
   const ServoSpyScreen({super.key});
