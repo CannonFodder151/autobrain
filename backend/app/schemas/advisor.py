@@ -341,6 +341,49 @@ class AdvisorDreamData(BaseModel):
     note: str | None = None
 
 
+class FundingGapBand(BaseModel):
+    """Funding-gap band for the Replace module (AUT-2446).
+
+    ``gap`` = ``replacement_cost - current_value - trade_in``.
+    ``monthly_target`` is the per-month saving needed to close it over the
+    user-supplied ``horizon_months`` (default 36, i.e. 3 years). When the
+    gap is negative (replacement costs less than current value + trade-in)
+    the response surfaces a zero target and a ``surplus`` flag instead.
+    """
+
+    currency: str = "AUD"
+    horizon_months: int = 36
+    gap: float | None = None
+    monthly_target: float | None = None
+    surplus: bool = False
+    note: str | None = None
+
+
+class AdvisorReplaceData(BaseModel):
+    """Structured output for ``GET /advisor/replace`` (AUT-2446).
+
+    All three costs share the same currency and are anchored on the
+    existing value module so the Replace surface never re-derives a number
+    that the Value surface already published. Used replacement cost ==
+    current private-sale mid (a buyer for your car is a buyer for a similar
+    car of the same vintage/condition). New replacement cost applies a
+    documented age-based new-vs-used premium on top of the same anchor. The
+    funding-gap band is computed exactly as the AC specifies:
+
+        gap = replacement_cost - current_value - trade_in
+    """
+
+    currency: str = "AUD"
+    current_value: float | None = None
+    trade_in: TradeInBand = Field(default_factory=TradeInBand)
+    used_replacement_cost: float | None = None
+    new_replacement_cost: float | None = None
+    age_years: int | None = None
+    new_used_premium: float = 1.0
+    horizon_months: int = 36
+    funding_gap: FundingGapBand = Field(default_factory=FundingGapBand)
+    note: str | None = None
+
 class AdvisorResponse(BaseModel):
     """Universal Ownership Advisor response envelope."""
 

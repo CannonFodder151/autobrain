@@ -66,6 +66,8 @@ from app.schemas.advisor import (
     AdvisorAIRequest,
     AdvisorDreamData,
     AdvisorDreamRequest,
+    AdvisorReplaceData,
+    FundingGapBand,
     AdvisorFinanceData,
     AdvisorFinanceRequest,
     AdvisorResponse,
@@ -152,6 +154,70 @@ async def advisor_value(
         factors=factors,
     )
 
+
+@router.get("/replace", response_model=AdvisorResponse)
+async def advisor_replace(
+    vehicle_id: str = Query(..., description="Vehicle UUID (owner or accepted share)"),
+    odometer_km: int | None = Query(None, ge=0, description="Optional override of the vehicle's stored odometer"),
+    horizon_months: int | None = Query(
+        None,
+        ge=1,
+        le=240,
+        description="Saving horizon for the monthly target (default 36). Server clamps to [6, 120].",
+    ),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> AdvisorResponse:
+    """Replacement cost (used + new) + funding gap + monthly saving target.
+
+    Deterministic only — no 9Router. Reuses the value module's cached
+    market median and the documented new-vs-used premium curve (see
+    ``app.services.advisor.new_used_premium``). Funding gap follows the
+    AC literally::
+
+        gap = replacement_cost - current_value - trade_in_mid
+
+    where ``trade_in_mid`` is the industry-standard 82% of private-sale
+    mid surfaced by ``trade_in_band``. ``monthly_target = gap /
+    horizon_months``; a negative gap (cheaper to replace than your
+    current car + trade-in is worth) is surfaced as ``surplus=True``
+    with a zero monthly target.
+
+    No market data → all gap fields null, ``note`` explains why (same
+    graceful fallback the value module uses).
+    """
+    _enforce_entitlement(user)
+    vehicle = await get_accessible_vehicle(db, vehicle_id, user)
+
+    plan = await compute_replace(
+        db, vehicle, odometer_km=odometer_km, horizon_months=horizon_months,
+    )
+    plan["trade_in"] = TradeInBand(**plan["trade_in"])
+    plan["funding_gap"] = FundingGapBand(**plan["funding_gap"])
+    data = AdvisorReplaceData(**plan)
+
+    factors = {
+        "vehicle": {
+            "id": vehicle.id,
+            "make": vehicle.make,
+            "model": vehicle.model,
+            "year": vehicle.year,
+            "odometer_km": odometer_km if odometer_km is not None else vehicle.odometer_km,
+            "vehicle_type": vehicle.vehicle_type,
+        },
+        "age_years": data.age_years,
+        "new_used_premium": data.new_used_premium,
+        "horizon_months": data.horizon_months,
+    }
+
+    return AdvisorResponse(
+        module="replace",
+        vehicle_id=vehicle.id,
+        generated_at=datetime.now(timezone.utc),
+        model="rule-based-fallback",
+        data=data.model_dump(),
+        factors=factors,
+    )
 
 @router.post("/finance", response_model=AdvisorResponse)
 async def advisor_finance(
