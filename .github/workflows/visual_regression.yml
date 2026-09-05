@@ -1,0 +1,72 @@
+name: Visual regression (desktop 1280/1440/1920)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/visual_regression.yml'
+
+concurrency:
+  group: visual-regression-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  golden:
+    name: Flutter golden — ${{ matrix.width }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        width: [1280, 1440, 1920]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: flutter pub get (frontend)
+        working-directory: frontend
+        run: flutter pub get
+      - name: Run golden tests (${{ matrix.width }})
+        working-directory: frontend
+        run: flutter test test/desktop_layout_golden_test.dart -r expanded
+
+  playwright:
+    name: Playwright screenshots — ${{ matrix.width }}
+    runs-on: ubuntu-latest
+    needs: golden
+    strategy:
+      fail-fast: false
+      matrix:
+        width: [1280, 1440, 1920]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node + Playwright
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install Playwright
+        working-directory: frontend/playwright
+        run: |
+          npm ci
+          npx playwright install-deps chromium
+          npx playwright install chromium
+      - name: Build frontend (web)
+        working-directory: frontend
+        run: |
+          flutter config --enable-web
+          flutter pub get
+          flutter build web --webRenderer=canvaskit
+      - name: Start static server
+        run: npx serve -s frontend/build/web -l 8080
+      - name: Screenshot regression (${{ matrix.width }})
+        working-directory: frontend/playwright
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:8080
+        run: npx playwright test --project=desktop-${{ matrix.width }}
