@@ -165,7 +165,7 @@ jobs:
     # exist and this job exits cleanly without creating a release.
     needs: auto-bump
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, linux, x64, vm2]
+    runs-on: [self-hosted, linux, x64]
     permissions:
       contents: write
     steps:
@@ -233,7 +233,7 @@ jobs:
   publish-amd64:
     needs: [auto-bump, github-release]
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux, x64, vm2]
+    runs-on: [self-hosted, linux, x64]
     permissions:
       contents: read
     steps:
@@ -426,7 +426,7 @@ jobs:
     # manifest assembly here as well.
     needs: [publish-amd64, publish-arm64]
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux, x64, vm2]
+    runs-on: [self-hosted, linux, x64]
     permissions:
       contents: read
     steps:
@@ -505,7 +505,7 @@ jobs:
   sync-changelog:
     needs: publish-manifest
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux, x64, vm2]
+    runs-on: [self-hosted, linux, x64]
     permissions:
       contents: write
     steps:
