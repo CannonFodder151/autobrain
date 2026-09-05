@@ -53,6 +53,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Added (AUT-2450)
 - backend+ai(advisor): AI Advisor module. New `POST /api/v1/advisor/ai` route consumes structured outputs from the Value/Replace/Upgrade/Finance/Dream sub-modules and returns `{decision, confidence, rationale, next_actions, based_on}`. Deterministic-first per ADR 0001: a small rule tree (mirrored in `backend/app/services/advisor.compute_advisor_recommendation` and `ai/app/fallbacks/advisor.advisor_fallback`) always runs and its decision is the source of truth; 9Router may add a richer rationale and sharper `next_actions` but cannot change the decision (listed in `_AI_IMMUTABLE["advisor"]` and the system prompt forbids it). The AI never invents numbers — any number in the response is one of the supplied module outputs verbatim. Graceful fallback: when the AI gateway is unreachable the route returns the deterministic baseline with `model = "rule-based-fallback"` and `factors.fallback_reason = "ai_gateway_unreachable"`; the user always gets an answer. 24h in-process LRU+TTL cache keyed by `sha256(sorted_module_outputs)` in `app.services.ai_client` (per the spec; per-process is acceptable because the cache only optimises repeat calls, not correctness — restart-eviction loses nothing). New `AdvisorAIRequest` + `AdvisorAIData` + `AdvisorAIBasedOn` schemas in `backend/app/schemas/advisor.py`; new `app.services.ai_client.run_advisor_ai`; new AI-gateway module `ai/app/modules/advisor.py` + system prompt + `_SCHEMAS["advisor"]` + `_AI_IMMUTABLE["advisor"]` in `ai/app/router_utils.py`. New module is registered in `ai/app/modules/__init__.py: MODULES["advisor"]` and the route is registered in `backend/app/api/v1/advisor.py`. Free accounts get 403 (same as every advisor module). Tests: `backend/tests/test_advisor_ai.py` (14 cases: pure-helper decision tree, never-invents-numbers invariant, request/response schema, FastAPI route for both gateway-up and gateway-down, free-account 403, cache dedupe); `ai/tests/test_advisor.py` (19 cases: gateway fallback, validate_advisor_response clamp, module registration, system-prompt/immutable/schema contract).
 
+### Added (AUT-2543)
+- docs: `docs/home-assistant-integration.md` — Home Assistant setup guide: token
+  creation (`POST /api/v1/ha/tokens`), `rest` + `command_line` sensor examples for
+  `/api/v1/ha/vehicles`, `/service-reminders`, per-vehicle `/analytics` and
+  `/service-intervals`, service-due mobile-notification automation (≤7d), Lovelace
+  cards, and the optional `wss://<host>/ws/ha/{vehicle_id}` real-time push path.
+  Registered the HA route table (`GET /ha/vehicles`, `/vehicles/{id}/service-intervals`,
+  `/vehicles/{id}/analytics`, `/service-reminders`; `POST/GET/DELETE /ha/tokens`)
+  in `docs/api-spec.md`.
+
+### Added (AUT-2543)
+- tests: `backend/tests/test_ha_docs.py` — drift guard asserting the documented
+  `/api/v1/ha/*` paths match the real router table (catches the `ha/v1/` double-
+  prefix regression from the draft PR) and that every field referenced in the doc
+  examples exists on the `HaAnalyticsOut`/`HaServiceReminderOut`/`HaServiceIntervalOut`
+  /`HaVehicleOut` schemas. Skips the field-name checks while AUT-2541's schemas
+  are absent so CI stays green on `main`; activates once PR-520 lands.
+
 ## [0.3.238] - 2026-09-05
 
 ### Fixed (AUT-2526)

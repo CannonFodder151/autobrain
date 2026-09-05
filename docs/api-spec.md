@@ -256,3 +256,18 @@ Response envelope (every advisor response):
 ```
 
 Caching: every response is cacheable for **24 h**. Frontend offline cache key is `sha256("advisor:{module}:{vehicle_id}:{stable_body_hash}")`; backend `market_listing_cache` keys remain `(make, model, year)`. Rate-limited via the existing `require_ai_rate_limit` dependency on AI paths.
+## Home Assistant Integration (AUT-2541)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET`  | `/ha/vehicles` | All accessible vehicles (HA token auth) |
+| `GET`  | `/ha/vehicles/{id}/service-intervals` | Upcoming service intervals |
+| `GET`  | `/ha/vehicles/{id}/analytics` | Analytics summary |
+| `GET`  | `/ha/service-reminders` | All service reminders (all accessible vehicles) |
+| `POST` | `/ha/tokens` | Create a new HA integration token |
+| `GET`  | `/ha/tokens` | List the caller's HA tokens |
+| `DELETE` | `/ha/tokens/{id}` | Revoke a token |
+
+HA endpoints are authenticated via the `X-HA-API-Key` header (`abha_...`).
+The token-management path (`/ha/tokens`) takes the normal Bearer JWT. Full
+setup guide: [`docs/home-assistant-integration.md`](home-assistant-integration.md).
