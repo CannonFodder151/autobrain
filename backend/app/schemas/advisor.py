@@ -1,4 +1,4 @@
-"""Schemas for the Ownership Advisor surface (AUT-2425 / AUT-2445-VALUE).
+"""Schemas for the Ownership Advisor surface (AUT-2425 / AUT-2445-VALUE / AUT-2448-FINANCE / AUT-2450-AI).
 
 Envelope is shared across all six sub-modules (value / replace / upgrade /
 finance / dream / ai) per ADR 0001 (docs/adr/0001-ownership-advisor.md):
@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 AdvisorModule = Literal["value", "replace", "upgrade", "finance", "dream", "ai"]
 AdvisorModel = Literal["rule-based-fallback", "rule-based+ai", "9router/<combo>"]
+AdvisorDecision = Literal["keep", "upgrade", "delay", "strategy"]
 AdvisorFinanceMode = Literal["buy", "finance", "lease", "novated"]
 
 
@@ -169,6 +170,52 @@ class AdvisorFinanceRequest(BaseModel):
         default=False,
         description="When true, also include the novated-lease block (currently coming_soon).",
     )
+
+
+class AdvisorAIBasedOn(BaseModel):
+    """Which sub-modules contributed structured data to the AI decision.
+
+    Booleans only; no numbers invented here. Lets the UI surface
+    "Based on: Value, Replace, Finance" instead of guessing.
+    """
+
+    value: bool = False
+    replace: bool = False
+    upgrade: bool = False
+    finance: bool = False
+    dream: bool = False
+
+
+class AdvisorAIData(BaseModel):
+    """Structured output for ``POST /advisor/ai`` (AUT-2450).
+
+    The AI advisor is the only module that hits 9Router. The decision
+    is deterministic (rule-based baseline); 9Router may add a richer
+    rationale and sharper next_actions but never invents numbers and
+    never changes the decision.
+    """
+
+    decision: AdvisorDecision = "keep"
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    rationale: str = ""
+    next_actions: list[str] = Field(default_factory=list)
+    based_on: AdvisorAIBasedOn = Field(default_factory=AdvisorAIBasedOn)
+
+
+class AdvisorAIRequest(BaseModel):
+    """Request body for ``POST /advisor/ai``.
+
+    The caller (frontend) supplies structured outputs from the other
+    sub-modules — typically fetched via their GET/POST endpoints in the
+    same render. The AI never re-fetches them and never invents numbers.
+    """
+
+    question: str | None = Field(default=None, max_length=500)
+    value: dict[str, Any] | None = None
+    replace: dict[str, Any] | None = None
+    upgrade: dict[str, Any] | None = None
+    finance: dict[str, Any] | None = None
+    dream: dict[str, Any] | None = None
 
 
 class AdvisorResponse(BaseModel):

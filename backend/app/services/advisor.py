@@ -497,3 +497,154 @@ def compute_finance_plan(
         "modes": modes,
         "note": note,
     }
+
+
+# --- AI Advisor baseline (AUT-2450) ----------------------------------------
+# Mirror of ai/app/fallbacks/advisor.py so the backend can answer the
+# /advisor/ai route when the AI gateway is unreachable. The rule tree is
+# identical so the deterministic answer is consistent end-to-end.
+
+_ADVISOR_UPGRADE_GAP_RATIO = 0.25
+_ADVISOR_DELAY_GAP_RATIO = 0.75
+_ADVISOR_UPGRADE_TCO_SAVING = 0.15
+_ADVISOR_RATIONALE_MAX = 280
+_ADVISOR_NEXT_ACTIONS_MAX = 3
+
+
+def _advisor_f(value):
+    if value is None:
+        return None
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return None
+    if f != f:
+        return None
+    return f
+
+
+def _advisor_clip(text: str, limit: int) -> str:
+    if not text:
+        return ""
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 1)].rstrip() + "\u2026"
+
+
+def _advisor_funding_gap(modules: dict) -> float | None:
+    replace = modules.get("replace") or {}
+    val = modules.get("value") or {}
+    gap = _advisor_f(replace.get("funding_gap"))
+    if gap is not None:
+        return gap
+    used = _advisor_f(replace.get("used_replacement_cost"))
+    mid = _advisor_f(val.get("mid") or val.get("estimated_value"))
+    if used is None or mid is None:
+        return None
+    return used - mid
+
+
+def _advisor_estimated_value(modules: dict) -> float | None:
+    val = modules.get("value") or {}
+    return _advisor_f(val.get("mid") or val.get("estimated_value"))
+
+
+def _advisor_monthly(modules: dict) -> float | None:
+    fin = modules.get("finance") or {}
+    for key in ("monthly", "effective_monthly", "payment"):
+        v = _advisor_f(fin.get(key))
+        if v is not None:
+            return v
+    return None
+
+
+def _advisor_decision(modules: dict) -> str:
+    gap = _advisor_funding_gap(modules)
+    est = _advisor_estimated_value(modules)
+    if gap is not None and est not in (None, 0):
+        ratio = gap / est
+        if ratio <= _ADVISOR_UPGRADE_GAP_RATIO:
+            return "upgrade"
+        if ratio > _ADVISOR_DELAY_GAP_RATIO:
+            return "delay"
+    monthly = _advisor_monthly(modules)
+    if monthly is not None and est is not None and est > 0:
+        if monthly * 12 < est * _ADVISOR_UPGRADE_TCO_SAVING:
+            return "upgrade"
+    dream = modules.get("dream") or {}
+    if dream and isinstance(dream.get("affordability"), str):
+        if dream["affordability"].strip().lower() in ("affordable", "yes", "within_budget", "ok"):
+            return "strategy"
+    return "keep"
+
+
+def _advisor_rationale(decision: str, modules: dict, missing: list[str]) -> str:
+    parts: list[str] = []
+    est = _advisor_estimated_value(modules)
+    gap = _advisor_funding_gap(modules)
+    if est is not None:
+        parts.append(f"current value ~${est:,.0f}")
+    if gap is not None:
+        parts.append(f"replacement gap ~${gap:,.0f}")
+    head = {
+        "keep": "Your current car is the smart money move.",
+        "upgrade": "A clear trade-up is within reach.",
+        "delay": "Wait — the numbers aren't in your favour yet.",
+        "strategy": "A non-binary play fits this scenario.",
+    }.get(decision, "Your current car is the smart money move.")
+    text = head
+    if parts:
+        text = f"{head} " + ", ".join(parts) + "."
+    if missing:
+        text += f" (limited data: {', '.join(missing)}.)"
+    return _advisor_clip(text, _ADVISOR_RATIONALE_MAX)
+
+
+def _advisor_actions(decision: str) -> list[str]:
+    table = {
+        "keep": [
+            "Stick with the current car; revisit in 6 months.",
+            "Keep up scheduled services to protect residual value.",
+        ],
+        "upgrade": [
+            "Shortlist 2-3 concrete upgrade candidates from the Upgrade tab.",
+            "Get a pre-purchase inspection budget for each shortlist.",
+        ],
+        "delay": [
+            "Re-run the advisor after your next service or in 3 months.",
+            "Track market median for your model weekly on the Value tab.",
+        ],
+        "strategy": [
+            "Compare a novated lease vs outright purchase on the Finance tab.",
+            "Talk to a broker about a 2-3 year hold before committing.",
+        ],
+    }
+    return table.get(decision, table["keep"])[:_ADVISOR_NEXT_ACTIONS_MAX]
+
+
+async def compute_advisor_recommendation(
+    modules: dict | None,
+) -> dict:
+    """Pure-deterministic AI-advisor baseline (AUT-2450).
+
+    ``modules`` is the caller's dict of sub-module outputs (value /
+    replace / upgrade / finance / dream). Returns the same
+    ``AdvisorAIData`` shape the AI gateway returns, so the route can
+    render either path through one parser. No 9Router call.
+    """
+    modules = modules or {}
+    required = ("value", "replace", "upgrade", "finance", "dream")
+    missing = [m for m in required if not modules.get(m)]
+    decision = _advisor_decision(modules)
+    strength = (len(required) - len(missing)) / len(required)
+    confidence = round(max(0.0, min(1.0, 0.5 + 0.4 * strength)), 2)
+    if decision == "delay" and missing:
+        confidence = min(confidence, 0.55)
+    return {
+        "decision": decision,
+        "confidence": confidence,
+        "rationale": _advisor_rationale(decision, modules, missing),
+        "next_actions": _advisor_actions(decision),
+        "based_on": {m: bool(modules.get(m)) for m in required},
+        "model": "rule-based-fallback",
+    }

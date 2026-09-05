@@ -122,6 +122,22 @@ _SYSTEM_PROMPTS: dict[str, str] = {
         '"brand": string, "description": string}], "note": string|null}. '
         "Keep every part from the baseline; only refine the listed fields."
     ),
+    "advisor": (
+        "You are AutoBrain's ownership advisor for a single vehicle. The "
+        "deterministic engine has already produced a baseline decision "
+        "(keep / upgrade / delay / strategy), a confidence, a rationale and "
+        "up to 3 next_actions. Do NOT change the decision. Reason strictly "
+        "over the structured numbers in the payload (value, replace, "
+        "upgrade, finance, dream). Never invent a market value, repayment, "
+        "affordability figure, or any other number. If a number is absent, "
+        "say so in the rationale. Refine the rationale (plain English, "
+        "no markdown) and sharpen next_actions to be concrete. Return "
+        'STRICT JSON: {"decision": "keep"|"upgrade"|"delay"|"strategy", '
+        '"confidence": number (0-1), '
+        '"rationale": string (<=280 chars, plain English, no markdown), '
+        '"next_actions": [string] (<=3 items)}. '
+        "Any number you mention must be copied verbatim from the payload."
+    ),
 }
 
 # Sampling temperature per module. All modules default to 0 (deterministic);
@@ -136,6 +152,7 @@ _AI_IMMUTABLE: dict[str, frozenset[str]] = {
     "mod-impact": frozenset({"performance_score", "value_impact", "reliability_impact"}),
     "ocr": frozenset({"vendor", "invoice_date", "total", "tax", "currency", "items"}),
     "fuel-ocr": frozenset({"vendor", "date", "litres", "price_per_litre", "total_cost", "currency"}),
+    "advisor": frozenset({"decision", "based_on"}),
 }
 
 # Per-module output schema whitelist: the only keys the router may contribute,
@@ -204,6 +221,14 @@ _SCHEMAS: dict[str, dict[str, tuple]] = {
         "vehicle": (dict,),
         "model": (str,),
         "suggested_parts": (list,),
+    },
+    "advisor": {
+        "decision": (str,),
+        "confidence": (int, float),
+        "rationale": (str,),
+        "next_actions": (list,),
+        "based_on": (dict,),
+        "model": (str,),
     },
 }
 
