@@ -179,3 +179,28 @@ done
   instructions (search for "MANDATORY API PATTERN").
 - `docs/heartbeat-protocol.md` (Paperclip) covers the wider heartbeat lifecycle.
 - Run liveness states — `needs_followup` is the failure mode this rule prevents.
+
+## Pre-exit guardrail (AUT-1992)
+
+A run that surfaces follow-ups but never POSTs a child is a defect class of its own
+(marked `needs_followup`, blocked, repeated). The mechanical check lives in
+`scripts/check-followup-guardrail.sh`. Run it from the last step of every heartbeat
+**before** you `PATCH` the issue to `done`:
+
+```bash
+bash scripts/check-followup-guardrail.sh "$PAPERCLIP_RUN_SCRATCH_DIR"
+# exit 0 = pass
+# exit 1 = follow-up signals present, no children -> create them, re-run, then close
+# exit 2 = skipped (no transcript available) -> safe to proceed
+```
+
+The script scans the run scratch dir for `.txt`/`.md`/`.log` artefacts, counts
+follow-up signal words (`todo`, `follow-up`, `next step`, `create child/issue`,
+`new aut/issue`, `assignee must/should/will`), and if it finds ≥ 2 signals it calls
+`GET /api/companies/{companyId}/issues?parentId={PAPERCLIP_TASK_ID}` to verify at
+least one child exists. If not, it exits 1 with the exact `POST` body you should
+use to fix the gap.
+
+This is belt-and-braces over the manual checklist: it runs even when the agent
+forgets the rule. Skip-on-empty-transcript (`exit 2`) keeps it from blocking
+agents whose harness does not surface a transcript dir.
