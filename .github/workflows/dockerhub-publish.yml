@@ -203,7 +203,7 @@ jobs:
             echo "$BODY"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
-      - name: Create GitHub release (AUT-2600: use REST API — gh CLI not on self-hosted runners)
+      - name: 'Create GitHub release (AUT-2600: use REST API — gh CLI not on self-hosted runners)'
         if: steps.info.outputs.skip != 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
