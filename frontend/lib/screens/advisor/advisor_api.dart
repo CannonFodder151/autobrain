@@ -123,4 +123,12 @@ class AdvisorApi {
         '/advisor/ai?vehicle_id=$vehicleId',
         body: {'tab_outputs': tabOutputs},
       );
+
+  Future<AdvisorResponse> carCheck(Map<String, dynamic> body) =>
+      _callWithCache(
+        'car-check',
+        null,
+        '/advisor/car-check',
+        body: body,
+      );
 }

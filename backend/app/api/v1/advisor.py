@@ -72,6 +72,8 @@ from app.schemas.advisor import (
     AdvisorFinanceRequest,
     AdvisorResponse,
     AdvisorUpgradeData,
+    AdvisorCarCheckData,
+    CarCheckRequest,
     UpgradeOption,
     SimilarVehicleSuggestion,
     TradeUpDelta,
@@ -88,7 +90,8 @@ from app.services.advisor import (
     find_comparables,
     trade_in_band,
 )
-from app.services.ai_client import run_advisor_ai
+from app.services.car_check import compute_car_check, parse_listing_url
+from app.services.ai_client import run_advisor_ai, run_car_check_ai
 from app.services.ownership import get_accessible_vehicle
 
 router = APIRouter(prefix="/advisor", tags=["advisor"])
@@ -519,6 +522,125 @@ async def advisor_ai(
         vehicle_id=vehicle.id,
         generated_at=datetime.now(timezone.utc),
         model=model,
+        data=data.model_dump(),
+        factors=factors,
+    )
+
+
+@router.post("/car-check", response_model=AdvisorResponse)
+async def advisor_car_check(
+    payload: CarCheckRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> AdvisorResponse:
+    """Second Hand Car Check: score a public listing against market data (AUT-2630).
+
+    Accepts either a ``listing_url`` (best-effort slug parser extracts
+    make/model/year) or inline ``make``/``model``/``year`` +
+    ``asking_price``. Runs ``compute_car_check`` (deterministic, no
+    9Router) against the existing ``market_listing_cache`` so the
+    verdict's fair-value band is internally consistent with the rest
+    of the Ownership Advisor.
+
+    Then tries the AI gateway (9Router) for a richer ``ai_summary``,
+    ``red_flags`` and ``green_flags``. When 9Router is unreachable
+    the route keeps the rule-based fallback produced by
+    ``compute_car_check``; ``model`` is then ``rule-based-fallback``.
+
+    Free accounts get 403; demo accounts are allowed (car-check is
+    deterministic — no AI, no 9Router).
+    """
+    if user.free_account:
+        raise HTTPException(
+            status_code=403,
+            detail="Car Check is a paid feature. Upgrade to enable it.",
+        )
+
+    make = payload.make.strip()
+    model = payload.model.strip()
+    year = payload.year
+    if not make or not model or year is None:
+        if payload.listing_url:
+            parsed = parse_listing_url(payload.listing_url)
+            if parsed:
+                make = (make or parsed.get("make") or "").strip()
+                model = (model or parsed.get("model") or "").strip()
+                if year is None and parsed.get("year") is not None:
+                    try:
+                        year = int(parsed["year"])
+                    except (TypeError, ValueError):
+                        pass
+            if not make or not model or year is None:
+                url_note = "listing_url was supplied but make/model/year could not be parsed from it; provide the inline fields"
+            else:
+                url_note = None
+        else:
+            url_note = "listing_url or make+model+year are required"
+    else:
+        url_note = None
+
+    if not make or not model or year is None or payload.asking_price is None or payload.asking_price <= 0:
+        return AdvisorResponse(
+            module="car-check",
+            vehicle_id=None,
+            generated_at=datetime.now(timezone.utc),
+            model="rule-based-fallback",
+            data=AdvisorCarCheckData(
+                verdict="risky",
+                asking_price=None,
+                fair_value_low=None,
+                fair_value_mid=None,
+                fair_value_high=None,
+                delta_pct=None,
+                delta_amount=None,
+                sample_size=0,
+                ai_summary="We couldn't parse this listing — please check the URL or fill in the fields manually.",
+                red_flags=["Could not extract make, model, year and price from the listing."],
+                green_flags=[],
+                note=url_note or "listing_url or make+model+year+asking_price required",
+            ).model_dump(),
+            factors={"url_note": url_note},
+        )
+
+    result = await compute_car_check(
+        db,
+        make=make,
+        model=model,
+        year=year,
+        asking_price=payload.asking_price,
+        odometer_km=payload.odometer_km,
+        condition=payload.condition,
+        vehicle_type=payload.vehicle_type,
+    )
+
+    ai_payload = {k: v for k, v in result.items() if k != "model"}
+    ai_result = await run_car_check_ai(make, model, year, payload.asking_price, ai_payload)
+    if ai_result:
+        for key in ("ai_summary", "red_flags", "green_flags"):
+            if key in ai_result and ai_result[key]:
+                result[key] = ai_result[key]
+        result["model"] = ai_result.get("model") or "rule-based+ai"
+    else:
+        result["model"] = "rule-based-fallback"
+
+    data = AdvisorCarCheckData(**result)
+    factors = {
+        "parsed_listing": {
+            "make": data.__dict__.get("make", make),
+            "model": data.__dict__.get("model", model),
+            "year": year,
+            "condition": payload.condition,
+            "odometer_km": payload.odometer_km,
+        },
+        "source": "url_parser" if payload.listing_url else "manual",
+        "model": data.model,
+    }
+
+    return AdvisorResponse(
+        module="car-check",
+        vehicle_id=None,
+        generated_at=datetime.now(timezone.utc),
+        model=data.model,
         data=data.model_dump(),
         factors=factors,
     )

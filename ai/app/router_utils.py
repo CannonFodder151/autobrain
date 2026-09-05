@@ -138,6 +138,21 @@ _SYSTEM_PROMPTS: dict[str, str] = {
         '"next_actions": [string] (<=3 items)}. '
         "Any number you mention must be copied verbatim from the payload."
     ),
+    "car-check": (
+        "You are AutoBrain's used-car deal checker. The deterministic engine "
+        "has already produced a verdict (great_deal / fair / overpriced / "
+        "risky), a fair-value band (fair_value_low/mid/high), an "
+        "asking_price, delta_pct and sample_size. Never change the verdict "
+        "or the fair-value numbers. Write a plain-English ai_summary "
+        "(<=280 chars, no markdown) that explains whether the asking price "
+        "is a good buy relative to the fair band. Add concrete red_flags "
+        "(<=6 items) and green_flags (<=6 items) drawn from the payload "
+        "numbers. If a number is absent, say so. Never invent a price, "
+        "year, odometer or any other vehicle attribute. Return STRICT JSON: "
+        '{"ai_summary": string (<=280 chars), '
+        '"red_flags": [string] (<=6), '
+        '"green_flags": [string] (<=6)}.'
+    ),
 }
 
 # Sampling temperature per module. All modules default to 0 (deterministic);
@@ -153,6 +168,7 @@ _AI_IMMUTABLE: dict[str, frozenset[str]] = {
     "ocr": frozenset({"vendor", "invoice_date", "total", "tax", "currency", "items"}),
     "fuel-ocr": frozenset({"vendor", "date", "litres", "price_per_litre", "total_cost", "currency"}),
     "advisor": frozenset({"decision", "based_on"}),
+    "car-check": frozenset({"verdict", "asking_price", "fair_value_low", "fair_value_mid", "fair_value_high", "delta_pct", "delta_amount", "sample_size", "condition_multiplier", "km_multiplier"}),
 }
 
 # Per-module output schema whitelist: the only keys the router may contribute,
@@ -228,6 +244,22 @@ _SCHEMAS: dict[str, dict[str, tuple]] = {
         "rationale": (str,),
         "next_actions": (list,),
         "based_on": (dict,),
+        "model": (str,),
+    },
+    "car-check": {
+        "verdict": (str,),
+        "asking_price": (int, float, type(None)),
+        "fair_value_low": (int, float, type(None)),
+        "fair_value_mid": (int, float, type(None)),
+        "fair_value_high": (int, float, type(None)),
+        "delta_pct": (int, float, type(None)),
+        "delta_amount": (int, float, type(None)),
+        "sample_size": (int,),
+        "condition_multiplier": (int, float),
+        "km_multiplier": (int, float),
+        "ai_summary": (str,),
+        "red_flags": (list,),
+        "green_flags": (list,),
         "model": (str,),
     },
 }
