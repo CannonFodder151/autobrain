@@ -1,4 +1,5 @@
-"""Ownership Advisor API surface (AUT-2425, AUT-2445-VALUE, AUT-2448-FINANCE, AUT-2450-AI).
+"""Ownership Advisor API surface (AUT-2425, AUT-2445-VALUE, AUT-2448-FINANCE,
+AUT-2449-DREAM, AUT-2450-AI).
 
 Frozen route layout per ADR 0001
 (``docs/adr/0001-ownership-advisor.md``):
@@ -7,12 +8,12 @@ Frozen route layout per ADR 0001
 - ``GET  /api/v1/advisor/replace`` — AUT-2446
 - ``GET  /api/v1/advisor/upgrade`` — AUT-2447
 - ``POST /api/v1/advisor/finance`` — AUT-2448 (this module)
-- ``POST /api/v1/advisor/dream``   — AUT-2449
-- ``POST /api/v1/advisor/ai``      — AUT-2450 (this module; only one that hits 9Router)
+- ``POST /api/v1/advisor/dream``   — AUT-2449 (this module)
+- ``POST /api/v1/advisor/ai``      — AUT-2450 (only module that hits 9Router)
 
-This router file ships the ``value`` + ``finance`` + ``ai`` sub-modules.
-Other sub-modules land in their own PRs so they can ship in parallel
-behind the frozen envelope.
+This router file ships the ``value`` + ``finance`` + ``dream`` + ``ai``
+sub-modules. Other sub-modules land in their own PRs so they can ship
+in parallel behind the frozen envelope.
 
 Value is deterministic: it anchors on the cached market median
 (``app.services.market_data``), applies a condition multiplier + km
@@ -25,6 +26,14 @@ on top of the value module's mid price. No 9Router call. The novated-lease
 block is future-flagged (``status="coming_soon"``) until the EV / FBT
 rules land in a follow-up ADR.
 
+Dream Car (AUT-2449) is the only POST module that doesn't anchor on
+the user's current vehicle. It looks up an arbitrary (make, model,
+year) on ``market_listing_cache`` (same key shape, no duplicate
+storage), computes an indicative monthly repayment via the same
+``_loan_monthly_payment`` helper the Finance module publishes, and —
+when the user supplies a finance profile in the request body — surfaces
+an affordability gap (cash shortfall + DSR ceiling check).
+
 AI Advisor (AUT-2450) is the only module that hits 9Router. It consumes
 structured outputs from the Value/Replace/Upgrade/Finance/Dream sub-modules
 and returns ``{decision, confidence, rationale, next_actions, based_on}``.
@@ -36,8 +45,10 @@ unreachable the route falls back to ``app.services.advisor.compute_advisor_recom
 ``sha256(sorted_module_outputs)`` in ``app.services.ai_client``.
 
 Entitlement: free accounts get ``403``; demo accounts are allowed (value
-+ finance are deterministic, no AI). Sharing rules reuse the existing
-``get_accessible_vehicle`` helper from ``app.services.ownership``.
++ finance + dream are deterministic, no AI; AI Advisor is paid-only).
+Sharing rules reuse the existing ``get_accessible_vehicle`` helper from
+``app.services.ownership`` (Dream doesn't need it — no current vehicle
+in scope).
 """
 
 from __future__ import annotations
@@ -53,6 +64,8 @@ from app.models.user import User
 from app.schemas.advisor import (
     AdvisorAIData,
     AdvisorAIRequest,
+    AdvisorDreamData,
+    AdvisorDreamRequest,
     AdvisorFinanceData,
     AdvisorFinanceRequest,
     AdvisorResponse,
@@ -62,6 +75,7 @@ from app.schemas.advisor import (
 )
 from app.services.advisor import (
     compute_advisor_recommendation,
+    compute_dream,
     compute_finance_plan,
     compute_market_value,
     find_comparables,
@@ -205,6 +219,80 @@ async def advisor_finance(
     )
 
 
+@router.post("/dream", response_model=AdvisorResponse)
+async def advisor_dream(
+    payload: AdvisorDreamRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> AdvisorResponse:
+    """Dream Car plan: lookup + affordability + indicative repayments.
+
+    Deterministic only — no 9Router. Three blocks:
+
+    - ``data.target``: market-data lookup for (make, model, year) via
+      ``app.services.market_data.get_market_data``. Reuses the existing
+      ``market_listing_cache`` row (same key shape as Value — no
+      duplicate storage, ADR 0001 §2.5).
+    - ``data.affordability``: pure arithmetic on the optional request
+      body fields ``annual_income`` / ``monthly_expenses`` /
+      ``cash_on_hand``. Surplus flag fires when the user can fund the
+      deposit AND keep the indicative monthly under the 30% DSR ceiling
+      on disposable income.
+    - ``data.repayments``: wraps the existing ``_loan_monthly_payment``
+      helper (same one the Finance module publishes) so consecutive
+      calls return the same numbers for the same inputs.
+
+    The Dream Car lookup is not tied to the user's current vehicle —
+    ``vehicle_id`` in the envelope is left ``None``. When the cache has
+    no row for the target, the response still ships a well-formed
+    envelope with ``data.target.mid = null`` and a ``note`` explaining
+    the gap, mirroring Value/Finance's "no market data" graceful
+    fallback. Free accounts get 403.
+    """
+    _enforce_entitlement(user)
+
+    plan = await compute_dream(
+        db,
+        make=payload.make,
+        model=payload.model,
+        year=payload.year,
+        vehicle_type=payload.vehicle_type,
+        finance_term_months=payload.finance_term_months,
+        rate_pct=payload.rate_pct,
+        deposit_pct=payload.deposit_pct,
+        annual_income=payload.annual_income,
+        monthly_expenses=payload.monthly_expenses,
+        cash_on_hand=payload.cash_on_hand,
+    )
+    data = AdvisorDreamData(**plan)
+
+    factors = {
+        "target": {
+            "make": data.target.make,
+            "model": data.target.model,
+            "year": data.target.year,
+            "vehicle_type": data.target.vehicle_type,
+        },
+        "finance_term_months": data.repayments.finance_term_months,
+        "rate_pct": data.repayments.rate_pct,
+        "deposit_pct": data.repayments.deposit_pct,
+        "dsr_ceiling": 0.30,
+        "profile_provided": (
+            payload.annual_income is not None
+            and payload.monthly_expenses is not None
+        ),
+    }
+
+    return AdvisorResponse(
+        module="dream",
+        vehicle_id=None,
+        generated_at=datetime.now(timezone.utc),
+        model="rule-based-fallback",
+        data=data.model_dump(),
+        factors=factors,
+    )
+
+
 @router.post("/ai", response_model=AdvisorResponse)
 async def advisor_ai(
     body: AdvisorAIRequest,
@@ -291,7 +379,7 @@ async def advisor_ai(
         module="ai",
         vehicle_id=vehicle.id,
         generated_at=datetime.now(timezone.utc),
-        model=model,  # type: ignore[arg-type]
+        model=model,
         data=data.model_dump(),
         factors=factors,
     )

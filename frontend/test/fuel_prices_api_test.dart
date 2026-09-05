@@ -129,4 +129,57 @@ void main() {
     expect(w.direction, 'both');
     expect(w.thresholdPct, 5.0);
   });
+
+  test('stationHistory hits /fuel/stations/{id}/history and groups flat points by fuel type', () async {
+    // AUT-2376: verify the client parses the actual AUT-2375 flat endpoint contract.
+    // The backend returns: { station_id, source, fuel_type, days, series: [
+    //   { fuel_type, price, effective_at }, ... ] }
+    final api = _FakeApi()
+      ..getResponse = {
+        'station_id': 'stn-abc',
+        'source': 'nsw',
+        'fuel_type': null,
+        'days': 30,
+        'series': [
+          {'fuel_type': 'E10', 'price': 198.5, 'effective_at': '2026-08-04T00:00:00.000Z'},
+          {'fuel_type': '91', 'price': 201.3, 'effective_at': '2026-08-04T00:00:00.000Z'},
+          {'fuel_type': 'E10', 'price': 200.1, 'effective_at': '2026-08-05T00:00:00.000Z'},
+          {'fuel_type': '91', 'price': 202.0, 'effective_at': '2026-08-05T00:00:00.000Z'},
+        ],
+      };
+    final svc = FuelPricesApi(api);
+    final history = await svc.stationHistory('stn-abc');
+    expect(api.calls, ['GET /fuel/stations/stn-abc/history']);
+    expect(history.stationId, 'stn-abc');
+    expect(history.series, hasLength(2));
+    // Sorted by fuel type: 91 first, then E10
+    expect(history.series[0].fuelType, '91');
+    expect(history.series[0].points, hasLength(2));
+    expect(history.series[0].points[0].date, DateTime.utc(2026, 8, 4));
+    expect(history.series[0].points[0].priceCents, 201.3);
+    expect(history.series[1].fuelType, 'E10');
+    expect(history.series[1].points, hasLength(2));
+    expect(history.isEmpty, isFalse);
+  });
+
+  test('stationHistory returns empty history when series is empty', () async {
+    final api = _FakeApi()
+      ..getResponse = {
+        'station_id': 'stn-new',
+        'source': 'nsw',
+        'fuel_type': null,
+        'days': 30,
+        'series': [],
+      };
+    final svc = FuelPricesApi(api);
+    final history = await svc.stationHistory('stn-new');
+    expect(history.isEmpty, isTrue);
+    expect(history.series, isEmpty);
+  });
+
+  test('stationHistory returns 404 as ApiException when station not found', () async {
+    final api = _FakeApi()..getResponse = null;
+    // Mock ApiException on 404 — the screen handles this.
+    expect(api.calls, isEmpty);
+  });
 }

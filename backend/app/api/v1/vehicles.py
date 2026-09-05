@@ -120,6 +120,11 @@ async def rego_lookup(
 
     Free plans can't use rego lookup, except on a vehicle shared with them
     where the owner's plan applies.
+
+    When called with a ``vehicle_id`` and the lookup returns status/expiry,
+    the values are persisted on the vehicle (AUT-2416). Status/expiry are
+    derived in two places: per-request from this endpoint, and daily by the
+    rego-refresh sweep (AUT-2414).
     """
     if payload.vehicle_id:
         vehicle = await get_accessible_vehicle(db, payload.vehicle_id, user)
@@ -137,7 +142,31 @@ async def rego_lookup(
     result = await lookup_rego(payload.rego, payload.jurisdiction, payload.state, payload.vehicle_type)
     if not result:
         raise HTTPException(status_code=404, detail="No registration data found for this plate")
+    if payload.vehicle_id:
+        await _persist_rego_on_vehicle(db, vehicle, result)
     return RegoLookupResponse(**result)
+
+
+async def _persist_rego_on_vehicle(db, vehicle: Vehicle, result: dict) -> None:
+    """Cache rego status + expiry on the vehicle after a successful lookup.
+
+    The expiry is parsed as a ``date`` so the daily Celery sweep can do
+    arithmetic on it. The ``rego_checked_at`` timestamp is set to ``now()`` so
+    ops can see how stale the cache is (the daily sweep re-fetches anyway).
+    """
+    from datetime import datetime, timezone
+
+    vehicle.rego_status = result.get("status") or "registered"
+    expiry_raw = result.get("expiry_date")
+    if expiry_raw:
+        try:
+            vehicle.rego_expiry_date = date.fromisoformat(expiry_raw)
+        except (ValueError, TypeError):
+            vehicle.rego_expiry_date = None
+    else:
+        vehicle.rego_expiry_date = None
+    vehicle.rego_checked_at = datetime.now(timezone.utc)
+    await db.commit()
 
 
 @router.get("/{vehicle_id}/timeline", response_model=list[TimelineEventOut])

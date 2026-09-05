@@ -52,4 +52,68 @@ class FuelPricesApi {
   Future<void> removeWatch(String id) async {
     await _api.delete('/fuel-prices/watchlist/$id');
   }
+
+  /// Last 30 days of fuel prices at a station (AUT-2375 endpoint, AUT-2376 chart).
+  /// Backend returns a flat list: `{ "station_id": ..., "series": [
+  ///   { "fuel_type": "E10", "price": 198.5, "effective_at": "2026-08-04T..." }, ... ] }`.
+  /// We group by `fuel_type` so the chart screen can iterate one series per fuel.
+  Future<StationPriceHistory> stationHistory(String stationId) async {
+    final data = await _api.get('/fuel/stations/$stationId/history')
+        as Map<String, dynamic>;
+    return StationPriceHistory.fromJson(data);
+  }
+}
+
+class StationPriceHistoryPoint {
+  final DateTime date;
+  final double priceCents; // cents per litre
+
+  const StationPriceHistoryPoint({required this.date, required this.priceCents});
+
+  factory StationPriceHistoryPoint.fromJson(Map<String, dynamic> m) {
+    return StationPriceHistoryPoint(
+      date: DateTime.parse(m['effective_at'] as String),
+      priceCents: (m['price'] as num).toDouble(),
+    );
+  }
+}
+
+class StationPriceHistorySeries {
+  final String fuelType;
+  final List<StationPriceHistoryPoint> points;
+
+  const StationPriceHistorySeries({
+    required this.fuelType,
+    required this.points,
+  });
+}
+
+class StationPriceHistory {
+  final String stationId;
+  final List<StationPriceHistorySeries> series;
+
+  const StationPriceHistory({
+    required this.stationId,
+    required this.series,
+  });
+
+  factory StationPriceHistory.fromJson(Map<String, dynamic> m) {
+    final stationId = m['station_id'] as String? ?? '';
+    // Flat response: each item is one (fuel, price, time) point. Group by fuel.
+    final raw = (m['series'] as List?) ?? const [];
+    final byFuel = <String, List<StationPriceHistoryPoint>>{};
+    for (final item in raw) {
+      final map = item as Map<String, dynamic>;
+      final fuelType = map['fuel_type'] as String? ?? '';
+      final p = StationPriceHistoryPoint.fromJson(map);
+      (byFuel[fuelType] ??= <StationPriceHistoryPoint>[]).add(p);
+    }
+    final series = byFuel.entries
+        .map((e) => StationPriceHistorySeries(fuelType: e.key, points: e.value))
+        .toList()
+      ..sort((a, b) => a.fuelType.compareTo(b.fuelType));
+    return StationPriceHistory(stationId: stationId, series: series);
+  }
+
+  bool get isEmpty => series.every((s) => s.points.isEmpty);
 }

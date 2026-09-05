@@ -28,6 +28,7 @@ import '../valuation/valuation_screen.dart';
 import '../vehicles/vehicle_list_screen.dart';
 import '../vehicles/vehicle_timeline_screen.dart';
 import '../servo_spy/servo_spy_screen.dart';
+import '../advisor/overview_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -376,6 +377,9 @@ class _FeatureGrid extends StatelessWidget {
       if (!kIsWeb)
         _Feature('OBD', Icons.settings_input_component, const Color(0xFF334155),
             ObdScreen(vehicleId: vehicle.id)),
+      _Feature('Ownership Advisor', Icons.insights,
+          const Color(0xFF6366F1),
+          _AdvisorEntry(vehicle: vehicle)),
       const _Feature('Servo Spy', Icons.local_gas_station, Color(0xFFF59E0B),
           ServoSpyScreen()),
       const _Feature('Community Garage', Icons.groups, Color(0xFF0D9488),
@@ -450,107 +454,13 @@ class _Feature {
   final Widget screen;
 }
 
-/// Offers the downloadable iOS/Android apps to a logged-in user.
-class DownloadAppDialog extends StatelessWidget {
-  const DownloadAppDialog({super.key});
-
-  static const _androidUrl = 'https://play.google.com/store/apps/details?id=com.autobrainservice.app';
-  static const _iosUrl = 'https://apps.apple.com/app/autobrain';
-
-  Future<void> _open(BuildContext context, String url) async {
-    final ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-    if (!ok && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open the link.')),
-      );
-    }
-  }
+/// Bridges the home grid to the Ownership Advisor entry point. The overview
+/// screen needs the live vehicleId, which the grid already filters for on
+/// `_Feature`s that need a vehicle; this indirection unpacks the id.
+class _AdvisorEntry extends StatelessWidget {
+  const _AdvisorEntry({required this.vehicle});
+  final Vehicle vehicle;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return AlertDialog(
-      title: const Text('Get the AutoBrain app'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'Install AutoBrain on your phone for the full experience — offline cache, '
-            'push notifications and faster access.',
-            style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 14),
-          ),
-          const SizedBox(height: 18),
-          FilledButton.tonalIcon(
-            onPressed: () => _open(context, _androidUrl),
-            icon: const Icon(Icons.android),
-            label: const Text('Get it on Google Play'),
-          ),
-          const SizedBox(height: 10),
-          FilledButton.tonalIcon(
-            onPressed: () => _open(context, _iosUrl),
-            icon: const Icon(Icons.apple),
-            label: const Text('Get on the App Store'),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
-        ),
-      ],
-    );
-  }
-}
-
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({
-    required this.message,
-    required this.onRetry,
-    this.sessionExpired = false,
-    this.onLogout,
-  });
-  final String message;
-  final VoidCallback onRetry;
-  final bool sessionExpired;
-  final VoidCallback? onLogout;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(sessionExpired ? Icons.lock_clock : Icons.cloud_off,
-                size: 56, color: scheme.error),
-            const SizedBox(height: 16),
-            Text(message, textAlign: TextAlign.center),
-            const SizedBox(height: 16),
-            if (sessionExpired && onLogout != null) ...[
-              FilledButton.tonalIcon(
-                onPressed: onLogout,
-                icon: const Icon(Icons.logout),
-                label: const Text('Log out'),
-              ),
-              const SizedBox(height: 8),
-              TextButton.icon(
-                onPressed: onRetry,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Retry'),
-              ),
-            ] else
-              FilledButton.tonalIcon(
-                onPressed: onRetry,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Retry'),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+  Widget build(BuildContext context) =>
+      AdvisorOverviewScreen(vehicleId: vehicle.id);

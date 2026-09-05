@@ -648,3 +648,236 @@ async def compute_advisor_recommendation(
         "based_on": {m: bool(modules.get(m)) for m in required},
         "model": "rule-based-fallback",
     }
+
+
+# ---------------------------------------------------------------------------
+# Dream Car module (AUT-2449)
+# ---------------------------------------------------------------------------
+#
+# Three deterministic blocks for an arbitrary target vehicle:
+#
+# 1. Target lookup — reuses ``get_market_data`` (same make/model/year key
+#    shape as Value/Upgrade, so the cache row is shared — no duplicate
+#    storage per ADR 0001 §2.5). Returns a low/mid/high band + sample
+#    size; when the cache has no row, ``note`` explains the gap so the
+#    UI can render a graceful "no market data" state.
+#
+# 2. Affordability — pure arithmetic on the request body's finance
+#    profile (``annual_income``, ``monthly_expenses``, ``cash_on_hand``).
+#    No DB read; finance inputs are ephemeral per ADR 0001 §2.4 (no
+#    migration, no user-settings tab). Surplus flag fires when the user
+#    can fund the deposit AND keep positive disposable income after the
+#    indicative repayment.
+#
+# 3. Repayments — wraps the existing ``_loan_monthly_payment`` (the same
+#    deterministic amortising-loan helper the Finance module publishes),
+#    with the same default term (60), rate (7.5% p.a.) and deposit (20%)
+#    — clamped via the existing helpers. Reusing rather than re-deriving
+#    stops the AI Advisor (AUT-2450) from ever seeing two different
+#    numbers for the same input.
+
+# Debt-service-ratio ceiling: how much of monthly disposable income can
+# be safely absorbed by the car loan. 30% is the conservative AU bank
+# floor (most lenders cap serviceability at 30-35%). Industry standard,
+# not invented.
+DREAM_DSR_CEILING = 0.30
+
+
+# Dream module's own finance clamps — kept inline so the module is
+# self-contained (no dependency on the Upgrade module, which is in
+# flight as PR #492). Same numeric bounds as the rest of the advisor
+# surface; clamp failures fall back to the documented defaults.
+DREAM_FINANCE_TERM_MIN = 12
+DREAM_FINANCE_TERM_MAX = 84
+DREAM_RATE_PCT_MIN = 0.0
+DREAM_RATE_PCT_MAX = 30.0
+DREAM_DEPOSIT_PCT_MIN = 0.0
+DREAM_DEPOSIT_PCT_MAX = 100.0
+DREAM_DEFAULT_FINANCE_TERM_MONTHS = 60
+DREAM_DEFAULT_RATE_PCT = 7.5
+DREAM_DEFAULT_DEPOSIT_PCT = 20.0
+
+
+def _dream_clamp_term(months: int | None) -> int:
+    if months is None:
+        return DREAM_DEFAULT_FINANCE_TERM_MONTHS
+    try:
+        m = int(months)
+    except (TypeError, ValueError):
+        return DREAM_DEFAULT_FINANCE_TERM_MONTHS
+    return max(DREAM_FINANCE_TERM_MIN, min(DREAM_FINANCE_TERM_MAX, m))
+
+
+def _dream_clamp_rate(rate: float | None) -> float:
+    if rate is None:
+        return DREAM_DEFAULT_RATE_PCT
+    try:
+        r = float(rate)
+    except (TypeError, ValueError):
+        return DREAM_DEFAULT_RATE_PCT
+    return max(DREAM_RATE_PCT_MIN, min(DREAM_RATE_PCT_MAX, r))
+
+
+def _dream_clamp_deposit(pct: float | None) -> float:
+    if pct is None:
+        return DREAM_DEFAULT_DEPOSIT_PCT
+    try:
+        p = float(pct)
+    except (TypeError, ValueError):
+        return DREAM_DEFAULT_DEPOSIT_PCT
+    return max(DREAM_DEPOSIT_PCT_MIN, min(DREAM_DEPOSIT_PCT_MAX, p))
+
+
+async def compute_dream(
+    db: AsyncSession,
+    *,
+    make: str,
+    model: str,
+    year: int,
+    vehicle_type: str = "car",
+    finance_term_months: int | None = None,
+    rate_pct: float | None = None,
+    deposit_pct: float | None = None,
+    annual_income: float | None = None,
+    monthly_expenses: float | None = None,
+    cash_on_hand: float | None = None,
+) -> dict:
+    """Deterministic Dream Car plan.
+
+    Returns a dict matching ``AdvisorDreamData`` in ``schemas/advisor.py``.
+    All numbers come from the existing ``market_listing_cache`` (target
+    lookup) or the request body's finance profile (affordability +
+    repayments) — no AI, no 9Router.
+    """
+    term = _dream_clamp_term(finance_term_months)
+    rate = _dream_clamp_rate(rate_pct)
+    deposit = _dream_clamp_deposit(deposit_pct)
+
+    # --- 1. Target lookup --------------------------------------------------
+    market = await get_market_data(
+        db, make or "", model or "", year, vehicle_type or "car",
+    )
+    target_mid = _safe(market.get("median_price"))
+    target_block = {
+        "make": (make or "").strip(),
+        "model": (model or "").strip(),
+        "year": year,
+        "vehicle_type": vehicle_type or "car",
+        "currency": CURRENCY,
+        "low": _safe(market.get("low_price")),
+        "mid": target_mid,
+        "high": _safe(market.get("high_price")),
+        "source": market.get("source", "fallback"),
+        "as_of": market.get("as_of"),
+        "stale": bool(market.get("stale")),
+        "sample_size": int(market.get("sample_size") or 0),
+        "note": market.get("note") if target_mid is None else None,
+    }
+
+    # --- 2. Affordability (pure arithmetic on request body) ----------------
+    # Three inputs: annual_income, monthly_expenses, cash_on_hand. All
+    # optional; any missing field makes the numeric block stay None and
+    # ``note`` explains the gap. This matches the ADR 0001 §2.4 rule
+    # that finance inputs are ephemeral — there's no DB row holding the
+    # user's profile, so the screen always re-asks.
+    has_profile = (
+        annual_income is not None and monthly_expenses is not None
+    )
+    if not has_profile:
+        affordability_block = {
+            "currency": CURRENCY,
+            "target_price_mid": target_mid,
+            "deposit_required": (
+                round(target_mid * deposit / 100.0, 2) if target_mid is not None else None
+            ),
+            "annual_income": annual_income,
+            "monthly_disposable_income": None,
+            "cash_on_hand": cash_on_hand,
+            "cash_gap": (
+                round(cash_on_hand - target_mid * deposit / 100.0, 2)
+                if (cash_on_hand is not None and target_mid is not None)
+                else None
+            ),
+            "surplus": False,
+            "note": "annual income and monthly expenses required to compute affordability",
+        }
+    else:
+        annual_income = float(annual_income)
+        monthly_expenses = float(monthly_expenses)
+        monthly_income = annual_income / 12.0
+        monthly_disposable = max(0.0, monthly_income - monthly_expenses)
+        deposit_required = (
+            round(target_mid * deposit / 100.0, 2) if target_mid is not None else None
+        )
+        if cash_on_hand is None or deposit_required is None:
+            cash_gap = None
+        else:
+            cash_gap = round(float(cash_on_hand) - deposit_required, 2)
+        affordability_block = {
+            "currency": CURRENCY,
+            "target_price_mid": target_mid,
+            "deposit_required": deposit_required,
+            "annual_income": annual_income,
+            "monthly_disposable_income": round(monthly_disposable, 2),
+            "cash_on_hand": float(cash_on_hand) if cash_on_hand is not None else None,
+            "cash_gap": cash_gap,
+            "surplus": False,  # finalised below once repayments are known
+            "note": None,
+        }
+
+    # --- 3. Repayments (reuse Finance's amortise helper) -------------------
+    if target_mid is None or target_mid <= 0:
+        repayments_block = {
+            "currency": CURRENCY,
+            "finance_term_months": term,
+            "rate_pct": rate,
+            "deposit_pct": deposit,
+            "principal": None,
+            "monthly_repayment": None,
+            "total_interest": None,
+            "note": "no market listings available for target — cannot estimate finance",
+        }
+    else:
+        principal = round(target_mid * (1 - deposit / 100.0), 2)
+        monthly = _loan_monthly_payment(principal, rate, term)
+        total_interest = round(monthly * term - principal, 2) if term > 0 else 0.0
+        repayments_block = {
+            "currency": CURRENCY,
+            "finance_term_months": term,
+            "rate_pct": rate,
+            "deposit_pct": deposit,
+            "principal": principal,
+            "monthly_repayment": monthly,
+            "total_interest": total_interest,
+            "note": None,
+        }
+
+    # --- Finalise affordability.surplus (cash + DSR headroom) ---------------
+    # Surplus fires when the user can fund the deposit (cash_on_hand >=
+    # deposit_required) AND the indicative monthly repayment fits under
+    # the DSR ceiling against their disposable income. Both are pure
+    # arithmetic on values already in the block — no new inputs.
+    monthly_repayment = repayments_block.get("monthly_repayment")
+    if has_profile and target_mid is not None and monthly_repayment:
+        cash_ok = (
+            affordability_block["cash_gap"] is None
+            or affordability_block["cash_gap"] >= 0
+        )
+        monthly_disposable = float(affordability_block["monthly_disposable_income"] or 0.0)
+        dsr_ok = monthly_disposable <= 0 or (
+            monthly_repayment <= monthly_disposable * DREAM_DSR_CEILING
+        )
+        affordability_block["surplus"] = bool(cash_ok and dsr_ok)
+        if not dsr_ok:
+            affordability_block["note"] = (
+                f"monthly repayment exceeds {int(DREAM_DSR_CEILING * 100)}% of "
+                f"disposable income — consider a longer term or a cheaper car"
+            )
+
+    return {
+        "currency": CURRENCY,
+        "target": target_block,
+        "affordability": affordability_block,
+        "repayments": repayments_block,
+        "note": target_block["note"],
+    }

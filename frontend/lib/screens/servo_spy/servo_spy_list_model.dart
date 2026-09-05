@@ -7,6 +7,7 @@
 enum ServoSortMetric { price, distance }
 
 class ServoStationRow {
+  final String? id;
   final String name;
   final String? brand;
   final String? logoUrl;
@@ -18,6 +19,7 @@ class ServoStationRow {
   final List<ServoFuelPrice> prices;
 
   const ServoStationRow({
+    this.id,
     required this.name,
     this.brand,
     this.logoUrl,
@@ -127,6 +129,7 @@ ServoStationRow stationRowFromApi(
   final prices = (m['prices'] as List?) ?? const [];
   final picked = pickPriceForFuel(prices, selectedFuelType);
   return ServoStationRow(
+    id: m['id'] as String?,
     name: m['name'] as String? ?? 'Unknown',
     brand: m['brand'] as String?,
     logoUrl: m['logo'] as String?,

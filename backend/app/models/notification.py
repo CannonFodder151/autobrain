@@ -64,6 +64,10 @@ class NotificationPreference(Base):
     # since the last logged fuel fill (encourages logging / shows gaps).
     fuel_gap_km: Mapped[int] = mapped_column(Integer, default=0)  # 0 = disabled
 
+    # Rego expiry trigger: alert when registration expires within N days.
+    # Premium-only setting evaluated by the daily sweep (AUT-2416).
+    rego_expiry_days: Mapped[int] = mapped_column(Integer, default=0)  # 0 = disabled
+
     discord_webhook_url: Mapped[str | None] = mapped_column(Text)
     fcm_token: Mapped[str | None] = mapped_column(Text)
 

@@ -5,7 +5,9 @@ import 'package:provider/provider.dart';
 import 'core/auth_state.dart';
 import 'core/config.dart';
 import 'core/theme.dart';
+import 'core/models.dart';
 import 'community_garage/screens/share_link_view.dart';
+import 'screens/advisor/overview_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/reset_password.dart';
 import 'screens/auth/server_setup_screen.dart';
@@ -60,11 +62,37 @@ class AutoBrainApp extends StatelessWidget {
     return fragment == 'license';
   }
 
+  /// Maps an Ownership Advisor deep-link path token to the Overview tab
+  /// index. Tokens outside the closed set fall through to the default
+  /// Overview tab.
+  static int? advisorTabFromUrl() {
+    final segs = Uri.base.pathSegments;
+    if (segs.isEmpty || segs.first != 'advisor') return null;
+    if (segs.length == 1) return 0;
+    switch (segs[1]) {
+      case 'value':
+        return 1;
+      case 'replace':
+        return 2;
+      case 'upgrade':
+        return 3;
+      case 'finance':
+        return 4;
+      case 'dream':
+        return 5;
+      case 'ai':
+        return 6;
+      default:
+        return 0;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthState>();
     final resetToken = resetTokenFromUrl();
     final shareToken = shareTokenFromUrl();
+    final advisorTab = advisorTabFromUrl();
 
     Widget home;
     if (resetToken != null) {
@@ -74,7 +102,13 @@ class AutoBrainApp extends StatelessWidget {
     } else if (shareToken != null) {
       home = ShareLinkView(token: shareToken);
     } else if (auth.isLoggedIn) {
-      home = licenseRequested() ? const LicenseScreen() : const HomeScreen();
+      if (licenseRequested()) {
+        home = const LicenseScreen();
+      } else if (advisorTab != null) {
+        home = _AdvisorDeepLink(tabIndex: advisorTab);
+      } else {
+        home = const HomeScreen();
+      }
     } else if (signupRequested() && auth.signupEnabled) {
       home = const SignupScreen();
     } else {
@@ -135,6 +169,62 @@ class AutoBrainApp extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+/// Renders the Ownership Advisor for the user's current vehicle at the
+/// tab matching a `/advisor/{value|replace|upgrade|finance|dream|ai}`
+/// deep-link. Falls back to the Overview tab if no vehicle is selected.
+class _AdvisorDeepLink extends StatefulWidget {
+  const _AdvisorDeepLink({required this.tabIndex});
+  final int tabIndex;
+
+  @override
+  State<_AdvisorDeepLink> createState() => _AdvisorDeepLinkState();
+}
+
+class _AdvisorDeepLinkState extends State<_AdvisorDeepLink> {
+  Vehicle? _vehicle;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final auth = context.read<AuthState>();
+    try {
+      final data = await auth.api.get('/vehicles') as List;
+      final vehicles = data
+          .map((e) => Vehicle.fromJson(e as Map<String, dynamic>))
+          .toList();
+      if (!mounted) return;
+      setState(() {
+        _vehicle = Vehicle.resolveSelection(vehicles, null);
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_vehicle == null) {
+      return const HomeScreen();
+    }
+    return AdvisorOverviewScreen(
+      vehicleId: _vehicle!.id,
+      initialTabIndex: widget.tabIndex,
     );
   }
 }
