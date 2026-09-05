@@ -120,7 +120,30 @@ flutter build appbundle --release \
 
 Artifact: `build/app/outputs/bundle/release/app-release.aab`
 
-### 3b. Android package name & signing (must-match checklist)
+### 3b. APK build throttle (AUT-2619)
+
+The release pipeline builds a release `.apk` **only** from release-mobile.yml
+for the apksigner v2/v3 scheme + upload-certificate fingerprint check, and to
+seed the coming-soon alternate-store (Google / Apple) uploads. To avoid
+spamming stores with binaries that are identical to the last upload, the APK
+build is gated on two conditions:
+
+1. **Meaningful change** — the git diff of `lib/` + `assets/` (mobile-app
+   code) since the previous release tag is non-empty. A pure version bump
+   (`bump-version.sh`, no code change) skips the APK.
+2. **2-day cooldown** — at least 48 hours have elapsed since the last APK
+   build. The last build time is stored on a floating tag ref `apk-built`
+   (updated by the pipeline after each successful APK build); the next
+   run reads it via `git show -s --format=%cI apk-built`.
+
+Both must be true for the APK to build. The `.aab` (the Play Console artifact)
+is **never** throttled — every release still produces and uploads the `.aab`.
+
+> The cooldown is measured in wall-clock time from the last APK build, not from
+> the last release. A release dispatched within the 48h window with no meaningful
+> change skips the APK entirely (the `.aab` is unaffected).
+
+
 
 Play Console is locked to package **`com.autobrainservice.app`**. Before uploading,
 verify these in `autobrain-mobile` — a mismatch is the #1 cause of upload rejection:
