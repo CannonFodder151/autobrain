@@ -57,7 +57,7 @@ class _VehicleTimelineScreenState extends State<VehicleTimelineScreen> {
                 : Center(
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 700),
-                    child: ListView.builder(
+                      child: ListView.builder(
                         padding: const EdgeInsets.all(16),
                         itemCount: _events.length,
                         itemBuilder: (context, i) {
