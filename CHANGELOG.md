@@ -11,6 +11,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-2543)
+- docs: `docs/home-assistant-integration.md` — Home Assistant setup guide: token
+  creation (`POST /api/v1/ha/tokens`), `rest` + `command_line` sensor examples for
+  `/api/v1/ha/vehicles`, `/service-reminders`, per-vehicle `/analytics` and
+  `/service-intervals`, service-due mobile-notification automation (≤7d), Lovelace
+  cards, and the optional `wss://<host>/ws/ha/{vehicle_id}` real-time push path.
+  Registered the HA route table (`GET /ha/vehicles`, `/vehicles/{id}/service-intervals`,
+  `/vehicles/{id}/analytics`, `/service-reminders`; `POST/GET/DELETE /ha/tokens`)
+  in `docs/api-spec.md`.
+
+### Added (AUT-2543)
+- tests: `backend/tests/test_ha_docs.py` — drift guard asserting the documented
+  `/api/v1/ha/*` paths match the real router table (catches the `ha/v1/` double-
+  prefix regression from the draft PR) and that every field referenced in the doc
+  examples exists on the `HaAnalyticsOut`/`HaServiceReminderOut`/`HaServiceIntervalOut`
+  /`HaVehicleOut` schemas. Skips the field-name checks while AUT-2541's schemas
+  are absent so CI stays green on `main`; activates once PR-520 lands.
+
 ## [0.3.238] - 2026-09-05
 
 ### Fixed (AUT-2526)
