@@ -10,6 +10,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Added (AUT-2616)
+- feat(backend,rego): backfill `engine`/`transmission` from the local spec table when the rego-lookup-api provider returns them blank. The scraper (`rego-lookup-api`) only extracts `vin`, `make`, `model`, `year`, `colour`, `body_type` from state sites — it cannot get `engine` or `transmission`. Backend `_map_provider` now backfills those fields from the existing `_AU_PREFIX` table by `(make, model)`, then tries VIN-WMI decode as a second fallback. Provider values always take precedence over the local spec. Tests: `backend/tests/test_aut2616_rego_spec_backfill.py` (16 cases). This closes the vehicle-screen table gap where Engine/Transmission were blank after a successful real lookup.
+
 ### Added (AUT-2376)
 - feat(frontend): Servo Spy station detail — 30-day price history chart. Tapping
   a station in the Servo Spy **list** view (or the **map** detail sheet) opens
