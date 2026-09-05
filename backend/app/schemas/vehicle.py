@@ -50,6 +50,7 @@ class VehicleCreate(BaseModel):
     club_reg: bool = False
     auto_suggest_service: bool = False
     fuel_type: str | None = None
+    powertrain: PowertrainType = PowertrainType.ICE
 
 
 class VehicleUpdate(BaseModel):
