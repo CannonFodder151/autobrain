@@ -41,6 +41,8 @@ from app.schemas.advisor import (
     AdvisorFinanceRequest,
     AdvisorResponse,
     AdvisorUpgradeData,
+    AdvisorCarCheckData,
+    CarCheckRequest,
     UpgradeOption,
     SimilarVehicleSuggestion,
     TradeUpDelta,

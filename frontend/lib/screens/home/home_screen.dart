@@ -29,6 +29,7 @@ import '../vehicles/vehicle_list_screen.dart';
 import '../vehicles/vehicle_timeline_screen.dart';
 import '../servo_spy/servo_spy_screen.dart';
 import '../advisor/overview_screen.dart';
+import '../advisor/car_check_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -378,6 +379,8 @@ class _FeatureGrid extends StatelessWidget {
           PartsScreen(vehicle: vehicle)),
       _Feature('Valuation', Icons.sell, const Color(0xFF059669),
           ValuationScreen(vehicleId: vehicle.id)),
+      const _Feature('Car Check', Icons.fact_check, Color(0xFF7C3AED),
+          CarCheckScreen()),
       _Feature('Analytics', Icons.insights, const Color(0xFFCA8A04),
           AnalyticsScreen(vehicleId: vehicle.id)),
       _Feature('Notifications', Icons.notifications_active,
