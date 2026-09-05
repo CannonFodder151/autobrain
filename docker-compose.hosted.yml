@@ -274,7 +274,10 @@ services:
 
   worker:
     # AUT-2482: pinned to post-fix worker digest (built 2026-09-04 from main 16b784c, includes AUT-2506 op.get_inspector fix).
-    image: ghcr.io/cannonfodder151/autobrain-worker:hosted@sha256:47f59cbf2781c5507d9b0d35c52e5959b1e80c0084f22a86ed2e287ccc6185c1
+    # AUT-1878: bumped to arm64 digest from 9d81e4d build (hosted-arm64), which adds
+    # the deterministic /proc-based HEALTHCHECK that fixes the stale celerybeat-schedule
+    # mtime false-negative. NOTE: this pin is arm64-only; amd64 arm still building.
+    image: ghcr.io/cannonfodder151/autobrain-worker:hosted-arm64@sha256:41db9068ef1b0fb431d3a003a9f41d2e70fd5fa8b21eb1937e2e0f32f27043c5
     restart: unless-stopped
     # AUT-1242/C1: beat scheduler embedded in the worker (-B), matching the dev
     # compose. Removes the separate beat container.
