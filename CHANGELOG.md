@@ -39,6 +39,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed (AUT-1878)
 - fix(deploy): pin hosted worker to a specific arm64 digest in `docker-compose.hosted.yml` and replace the Celerybeat-schedule mtime HEALTHCHECK with a deterministic `/proc` PID + `GET /health` probe. The previous mtime probe falsely flapped when no tasks were due within the window (the production norm for the worker), cycling containers; the new probe stays Healthy on the Oracle VM.
 
+### Added (AUT-2446)
+- backend(advisor): Ownership Advisor Replace module — deterministic used/new replacement cost + funding gap + monthly saving target. New `GET /api/v1/advisor/replace` route (per ADR 0001) anchors on the same cached `market_listing_cache` median the Value module uses — no 9Router, no AI. Used replacement cost = current private-sale mid; new replacement cost applies age-based new-vs-used premium curve (1.0× at 0y → 1.4× at 3y → 1.8× at 6y → 2.2× at 10y, clamped at 3.0×). Funding gap: `gap = replacement_cost - current_value - trade_in_mid`; `monthly_target = gap / horizon_months`. Negative gap = `surplus=true` with zero monthly. Free accounts get 403. New schemas `AdvisorReplaceData`, `FundingGapBand`. New helpers `compute_replace`, `age_years`, `new_used_premium`, `_clamp_horizon`. Tests: `backend/tests/test_advisor_replace.py`.
+
 ## [0.3.239] - 2026-09-05
 
 ### Added (AUT-2450)
