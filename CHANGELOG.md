@@ -80,6 +80,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed (AUT-2526)
 - fix(frontend, web): cap content width on the desktop web app so screens reported as oversized in the audit no longer stretch to 1920px. Added `frontend/lib/widgets/responsive.dart` with a `CenteredMaxWidth` layout widget, `Breakpoints` (desktop ≥1100, wideDesktop 1400) and a `BuildContext.isDesktop` extension. Wrapped the bodies of: home dashboard, Servo Spy map controls + error banner, vehicle list, vehicle timeline, settings, login, signup, server setup, forgot-password, reset-password, add-vehicle, edit-vehicle and share-vehicle. Home `FeatureGrid` now picks `crossAxisCount` 2/3/4 by width (mobile / desktop / wide desktop) and the `childAspectRatio` widens on desktop. Added a global `MediaQuery.withClampedTextScaling(maxScale: 1.5)` in `app.dart` `builder` so desktop zoom can't balloon text beyond a readable ceiling. Added `frontend/test/responsive_test.dart` covering the breakpoint constants and the `CenteredMaxWidth` cap on 1920px.
 
+### Fixed (AUT-2526)
+- fix(web): cap oversized screens on desktop — auth (login/signup/setup/reset), home dashboard, Servo Spy map + list, vehicle list/timeline/add/edit/share, settings, and license are now centered with a max-width (`1280px` for content, `460px` for auth cards, `900px` for forms/lists). Home feature grid is now responsive (2 cols < 600px, 3 cols < 900px, 4 cols ≥ 900px) instead of fixed 3 columns. Wipes the ultra-wide whitespace that broke scanning on 1280/1440/1920 monitors and keeps form rows readable. New helper widgets `widgets/desktop_max_width.dart` and `widgets/centered_max_width.dart` available for future screens.
+
 ## [0.3.237] - 2026-09-05
 
 ### Fixed (AUT-2108)

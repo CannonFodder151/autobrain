@@ -58,33 +58,46 @@ class _ServoSpyScreenState extends State<ServoSpyScreen> {
           ? const PremiumGate(
               lockedReason: 'Servo Spy is a premium member feature.',
             )
-          : Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                  child: SegmentedButton<_ServoSpyView>(
-                    segments: const [
-                      ButtonSegment(
-                        value: _ServoSpyView.map,
-                        label: Text('Map'),
-                        icon: Icon(Icons.map_outlined),
-                      ),
-                      ButtonSegment(
-                        value: _ServoSpyView.list,
-                        label: Text('List'),
-                        icon: Icon(Icons.list_alt_outlined),
-                      ),
-                    ],
-                    selected: {_view},
-                    onSelectionChanged: (s) => setState(() => _view = s.first),
-                  ),
-                ),
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                final isWide = constraints.maxWidth >= 1280;
+                return Row(
+                  mainAxisAlignment: isWide ? MainAxisAlignment.center : MainAxisAlignment.start,
+                  children: [
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1280),
+                      child: Column(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                            child: SegmentedButton<_ServoSpyView>(
+                              segments: const [
+                                ButtonSegment(
+                                  value: _ServoSpyView.map,
+                                  label: Text('Map'),
+                                  icon: Icon(Icons.map_outlined),
+                                ),
+                                ButtonSegment(
+                                  value: _ServoSpyView.list,
+                                  label: Text('List'),
+                                  icon: Icon(Icons.list_alt_outlined),
+                                ),
+                              ],
+                              selected: {_view},
+                              onSelectionChanged: (s) => setState(() => _view = s.first),
+                            ),
+                          ),
                 Expanded(
-                  child: _view == _ServoSpyView.map
-                      ? const _ServoSpyMap()
-                      : const _ServoSpyList(),
-                ),
-              ],
+                    child: _view == _ServoSpyView.map
+                        ? const _ServoSpyMap()
+                        : const _ServoSpyList(),
+                  ),
+                ],
+              ),
+            ),
+                  ],
+                );
+              },
             ),
     );
   }
@@ -993,8 +1006,11 @@ class _ServoSpyListState extends State<_ServoSpyList> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
 
-    return Column(
-      children: [
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 900),
+        child: Column(
+          children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
@@ -1140,6 +1156,8 @@ class _ServoSpyListState extends State<_ServoSpyList> {
                         ),
         ),
       ],
+    ),
+      ),
     );
   }
 }

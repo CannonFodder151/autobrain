@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 
 import '../../core/auth_state.dart';
 import '../../core/models.dart';
-import '../../widgets/responsive.dart';
 
 class VehicleTimelineScreen extends StatefulWidget {
   const VehicleTimelineScreen({super.key, required this.vehicleId});
@@ -48,16 +47,16 @@ class _VehicleTimelineScreenState extends State<VehicleTimelineScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Timeline')),
-      body: RefreshIndicator(
-        onRefresh: _load,
-        child: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : _events.isEmpty
-                ? const Center(child: Text('No events yet'))
-                : Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 700),
-                    child: ListView.builder(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 900),
+          child: RefreshIndicator(
+            onRefresh: _load,
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _events.isEmpty
+                    ? const Center(child: Text('No events yet'))
+                    : ListView.builder(
                         padding: const EdgeInsets.all(16),
                         itemCount: _events.length,
                         itemBuilder: (context, i) {
@@ -72,7 +71,7 @@ class _VehicleTimelineScreenState extends State<VehicleTimelineScreen> {
                               ),
                               trailing: e.amount != null
                                   ? Text(
-                                      '${e.amount!.toStringAsFixed(0)}',
+                                      e.amount!.toStringAsFixed(0),
                                       style: Theme.of(context).textTheme.titleSmall,
                                     )
                                   : null,
@@ -80,13 +79,9 @@ class _VehicleTimelineScreenState extends State<VehicleTimelineScreen> {
                           );
                         },
                       ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
           ),
         ),
-      );
+      ),
+    );
   }
 }

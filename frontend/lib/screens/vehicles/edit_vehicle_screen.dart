@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../../core/auth_state.dart';
 import '../../core/fuel_types.dart';
 import '../../core/models.dart';
-import '../../widgets/responsive.dart';
 import 'share_vehicle_screen.dart';
 
 class EditVehicleScreen extends StatefulWidget {
@@ -186,190 +185,191 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
         padding: const EdgeInsets.all(16),
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 640),
+            constraints: const BoxConstraints(maxWidth: 900),
             child: Form(
               key: _formKey,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-              TextFormField(
-                controller: _nickname,
-                decoration: const InputDecoration(labelText: 'Nickname'),
-                validator: (v) => v == null || v.isEmpty ? 'Required' : null,
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: _vehicleType,
-                decoration: const InputDecoration(labelText: 'Vehicle type'),
-                items: const [
-                  DropdownMenuItem(value: 'car', child: Text('Car')),
-                  DropdownMenuItem(value: 'motorcycle', child: Text('Motorcycle')),
-                ],
-                onChanged: (v) => setState(() => _vehicleType = v ?? 'car'),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _rego,
-                      decoration: const InputDecoration(labelText: 'Rego'),
-                    ),
+                  TextFormField(
+                    controller: _nickname,
+                    decoration: const InputDecoration(labelText: 'Nickname'),
+                    validator: (v) => v == null || v.isEmpty ? 'Required' : null,
                   ),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    width: 110,
-                    child: DropdownButtonFormField<String>(
-                      value: _state,
-                      decoration: const InputDecoration(labelText: 'State'),
-                      items: const [
-                        DropdownMenuItem(value: 'NSW', child: Text('NSW')),
-                        DropdownMenuItem(value: 'VIC', child: Text('VIC')),
-                        DropdownMenuItem(value: 'QLD', child: Text('QLD')),
-                        DropdownMenuItem(value: 'WA', child: Text('WA')),
-                        DropdownMenuItem(value: 'SA', child: Text('SA')),
-                        DropdownMenuItem(value: 'TAS', child: Text('TAS')),
-                        DropdownMenuItem(value: 'NT', child: Text('NT')),
-                        DropdownMenuItem(value: 'ACT', child: Text('ACT')),
-                      ],
-                      onChanged: (v) => setState(() => _state = v ?? 'VIC'),
-                    ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: _vehicleType,
+                    decoration: const InputDecoration(labelText: 'Vehicle type'),
+                    items: const [
+                      DropdownMenuItem(value: 'car', child: Text('Car')),
+                      DropdownMenuItem(value: 'motorcycle', child: Text('Motorcycle')),
+                    ],
+                    onChanged: (v) => setState(() => _vehicleType = v ?? 'car'),
                   ),
-                  const SizedBox(width: 8),
-                  FilledButton.tonalIcon(
-                    onPressed: _lookingUp ? null : _lookup,
-                    icon: _lookingUp
-                        ? const SizedBox(
-                            height: 16,
-                            width: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.search),
-                    label: const Text('Lookup'),
-                  ),
-                ],
-              ),
-              if (_lookupInfo != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(_lookupInfo!,
-                      style:
-                          TextStyle(color: Theme.of(context).colorScheme.primary)),
-                ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _vin,
-                decoration: const InputDecoration(labelText: 'VIN'),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _make,
-                      decoration: const InputDecoration(labelText: 'Make'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _model,
-                      decoration: const InputDecoration(labelText: 'Model'),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: DropdownButtonFormField<int>(
-                      value: _year,
-                      decoration: const InputDecoration(labelText: 'Year'),
-                      items: [
-                        for (var y = DateTime.now().year + 1; y >= 1980; y--)
-                          DropdownMenuItem(value: y, child: Text('$y')),
-                      ],
-                      onChanged: (v) => setState(() => _year = v),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _odometer,
-                      decoration: const InputDecoration(
-                        labelText: 'Odometer (km)',
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _rego,
+                          decoration: const InputDecoration(labelText: 'Rego'),
+                        ),
                       ),
-                      keyboardType: TextInputType.number,
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: 110,
+                        child: DropdownButtonFormField<String>(
+                          value: _state,
+                          decoration: const InputDecoration(labelText: 'State'),
+                          items: const [
+                            DropdownMenuItem(value: 'NSW', child: Text('NSW')),
+                            DropdownMenuItem(value: 'VIC', child: Text('VIC')),
+                            DropdownMenuItem(value: 'QLD', child: Text('QLD')),
+                            DropdownMenuItem(value: 'WA', child: Text('WA')),
+                            DropdownMenuItem(value: 'SA', child: Text('SA')),
+                            DropdownMenuItem(value: 'TAS', child: Text('TAS')),
+                            DropdownMenuItem(value: 'NT', child: Text('NT')),
+                            DropdownMenuItem(value: 'ACT', child: Text('ACT')),
+                          ],
+                          onChanged: (v) => setState(() => _state = v ?? 'VIC'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton.tonalIcon(
+                        onPressed: _lookingUp ? null : _lookup,
+                        icon: _lookingUp
+                            ? const SizedBox(
+                                height: 16,
+                                width: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.search),
+                        label: const Text('Lookup'),
+                      ),
+                    ],
+                  ),
+                  if (_lookupInfo != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(_lookupInfo!,
+                          style:
+                              TextStyle(color: Theme.of(context).colorScheme.primary)),
                     ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _vin,
+                    decoration: const InputDecoration(labelText: 'VIN'),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _make,
+                          decoration: const InputDecoration(labelText: 'Make'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _model,
+                          decoration: const InputDecoration(labelText: 'Model'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<int>(
+                          value: _year,
+                          decoration: const InputDecoration(labelText: 'Year'),
+                          items: [
+                            for (var y = DateTime.now().year + 1; y >= 1980; y--)
+                              DropdownMenuItem(value: y, child: Text('$y')),
+                          ],
+                          onChanged: (v) => setState(() => _year = v),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _odometer,
+                          decoration: const InputDecoration(
+                            labelText: 'Odometer (km)',
+                          ),
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _engine,
+                    decoration: const InputDecoration(labelText: 'Engine'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _transmission,
+                    decoration: const InputDecoration(labelText: 'Transmission'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _colour,
+                    decoration: const InputDecoration(labelText: 'Colour'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _bodyType,
+                    decoration: const InputDecoration(labelText: 'Body type'),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: _fuelType != null && _fuelTypes.contains(_fuelType) ? _fuelType : null,
+                    decoration: const InputDecoration(
+                      labelText: 'Fuel type',
+                      hintText: 'Used to pick the default price on map/list',
+                    ),
+                    items: [
+                      for (final t in _fuelTypes)
+                        DropdownMenuItem(value: t, child: Text(t)),
+                    ],
+                    onChanged: (v) => setState(() => _fuelType = v),
+                  ),
+                  const SizedBox(height: 12),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Set as primary vehicle'),
+                    value: _isPrimary,
+                    onChanged: (v) => setState(() => _isPrimary = v ?? false),
+                  ),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Club registration'),
+                    subtitle: const Text(
+                        'Victoria requires a physical paper logbook for '
+                        'club-registered vehicles, so the digital logbook is disabled.'),
+                    value: _clubReg,
+                    onChanged: (v) => setState(() => _clubReg = v ?? false),
+                  ),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Auto suggest next service with AI'),
+                    subtitle: const Text(
+                        'Whenever the odometer is updated (dongle, logbook or '
+                        'fuel entry), check for a scheduled service that is now due '
+                        'and surface the suggestion.'),
+                    value: _autoSuggest,
+                    onChanged: (v) => setState(() => _autoSuggest = v ?? false),
+                  ),
+                  const SizedBox(height: 20),
+                  FilledButton(
+                    onPressed: _busy ? null : _submit,
+                    child: const Text('Save changes'),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _engine,
-                decoration: const InputDecoration(labelText: 'Engine'),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _transmission,
-                decoration: const InputDecoration(labelText: 'Transmission'),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _colour,
-                decoration: const InputDecoration(labelText: 'Colour'),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _bodyType,
-                decoration: const InputDecoration(labelText: 'Body type'),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: _fuelType != null && _fuelTypes.contains(_fuelType) ? _fuelType : null,
-                decoration: const InputDecoration(
-                  labelText: 'Fuel type',
-                  hintText: 'Used to pick the default price on map/list',
-                ),
-                items: [
-                  for (final t in _fuelTypes)
-                    DropdownMenuItem(value: t, child: Text(t)),
-                ],
-                onChanged: (v) => setState(() => _fuelType = v),
-              ),
-              const SizedBox(height: 12),
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Set as primary vehicle'),
-                value: _isPrimary,
-                onChanged: (v) => setState(() => _isPrimary = v ?? false),
-              ),
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Club registration'),
-                subtitle: const Text(
-                    'Victoria requires a physical paper logbook for '
-                    'club-registered vehicles, so the digital logbook is disabled.'),
-                value: _clubReg,
-                onChanged: (v) => setState(() => _clubReg = v ?? false),
-              ),
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Auto suggest next service with AI'),
-                subtitle: const Text(
-                    'Whenever the odometer is updated (dongle, logbook or '
-                    'fuel entry), check for a scheduled service that is now due '
-                    'and surface the suggestion.'),
-                value: _autoSuggest,
-                onChanged: (v) => setState(() => _autoSuggest = v ?? false),
-              ),
-              const SizedBox(height: 20),
-              FilledButton(
-                onPressed: _busy ? null : _submit,
-                child: const Text('Save changes'),
-              ),
-            ],
             ),
           ),
         ),
