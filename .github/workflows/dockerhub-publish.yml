@@ -165,7 +165,7 @@ jobs:
     # exist and this job exits cleanly without creating a release.
     needs: auto-bump
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, linux, x64, vm2]
+    runs-on: [self-hosted, linux, x64]
     permissions:
       contents: write
     steps:
@@ -233,7 +233,13 @@ jobs:
   publish-amd64:
     needs: [auto-bump, github-release]
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux, x64, vm2]
+    # AUT-2600: vm2 runner (gh-runner-autobrain-2) is offline. Route through
+    # the legacy x64 runner (gh-runner-autobrain, id 32) instead so publish
+    # is not fully blocked. AUT-1798 added vm2 to escape the legacy runner's
+    # dockerd wedge (AUT-1720); once vm2 is restored (AUT-2710) flip back.
+    # Risk: the legacy runner has a docker buildx hang history (AUT-1773) —
+    # monitor the first publish through it.
+    runs-on: [self-hosted, linux, x64]
     permissions:
       contents: read
     steps:
@@ -426,7 +432,12 @@ jobs:
     # manifest assembly here as well.
     needs: [publish-amd64, publish-arm64]
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux, x64, vm2]
+    # AUT-2600: vm2 runner (gh-runner-autobrain-2) is offline. Route through
+    # the legacy x64 runner instead so publish is not fully blocked. This job
+    # only runs `docker buildx imagetools` (no buildx build), so the dockerd
+    # wedge risk is lower than publish-amd64. Once vm2 is restored (AUT-2710)
+    # this should flip back.
+    runs-on: [self-hosted, linux, x64]
     permissions:
       contents: read
     steps:
@@ -505,7 +516,11 @@ jobs:
   sync-changelog:
     needs: publish-manifest
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux, x64, vm2]
+    # AUT-2600: vm2 runner (gh-runner-autobrain-2) is offline. Route through
+    # the legacy x64 runner instead so publish is not fully blocked. This job
+    # only needs git/curl/REST API, no docker. Once vm2 is restored (AUT-2710)
+    # this should flip back.
+    runs-on: [self-hosted, linux, x64]
     permissions:
       contents: write
     steps:
