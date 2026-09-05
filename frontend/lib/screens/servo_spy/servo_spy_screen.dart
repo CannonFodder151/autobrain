@@ -718,6 +718,21 @@ class _StationSheet extends StatelessWidget {
     }
   }
 
+  Future<void> _openHistory() async {
+    final stationId = station.id;
+    if (stationId == null || stationId.isEmpty) return;
+    final stationName = station.name ?? 'Station';
+    Navigator.of(context, rootNavigator: true).pop();
+    Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute(
+        builder: (_) => ServoSpyStationHistoryScreen(
+          stationId: stationId,
+          stationName: stationName,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -764,7 +779,7 @@ class _StationSheet extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: FilledButton.tonalIcon(
-              onPressed: () => _openHistory(context),
+              onPressed: () => _openHistory(),
               icon: const Icon(Icons.show_chart),
               label: const Text('30-day price history'),
             ),
@@ -887,20 +902,6 @@ class _ServoSpyListState extends State<_ServoSpyList> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
-  }
-
-  void _openHistory(BuildContext context) {
-    final stationId = station.id;
-    final stationName = station.name ?? 'Station';
-    Navigator.of(context, rootNavigator: true).pop();
-    Navigator.of(context, rootNavigator: true).push(
-      MaterialPageRoute(
-        builder: (_) => ServoSpyStationHistoryScreen(
-          stationId: stationId,
-          stationName: stationName,
-        ),
-      ),
-    );
   }
 
   void _openHistory(ServoStationRow s) {
