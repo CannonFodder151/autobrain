@@ -13,6 +13,7 @@ import '../admin/admin_screen.dart';
 import '../analytics/analytics_screen.dart';
 import '../../community_garage/community_garage_screen.dart';
 import '../diagnostics/diagnostics_screen.dart';
+import '../electricity/electricity_screen.dart';
 import '../fuel/fuel_screen.dart';
 import '../fuel/petrol_price_map_screen.dart';
 import '../logbook/logbook_screen.dart';
@@ -353,6 +354,8 @@ class _FeatureGrid extends StatelessWidget {
           VehicleTimelineScreen(vehicleId: vehicle.id)),
       _Feature('Services', Icons.build, const Color(0xFF2563EB),
           ServiceListScreen(vehicleId: vehicle.id)),
+      _Feature('Electricity', Icons.bolt, const Color(0xFFCA8A04),
+          ElectricityScreen(vehicleId: vehicle.id)),
       _Feature('Fuel', Icons.local_gas_station, const Color(0xFF16A34A),
           FuelScreen(vehicleId: vehicle.id)),
       if (!vehicle.clubReg)
