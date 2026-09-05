@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-1878)
+- fix(deploy): pin hosted worker to a specific arm64 digest in `docker-compose.hosted.yml` and replace the Celerybeat-schedule mtime HEALTHCHECK with a deterministic `/proc` PID + `GET /health` probe. The previous mtime probe falsely flapped when no tasks were due within the window (the production norm for the worker), cycling containers; the new probe stays Healthy on the Oracle VM.
+
 ## [0.3.239] - 2026-09-05
 
 ### Added (AUT-2450)
