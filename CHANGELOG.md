@@ -18,6 +18,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Added (AUT-2451)
 - feat(frontend,advisor): Ownership Advisor front-door — single home-screen card on `HomeScreen` that opens a 7-tab nested shell (Overview + 6 sub-modules) per ADR 0001. Overview tab shows 6 `ActionChip` chips routing Value/Replace/Upgrade/Finance/Dream/AI into their own screens. Back button preserves tab selection when navigating back to the Advisor. Deep-links `/advisor/{value|replace|upgrade|finance|dream|ai}` select the matching tab from the home screen; unknown tokens fall through to Overview. Offline path: `AdvisorApi._callWithCache` reads `OfflineCache` before every request and serves the cached response on any `ApiException`, so each sub-module shows a cached last-known snapshot when offline. New files: `lib/screens/advisor/advisor_models.dart` (shared `AdvisorResponse`/`AdvisorValueData`/`AdvisorFinanceData`/etc.), `lib/screens/advisor/advisor_api.dart` (`AdvisorApi` + `cacheKey` + `_bodyKey`), and one screen per module (`value_screen.dart`, `replace_screen.dart`, `upgrade_screen.dart`, `finance_screen.dart`, `dream_screen.dart`, `ai_screen.dart`). Test: `test/advisor_overview_test.dart` (3 widget tests: seven-tab shell, initial-tab selection, chip count). Mobile team will split these same files into `autobrain-mobile` unchanged.
 
+### Fixed (AUT-1878)
+- fix(deploy): pin hosted worker to a specific arm64 digest in `docker-compose.hosted.yml` and replace the Celerybeat-schedule mtime HEALTHCHECK with a deterministic `/proc` PID + `GET /health` probe. The previous mtime probe falsely flapped when no tasks were due within the window (the production norm for the worker), cycling containers; the new probe stays Healthy on the Oracle VM.
+
 ## [0.3.239] - 2026-09-05
 
 ### Added (AUT-2450)

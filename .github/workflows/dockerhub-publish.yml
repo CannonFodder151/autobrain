@@ -203,24 +203,27 @@ jobs:
             echo "$BODY"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
-      - name: Create GitHub release
+      - name: Create GitHub release (AUT-2600: use REST API — gh CLI not on self-hosted runners)
         if: steps.info.outputs.skip != 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.info.outputs.version }}
           BODY: ${{ steps.info.outputs.body }}
         run: |
           set -euo pipefail
-          # Ensure the tag is pushed (auto-bump.sh does this best-effort, but
-          # shallow / no-auth CI runners can fail silently — retry here so
-          # `gh release create --verify-tag` succeeds).
+          # AUT-2600: `gh release create` exits 127 on the self-hosted x64/vm2
+          # runner (gh not installed), which blocks publish-amd64/arm64 via
+          # `needs:`. Use the GitHub REST API directly instead — curl is always
+          # present. The GITHUB_TOKEN (auto-injected, Contents: write) is sufficient.
           git push origin "v$VERSION" || echo "tag push may have already happened — continuing"
-          printf '%s\n' "$BODY" | gh release create "v$VERSION" \
-            --repo "${{ github.repository }}" \
-            --title "v$VERSION" \
-            --notes-file - \
-            --verify-tag \
-            --target main
+          # --verify-tag is implicit: the API rejects if the tag doesn't exist.
+          RELEASE_PAYLOAD=$(printf '{"tag_name":"v%s","target":"main","name":"v%s","body":%s}' \
+            "$VERSION" "$VERSION" "$(printf '%s' "$BODY" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')")
+          curl -fsSL -X POST \
+            -H "Authorization: bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/releases" \
+            -d "$RELEASE_PAYLOAD" > /dev/null
           echo "==> released v$VERSION"
 
   publish-amd64:
