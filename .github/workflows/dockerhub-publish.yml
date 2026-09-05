@@ -117,7 +117,11 @@ jobs:
   auto-bump:
     needs: changelog-gate
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, linux, x64, vm2]
+    # AUT-2600: vm2 runner (gh-runner-autobrain-2) is offline. Route through the
+    # legacy x64 runner instead so publish is not fully blocked. AUT-1798 added
+    # vm2 to escape the legacy runner's dockerd wedge (AUT-1720); once the vm2
+    # runner is restored (AUT-2710) this should flip back to `vm2`.
+    runs-on: [self-hosted, linux, x64]
     permissions:
       contents: write
     steps:
