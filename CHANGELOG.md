@@ -157,6 +157,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed (AUT-2383)
 - fix(frontend,servo-spy): CARTO basemap tile URL query param was `?api_key=` but CARTO requires `?key=` — the watermark persisted because the API silently ignored the wrong parameter. Updated tile URL template in `frontend/lib/screens/servo_spy/servo_spy_screen.dart` to use `?key=$_cartoApiKey`; updated comment in `docker/frontend/Dockerfile`. Caching is already optimal: tiles are immutable `{z}/{x}/{y}` hashes so CDN/browser cache-hit rate is naturally high — no extra layer needed.
 
+### Fixed (AUT-2319)
+- fix(backend): `_station_out` body lifted out of `app/api/v1/fuel_servo.py` into `app/services/fuel_servo.py` as the pure function `annotate_station` (no DB/AI/FastAPI). The AUT-2201 station-annotation unit test now imports `annotate_station` directly instead of `app.api.v1.fuel_servo._station_out`, sidestepping the router's transitive imports (`app.models`/`app.services.fuel_feeds`) that were blocking collection. The route keeps a thin `_station_out` compat wrapper that delegates to `annotate_station`. `annotate_station` preserves the current `FuelStationOut` shape including the AUT-2381 `source`/`best_source`/`source_score`/`flag_reason` per-price fields.
+- note: the AUT-2277 duplicate-`FuelPrice`-class fix (already on main as of 0.3.224, deployed to AutoBrain-Hosted arm64 in 0.3.234) supersedes the original `extend_existing=True` approach from AUT-2319's first draft; this rebase keeps only the test/lift refactor.
+
 ## [0.3.234] - 2026-09-04
 
 ### Fixed (AUT-2484)
