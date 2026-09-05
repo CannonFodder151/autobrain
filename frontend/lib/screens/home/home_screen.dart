@@ -28,6 +28,7 @@ import '../valuation/valuation_screen.dart';
 import '../vehicles/vehicle_list_screen.dart';
 import '../vehicles/vehicle_timeline_screen.dart';
 import '../servo_spy/servo_spy_screen.dart';
+import '../advisor/overview_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -376,6 +377,9 @@ class _FeatureGrid extends StatelessWidget {
       if (!kIsWeb)
         _Feature('OBD', Icons.settings_input_component, const Color(0xFF334155),
             ObdScreen(vehicleId: vehicle.id)),
+      _Feature('Ownership Advisor', Icons.insights,
+          const Color(0xFF6366F1),
+          _AdvisorEntry(vehicle: vehicle)),
       const _Feature('Servo Spy', Icons.local_gas_station, Color(0xFFF59E0B),
           ServoSpyScreen()),
       const _Feature('Community Garage', Icons.groups, Color(0xFF0D9488),
@@ -448,6 +452,19 @@ class _Feature {
   final IconData icon;
   final Color color;
   final Widget screen;
+}
+
+/// Bridges the home grid to the Ownership Advisor entry point. We can't
+/// pass a Widget directly because the overview screen needs the live
+/// vehicleId; the grid already filters out `_Feature`s that need a vehicle
+/// so this indirection just unpacks the id from the captured vehicle.
+class _AdvisorEntry extends StatelessWidget {
+  const _AdvisorEntry({required this.vehicle});
+  final Vehicle vehicle;
+
+  @override
+  Widget build(BuildContext context) =>
+      AdvisorOverviewScreen(vehicleId: vehicle.id);
 }
 
 /// Offers the downloadable iOS/Android apps to a logged-in user.
