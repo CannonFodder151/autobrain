@@ -113,7 +113,7 @@ jobs:
   # ecosystem-aware vuln source for Dart/Flutter), gated to fail on HIGH/CRITICAL.
   flutter-audit:
     name: Flutter — osv-scanner (pubspec.lock)
-    runs-on: [self-hosted, linux, x64, vm2]
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
       - name: Set up Flutter
