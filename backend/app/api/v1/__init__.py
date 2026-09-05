@@ -16,6 +16,7 @@ from app.api.v1 import (
     fuel,
     fuel_prices,
     fuel_servo,
+    ev_spy,
     issues,
     logbook,
     mods,

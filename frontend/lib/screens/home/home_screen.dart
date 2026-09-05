@@ -13,6 +13,7 @@ import '../admin/admin_screen.dart';
 import '../analytics/analytics_screen.dart';
 import '../../community_garage/community_garage_screen.dart';
 import '../diagnostics/diagnostics_screen.dart';
+import '../electric_spy/electric_spy_screen.dart';
 import '../fuel/fuel_screen.dart';
 import '../fuel/petrol_price_map_screen.dart';
 import '../logbook/logbook_screen.dart';
@@ -382,6 +383,8 @@ class _FeatureGrid extends StatelessWidget {
           _AdvisorEntry(vehicle: vehicle)),
       const _Feature('Servo Spy', Icons.local_gas_station, Color(0xFFF59E0B),
           ServoSpyScreen()),
+      const _Feature('Electric Spy', Icons.ev_station, Color(0xFF0EA5E9),
+          ElectricSpyScreen()),
       const _Feature('Community Garage', Icons.groups, Color(0xFF0D9488),
           CommunityGarageScreen()),
     ];
