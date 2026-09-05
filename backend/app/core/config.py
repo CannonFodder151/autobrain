@@ -5,6 +5,7 @@ All settings are read from environment variables (see .env.example).
 
 import secrets
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -61,6 +62,7 @@ class Settings(BaseSettings):
     # AI router (9Router) — all AI services read this at runtime
     AI_ROUTER_URL: str = "http://your-9router-instance:port"
     AI_ROUTER_API_KEY: str = ""
+    AI_ROUTER_API_KEY_FILE: str = ""  # AUT-1533: secret-file pattern
     AI_ROUTER_TIMEOUT_SECONDS: int = 60
     AI_LOCAL_BASE_URL: str = "http://ai:8001"
     AI_GATEWAY_API_KEY: str = ""  # shared secret backend->AI gateway (Bearer)
@@ -283,6 +285,18 @@ class Settings(BaseSettings):
                 + ", ".join(offenders)
                 + " — set real values in the deployment env (see .env.example)"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _load_file_secrets(self) -> "Settings":
+        """AUT-1533: resolve *_FILE env vars so config reads the same keys
+        regardless of whether lib-load-secrets.sh has already sourced them.
+        Plain env takes precedence; file is the fallback. Missing files are
+        silently skipped so optional credentials stay optional."""
+        if not self.AI_ROUTER_API_KEY and self.AI_ROUTER_API_KEY_FILE:
+            p = Path(self.AI_ROUTER_API_KEY_FILE)
+            if p.is_file():
+                self.AI_ROUTER_API_KEY = p.read_text(encoding="utf-8").strip()
         return self
 
     @model_validator(mode="after")

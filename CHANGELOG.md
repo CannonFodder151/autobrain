@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-2108)
+- fix(backend): `Settings` now declares `AI_ROUTER_API_KEY_FILE` and a `model_validator` populates `AI_ROUTER_API_KEY` from the secret file when the plain env var is unset. Compose already set `AI_ROUTER_API_KEY_FILE=/run/secrets/ai_router_api_key` (AUT-1533), but the field did not exist on `Settings`, so the file was never read and embedding requests to the 9Router went unauthenticated. Plain env still wins; missing files are silently skipped. Parent: AUT-2091.
+
 ## [0.3.236] - 2026-09-05
 ### Fixed (AUT-2568)
 - fix(deploy): frontend healthcheck in `docker-compose.yml`, `docker-compose.prod.yml`, and `docker-compose.hosted.yml` now references `${BACKEND_URL:-http://backend:8000}` (matching the existing `environment:` block) instead of bare `${BACKEND_URL}`, so compose interpolation can never resolve the URL to empty at deploy time (AUT-2350 follow-up: was producing `wget: bad address "/health"` and flipping the Portainer frontend container unhealthy). Also fixes the grep pattern from `"status": "ok"` to `"status":"ok"` so it matches FastAPI/ORJSON compact output `{"status":"ok",...}` — the with-space variant never matched and would silently re-break the healthcheck on a fresh redeploy from main. Repo now matches the stack actually running on EP5 (frontend Healthy).
