@@ -135,3 +135,62 @@ async def run_advisor_ai(
         return None
     _advisor_cache_put(cache_key, result)
     return result
+
+
+# --- Car Check AI enrichment (AUT-2630) -----------------------------------
+# 24h in-process cache keyed by (make, model, year, asking_price, sample_size)
+# so the same listing never hits 9Router twice. The deterministic verdict +
+# fair-value band are produced by app.services.car_check; the router only
+# enriches ai_summary / red_flags / green_flags. When 9Router is unreachable
+# the route keeps the rule-based summary from compute_car_check.
+
+_CC_CACHE: dict[str, tuple[float, dict]] = {}
+_CC_CACHE_TTL_SECONDS = 24 * 60 * 60
+_CC_CACHE_MAX_ENTRIES = 1024
+
+
+def _cc_cache_key(make: str, model: str, year: int | None, asking_price: float) -> str:
+    import hashlib, json as _json
+    canonical = _json.dumps(
+        {"make": make, "model": model, "year": year, "asking_price": asking_price},
+        sort_keys=True, default=str, separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _cc_cache_get(key: str) -> dict | None:
+    entry = _CC_CACHE.get(key)
+    if entry is None:
+        return None
+    expires_at, value = entry
+    if expires_at < time.time():
+        _CC_CACHE.pop(key, None)
+        return None
+    return value
+
+
+def _cc_cache_put(key: str, value: dict) -> None:
+    if len(_CC_CACHE) >= _CC_CACHE_MAX_ENTRIES:
+        _CC_CACHE.pop(next(iter(_CC_CACHE)), None)
+    _CC_CACHE[key] = (time.time() + _CC_CACHE_TTL_SECONDS, value)
+
+
+async def run_car_check_ai(
+    make: str, model: str, year: int | None, asking_price: float, payload: dict,
+) -> dict | None:
+    """Call the AI gateway for Car Check enrichment.
+
+    Returns the parsed ``{ai_summary, red_flags, green_flags, model}`` dict,
+    or ``None`` when the gateway is unreachable. The caller
+    (``advisor_car_check`` route) keeps the deterministic ``ai_summary``
+    produced by ``compute_car_check`` in the ``None`` case.
+    """
+    cache_key = _cc_cache_key(make, model, year, asking_price)
+    cached = _cc_cache_get(cache_key)
+    if cached is not None:
+        return cached
+    result = await _call("car-check", payload)
+    if not isinstance(result, dict):
+        return None
+    _cc_cache_put(cache_key, result)
+    return result

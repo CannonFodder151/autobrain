@@ -227,3 +227,57 @@ class AdvisorFinanceRequest {
         'novated': novated,
       };
 }
+
+class CarCheckData {
+  final String currency;
+  final String verdict;
+  final double? askingPrice;
+  final double? fairValueLow;
+  final double? fairValueMid;
+  final double? fairValueHigh;
+  final double? deltaPct;
+  final double? deltaAmount;
+  final int sampleSize;
+  final double conditionMultiplier;
+  final double kmMultiplier;
+  final String aiSummary;
+  final List<String> redFlags;
+  final List<String> greenFlags;
+  final String? note;
+
+  CarCheckData({
+    this.currency = 'AUD',
+    this.verdict = 'risky',
+    this.askingPrice,
+    this.fairValueLow,
+    this.fairValueMid,
+    this.fairValueHigh,
+    this.deltaPct,
+    this.deltaAmount,
+    this.sampleSize = 0,
+    this.conditionMultiplier = 1.0,
+    this.kmMultiplier = 1.0,
+    this.aiSummary = '',
+    this.redFlags = const [],
+    this.greenFlags = const [],
+    this.note,
+  });
+
+  factory CarCheckData.fromJson(Map<String, dynamic> json) => CarCheckData(
+        currency: json['currency'] as String? ?? 'AUD',
+        verdict: json['verdict'] as String? ?? 'risky',
+        askingPrice: (json['asking_price'] as num?)?.toDouble(),
+        fairValueLow: (json['fair_value_low'] as num?)?.toDouble(),
+        fairValueMid: (json['fair_value_mid'] as num?)?.toDouble(),
+        fairValueHigh: (json['fair_value_high'] as num?)?.toDouble(),
+        deltaPct: (json['delta_pct'] as num?)?.toDouble(),
+        deltaAmount: (json['delta_amount'] as num?)?.toDouble(),
+        sampleSize: json['sample_size'] as int? ?? 0,
+        conditionMultiplier: (json['condition_multiplier'] as num?)?.toDouble() ?? 1.0,
+        kmMultiplier: (json['km_multiplier'] as num?)?.toDouble() ?? 1.0,
+        aiSummary: json['ai_summary'] as String? ?? '',
+        redFlags: (json['red_flags'] as List?)?.cast<String>().toList() ?? const [],
+        greenFlags: (json['green_flags'] as List?)?.cast<String>().toList() ?? const [],
+        note: json['note'] as String?,
+      );
+}
