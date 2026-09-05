@@ -3,10 +3,12 @@ library;
 
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 
 import '../core/config.dart';
+import '../core/offline_cache.dart';
 
 /// Resolve a safe multipart content type. Empty/unparseable values (e.g. the
 /// empty string `XFile.mimeType` returns for HEIC) fall back to a
@@ -67,6 +69,49 @@ class ApiClient {
 
   Future<dynamic> get(String path, {Map<String, String>? query}) =>
       _send('GET', path, null, null, query);
+
+  /// Invalidate cached responses by [prefix]. Use after a write so the next
+  /// read hits the server. Exposed publicly so screens can wire it into
+  /// their write handlers in one line.
+  Future<void> invalidateCache(String prefix) =>
+      OfflineCache.instance.invalidateByPrefix(prefix);
+
+  /// Per-endpoint cache TTLs. Anything not listed here is not cached. The
+  /// list deliberately excludes auth flows, exports, uploads, billing, and
+  /// OBD real-time data — caching those is unsafe.
+  static const Map<String, Duration> _cacheTtls = <String, Duration>{
+    '/vehicles': Duration(minutes: 5),
+    '/vehicles/': Duration(minutes: 10),
+    '/auth/me': Duration(minutes: 30),
+    '/social/feed': Duration(minutes: 5),
+    '/fuel-prices': Duration(minutes: 15),
+  };
+
+  /// Build a deterministic cache key for a path+query. We use the literal
+  /// query map (sorted) so the same logical request always maps to the same
+  /// key regardless of caller-side ordering.
+  static String _cacheKey(String path, Map<String, String>? query) {
+    if (query == null || query.isEmpty) return path;
+    final sorted = query.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    return '$path?${sorted.map((e) => '${e.key}=${e.value}').join('&')}';
+  }
+
+  static Duration? _ttlFor(String path) {
+    for (final entry in _cacheTtls.entries) {
+      if (path == entry.key || path.startsWith(entry.key)) {
+        return entry.value;
+      }
+    }
+    return null;
+  }
+
+  @visibleForTesting
+  static Duration? ttlForTest(String path) => _ttlFor(path);
+
+  @visibleForTesting
+  static String cacheKeyForTest(String path, Map<String, String>? query) =>
+      _cacheKey(path, query);
   Future<dynamic> post(String path,
           [Object? body, Map<String, String>? headers]) =>
       _send('POST', path, body, headers);
@@ -121,16 +166,46 @@ class ApiClient {
       if (_token != null) 'Authorization': 'Bearer $_token',
       ...?extraHeaders,
     };
-    var response = await _raw(method, uri, headers, body);
-    if (response.statusCode == 401 && _token != null && onRefresh != null) {
-      final newToken = await _refresh();
-      if (newToken != null) {
-        _token = newToken;
-        headers['Authorization'] = 'Bearer $_token';
-        response = await _raw(method, uri, headers, body);
+
+    // Read-through cache for GETs. Only safe endpoints (per _cacheTtls) are
+    // eligible; auth flows, exports, uploads, billing and OBD are skipped.
+    final cacheKey = method == 'GET' ? _cacheKey(path, query) : null;
+    final ttl = method == 'GET' ? _ttlFor(path) : null;
+    final shouldCache = cacheKey != null && ttl != null;
+
+    // Try network first. On a transport-level failure (timeout, socket,
+    // handshake) for a cached GET, fall back to the cached body so the
+    // screen still renders. HTTP 4xx/5xx is a real response — we surface it.
+    try {
+      var response = await _raw(method, uri, headers, body);
+      if (response.statusCode == 401 && _token != null && onRefresh != null) {
+        final newToken = await _refresh();
+        if (newToken != null) {
+          _token = newToken;
+          headers['Authorization'] = 'Bearer $_token';
+          response = await _raw(method, uri, headers, body);
+        }
       }
+      if (shouldCache && response.statusCode >= 200 && response.statusCode < 300) {
+        // Fire-and-forget; cache write failures must not break the request.
+        // ignore: discarded_futures
+        OfflineCache.instance.put(cacheKey, response.body, ttl: ttl);
+      }
+      return _decode(response);
+    } catch (e) {
+      // Transport-level failure (no HTTP response). Fall back to cache.
+      if (shouldCache) {
+        final cached = await OfflineCache.instance.get(cacheKey, allowStale: true);
+        if (cached != null) return _decodeBody(cached.body);
+      }
+      rethrow;
     }
-    return _decode(response);
+  }
+
+  /// Decode a raw response body string (used by the cache fallback path).
+  dynamic _decodeBody(String body) {
+    if (body.isEmpty) return null;
+    return jsonDecode(body);
   }
 
   Future<http.Response> _raw(
