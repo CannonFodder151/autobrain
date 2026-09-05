@@ -51,6 +51,9 @@ x-backend-base: &backend-base
     # backend/app/core/config.py:110 as settings.FUEL_QLD_API_KEY. Empty key
     # disables the feed (mirrors the NSW no-key pattern).
     FUEL_QLD_API_KEY: ${FUEL_QLD_API_KEY:-}
+    # AUT-2406: SA SAFPIS (Informed Sources / Fuel Pricing Information Scheme).
+    # Same platform as QLD DirectAPI; empty key disables the feed.
+    FUEL_SA_API_KEY: ${FUEL_SA_API_KEY:-}
   depends_on:
     postgres:
       condition: service_healthy
