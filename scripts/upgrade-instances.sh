@@ -26,6 +26,7 @@
 #
 # Environment overrides (sane defaults for the three AutoBrain tiers):
 #   UPGRADE_TIERS        space/tab/newline separated "name|endpoint|health|required_env"
+#                           AUT-2409: default is hosted-only; override to add demo/default tiers manually
 #   UPGRADE_DRY_RUN=1    resolve + health-check only, do not redeploy
 #   HEALTH_TIMEOUT_SEC   per-tier health poll timeout (default 600)
 #
@@ -45,8 +46,7 @@ API="$PORTAINER_URL/api"
 
 # name | endpoint_id | health_url | "k=v,k=v" required env the stack must carry
 DEFAULT_TIERS="
-autobrain-demo|2|https://demo.autobrainservice.app/health|
-autobrain|2|https://default.autobrainservice.app/health|
+# AUT-2409: hosted-only deploys (03:00-04:00 AEST window; demo/default off-limits)
 autobrain-hosted|5|https://hosted.autobrainservice.app/health|POSTGRES_USER=autobrain,POSTGRES_DB=autobrain
 "
 
