@@ -9,7 +9,12 @@ answers; the same path also works after a partial scrape.
 
 import pytest
 
-from app.services.rego import _backfill_spec, _backfill_spec_from_vin, _map_provider
+from app.services.rego import (
+    _backfill_spec,
+    _backfill_spec_from_vin,
+    _backfill_year_from_vin,
+    _map_provider,
+)
 
 
 def _provider_payload(make: str, model: str, year: int = 2020, vin: str | None = None) -> dict:
@@ -83,7 +88,28 @@ def test_backfill_vin_none():
     assert transmission == ""
 
 
-def test_map_provider_backfills_from_make_model():
+def test_backfill_year_from_vin_known():
+    # Year code is VIN position 10 (0-indexed 9), ISO 3779.
+    assert _backfill_year_from_vin("JTDBR32E810012345") == 2031  # pos9='1'
+    assert _backfill_year_from_vin("1HGB02E35D9123456") == 2013  # pos9='D'
+    assert _backfill_year_from_vin("WVWZZZ1JZYW000001") == 2030  # pos9='Y'
+
+
+def test_backfill_year_from_vin_none():
+    assert _backfill_year_from_vin(None) is None
+
+
+def test_backfill_year_from_vin_too_short():
+    assert _backfill_year_from_vin("JT") is None
+
+
+def test_backfill_year_from_vin_unknown_code():
+    # 'I', 'O', 'Q', 'Z' are not valid VIN year codes — returns None.
+    # Put the unknown code in position 10 (0-indexed 9).
+    assert _backfill_year_from_vin("JTDBR32E8I00ABCDE") is None  # 'I'
+    assert _backfill_year_from_vin("JTDBR32E8O00ABCDE") is None  # 'O'
+    assert _backfill_year_from_vin("JTDBR32E8Q00ABCDE") is None  # 'Q'
+    assert _backfill_year_from_vin("JTDBR32E8Z00ABCDE") is None  # 'Z'
     """The rego-lookup-api shape has no engine/transmission — backfill from
     the local spec table instead of returning blanks."""
     result = _map_provider(_provider_payload("Toyota", "Camry"), "TCRWN", "VIC")
@@ -152,3 +178,23 @@ def test_map_provider_year_uses_year_field_first():
     )
     assert result is not None
     assert result["year"] == 2019
+
+
+def test_map_provider_backfills_year_from_vin():
+    """When provider has no year field, decode it from VIN position 10."""
+    result = _map_provider(
+        {"vehicle": {"make": "Toyota", "model": "Camry", "vin": "JTDBR32E810012345"}},
+        "TCRWN", "VIC",
+    )
+    assert result is not None
+    assert result["year"] == 2031
+
+
+def test_map_provider_year_none_stays_none():
+    """VIN without valid year code leaves year as None."""
+    result = _map_provider(
+        {"vehicle": {"make": "Toyota", "model": "Camry", "vin": "JT"}},
+        "TCRWN", "VIC",
+    )
+    assert result is not None
+    assert result["year"] is None
