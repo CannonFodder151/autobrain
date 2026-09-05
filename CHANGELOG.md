@@ -46,6 +46,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Added (AUT-2446)
 - backend(advisor): Ownership Advisor Replace module — deterministic used/new replacement cost + funding gap + monthly saving target. New `GET /api/v1/advisor/replace` route (per ADR 0001) anchors on the same cached `market_listing_cache` median the Value module uses — no 9Router, no AI. Used replacement cost = current private-sale mid; new replacement cost applies age-based new-vs-used premium curve (1.0× at 0y → 1.4× at 3y → 1.8× at 6y → 2.2× at 10y, clamped at 3.0×). Funding gap: `gap = replacement_cost - current_value - trade_in_mid`; `monthly_target = gap / horizon_months`. Negative gap = `surplus=true` with zero monthly. Free accounts get 403. New schemas `AdvisorReplaceData`, `FundingGapBand`. New helpers `compute_replace`, `age_years`, `new_used_premium`, `_clamp_horizon`. Tests: `backend/tests/test_advisor_replace.py`.
 
+### Added (AUT-2376)
+- feat(frontend): Servo Spy station detail — 30-day price history chart. Tapping
+  a station in the Servo Spy **list** view (or the **map** detail sheet) opens
+  a new screen that calls `GET /api/v1/fuel/stations/{id}/history` and renders
+  one `fl_chart` `LineChart` line per fuel type (E10, 91, 95, 98, Diesel, LPG)
+  for the last 30 days, with a legend, a `\$x.xx` Y axis, and tap-to-tooltip.
+  The client groups the flat `(fuel_type, price, effective_at)` response from
+  the AUT-2375 endpoint by fuel type. Cached in-memory per station so a
+  re-open is instant. Empty state ("No price history yet") and 404 fallback
+  handled. New unit tests `frontend/test/fuel_prices_api_test.dart` cover the
+  flat contract and empty/404 cases. Closes AUT-2376.
+
 ## [0.3.239] - 2026-09-05
 
 ### Added (AUT-2450)
