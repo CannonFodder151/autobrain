@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/auth_state.dart';
 import '../../core/fuel_types.dart';
+import '../../widgets/responsive.dart';
 
 class AddVehicleScreen extends StatefulWidget {
   const AddVehicleScreen({super.key});
@@ -173,7 +174,10 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
       appBar: AppBar(title: const Text('Add vehicle')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        child: Form(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 640),
+            child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -384,6 +388,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                 child: const Text('Save vehicle'),
               ),
             ],
+          ),
           ),
         ),
       ),

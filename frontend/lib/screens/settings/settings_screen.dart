@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../../core/api_client.dart';
 import '../../core/auth_state.dart';
 import '../../core/download.dart';
+import '../../widgets/responsive.dart';
 import 'car_integration_screen.dart';
 
 String _errorText(Object e) => e is ApiException ? e.message : '$e';
@@ -186,9 +187,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final auth = context.read<AuthState>();
     return Scaffold(
       appBar: AppBar(title: const Text('Settings & security')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 800),
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
           Card(
             child: ListTile(
               leading: const Icon(Icons.person),
@@ -388,6 +392,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ),
+      ),
+    ),
     );
   }
 }
