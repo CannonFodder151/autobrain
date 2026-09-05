@@ -1,0 +1,38 @@
+name: Visual regression (desktop 1280/1440/1920)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'frontend/test/**'
+      - '.github/workflows/visual_regression.yml'
+
+concurrency:
+  group: visual-regression-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  desktop-tests:
+    name: Desktop layout — ${{ matrix.width }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        width: [1280, 1440, 1920]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: flutter pub get (frontend)
+        working-directory: frontend
+        run: flutter pub get
+      - name: Desktop layout assertions (${{ matrix.width }})
+        working-directory: frontend
+        run: flutter test test/desktop_layout_test.dart -r expanded

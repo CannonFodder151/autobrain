@@ -33,6 +33,10 @@ migrate_working_dir/
 /build/
 /coverage/
 
+# Playwright
+frontend/playwright/node_modules/
+frontend/playwright/tests/visual/__screenshots__/
+
 # Symbolication related
 app.*.symbols
 
