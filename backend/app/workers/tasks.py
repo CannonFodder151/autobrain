@@ -507,7 +507,7 @@ def ingest_fuel_all() -> None:
         async with SessionLocal() as db:
             summary = await ingest_all_fuel(db)
             for source, res in summary.items():
-                logger.info("fuel_ingest_summary", **res)
+                logger.info("fuel_ingest_summary", source=source, **res)
             await db.commit()
 
     _run(_ingest())
@@ -525,7 +525,7 @@ def _run_single_source_ingest(source: str, fn) -> dict:
     async def _ingest():
         async with SessionLocal() as db:
             res = await fn(db)
-            logger.info("fuel_ingest_summary", **res)
+            logger.info("fuel_ingest_summary", source=source, **res)
             await db.commit()
             return res
 
@@ -554,6 +554,14 @@ def ingest_fuel_qld() -> None:
     from app.services.fuel_feeds import ingest_qld_fuel_prices
 
     return _run_single_source_ingest("qld", ingest_qld_fuel_prices)
+
+
+@shared_task
+def ingest_fuel_sa() -> None:
+    """AUT-2375/AUT-2406: per-source manual-trigger ingest (SA SAFPIS)."""
+    from app.services.fuel_feeds import ingest_sa_fuel
+
+    return _run_single_source_ingest("sa", ingest_sa_fuel)
 
 
 @shared_task
