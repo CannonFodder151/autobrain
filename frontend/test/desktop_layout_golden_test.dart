@@ -94,7 +94,7 @@ void main() {
         await _pumpAtSize(tester, const VehicleListScreen(), entry.value);
         await expectLater(
           find.byType(VehicleListScreen),
-          matchesGoldenFile('goldens/vehicle_list_screen/${width}_dark.png'),
+          matchesGoldenFile('test/goldens/vehicle_list_screen/${width}_dark.png'),
         );
       });
     }
