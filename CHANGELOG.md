@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-2651)
+- backend(advisor): Car Check module (AUT-2651) — deterministic deal score + AI 9Router narrative (system prompt instructs model never to invent numbers). New `POST /api/v1/advisor/car-check` route takes a parsed listing + optional reference price, computes a 0-100 deal score from price/km/age heuristics, then calls 9Router via `run_car_check_ai` (24h in-process LRU+TTL cache, mirrored from `run_advisor_ai`). When 9Router is unreachable, falls back to `car_check_fallback` (rule-based summary with red/green flags). `deal_score` is immutable via `_AI_IMMUTABLE["car-check"]` — the router can enrich prose but never override the score. Schema whitelist `_SCHEMAS["car-check"]` allows only `summary`, `red_flags`, `green_flags`. AI fallback: `ai/app/fallbacks/car_check.py`. AI module: `ai/app/modules/car_check.py`. Backend service: `backend/app/services/car_check.py`. Tests: `ai/tests/test_car_check.py` (17 cases) + `backend/tests/test_car_check_ai.py` (19 cases). Parent: AUT-2630.
+
 ## [0.3.240] - 2026-09-06
 ### Added (AUT-2703)
 - feat(firmware,backend,frontend): extend trip CSV row schema with EV/PHEV fields (`soc_pct,pack_v,pack_a,pack_temp_c,odo_km,ev_mode`) for AUT-2437. `format_trip_row` in `obd_pids.h` now emits 13-field rows (old 7-field rows still accepted via default args). CSV header updated to `epoch,rpm,speed,coolant,throttle,lat,lon,soc_pct,pack_v,pack_a,pack_temp_c,odo_km,ev_mode`. `csv_to_gps_json` (upload_payload.h), backend `parse_board_csv` (trip_gps.py), and frontend `tripCsvToJson` (dongle_relay.dart) all tolerate both old and new row lengths via fixed-position reads. Dart tests expanded with backward-compat + EV-field cases. C++ self_check expanded with EV-field assertions + old-format CSV tolerance.

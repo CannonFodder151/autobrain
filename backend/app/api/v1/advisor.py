@@ -1,61 +1,30 @@
 """Ownership Advisor API surface (AUT-2425, AUT-2445-VALUE, AUT-2448-FINANCE,
-AUT-2449-DREAM, AUT-2450-AI).
+AUT-2449-DREAM, AUT-2450-AI, AUT-2651-CAR-CHECK).
 
 Frozen route layout per ADR 0001
 (``docs/adr/0001-ownership-advisor.md``):
 
-- ``GET  /api/v1/advisor/value``   — AUT-2445 (this module)
-- ``GET  /api/v1/advisor/replace`` — AUT-2446
-- ``GET  /api/v1/advisor/upgrade`` — AUT-2447
-- ``POST /api/v1/advisor/finance`` — AUT-2448 (this module)
-- ``POST /api/v1/advisor/dream``   — AUT-2449 (this module)
-- ``POST /api/v1/advisor/ai``      — AUT-2450 (only module that hits 9Router)
+- ``GET  /api/v1/advisor/value``      — AUT-2445 (this module)
+- ``GET  /api/v1/advisor/replace``    — AUT-2446
+- ``GET  /api/v1/advisor/upgrade``    — AUT-2447
+- ``POST /api/v1/advisor/finance``    — AUT-2448 (this module)
+- ``POST /api/v1/advisor/dream``      — AUT-2449 (this module)
+- ``POST /api/v1/advisor/ai``         — AUT-2450 (only module that hits 9Router)
+- ``POST /api/v1/advisor/car-check``  — AUT-2651 (car-check AI + deterministic fallback)
 
-This router file ships the ``value`` + ``finance`` + ``dream`` + ``ai``
-sub-modules. Other sub-modules land in their own PRs so they can ship
-in parallel behind the frozen envelope.
-
-Value is deterministic: it anchors on the cached market median
-(``app.services.market_data``), applies a condition multiplier + km
-adjustment, surfaces a low / mid / high band, and lists comparables
-(same make/model, year ±3) from the same cache. Trade-in band is the
-industry-standard 75 / 82 / 90% of mid private-sale value.
-
-Finance (AUT-2448) is also fully deterministic: pure-function amortisation
-on top of the value module's mid price. No 9Router call. The novated-lease
-block is future-flagged (``status="coming_soon"``) until the EV / FBT
-rules land in a follow-up ADR.
-
-Dream Car (AUT-2449) is the only POST module that doesn't anchor on
-the user's current vehicle. It looks up an arbitrary (make, model,
-year) on ``market_listing_cache`` (same key shape, no duplicate
-storage), computes an indicative monthly repayment via the same
-``_loan_monthly_payment`` helper the Finance module publishes, and —
-when the user supplies a finance profile in the request body — surfaces
-an affordability gap (cash shortfall + DSR ceiling check).
-
-AI Advisor (AUT-2450) is the only module that hits 9Router. It consumes
-structured outputs from the Value/Replace/Upgrade/Finance/Dream sub-modules
-and returns ``{decision, confidence, rationale, next_actions, based_on}``.
-The decision is deterministic (rule tree); 9Router enriches rationale +
-next_actions but cannot change the decision. When the AI gateway is
-unreachable the route falls back to ``app.services.advisor.compute_advisor_recommendation``
-(same rule tree) so the user always gets an answer; ``model`` is then
-``rule-based-fallback``. 24h in-process LRU+TTL cache keyed by
-``sha256(sorted_module_outputs)`` in ``app.services.ai_client``.
-
-Entitlement: free accounts get ``403``; demo accounts are allowed (value
-+ finance + dream are deterministic, no AI; AI Advisor is paid-only).
-Sharing rules reuse the existing ``get_accessible_vehicle`` helper from
-``app.services.ownership`` (Dream doesn't need it — no current vehicle
-in scope).
+Car Check (AUT-2651) is the second AI module: it takes a parsed listing +
+deal score (computed deterministically from listing fields vs the user's
+vehicle reference price) and returns a narrative summary plus red/green
+flags. The deal score is immutable (see _AI_IMMUTABLE in the AI gateway);
+the router only enriches the prose. When 9Router is unreachable a
+rule-based summary is returned from the deterministic fallback.
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -78,6 +47,8 @@ from app.schemas.advisor import (
     AdvisorValueData,
     ComparableListing,
     TradeInBand,
+    CarCheckRequest,
+    CarCheckData,
 )
 from app.services.advisor import (
     compute_advisor_recommendation,
@@ -88,7 +59,8 @@ from app.services.advisor import (
     find_comparables,
     trade_in_band,
 )
-from app.services.ai_client import run_advisor_ai
+from app.services.ai_client import run_advisor_ai, run_car_check_ai
+from app.services.car_check import compute_deal_score, car_check_fallback
 from app.services.ownership import get_accessible_vehicle
 
 router = APIRouter(prefix="/advisor", tags=["advisor"])
@@ -516,6 +488,76 @@ async def advisor_ai(
 
     return AdvisorResponse(
         module="ai",
+        vehicle_id=vehicle.id,
+        generated_at=datetime.now(timezone.utc),
+        model=model,
+        data=data.model_dump(),
+        factors=factors,
+    )
+
+
+@router.post("/car-check", response_model=AdvisorResponse)
+async def car_check(
+    car_check_request: CarCheckRequest = Body(..., alias="body"),
+    vehicle_id: str = Query(..., description="Vehicle UUID (owner or accepted share)"),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> AdvisorResponse:
+    """AI car-check for a listing (AUT-2651).
+
+    Input: a parsed listing + optional reference price (current vehicle
+    market mid from the Value module). The backend first computes a
+    deterministic deal score from the listing fields, then calls 9Router
+    via ``run_car_check_ai`` for the narrative summary + red/green flags.
+    When 9Router is unreachable the deterministic fallback produces a
+    rule-based summary from the same input.
+
+    Returns the same ``AdvisorResponse`` envelope as the other advisor
+    modules so the frontend can render any module with one parser.
+    """
+    _enforce_entitlement(user)
+    vehicle = await get_accessible_vehicle(db, vehicle_id, user)
+
+    listing = car_check_request.listing
+    payload = {
+        "deal_score": compute_deal_score(
+            listing,
+            reference_price=car_check_request.reference_price,
+            vehicle_year=car_check_request.vehicle_year,
+        ),
+        "listing": listing,
+    }
+
+    ai_result = await run_car_check_ai(vehicle.id, payload)
+    if ai_result:
+        data = CarCheckData(**ai_result)
+        model = ai_result.get("model") or "9router/<combo>"
+        factors = {
+            "vehicle": {
+                "id": vehicle.id,
+                "make": vehicle.make,
+                "model": vehicle.model,
+                "year": vehicle.year,
+            },
+            "router_provenance": model,
+        }
+    else:
+        fallback = car_check_fallback(payload)
+        data = CarCheckData(**fallback)
+        model = "rule-based-fallback"
+        factors = {
+            "vehicle": {
+                "id": vehicle.id,
+                "make": vehicle.make,
+                "model": vehicle.model,
+                "year": vehicle.year,
+            },
+            "router_provenance": None,
+            "fallback_reason": "ai_gateway_unreachable",
+        }
+
+    return AdvisorResponse(
+        module="car-check",
         vehicle_id=vehicle.id,
         generated_at=datetime.now(timezone.utc),
         model=model,

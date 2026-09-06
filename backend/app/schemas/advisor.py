@@ -16,7 +16,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-AdvisorModule = Literal["value", "replace", "upgrade", "finance", "dream", "ai"]
+AdvisorModule = Literal["value", "replace", "upgrade", "finance", "dream", "ai", "car-check"]
 AdvisorModel = Literal["rule-based-fallback", "rule-based+ai", "9router/<combo>"]
 AdvisorDecision = Literal["keep", "upgrade", "delay", "strategy"]
 AdvisorFinanceMode = Literal["buy", "finance", "lease", "novated"]
@@ -29,6 +29,24 @@ class ComparableListing(BaseModel):
     odometer_km: int | None = None
     source: str = ""
     url: str = ""
+
+
+class CarCheckRequest(BaseModel):
+    """Request body for ``POST /advisor/car-check`` (AUT-2651)."""
+
+    listing: dict[str, Any] = Field(..., description="Parsed market listing to evaluate.")
+    reference_price: float | None = Field(default=None, ge=0, description="Reference price for deal-score anchoring.")
+    vehicle_year: int | None = Field(default=None, ge=1900, le=2100, description="User's vehicle year for age-based scoring.")
+
+
+class CarCheckData(BaseModel):
+    """Structured output for ``POST /advisor/car-check`` (AUT-2651)."""
+
+    deal_score: float | None = Field(default=None, description="0-100 deal score (None when insufficient data).")
+    summary: str = ""
+    red_flags: list[str] = Field(default_factory=list)
+    green_flags: list[str] = Field(default_factory=list)
+    model: str = "rule-based-fallback"
 
 
 class TradeInBand(BaseModel):

@@ -138,6 +138,22 @@ _SYSTEM_PROMPTS: dict[str, str] = {
         '"next_actions": [string] (<=3 items)}. '
         "Any number you mention must be copied verbatim from the payload."
     ),
+    "car-check": (
+        "You are AutoBrain's car-check narrator. A deterministic engine has "
+        "already computed a deal score (0-100) and extracted structured "
+        "listing fields (price, year, odometer_km, make, model, listing_url, "
+        "title). Do NOT invent, adjust, or override any number. Your ONLY "
+        "job is to narrate what the deterministic input says in plain English, "
+        "no markdown. Write a concise summary (<=280 chars) of why this deal "
+        "scores the way it does, then list the top red flags and green flags "
+        "as short bullet strings (each <=120 chars). Never mention a price, "
+        "year, odometer, or score that does not appear verbatim in the "
+        "<untrusted_user_data> payload. If a field is absent or null, say "
+        "'not available' rather than guessing. Return "
+        'STRICT JSON: {"summary": string (<=280 chars, plain English), '
+        '"red_flags": [string] (<=5 items, each <=120 chars), '
+        '"green_flags": [string] (<=5 items, each <=120 chars)}.'
+    ),
 }
 
 # Sampling temperature per module. All modules default to 0 (deterministic);
@@ -153,6 +169,7 @@ _AI_IMMUTABLE: dict[str, frozenset[str]] = {
     "ocr": frozenset({"vendor", "invoice_date", "total", "tax", "currency", "items"}),
     "fuel-ocr": frozenset({"vendor", "date", "litres", "price_per_litre", "total_cost", "currency"}),
     "advisor": frozenset({"decision", "based_on"}),
+    "car-check": frozenset({"deal_score", "red_flags", "green_flags"}),
 }
 
 # Per-module output schema whitelist: the only keys the router may contribute,
@@ -229,6 +246,11 @@ _SCHEMAS: dict[str, dict[str, tuple]] = {
         "next_actions": (list,),
         "based_on": (dict,),
         "model": (str,),
+    },
+    "car-check": {
+        "summary": (str,),
+        "red_flags": (list,),
+        "green_flags": (list,),
     },
 }
 
