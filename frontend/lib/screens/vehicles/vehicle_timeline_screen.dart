@@ -83,10 +83,6 @@ class _VehicleTimelineScreenState extends State<VehicleTimelineScreen> {
                     ),
                   ),
                 ),
-              ),
-            ),
-          ),
-        ),
       );
   }
 }
