@@ -474,7 +474,7 @@ class _AdvisorEntry extends StatelessWidget {
       AdvisorOverviewScreen(vehicleId: vehicle.id);
 }
 
-class _OwnershipAdvisorLaunchCard extends StatelessWidget {
+class _ErrorView extends StatelessWidget {
   const _ErrorView({
     required this.message,
     required this.sessionExpired,
@@ -504,6 +504,10 @@ class _OwnershipAdvisorLaunchCard extends StatelessWidget {
               TextButton(
                   onPressed: onLogout, child: const Text('Log in again')),
           ],
+        ),
+      ),
+    );
+  }
 }
 
 class _OwnershipAdvisorLaunchCard extends StatelessWidget {
