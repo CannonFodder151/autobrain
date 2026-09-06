@@ -59,7 +59,13 @@ app.include_router(fuel_servo_router, prefix="/api")
 
 @app.get("/health")
 async def health() -> dict:
-    return {"status": "ok", "service": "autobrain-backend", "version": settings.APP_VERSION}
+    if settings.DEMO_MODE:
+        env = "demo"
+    elif settings.SOCIAL_FEDERATION_HOSTED:
+        env = "hosted"
+    else:
+        env = "default"
+    return {"status": "ok", "service": "autobrain-backend", "version": settings.APP_VERSION, "env": env}
 
 
 # Kubernetes-style alias for the boot-probe used by the Flutter app
