@@ -42,14 +42,13 @@ RUN useradd -m -u 1000 autobrain \
 # upstream layer change, leaving chrome-sandbox autobrain:autobrain 0755 at
 # runtime (CTO verification 2026-09-03). This RUN runs as root (USER switched
 # back to root) so chown root:root succeeds regardless of build-host uid.
-# AUT-2472: Playwright 1.62+ (chromium v1234+) no longer ships chrome-sandbox
-# under /ms-playwright — the kernel namespace sandbox replaces SUID. The
-# scraper's --no-sandbox fallback handles this gracefully; fail the build only
-# when the file exists but cannot be re-SUIDed (permission error).
+# AUT-2582 fix: Playwright 1.62+ ships chrome_sandbox (underscore); also match
+# chrome-sandbox (hyphen) for older Playwright versions so the SUID sandbox
+# helper is always root-owned + setuid regardless of naming convention.
 USER root
 RUN set -eux; \
     sb_count=0; \
-    for sb in $(find /ms-playwright -type f -name chrome-sandbox); do \
+    for sb in $(find /ms-playwright -type f \( -name chrome-sandbox -o -name chrome_sandbox \)); do \
         chown root:root "$sb"; \
         chmod 4755 "$sb"; \
         sb_count=$((sb_count+1)); \
