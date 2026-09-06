@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-2118)
+- backend(tests): add `backend/tests/test_health_demo.py` — dedicated health endpoint CI gate asserting /health returns 200, status=ok, service=autobrain-backend, version matches APP_VERSION, and marks demo/hosted/default env when DEMO_MODE=true. Promoted from test_api.py.
+
 ## [0.3.241] - 2026-09-06
 
 ### Added (AUT-2651)
