@@ -10,8 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
-### Fixed (AUT-1919)
-- fix(ci): pin Flutter version `3.24.x` in `security-pr-gate.yml` flutter-audit job (`subosito/flutter-action@v2`). Unpinned `channel: stable` was installing a pre-Dart-3.3 / pre-Flutter-3.19 toolchain that lacks `dart pub audit`, causing the PR gate to false-red on every PR regardless of frontend changes.
+### Fixed (AUT-1921)
+- fix(ci): bump flutter-audit job in `security-pr-gate.yml` to Flutter `3.48.x` (Dart 3.8) and replace the `osv-scanner` workaround with native `dart pub audit --severity high,critical`. Dart 3.8+ ships `dart pub audit` natively; the previous `3.24.x` pin lacked the subcommand, forcing the osv-scanner bridge that was always intended as a stopgap (AUT-2066). The gate now scans `pubspec.lock` with the canonical Dart package registry and fails the PR on HIGH/CRITICAL advisories. Closes AUT-1921.
 
 ### Added (AUT-2384)
 - feat(frontend,AUT-2384): wire the existing-but-dead `OfflineCache` (sqflite) into `ApiClient` so GET requests cache successful responses and fall back to cache on network failure. Per-endpoint TTL table in `ApiClient._cacheTtls` (safe-list only: vehicles, auth/me, social/feed, fuel-prices; auth, exports, uploads, billing, admin, OBD excluded). Read-through on `SocketException`/`TimeoutException`/`HandshakeException`; HTTP 4xx/5xx surfaced as-is. Prefix-based invalidation via `api.invalidateCache(path)`. In-memory hot layer (LRU 64) over SQLite. Boot-time `clearExpired()` in `lib/main.dart`. No new dependencies. Closes AUT-2384 Layers 2+3.

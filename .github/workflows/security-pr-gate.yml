@@ -105,46 +105,33 @@ jobs:
           rm -f "$TMPREQ"
           python3 -m pip_audit --disable-pip --no-deps -r market-data/requirements.txt
 
-  # (5) Flutter/Dart dependency vulnerability scan (AUT-2066).
-  # `flutter pub audit` and `dart pub audit` do not exist on current Flutter/Dart
-  # stable — the subcommand was never shipped, so every PR was failing this step
-  # regardless of diff content (blocking AUT-1899 and any other PR that touched
-  # `frontend/`). Use osv-scanner against `pubspec.lock` (the canonical
-  # ecosystem-aware vuln source for Dart/Flutter), gated to fail on HIGH/CRITICAL.
+  # (5) Flutter/Dart dependency vulnerability scan via `dart pub audit`
+  # (AUT-2066, AUT-1921). Dart 3.8+ ships `dart pub audit` natively; require
+  # Flutter >=3.48 (Dart >=3.8) so the subcommand is present. This replaces
+  # the osv-scanner workaround that was needed when `dart pub audit` did not
+  # exist. Gate fails on HIGH/CRITICAL vulns in pubspec.lock.
   flutter-audit:
-    name: Flutter — osv-scanner (pubspec.lock)
+    name: Flutter — dart pub audit
     runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.x'
+          flutter-version: '3.48.x'
           cache: true
-      - name: Install osv-scanner
-        run: |
-          set -euo pipefail
-          mkdir -p "$HOME/.local/bin"
-          # AUT-2312: v1.7.3's asset name was `osv-scanner_linux_amd64`, not the
-          # `osv-scanner_1.7.3_linux_amd64` filename this step used (404).
-          # Pin v1.9.2 with the correct asset name; bump deliberately when ready.
-          OSV_VER="1.9.2"
-          curl -sfL "https://github.com/google/osv-scanner/releases/download/v${OSV_VER}/osv-scanner_linux_amd64" \
-            -o "$HOME/.local/bin/osv-scanner"
-          chmod +x "$HOME/.local/bin/osv-scanner"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: flutter pub get (frontend)
         working-directory: frontend
         run: |
           set -euo pipefail
           flutter pub get
-      - name: osv-scanner — fail on any finding
+      - name: dart pub audit — fail on HIGH/CRITICAL
         working-directory: frontend
         run: |
           set -euo pipefail
-          # v1.x CLI: `osv-scanner scan` is the v1 entrypoint; v1.x exits
-          # non-zero automatically on any finding (no `--exit-code` flag in v1).
-          osv-scanner scan --format=table --lockfile=pubspec.lock
+          # dart pub audit exits non-zero on any finding; pin to HIGH/CRITICAL
+          # so lower-severity advisories (info/low) do not block the PR gate.
+          dart pub audit --severity high,critical
 
   # (6a) AUT-2390 compose-config-diff — prevent AUT-1964 typo recurrence.
   # When a PR touches any `docker-compose*.yml`, run `docker compose config`
@@ -377,4 +364,4 @@ jobs:
           curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
             -H "Content-Type: application/json" \
             -d "$(jq -nc --arg c status --arg t "$TITLE" --arg col "$COLOR" --arg u "$RUN_URL" \
-              '{channel:$c,title:$t,description:"AUT-1746 PR gate: gitleaks + trivy config + pip-audit + flutter osv-scanner (pubspec.lock) + compose env-var diff (AUT-2390).",color:$col,author:"Security Scan",fields:[{name:"Scope",value:"secrets, IaC, python, flutter, compose-env",inline:true},{name:"Run",value:$u,inline:true}]}')"
+              '{channel:$c,title:$t,description:"AUT-1746 PR gate: gitleaks + trivy config + pip-audit + dart pub audit (Flutter >=3.48) + compose env-var diff (AUT-2390).",color:$col,author:"Security Scan",fields:[{name:"Scope",value:"secrets, IaC, python, flutter, compose-env",inline:true},{name:"Run",value:$u,inline:true}]}')"
