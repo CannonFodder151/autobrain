@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/api_client.dart';
 import '../../core/auth_state.dart';
+import '../../core/connectivity_service.dart';
 import '../../core/models.dart';
 import '../../widgets/rego_status_badge.dart';
 import '../../widgets/responsive.dart';
+import '../../widgets/stale_hint.dart';
 import 'add_vehicle_screen.dart';
 import 'edit_vehicle_screen.dart';
 import 'share_vehicle_screen.dart';
@@ -20,6 +23,7 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
   List<Vehicle> _vehicles = const [];
   List<Map<String, dynamic>> _invites = const [];
   bool _loading = true;
+  bool _stale = false;
   String? _busyInvite;
 
   @override
@@ -30,18 +34,33 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
 
   Future<void> _load() async {
     final api = context.read<AuthState>().api;
-    setState(() => _loading = true);
+    // Cache-first: render immediately from cache.
+    final cached = await api.getCachedDecoded('/vehicles', null);
+    if (cached != null) {
+      _vehicles = (cached as List)
+          .map((e) => Vehicle.fromJson(e as Map<String, dynamic>))
+          .toList();
+      _stale = true;
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
+    if (!mounted) return;
+    // Background refresh if online.
+    if (!ConnectivityService.instance.isOnline) return;
     try {
       final data = await api.get('/vehicles') as List;
       _vehicles = data
           .map((e) => Vehicle.fromJson(e as Map<String, dynamic>))
           .toList();
-    } catch (_) {}
+      _stale = false;
+    } catch (_) {
+      if (_vehicles.isEmpty) _stale = true;
+    }
     try {
       final invites = await api.get('/vehicle-shares') as List;
       _invites = invites.map((e) => e as Map<String, dynamic>).toList();
     } catch (_) {}
-    if (mounted) setState(() => _loading = false);
+    if (mounted) setState(() {});
   }
 
   Future<void> _delete(Vehicle v) async {
@@ -145,6 +164,10 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
+                  StaleHint(
+                    isStale: _stale,
+                    isOffline: !ConnectivityService.instance.isOnline,
+                  ),
                   Center(
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 700),

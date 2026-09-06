@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/api_client.dart';
 import '../../core/auth_state.dart';
+import '../../core/connectivity_service.dart';
 import '../../core/download.dart';
 import '../../core/models.dart';
+import '../../widgets/stale_hint.dart';
 import 'service_form_screen.dart';
 import 'service_prediction_screen.dart';
 
@@ -19,6 +22,7 @@ class _ServiceListScreenState extends State<ServiceListScreen> {
   List<ServiceRecord> _services = const [];
   int? _currentOdo;
   bool _loading = true;
+  bool _stale = false;
 
   @override
   void initState() {
@@ -28,18 +32,34 @@ class _ServiceListScreenState extends State<ServiceListScreen> {
 
   Future<void> _load() async {
     final api = context.read<AuthState>().api;
-    setState(() => _loading = true);
+    final path = '/vehicles/${widget.vehicleId}/services';
+    // Cache-first: render immediately from cache.
+    final cached = await api.getCachedDecoded(path, null);
+    if (cached != null) {
+      _services = (cached as List)
+          .map((e) => ServiceRecord.fromJson(e as Map<String, dynamic>))
+          .toList();
+      _stale = true;
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
+    if (!mounted) return;
+    // Background refresh if online.
+    if (!ConnectivityService.instance.isOnline) return;
     try {
-      final data = await api.get('/vehicles/${widget.vehicleId}/services') as List;
+      final data = await api.get(path) as List;
       _services = data
           .map((e) => ServiceRecord.fromJson(e as Map<String, dynamic>))
           .toList();
-    } catch (_) {}
+      _stale = false;
+    } catch (_) {
+      if (_services.isEmpty) _stale = true;
+    }
     try {
       final v = await api.get('/vehicles/${widget.vehicleId}') as Map<String, dynamic>;
       _currentOdo = v['odometer_km'] as int?;
     } catch (_) {}
-    setState(() => _loading = false);
+    if (mounted) setState(() {});
   }
 
   Future<void> _delete(ServiceRecord s) async {
@@ -160,11 +180,15 @@ class _ServiceListScreenState extends State<ServiceListScreen> {
         onRefresh: _load,
         child: _loading
             ? const Center(child: CircularProgressIndicator())
-            : _services.isEmpty
+            : _services.isEmpty && _stale
                 ? const Center(child: Text('No services logged'))
                 : ListView(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
                     children: [
+                      StaleHint(
+                        isStale: _stale,
+                        isOffline: !ConnectivityService.instance.isOnline,
+                      ),
                       if (upcoming.isNotEmpty) ...[
                         _SectionHeader(
                           title: 'Upcoming',

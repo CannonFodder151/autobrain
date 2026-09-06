@@ -36,6 +36,12 @@ class OfflineCache {
   static const int _hotCapacity = 64;
   final Map<String, CacheEntry> _hot = <String, CacheEntry>{};
 
+  /// Ultra-hot in-memory layer for the busiest endpoints (vehicles, profile).
+  /// These entries bypass SQLite entirely and expire after [ultraHotTtl]
+  /// (default 10 s). Only a handful of keys are ever stored here.
+  static const Duration ultraHotTtl = Duration(seconds: 10);
+  final Map<String, CacheEntry> _ultraHot = <String, CacheEntry>{};
+
   Future<Database> _open() async {
     if (_db != null) return _db!;
     if (_opening != null) return await _opening!;
@@ -90,7 +96,18 @@ class OfflineCache {
   /// is false, expired entries (TTL exceeded) are treated as missing. When
   /// allowStale is true, the entry is returned with `stale: true` so callers
   /// can choose to refresh in the background.
+  ///
+  /// Check order: ultra-hot (in-memory, 10 s) → hot (in-memory LRU) → SQLite.
   Future<CacheEntry?> get(String key, {bool allowStale = false}) async {
+    // Ultra-hot in-memory layer: fastest possible read, no SQLite involved.
+    final ultra = _ultraHot[key];
+    if (ultra != null) {
+      if (_isExpired(ultra)) {
+        _ultraHot.remove(key);
+      } else {
+        return ultra;
+      }
+    }
     final hot = _hot[key];
     if (hot != null) {
       if (_isExpired(hot) && !allowStale) {
@@ -119,6 +136,7 @@ class OfflineCache {
     final db = await _open();
     await db.delete('cache', where: 'key LIKE ?', whereArgs: ['$prefix%']);
     _hot.removeWhere((k, _) => k.startsWith(prefix));
+    _ultraHot.removeWhere((k, _) => k.startsWith(prefix));
   }
 
   /// Drop a single key.
@@ -126,6 +144,7 @@ class OfflineCache {
     final db = await _open();
     await db.delete('cache', where: 'key = ?', whereArgs: [key]);
     _hot.remove(key);
+    _ultraHot.remove(key);
   }
 
   /// Wipe everything (used by logout / cache clear in settings).
@@ -133,6 +152,7 @@ class OfflineCache {
     final db = await _open();
     await db.delete('cache');
     _hot.clear();
+    _ultraHot.clear();
   }
 
   /// Drop expired rows from the SQLite table. Safe to call at boot.
@@ -171,4 +191,25 @@ class OfflineCache {
       _hot.remove(k);
     }
   }
+
+  /// Read-only ultra-hot lookup. Returns the entry only when it is still
+  /// fresh (within [ultraHotTtl]). Never touches SQLite.
+  CacheEntry? getUltraHot(String key) {
+    final e = _ultraHot[key];
+    if (e == null) return null;
+    if (_isExpired(e)) {
+      _ultraHot.remove(key);
+      return null;
+    }
+    return e;
+  }
+
+  /// Store an entry in the ultra-hot layer (in-memory only).
+  void putUltraHot(String key, String body) {
+    _ultraHot[key] = CacheEntry(
+        body, DateTime.now(), false, ultraHotTtl.inMilliseconds);
+  }
+
+  /// Drop a single ultra-hot key.
+  void invalidateUltraHot(String key) => _ultraHot.remove(key);
 }

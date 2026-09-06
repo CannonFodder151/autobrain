@@ -14,6 +14,8 @@ import 'package:provider/provider.dart';
 import '../../core/api_client.dart';
 import '../../core/auth_state.dart';
 import '../../core/config.dart';
+import '../../core/connectivity_service.dart';
+import '../../widgets/stale_hint.dart';
 import '../models.dart';
 import '../social_api.dart';
 import '../widgets/premium_gate.dart';
