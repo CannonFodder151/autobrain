@@ -210,6 +210,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         Center(
                           child: ConstrainedBox(
                             constraints: const BoxConstraints(maxWidth: 600),
+                            child: _OwnershipAdvisorLaunchCard(
+                                vehicle: _selected!),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 600),
                             child: Align(
                               alignment: Alignment.centerLeft,
                               child: Text('Features',
@@ -466,7 +474,7 @@ class _AdvisorEntry extends StatelessWidget {
       AdvisorOverviewScreen(vehicleId: vehicle.id);
 }
 
-class _ErrorView extends StatelessWidget {
+class _OwnershipAdvisorLaunchCard extends StatelessWidget {
   const _ErrorView({
     required this.message,
     required this.sessionExpired,
@@ -496,27 +504,136 @@ class _ErrorView extends StatelessWidget {
               TextButton(
                   onPressed: onLogout, child: const Text('Log in again')),
           ],
+}
+
+class _OwnershipAdvisorLaunchCard extends StatelessWidget {
+  const _OwnershipAdvisorLaunchCard({required this.vehicle});
+  final Vehicle vehicle;
+
+  static const _modules = <_ModuleChipData>[
+    _ModuleChipData('Value', Icons.sell, Color(0xFF059669)),
+    _ModuleChipData('Replace', Icons.swap_horiz, Color(0xFF2563EB)),
+    _ModuleChipData('Upgrade', Icons.upgrade, Color(0xFF7C3AED)),
+    _ModuleChipData('Finance', Icons.calculate, Color(0xFF0B6B6A)),
+    _ModuleChipData('Dream', Icons.star, Color(0xFFDB2777)),
+    _ModuleChipData('AI', Icons.psychology, Color(0xFF0891B2)),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: const Color(0xFF6366F1),
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => AdvisorOverviewScreen(vehicleId: vehicle.id),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.18),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.insights,
+                        color: Colors.white, size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Ownership Advisor',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(
+                          'Live now',
+                          style: TextStyle(
+                            color: Color(0xFFE0E7FF),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.4,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.arrow_forward,
+                      color: Colors.white, size: 20),
+                ],
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'What should you do with your car? Value, replace, upgrade, '
+                'finance, dream — six answers, one screen. Deterministic '
+                'where possible, AI only for the final call.',
+                style: TextStyle(color: Colors.white, fontSize: 13, height: 1.35),
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final m in _modules) _ModuleChip(data: m),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class DownloadAppDialog extends StatelessWidget {
-  const DownloadAppDialog({super.key});
+class _ModuleChipData {
+  const _ModuleChipData(this.label, this.icon, this.color);
+  final String label;
+  final IconData icon;
+  final Color color;
+}
+
+class _ModuleChip extends StatelessWidget {
+  const _ModuleChip({required this.data});
+  final _ModuleChipData data;
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-        icon: const Icon(Icons.smartphone),
-        title: const Text('Get the mobile app'),
-        content: const Text(
-          'AutoBrain is available as a native app for Android and iOS. '
-          'Open this page on your phone to download it.',
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Close')),
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(data.icon, color: Colors.white, size: 14),
+          const SizedBox(width: 6),
+          Text(
+            data.label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
         ],
-      );
+      ),
+    );
+  }
 }
