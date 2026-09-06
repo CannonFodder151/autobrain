@@ -90,6 +90,22 @@ CVE-2026-14456  # openssl QUIC DoS: AutoBrain does not use QUIC anywhere
 CVE-2026-66046  # expat DoS: no network exposure in AutoBrain nginx frontend
 CVE-2026-76641  # expat: same package; no runtime impact
 
+
+# --- AUT-2762: nginx libuuid (util-linux) HIGH CVEs (alpine 3.24.1 base package; no upstream fix yet) ---
+# Source: libuuid in nginxinc/nginx-unprivileged:stable-alpine@sha256:45ce1e2e...
+# CVE-2026-53612/53613/53614: TOCTOU / SUID mount bypass via libmount; CVE-2026-76642: privileged X-mount post-hooks.
+# CVE-2026-78408/78409/78410: nsenter cgroup leak / X-mount.subdir symlink escape / restricted bind-mount pinning.
+# These are util-linux/libmount mount(8) features AutoBrain does not use — the nginx frontend
+# container never invokes mount(8), nsenter, or libmount path resolution at runtime.
+# Time-boxed: re-check 2026-12-28; drop entries + bump NGINX_FRONTEND_IMAGE digest if
+# nginxinc ships an alpine 3.24.x respin with util-linux >= 2.42.3-r0.
+CVE-2026-53612  # util-linux TOCTOU in mount(8): nginx frontend never invokes mount
+CVE-2026-53613  # util-linux ancestor directory swap via mount: nginx frontend never invokes mount
+CVE-2026-53614  # util-linux SUID mount(8) nosuid bypass: nginx frontend never invokes mount
+CVE-2026-76642  # util-linux failed mount helper post-hooks: nginx frontend never invokes mount
+CVE-2026-78408  # util-linux nsenter --join-cgroup root cgroup leak: nginx frontend never invokes nsenter
+CVE-2026-78409  # util-linux X-mount.subdir symlink escape: nginx frontend never invokes libmount
+CVE-2026-78410  # util-linux restricted bind-mount source pinning bypass: nginx frontend never invokes mount
 # --- AUT-2332: trivy-db placeholder CVE in nginxinc/nginx-unprivileged:stable-alpine ----
 # CVE-2026-80256 was added to the Alpine 3.24.1 vuln DB on 2026-09-03 but its
 # metadata is still being populated upstream (trivy 0.70 logs "no vulnerability

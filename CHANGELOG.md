@@ -429,6 +429,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [0.3.206] - 2026-09-02
 
+### Added
+- ci(libexpat): daily `libexpat-version-check` workflow resolves the current `nginxinc/nginx-unprivileged:stable-alpine` digest, reads the libexpat version via `apk info`, and auto-files a Paperclip issue with a PR-ready patch once the version reaches >= 2.8.4-r0 so the time-boxed `.trivyignore` entries (CVE-2026-66046, CVE-2026-76641) can be dropped (AUT-2126, AUT-2161).
+
 ## [0.3.205] - 2026-09-02
 
 ## [0.3.204] - 2026-09-02
