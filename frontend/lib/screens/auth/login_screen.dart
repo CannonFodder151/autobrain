@@ -196,7 +196,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
+                    children: [
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
