@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Added (AUT-2384)
+- feat(frontend,AUT-2384): wire the existing-but-dead `OfflineCache` (sqflite) into `ApiClient` so GET requests cache successful responses and fall back to cache on network failure. Per-endpoint TTL table in `ApiClient._cacheTtls` (safe-list only: vehicles, auth/me, social/feed, fuel-prices; auth, exports, uploads, billing, admin, OBD excluded). Read-through on `SocketException`/`TimeoutException`/`HandshakeException`; HTTP 4xx/5xx surfaced as-is. Prefix-based invalidation via `api.invalidateCache(path)`. In-memory hot layer (LRU 64) over SQLite. Boot-time `clearExpired()` in `lib/main.dart`. No new dependencies. Closes AUT-2384 Layers 2+3.
 
 ## [0.3.243] - 2026-09-06
 ### Fixed (AUT-2656)
