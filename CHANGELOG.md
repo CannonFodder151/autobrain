@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Fixed (AUT-2656)
+- fix(frontend): restore flutter web compile on arm64 runner. PR #530 (AUT-2478) introduced a class name collision in `home_screen.dart` — the `_OwnershipAdvisorLaunchCard` class had its constructor renamed to `_ErrorView`, nesting it and breaking dart2js. Separated `_ErrorView` as its own top-level class and restored `_ErrorView.build` body. Also fixed `servo_spy_screen.dart` `_openHistory()` missing `BuildContext` argument (passed `context` to `Navigator.of(context)` but the method signature lacked the parameter, causing `context` to resolve to the enclosing `build` scope).
 
 ## [0.3.243] - 2026-09-06
 ### Fixed (AUT-2656)
