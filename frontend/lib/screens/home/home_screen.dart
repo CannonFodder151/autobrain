@@ -69,7 +69,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _loadError = 'Your login has expired. Please log in again.';
         _sessionExpired = true;
       } else {
-        _loadError = 'Could not reach the server. Check your connection or server settings.';
+        _loadError = 'The server returned an error (${e.statusCode}). Try again later.';
       }
     } catch (_) {
       _loadError = 'Could not reach the server. Check your connection or server settings.';
