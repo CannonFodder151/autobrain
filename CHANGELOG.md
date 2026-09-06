@@ -59,6 +59,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Added (AUT-2447)
 - backend(advisor): Ownership Advisor Upgrade module — deterministic upgrade options + similar suggestions + trade-up estimate. New `GET /api/v1/advisor/upgrade` route anchors on the value module's cached market median. No 9Router. No AI. Free accounts get 403. New schemas `UpgradeOption`, `SimilarVehicleSuggestion`, `TradeUpDelta`, `AdvisorUpgradeData`. New helpers `compute_upgrade`, `find_upgrade_options`, `find_similar_vehicles`, `build_trade_up`, `_amortize_monthly`, `_similarity_score`, `_clamp_finance_term/rate/deposit_pct`, `_tier_label`, `_median_for`. Tests: `backend/tests/test_advisor_upgrade.py`.
 
+
 ### Added (AUT-2478)
 - feat(frontend,advisor): Ownership Advisor launch card on `HomeScreen` — a full-width purple (`#6366F1`) branded card above the feature grid with title, tagline, and a `Wrap` of six `_ModuleChip` pills (Value/Replace/Upgrade/Finance/Dream/AI) mirroring the 6-module Overview shell per AUT-2451. The existing feature-tile entry is preserved so users who scroll past the launch card still reach `AdvisorOverviewScreen(vehicleId:)` via `_AdvisorEntry`. Copy matches the `#changelog` embed payload for sibling AUT-2477 (module names, "deterministic where possible, AI only for the final call"). New test `test/advisor_home_card_test.dart` (4 cases: card found, title, tagline, chip count). Closes AUT-2478.
 
@@ -235,6 +236,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed (AUT-2683)
 - fix(backend): import `PowertrainType` in `app/schemas/vehicle.py` so the enum is defined before use. Missing import caused `NameError` at backend startup on every redeploy, returning 502 on all frontend requests.
+
 
 ### Added (AUT-2434)
 - backend: vehicle powertrain field (`ICE | EV | HEV | PHEV`). New `PowertrainType` enum on `Vehicle` model with default `ICE`. Alembic migration `aut2434_vehicle_powertrain` adds `vehicles.powertrain VARCHAR(8) NOT NULL DEFAULT 'ICE'` — all pre-existing rows backfill to ICE. API responses (`VehicleOut`) now include `powertrain`; create/update accept `powertrain` in request bodies. Tests: `backend/tests/test_aut2434_powertrain.py` (6 offline cases: column present, enum locked to 4 tokens, Create/Update/Out serialization, default-ICE contract).
