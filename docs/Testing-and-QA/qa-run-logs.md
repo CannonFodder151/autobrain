@@ -1,8 +1,18 @@
 # QA Run Logs
 
-**Owner:** QA & User Testing. **Section:** Testing & QA. **Last reviewed:** 2026-08-10 (AUT-182).
+**Owner:** QA & User Testing. **Section:** Testing & QA. **Last reviewed:** 2026-09-06 (AUT-2632).
 
 Chronological log of verified test passes and verification runs. Real state only — mirrors repo `docs/qa-run-logs.md`. Newest first.
+
+## 2026-09-06 — Location Services verification: AUT-2632 (iOS + Android)
+
+Verified Flutter frontend location services configuration.
+
+**Findings:**
+- `geolocator: ^14.0.2` used in 3 features: speed detection, servo spy, logbook.
+- iOS `autobrain-mobile/ios/Runner/Info.plist`: `NSLocationWhenInUseUsageDescription` + `NSLocationAlwaysAndWhenInUseUsageDescription` added (this run).
+- Android `autobrain-mobile/android/app/src/main/AndroidManifest.xml`: `ACCESS_FINE_LOCATION`/`ACCESS_COARSE_LOCATION` not found. Geolocator plugin injects these at build time via Gradle; verify on next build.
+- No release-blocking issue. Verdict: **deliverable**. Parent: AUT-2628.
 
 ## 2026-08-14 — Post-push pass: AUT-712 demo issue-blog seed (AUT-722, Gate 2)
 

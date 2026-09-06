@@ -25,15 +25,6 @@ frontend/.dart_tool/
 frontend/build/
 frontend/.flutter-plugins
 frontend/.flutter-plugins-dependencies
-frontend/ios/Pods/
-frontend/ios/.symlinks/
-frontend/ios/Flutter/ephemeral/
-frontend/ios/Flutter/Generated.xcconfig
-frontend/ios/Flutter/flutter_export_environment.sh
-frontend/ios/Runner/GeneratedPluginRegistrant.h
-frontend/ios/Runner/GeneratedPluginRegistrant.m
-frontend/android/.gradle/
-frontend/android/local.properties
 *.iml
 
 # Node (frontend web tooling, if any)
