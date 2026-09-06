@@ -31,7 +31,21 @@ FRONT="$ROOT/frontend"
 cd "$MOBILE"
 [[ -d .git ]] || { echo "::error::$MOBILE is not a git checkout" >&2; exit 1; }
 
+# --- Platform dirs are NOT synced ----------------------------------------------
+# AUT-2642: ios/ and android/ now live in autobrain-mobile itself (migrated from
+# frontend/). The sync mirrors only the shared Flutter lineage (lib/ + assets/ +
+# CHANGELOG). Platform dirs must never be overwritten by the monorepo copy —
+# they carry mobile-only build configs, signing keys, and store metadata.
+for d in ios android; do
+  [[ -d "$d" ]] || { echo "::error::$MOBILE/$d missing — platform dir was not migrated" >&2; exit 1; }
+done
+
 # --- Shared lineage (lib + assets + CHANGELOG) -------------------------------
+# AUT-2642: platform dirs live in autobrain-mobile itself. If they ever appear
+# in frontend/ again, fail loudly instead of silently overwriting mobile configs.
+for d in ios android; do
+  [[ ! -d "$FRONT/$d" ]] || { echo "::error::$FRONT/$d exists — platform dirs must stay in autobrain-mobile" >&2; exit 1; }
+done
 # Copy lib/ verbatim except the mobile-only-delta files.
 for f in core/auth_state.dart core/config.dart \
     screens/auth/login_screen.dart screens/settings/license_screen.dart \
