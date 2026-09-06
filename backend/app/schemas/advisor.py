@@ -482,6 +482,63 @@ class AdvisorUpgradeData(BaseModel):
     note: str | None = None
 
 
+class AdvisorCarCheckData(BaseModel):
+    """Structured output for ``POST /advisor/car-check`` (AUT-2630).
+
+    The Car Check module is fully deterministic: it anchors on the
+    existing ``market_listing_cache`` (the same cache the Value module
+    uses — no duplicate storage), applies the documented condition and
+    odometer multipliers from ``app.services.advisor``, and returns a
+    one-line verdict with the fair-value band and delta.
+
+    The AI summary and ``red_flags`` / ``green_flags`` are layered on
+    top by 9Router via the AI gateway (``ai/app/modules/car_check.py``)
+    when reachable; the ``model`` field records the source. When 9Router
+    is unreachable the route falls back to the rule-based
+    ``ai_summary`` produced by ``app.services.car_check`` so the
+    frontend always has readable copy. The ``verdict``, ``fair_value_*``
+    and ``delta_pct`` fields are *never* invented by the AI — they come
+    entirely from ``compute_car_check``.
+    """
+
+    currency: str = "AUD"
+    verdict: str = "risky"
+    asking_price: float | None = None
+    fair_value_low: float | None = None
+    fair_value_mid: float | None = None
+    fair_value_high: float | None = None
+    delta_pct: float | None = None
+    delta_amount: float | None = None
+    sample_size: int = 0
+    condition_multiplier: float = 1.0
+    km_multiplier: float = 1.0
+    ai_summary: str = ""
+    red_flags: list[str] = Field(default_factory=list)
+    green_flags: list[str] = Field(default_factory=list)
+    note: str | None = None
+
+
+class CarCheckRequest(BaseModel):
+    """Request body for ``POST /advisor/car-check``.
+
+    Either ``listing_url`` (best-effort parser) or the inline
+    ``make``/``model``/``year`` + ``asking_price`` fields are required.
+    The listing_url path runs the slug parser; if it can't extract
+    all three fields the route falls back to the manual form with a
+    ``note`` on the response explaining the gap so the frontend can
+    prompt the user.
+    """
+
+    listing_url: str = Field(default="", description="Public listing URL (CarsGuide, CarSales, FB Marketplace, etc.)")
+    make: str = Field("", description="Vehicle make")
+    model: str = Field("", description="Vehicle model")
+    year: int | None = Field(None, ge=1900, le=2100)
+    asking_price: float = Field(..., gt=0, description="Listing asking price (AUD)")
+    odometer_km: int | None = Field(None, ge=0, description="Odometer reading (km)")
+    condition: str | None = Field(None, description="Vehicle condition: excellent|good|fair|poor")
+    vehicle_type: str = Field("car", pattern=r"^(car|bike|motorcycle|truck|van)$")
+
+
 class AdvisorResponse(BaseModel):
     """Universal Ownership Advisor response envelope."""
 
