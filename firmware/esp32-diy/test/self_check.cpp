@@ -8,6 +8,7 @@
 #include "../include/config.h"
 #include "../src/dtc.h"
 #include "../src/obd_pids.h"
+#include "../src/ev_pids.h"
 #include "../src/prov_validate.h"
 #include "../src/sleep_heuristics.h"
 #include "../src/upload_payload.h"
@@ -356,6 +357,43 @@ int main() {
         assert(strcmp(body, "{\"codes\":[]}") == 0);
         dtc_body_json("garbage-line\nP0301\n", body, sizeof body);
         assert(strcmp(body, "{\"codes\":[{\"code\":\"P0301\"}]}") == 0);
+    }
+
+    // ---- AUT-2702: EV PID table + VIN decode stub ----
+    {
+        uint8_t req[8];
+        build_mode22_request(req, 0xF18D);
+        assert(req[0] == 3 && req[1] == 0x22 && req[2] == 0xF1 && req[3] == 0x8D && req[7] == 0);
+
+        uint8_t m22resp[8] = {0x62, 0xF1, 0x8D, 50, 0, 0, 0, 0};
+        assert(is_valid_mode22_response(m22resp, 0xF18D));
+        assert(!is_valid_mode22_response(m22resp, 0xF18E));
+        assert(!is_valid_mode22_response(nullptr, 0xF18D));
+
+        char wmi[4] = {0};
+        assert(vin_wmi("1N6BD3063NN810001", wmi) && strcmp(wmi, "1N6") == 0);
+        assert(vin_wmi("ABC", wmi) && strcmp(wmi, "ABC") == 0);
+        assert(!vin_wmi("AB", wmi));
+        assert(!vin_wmi(nullptr, wmi));
+        assert(!vin_wmi("1N6BD3063NN810001", nullptr));
+
+        const EvProfile* p = ev_profile_for_wmi("1N6");
+        assert(p && strcmp(p->wmi, "1N6") == 0 && strcmp(p->make, "Nissan") == 0);
+        assert(p->soc_pct.pid == 0x016B);
+        assert(p->pack_v.pid == 0x0156);
+        p = ev_profile_for_wmi("XXXX");
+        assert(p && strcmp(p->wmi, "GEN") == 0);
+        assert(ev_profile_for_wmi(nullptr) == &GENERIC_EV);
+        assert(ev_profile_for_wmi("") == &GENERIC_EV);
+
+        uint8_t resp_soc[8] = {0x62, 0x01, 0x6B, 75, 0, 0, 0, 0};
+        assert(ev_decode_value(resp_soc, EV_CH_SOC) == 7500);
+        uint8_t resp_v[8] = {0x62, 0x01, 0x56, 0x1A, 0x20, 0, 0, 0};
+        assert(ev_decode_value(resp_v, EV_CH_PACK_V) == 666400);
+        uint8_t resp_i[8] = {0x62, 0x01, 0x57, 0xFF, 0xFF, 0, 0, 0};
+        assert(ev_decode_value(resp_i, EV_CH_PACK_I) == -100);
+        uint8_t resp_t[8] = {0x62, 0x01, 0x58, 20, 0, 0, 0, 0};
+        assert(ev_decode_value(resp_t, EV_CH_PACK_TEMP) == 2000);
     }
 
     printf("all self-checks passed\n");
