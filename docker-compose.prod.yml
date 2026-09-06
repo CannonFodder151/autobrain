@@ -1,6 +1,6 @@
 # AutoBrain production stack.
 # Builds from source, tags images as ${DOCKERHUB_USERNAME}/autobrain-*.
-# Runs: postgres, redis, minio, backend (API + Celery worker+beat), ai, frontend.
+# Runs: postgres, redis, minio, backend (API + AI gateway + Celery worker+beat), frontend.
 # Nginx frontend container serves Flutter web + proxies /api, /ws, /ai.
 # No ports exposed except frontend :80. All internal services exposed only via Compose network.
 #
@@ -18,7 +18,9 @@ x-core-env: &core-env
   # AUT-1786: explicit passthrough for init-minio.sh and runtime uploads.
   MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-}
   MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-}
-  AI_LOCAL_BASE_URL: http://ai:8001
+  # AUT-2000: AI gateway runs inside the backend container on :8001,
+  # so localhost routing is correct (no separate `ai` service).
+  AI_LOCAL_BASE_URL: http://localhost:8001
   AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:?AI_GATEWAY_API_KEY must be set (prod fails closed)}
 
 x-backend-base: &backend-base
@@ -132,6 +134,11 @@ services:
       retries: 10
 
   # ── App services ───────────────────────────────────────────
+  # AUT-2000: backend image is the unified backend+ai image. The AI gateway
+  # (FastAPI app at /app/ai_app) runs as a co-process on :8001, alongside
+  # the backend API (:8000) and the Celery worker+beat. This collapses three
+  # compose services (backend, ai, worker) into one container, matching the
+  # dev compose and the backend Dockerfile's default CMD.
   backend:
     <<: *backend-base
     read_only: true
@@ -140,32 +147,12 @@ services:
     tmpfs:
       - /tmp
       - /app/tmp
-
-  ai:
-    build:
-      context: .
-      dockerfile: docker/ai/Dockerfile
-    image: ${DOCKERHUB_USERNAME:-autobrain}/autobrain-ai:${IMAGE_TAG:-latest}
-    restart: unless-stopped
-    read_only: true
-    cap_drop:
-      - ALL
-    # AUT-1739: adequate /dev/shm for Chromium (market-data scraper).
-    shm_size: "256m"
-    tmpfs:
-      - /tmp
-    # AUT-2258: /ms-playwright is NOT tmpfs-mounted. It used to be, which
-    # shadowed the image's chrome-sandbox SUID binary at runtime (the tmpfs
-    # is empty, the autobrain user can't chown to root, so the sandbox
-    # silently falls back to --no-sandbox). The image's /ms-playwright is
-    # read-only by definition (Playwright browsers + chrome-sandbox helper),
-    # so tmpfs-mounting it served no security purpose; removing the mount
-    # restores the CWE-250 mitigation.
-    env_file: .env
-    environment:
-      AI_ROUTER_URL: ${AI_ROUTER_URL}
-      AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:?AI_GATEWAY_API_KEY must be set (prod fails closed)}
-      API_KEY: ${MARKET_DATA_API_KEY:-}
+    command: >-
+      sh -c "/init-minio.sh
+      && alembic upgrade head
+      && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &)
+      && (uvicorn ai_app.main:app --host 0.0.0.0 --port 8001 &)
+      && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
     expose:
       - "8000"
       - "8001"
@@ -204,7 +191,6 @@ services:
       start_period: 30s
     depends_on:
       - backend
-      - ai
 
 # ── Persistent volumes ──────────────────────────────────────
 volumes:
