@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Fixed (AUT-2656)
+- fix(frontend): restore flutter web compile on arm64 runner. Three compile errors blocked `flutter build web` in the dockerhub-publish + build-hosted arm64 jobs: (1) `login_screen.dart:199` — `children:` under-indented by 2 spaces; (2) `signup_screen.dart:85` — `child:` under-indented by 2 spaces; (3) `reset_password_web.dart` — `import 'dart:html'` unsupported by Flutter ≥3.22 web builds (CanvasKit renderer), replaced with no-op `clearUrlToken()` (token detection in `app.dart` reads the fragment before navigation, so no data loss).
 
 ## [0.3.242] - 2026-09-06
 
