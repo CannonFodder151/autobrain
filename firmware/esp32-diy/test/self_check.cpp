@@ -7,6 +7,7 @@
 
 #include "../include/config.h"
 #include "../src/dtc.h"
+#include "../src/ev_pids.h"
 #include "../src/obd_pids.h"
 #include "../src/prov_validate.h"
 #include "../src/sleep_heuristics.h"
@@ -76,6 +77,31 @@ int main() {
     format_trip_row(row, sizeof row, 1713000000, 826, 75, 44, 50, 0, 0, 85, 400, 120, 28, 45000, 1);
     assert(strcmp(row, "1713000000,826,75,44,50,0,0,85,400,120,28,45000,1\n") == 0);
     assert(strlen(row) == 50);  // 13-field row with EV data
+
+    // ---- ev_mode classification (AUT-2706) ----
+    assert(classify_ev_mode(0, 0) == 0);       // ICE
+    assert(classify_ev_mode(800, 0) == 0);     // ICE
+    assert(classify_ev_mode(0, -50) == 1);     // EV
+    assert(classify_ev_mode(2000, -50) == 2); // HYBRID
+
+    // ---- EV profile / VIN decode (AUT-2702) ----
+    char wmi[4];
+    assert(vin_wmi("1HGBH41JXMN109186", wmi) && strcmp(wmi, "1HG") == 0);
+    assert(!vin_wmi("AB", wmi));  // too short
+
+    assert(ev_profile_for_wmi("5YJ") == &EV_PROFILES[4]);  // Tesla
+    assert(ev_profile_for_wmi("LRW") == &EV_PROFILES[6]);  // Rivian
+    assert(ev_profile_for_wmi("UNK") == &GENERIC_EV);      // fallback
+
+    // ---- Mode-22 decode (AUT-2702) ----
+    {
+        uint8_t soc_resp[8] = {0x62, 0x01, 0x22, 0x55, 0, 0, 0, 0};
+        assert(ev_decode_value(soc_resp, EV_CH_SOC) == 8500);  // 85% * 100
+        uint8_t v_resp[8] = {0x62, 0x01, 0x23, 0x01, 0x90, 0, 0, 0};
+        assert(ev_decode_value(v_resp, EV_CH_PACK_V) == 40000); // 400V * 100
+        uint8_t i_resp[8] = {0x62, 0x01, 0x24, 0xFF, 0x38, 0, 0, 0};
+        assert(ev_decode_value(i_resp, EV_CH_PACK_I) == -3000); // -30A * 100
+    }
 
     // ---- board CSV -> gps_samples JSON (AUT-918 upload payload, AUT-2703 tolerant) ----
     char gps[512];
