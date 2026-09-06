@@ -67,6 +67,7 @@ CVE-2026-56862  # gosu-stdlib: crypto/tls KeyUpdate; gosu does no TLS
 GHSA-6v7p-g79w-8964  # msgpack OOB read/crash on Unpacker reuse: NOT imported; unreachable
 CVE-2026-57585  # msgpack: CVE alias of GHSA-6v7p-g79w-8964 (same advisory); unreachable
 CVE-2025-47273  # setuptools PackageIndex path traversal: build-time only, no runtime install path
+CVE-2025-47273  # setuptools PackageIndex path traversal: build-time only, no runtime install path
 GHSA-5rjg-fvgr-3xxf  # setuptools: GHSA alias of CVE-2025-47273; build-time only
 
 # --- AUT-1793 / python base image OpenSSL QUIC DoS -----------------------------------

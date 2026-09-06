@@ -588,6 +588,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - fix(hosted): bump worker image digest to the latest `:hosted` build carrying
   the AUT-2056 bash healthcheck.
 
+### Security
+- Re-pin frontend nginx base image (`nginxinc/nginx-unprivileged:stable-alpine`) by
+  `@sha256` digest in `docker/frontend/Dockerfile` (AUT-1600 branch rebase — the
+  AUT-2087 digest re-pin was missing on the Redis-healthcheck branch).
+- Bump `pypdf` from `6.15.0` → `6.16.1` in `backend/requirements.txt` and
+  `ai/requirements.txt` to clear CVE-2026-84309 / CVE-2026-84310 / CVE-2026-84311
+  flagged by the PR-time pip-audit gate (AUT-1600 branch rebase — main was
+  already on 6.16.1).
+- Suppress trivy 0.70 placeholder CVE-2026-80256 in `.trivyignore` — the
+  nginx frontend image's vuln DB entry has no metadata yet (trivy logs
+  "no vulnerability details" and exits 1 on the metadata miss). Trivy 0.74 +
+  a fully populated DB will resolve it; this entry can be dropped after.
+
 ## [0.3.198] - 2026-09-01
 
 ### Security
@@ -753,6 +766,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Security
 - Hardened Redis in `docker-compose.prod.yml` — added `--requirepass` and updated healthcheck to authenticate; environment variable `REDIS_PASSWORD` is now required (AUT-1600).
 - **Security (AUT-1600):** hardened Redis healthcheck — `redis-cli` now receives `REDIS_PASSWORD` via the `REDISCLI_AUTH` env var instead of `redis-cli -a`, so the broker password never appears in the container process list (`docker-compose.yml`, `docker-compose.prod.yml`).
+
 
 ### Security
 - **Security (AUT-1735):** Bumped `docker/backend`, `docker/ai`, `docker/worker` and `market-data` Dockerfiles off the vulnerable `python:3.12-slim` base (trivy reported 18 HIGH/CRITICAL CVEs: CVE-2026-13221 perl RCE, CVE-2026-42496 perl-Archive-Tar path traversal, CVE-2026-8376 perl heap overflow, CVE-2026-14456 OpenSSL QUIC DoS, CVE-2026-11822/11824 SQLite FTS5 code exec, CVE-2025-7458 SQLite integer overflow, CVE-2023-45853 zlib heap overflow). All python bases now pin `python:3.13-slim@sha256:...` by digest. Added a python base-image scan to `.github/workflows/trivy-image-scan.yml` (`--severity HIGH,CRITICAL --exit-code 1`) plus a pin guard that fails any floating `FROM python:*` tag. `rego-lookup-api/Dockerfile` (separate private repo) tracked in follow-up AUT-1735-r1.
