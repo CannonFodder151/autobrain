@@ -520,12 +520,19 @@ async def car_check(
     _enforce_entitlement(user)
     vehicle = await get_accessible_vehicle(db, vehicle_id, user)
 
-    listing = car_check_request.listing
+    listing = {
+        "price": float(car_check_request.asking_price),
+        "year": car_check_request.year,
+        "odometer_km": car_check_request.odometer_km,
+        "make": car_check_request.make,
+        "model": car_check_request.model,
+        "listing_url": car_check_request.listing_url or None,
+    }
     payload = {
         "deal_score": compute_deal_score(
             listing,
-            reference_price=car_check_request.reference_price,
-            vehicle_year=car_check_request.vehicle_year,
+            reference_price=None,
+            vehicle_year=car_check_request.year,
         ),
         "listing": listing,
     }
