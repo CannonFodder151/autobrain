@@ -80,7 +80,6 @@ GHSA-5rjg-fvgr-3xxf  # setuptools: GHSA alias of CVE-2025-47273; build-time only
 # Re-added to .trivyignore after AUT-1794 removed the prior entry; same justification.
 # Time-boxed: re-check 2026-11-28; drop entry + bump PYTHON_BASE_IMAGE digest once
 # a 3.13-slim respin ships openssl>=3.5.7-1~deb13u2.
-CVE-2026-14456  # openssl QUIC DoS: AutoBrain does not use QUIC anywhere
 
 # --- AUT-1998: nginx libexpat HIGH CVEs (image not yet rebuilt with expat 2.8.4) ------------------
 # Source: libexpat in nginxinc/nginx-unprivileged:stable-alpine@sha256:ee055adf...
