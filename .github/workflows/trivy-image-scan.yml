@@ -100,7 +100,7 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         with:
             image-ref: ${{ env.POSTGRES_IMAGE }}
-            scan-type: vuln
+            scan-type: image
             severity: 'HIGH,CRITICAL'
             ignore-unfixed: true
             trivyignores: '.trivyignore'
@@ -112,7 +112,7 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         with:
             image-ref: ${{ env.NGINX_FRONTEND_IMAGE }}
-            scan-type: vuln
+            scan-type: image
             severity: 'HIGH,CRITICAL'
             ignore-unfixed: true
             trivyignores: '.trivyignore'
@@ -124,7 +124,7 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.PYTHON_BASE_IMAGE }}
-          scan-type: vuln
+          scan-type: image
           severity: 'HIGH,CRITICAL'
           ignore-unfixed: true
           trivyignores: '.trivyignore'
