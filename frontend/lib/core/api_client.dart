@@ -1,6 +1,7 @@
 /// HTTP API client with bearer auth and offline queue hooks.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -91,14 +92,17 @@ class ApiClient {
   /// query map (sorted) so the same logical request always maps to the same
   /// key regardless of caller-side ordering.
   static String _cacheKey(String path, Map<String, String>? query) {
-    if (query == null || query.isEmpty) return path;
-    final sorted = query.entries.toList()
+    final q = query == null ? <String, String>{} : query;
+    if (q.isEmpty) return path;
+    final sorted = q.entries.toList()
       ..sort((a, b) => a.key.compareTo(b.key));
     return '$path?${sorted.map((e) => '${e.key}=${e.value}').join('&')}';
   }
 
-  static Duration? _ttlFor(String path) {
-    for (final entry in _cacheTtls.entries) {
+  static Duration? _ttlFor(String path, Map<String, String>? query) {
+    final sorted = _cacheTtls.entries.toList()
+      ..sort((a, b) => b.key.length.compareTo(a.key.length));
+    for (final entry in sorted) {
       if (path == entry.key || path.startsWith(entry.key)) {
         return entry.value;
       }
@@ -107,7 +111,7 @@ class ApiClient {
   }
 
   @visibleForTesting
-  static Duration? ttlForTest(String path) => _ttlFor(path);
+  static Duration? ttlForTest(String path) => _ttlFor(path, null);
 
   @visibleForTesting
   static String cacheKeyForTest(String path, Map<String, String>? query) =>
@@ -170,7 +174,7 @@ class ApiClient {
     // Read-through cache for GETs. Only safe endpoints (per _cacheTtls) are
     // eligible; auth flows, exports, uploads, billing and OBD are skipped.
     final cacheKey = method == 'GET' ? _cacheKey(path, query) : null;
-    final ttl = method == 'GET' ? _ttlFor(path) : null;
+    final ttl = method == 'GET' ? _ttlFor(path, query) : null;
     final shouldCache = cacheKey != null && ttl != null;
 
     // Try network first. On a transport-level failure (timeout, socket,
@@ -187,19 +191,38 @@ class ApiClient {
         }
       }
       if (shouldCache && response.statusCode >= 200 && response.statusCode < 300) {
-        // Fire-and-forget; cache write failures must not break the request.
-        // ignore: discarded_futures
-        OfflineCache.instance.put(cacheKey, response.body, ttl: ttl);
+        unawaited(
+          OfflineCache.instance.put(cacheKey, response.body, ttl: ttl)
+              .catchError((_) {}),
+        );
       }
       return _decode(response);
+    } on TimeoutException catch (_) {
+      if (shouldCache) return _fallbackToCache(path, query);
+      rethrow;
+    } on SocketException catch (_) {
+      if (shouldCache) return _fallbackToCache(path, query);
+      rethrow;
+    } on TlsException catch (_) {
+      if (shouldCache) return _fallbackToCache(path, query);
+      rethrow;
+    } on HandshakeException catch (_) {
+      if (shouldCache) return _fallbackToCache(path, query);
+      rethrow;
+    } on HttpException catch (_) {
+      if (shouldCache) return _fallbackToCache(path, query);
+      rethrow;
     } catch (e) {
-      // Transport-level failure (no HTTP response). Fall back to cache.
-      if (shouldCache) {
-        final cached = await OfflineCache.instance.get(cacheKey, allowStale: true);
-        if (cached != null) return _decodeBody(cached.body);
-      }
       rethrow;
     }
+  }
+
+  Future<dynamic> _fallbackToCache(String path, Map<String, String>? query) {
+    final cacheKey = _cacheKey(path, query);
+    return OfflineCache.instance.get(cacheKey, allowStale: true).then((cached) {
+      if (cached != null) return _decodeBody(cached.body);
+      throw StateError('no cached entry');
+    });
   }
 
   /// Decode a raw response body string (used by the cache fallback path).

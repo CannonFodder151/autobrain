@@ -11,14 +11,16 @@
 /// underlying SQLite database is opened lazily on first use.
 library;
 
+import 'dart:async';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
 
 class CacheEntry {
-  const CacheEntry(this.body, this.savedAt, this.stale);
+  const CacheEntry(this.body, this.savedAt, this.stale, this.ttlMs);
   final String body;
   final DateTime savedAt;
   final bool stale;
+  final int? ttlMs;
 }
 
 class OfflineCache {
@@ -26,6 +28,7 @@ class OfflineCache {
   static final OfflineCache instance = OfflineCache._();
 
   Database? _db;
+  Future<void>? _opening;
 
   /// In-memory mirror of the most recent reads. Bounded to keep memory
   /// pressure off — the SQLite table is the source of truth; this is just
@@ -35,6 +38,24 @@ class OfflineCache {
 
   Future<Database> _open() async {
     if (_db != null) return _db!;
+    if (_opening != null) return await _opening!;
+    _opening = _openImpl().then((d) {
+      _db = d;
+      _opening = null;
+      return d;
+    }).catchError((_) {
+      _opening = null;
+      rethrow;
+    });
+    try {
+      return await _opening!;
+    } on Exception {
+      _opening = null;
+      rethrow;
+    }
+  }
+
+  Future<Database> _openImpl() async {
     final dir = await getDatabasesPath();
     _db = await openDatabase(
       p.join(dir, 'autobrain_cache.db'),
@@ -43,8 +64,6 @@ class OfflineCache {
         'CREATE TABLE cache (key TEXT PRIMARY KEY, body TEXT, saved_at TEXT, ttl_ms INTEGER)',
       ),
       onUpgrade: (db, oldV, newV) async {
-        // v1 -> v2: add ttl_ms column. The old (dead-coded) cache put no
-        // TTL, so all existing rows are treated as fresh-forever.
         if (oldV < 2) {
           await db.execute('ALTER TABLE cache ADD COLUMN ttl_ms INTEGER');
         }
@@ -63,7 +82,7 @@ class OfflineCache {
       'ttl_ms': ttl?.inMilliseconds,
     };
     await db.insert('cache', row, conflictAlgorithm: ConflictAlgorithm.replace);
-    _hot[key] = CacheEntry(body, DateTime.now(), false);
+    _hot[key] = CacheEntry(body, DateTime.now(), false, ttl?.inMilliseconds);
     _evictHot();
   }
 
@@ -87,15 +106,15 @@ class OfflineCache {
     final body = rows.first['body'] as String?;
     final savedAt = DateTime.tryParse((rows.first['saved_at'] as String?) ?? '');
     if (body == null || savedAt == null) return null;
-    final entry = CacheEntry(body, savedAt, _isExpiredTime(savedAt, rows.first['ttl_ms'] as int?));
+    final ttlMs = rows.first['ttl_ms'] as int?;
+    final entry = CacheEntry(body, savedAt, _isExpiredTime(savedAt, ttlMs), ttlMs);
     if (entry.stale && !allowStale) return null;
     _hot[key] = entry;
     _evictHot();
     return entry;
   }
 
-  /// Drop every entry whose key starts with [prefix]. Use after a write to
-  /// invalidate related list caches, e.g. invalidateByPrefix('/vehicles/42/fuel').
+  /// Drop every entry whose key starts with [prefix].
   Future<void> invalidateByPrefix(String prefix) async {
     final db = await _open();
     await db.delete('cache', where: 'key LIKE ?', whereArgs: ['$prefix%']);
@@ -137,17 +156,12 @@ class OfflineCache {
   }
 
   static bool _isExpired(CacheEntry e) =>
-      _isExpiredTime(e.savedAt, _ttlFromHot(e));
+      _isExpiredTime(e.savedAt, e.ttlMs);
 
   static bool _isExpiredTime(DateTime savedAt, int? ttlMs) {
     if (ttlMs == null) return false;
     return DateTime.now().difference(savedAt).inMilliseconds > ttlMs;
   }
-
-  /// TTL on hot entries is unknown (we only stored body+savedAt), so hot
-  /// entries never auto-expire here — the canonical TTL lives in SQLite and
-  /// will be re-evaluated on the next miss. Hot entries are advisory.
-  static int? _ttlFromHot(CacheEntry e) => null;
 
   void _evictHot() {
     if (_hot.length <= _hotCapacity) return;
