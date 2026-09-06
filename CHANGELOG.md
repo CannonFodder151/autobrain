@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Fixed (AUT-2656)
+- fix(frontend): restore Flutter web compile on the arm64 build runner. Three compile errors blocked `flutter build web` in `dockerhub-publish.yml` + `build-hosted.yml`: (1) `home_screen.dart` — class-name collision where `_OwnershipAdvisorLaunchCard` had its constructor named `_ErrorView`, nesting the class and breaking dart2js; renamed the first class to `_ErrorView`; (2) `home_screen.dart` — `DownloadAppDialog` referenced at line 85 but never defined (lost during AUT-2400 revert churn); restored the class; (3) `home_screen.dart` + `car_check_screen.dart` — `Color.withValues(alpha:)` unsupported on Flutter <3.27 (arm64 runner image), replaced all remaining hits with `withOpacity()` or `Color(0x2FFFFFFF)`.
 
 ## [0.3.245] - 2026-09-06
 
