@@ -21,13 +21,13 @@ async function outlineFetch(endpoint, options = {}) {
   const url = `${OUTLINE_API_URL}${endpoint}`;
   let lastError;
   for (let attempt = 0; attempt < 5; attempt++) {
-    await new Promise((r) => setTimeout(r, 600));
+    await new Promise((r) => setTimeout(r, 800));
     try {
       const res = await fetch(url, { ...options, headers: { ...HEADERS, ...(options.headers || {}) } });
       if (!res.ok) {
         const text = await res.text();
         if (res.status === 429 && attempt < 4) {
-          const wait = Math.min(2000 * (attempt + 1), 15000);
+          const wait = Math.min(3000 * (attempt + 1), 30000);
           console.log(`  rate limited, waiting ${wait}ms...`);
           await new Promise((r) => setTimeout(r, wait));
           continue;
@@ -39,7 +39,7 @@ async function outlineFetch(endpoint, options = {}) {
     } catch (err) {
       lastError = err;
       if (err.message?.includes('429') && attempt < 4) {
-        const wait = Math.min(2000 * (attempt + 1), 15000);
+        const wait = Math.min(3000 * (attempt + 1), 30000);
         await new Promise((r) => setTimeout(r, wait));
         continue;
       }
@@ -81,33 +81,58 @@ async function listExistingDocs(collectionId) {
   return all;
 }
 
-function titleToIdMap(docs) {
-  const map = {};
+function buildMaps(docs) {
+  const parentIdMap = {};
+  const docKeyMap = {};
+
   for (const d of docs) {
-    if (!map[d.title]) map[d.title] = d.id;
+    if (!d.parentDocumentId) {
+      parentIdMap[d.title] = d.id;
+    } else {
+      const key = `${d.parentDocumentId}:${d.title}`;
+      docKeyMap[key] = d.id;
+    }
   }
-  return map;
+  return { parentIdMap, docKeyMap };
 }
 
-async function upsertDoc(collectionId, title, markdown, parentTitle = null, titleMap = {}) {
-  const payload = { title, text: markdown, collectionId };
-  if (parentTitle && titleMap[parentTitle]) {
-    payload.parentDocumentId = titleMap[parentTitle];
+function truncateTitle(title, maxLen = 95) {
+  if (title.length <= maxLen) return title;
+  return title.substring(0, maxLen - 3) + '...';
+}
+
+async function upsertDoc(
+  collectionId,
+  title,
+  markdown,
+  parentTitle = null,
+  parentIdMap = {},
+  docKeyMap = {}
+) {
+  const docTitle = truncateTitle(title);
+  const parentId = parentTitle ? parentIdMap[parentTitle] || null : null;
+  const docKey = `${parentId}:${docTitle}`;
+  const docId = docKeyMap[docKey] || null;
+
+  const payload = { title: docTitle, text: markdown, collectionId };
+  if (parentId) {
+    payload.parentDocumentId = parentId;
   }
-  const docId = titleMap[title];
-  let result;
+
   if (docId) {
     payload.id = docId;
     await outlineFetch('/api/documents.update', { method: 'POST', body: JSON.stringify(payload) });
-    console.log(`  updated: ${title}`);
+    console.log(`  updated: ${docTitle}`);
     return docId;
-  } else {
-    result = await outlineFetch('/api/documents.create', { method: 'POST', body: JSON.stringify(payload) });
-    const newId = result?.data?.id;
-    if (newId) titleMap[title] = newId;
-    console.log(`  created: ${title}`);
-    return newId;
   }
+
+  const result = await outlineFetch('/api/documents.create', { method: 'POST', body: JSON.stringify(payload) });
+  const newId = result?.data?.id;
+  if (newId) {
+    docKeyMap[docKey] = newId;
+  }
+  console.log(`  created: ${docTitle}`);
+  return newId;
 }
 
 async function docsJsonToPages() {
@@ -125,16 +150,39 @@ async function docsJsonToPages() {
   return pages;
 }
 
+function parseFrontmatter(content) {
+  if (!content.startsWith('---')) return null;
+  const closeIdx = content.indexOf('---', 3);
+  if (closeIdx <= 0) return null;
+  const fmText = content.slice(3, closeIdx);
+  const body = content.slice(closeIdx + 3).trim();
+  const titleMatch = fmText.match(/^title:\s*(.+)$/m);
+  const title = titleMatch ? titleMatch[1].trim().replace(/^['"]|['"]$/g, '') : null;
+  return { title, body };
+}
+
 async function syncFile(mdPath) {
   const content = await fsp.readFile(mdPath, 'utf8');
-  const frontmatterEnd = content.indexOf('---', 3);
+  let title = null;
   let body = content;
-  if (frontmatterEnd > 0) {
-    body = content.slice(content.indexOf('\n', frontmatterEnd + 3) + 1);
+
+  const fm = parseFrontmatter(content);
+  if (fm) {
+    title = fm.title;
+    body = fm.body;
   }
-  const headingMatch = body.match(/^#\s+(.+)$/m);
-  const baseName = path.basename(mdPath, '.md').replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-  const title = headingMatch ? headingMatch[1].trim() : baseName;
+
+  if (!title) {
+    const headingMatch = body.match(/^#\s+(.+)$/m);
+    if (headingMatch) title = headingMatch[1].trim();
+  }
+
+  if (!title) {
+    title = path.basename(mdPath, '.md')
+      .replace(/-/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+
   return { title, body: body.trim() };
 }
 
@@ -147,7 +195,7 @@ async function main() {
   console.log(`Outline collection: ${collection.name} (${collection.id})`);
 
   const existingDocs = await listExistingDocs(collection.id);
-  let titleMap = titleToIdMap(existingDocs);
+  const { parentIdMap, docKeyMap } = buildMaps(existingDocs);
 
   const tabParentMap = { Testing: 'Testing & QA' };
   const synced = [];
@@ -157,8 +205,7 @@ async function main() {
     try {
       const { title, body } = await syncFile(page.path);
       const intendedParent = tabParentMap[page.tab] || page.tab;
-      const parentTitle = (intendedParent === title) ? null : intendedParent;
-      await upsertDoc(collection.id, title, body, parentTitle, titleMap);
+      await upsertDoc(collection.id, title, body, intendedParent, parentIdMap, docKeyMap);
       synced.push({ ref: page.ref, title });
     } catch (err) {
       console.error(`  FAILED ${page.ref}: ${err.message}`);
