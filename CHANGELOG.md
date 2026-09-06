@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Fixed (AUT-2656)
+- fix(frontend): restore flutter web compile on arm64 runner. PR #530 (AUT-2478) introduced a class name collision in `home_screen.dart` — the `_OwnershipAdvisorLaunchCard` class had its constructor renamed to `_ErrorView`, nesting it and breaking dart2js. Separated `_ErrorView` as its own top-level class and restored `_ErrorView.build` body. Also fixed `servo_spy_screen.dart` `_openHistory()` missing `BuildContext` argument (passed `context` to `Navigator.of(context)` but the method signature lacked the parameter, causing `context` to resolve to the enclosing `build` scope).
 
 ### Fixed (AUT-1929)
 - fix(ci): replace the broken `dart pub audit` step in `.github/workflows/security-pr-gate.yml` with `osv-scanner --lockfile=pubspec.lock`. The `dart pub audit` subcommand is not recognized on the runner's Flutter stable-3.47.2, causing the Flutter dependency audit job to fail red on every PR/push to main regardless of diff content. The new step uses osv-scanner v1.9.2 against `pubspec.lock` and fails on HIGH/CRITICAL findings only. Repo-wide fix — unblocks merge of all open PRs.
