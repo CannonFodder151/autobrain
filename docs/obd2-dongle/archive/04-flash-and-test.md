@@ -103,7 +103,7 @@ Trips land in LittleFS as CSV and surface in the app logbook via BLE/WiFi sync.
 Row schema (shared with the app parser):
 
 ```
-epoch,rpm,speed,coolant,throttle,lat,lon
+epoch,rpm,speed,coolant,throttle,lat,lon,soc_pct,pack_v,pack_a,pack_temp_c,odo_km,ev_mode
 1700000000,750,0.0,98.5,12.0,-338687241,1512109053
 ```
 
