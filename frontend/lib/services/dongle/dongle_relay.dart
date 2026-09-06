@@ -19,7 +19,7 @@ class DongleRelayResult {
 /// Converts one board trip CSV into the device-trips batch JSON object, or
 /// null when the CSV carries no usable epoch rows. Mirrors the firmware's
 /// upload_payload.h rules exactly so both paths produce identical payloads:
-/// rows are "epoch,rpm,speed,coolant,throttle,lat,lon", lat/lon degrees x10^7,
+/// rows are "epoch,rpm,speed,coolant,throttle,lat,lon[,soc_pct,pack_v,pack_a,pack_temp_c,odo_km,ev_mode]", lat/lon degrees x10^7,
 /// and "0,0" means no fix (dropped).
 Map<String, dynamic>? tripCsvToJson(String filename, String csv) {
   if (!filename.endsWith('.csv')) return null;

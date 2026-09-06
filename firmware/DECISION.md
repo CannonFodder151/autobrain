@@ -30,7 +30,7 @@ the buy-path reference: proven SDK, no PCB work, but 4–9× the per-unit cost.
   (`test/self_check.cpp`) for the pure PID/CSV/NMEA/RTC logic.
 - `firmware/freematics-one-plus/` — SDK-accurate reference sketch for Model B
   (COBD + SDLogger). Needs the Freematics SDK to build; reference only.
-- Row schema `epoch,rpm,speed,coolant,throttle,lat,lon` shared by both paths so the app
+- Row schema `epoch,rpm,speed,coolant,throttle,lat,lon,soc_pct,pack_v,pack_a,pack_temp_c,odo_km,ev_mode` shared by both paths so the app
   sync code is written once.
 
 ## Remaining to close the decision (hardware in hands)

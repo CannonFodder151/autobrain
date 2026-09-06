@@ -464,3 +464,59 @@ class _AdvisorEntry extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       AdvisorOverviewScreen(vehicleId: vehicle.id);
+}
+
+class _ErrorView extends StatelessWidget {
+  const _ErrorView({
+    required this.message,
+    required this.sessionExpired,
+    required this.onLogout,
+    required this.onRetry,
+  });
+  final String message;
+  final bool sessionExpired;
+  final VoidCallback onLogout;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.error_outline, size: 48, color: scheme.error),
+            const SizedBox(height: 12),
+            Text(message, textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            FilledButton.tonal(onPressed: onRetry, child: const Text('Retry')),
+            if (sessionExpired)
+              TextButton(
+                  onPressed: onLogout, child: const Text('Log in again')),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class DownloadAppDialog extends StatelessWidget {
+  const DownloadAppDialog({super.key});
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        icon: const Icon(Icons.smartphone),
+        title: const Text('Get the mobile app'),
+        content: const Text(
+          'AutoBrain is available as a native app for Android and iOS. '
+          'Open this page on your phone to download it.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Close')),
+        ],
+      );
+}

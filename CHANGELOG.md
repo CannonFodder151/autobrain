@@ -10,6 +10,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+
+## [0.3.240] - 2026-09-06
+### Added (AUT-2703)
+- feat(firmware,backend,frontend): extend trip CSV row schema with EV/PHEV fields (`soc_pct,pack_v,pack_a,pack_temp_c,odo_km,ev_mode`) for AUT-2437. `format_trip_row` in `obd_pids.h` now emits 13-field rows (old 7-field rows still accepted via default args). CSV header updated to `epoch,rpm,speed,coolant,throttle,lat,lon,soc_pct,pack_v,pack_a,pack_temp_c,odo_km,ev_mode`. `csv_to_gps_json` (upload_payload.h), backend `parse_board_csv` (trip_gps.py), and frontend `tripCsvToJson` (dongle_relay.dart) all tolerate both old and new row lengths via fixed-position reads. Dart tests expanded with backward-compat + EV-field cases. C++ self_check expanded with EV-field assertions + old-format CSV tolerance.
+
 ### Fixed (AUT-2600)
 - fix(frontend): add missing `child:` label on the `ConstrainedBox` wrapping `ListView.builder` in `vehicle_timeline_screen.dart` (line 60). The widget was passed as a positional argument, misaligning the formal argument list and tripping dart2js on every `ConstrainedBox` inside the body (the compile error attached to login_screen.dart / home_screen.dart / signup_screen.dart were the downstream effect). Closes the second-half of AUT-2600 (unblocks `build-hosted.yml` amd64+arm64 `flutter build web` for the AUT-2446 Replace + AUT-2447 Upgrade release).
 
@@ -24,7 +29,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added (AUT-2447)
 - backend(advisor): Ownership Advisor Upgrade module — deterministic upgrade options + similar suggestions + trade-up estimate. New `GET /api/v1/advisor/upgrade` route anchors on the value module's cached market median. No 9Router. No AI. Free accounts get 403. New schemas `UpgradeOption`, `SimilarVehicleSuggestion`, `TradeUpDelta`, `AdvisorUpgradeData`. New helpers `compute_upgrade`, `find_upgrade_options`, `find_similar_vehicles`, `build_trade_up`, `_amortize_monthly`, `_similarity_score`, `_clamp_finance_term/rate/deposit_pct`, `_tier_label`, `_median_for`. Tests: `backend/tests/test_advisor_upgrade.py`.
-
 
 ### Added (AUT-2478)
 - feat(frontend,advisor): Ownership Advisor launch tile on the `HomeScreen` feature grid (purple `#6366F1` Insights icon) — restores the tile AUT-2416/PR #481 accidentally stripped from `_FeatureGrid`. The grid builds the full 15-tile `GridView` (AUT-2471 regression fix) including Timeline/Services/Fuel/Logbook/Diagnostics/Petrol Prices/Mods/Receipts/Parts/Valuation/Analytics/Notifications/OBD/Ownership Advisor/Servo Spy/Community Garage. The Ownership Advisor tile bridges to `AdvisorOverviewScreen(vehicleId:)` via `_AdvisorEntry`; tapping opens the 7-tab shell per AUT-2451. New `_FeatureTile` + `_Feature` + `_AdvisorEntry` widgets replace the empty stub build that left the grid unrendered. Closes AUT-2478.
@@ -206,7 +210,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed (AUT-2683)
 - fix(backend): import `PowertrainType` in `app/schemas/vehicle.py` so the enum is defined before use. Missing import caused `NameError` at backend startup on every redeploy, returning 502 on all frontend requests.
-
 
 ### Added (AUT-2434)
 - backend: vehicle powertrain field (`ICE | EV | HEV | PHEV`). New `PowertrainType` enum on `Vehicle` model with default `ICE`. Alembic migration `aut2434_vehicle_powertrain` adds `vehicles.powertrain VARCHAR(8) NOT NULL DEFAULT 'ICE'` — all pre-existing rows backfill to ICE. API responses (`VehicleOut`) now include `powertrain`; create/update accept `powertrain` in request bodies. Tests: `backend/tests/test_aut2434_powertrain.py` (6 offline cases: column present, enum locked to 4 tokens, Create/Update/Out serialization, default-ICE contract).

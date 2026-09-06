@@ -30,13 +30,15 @@ nothing is left to inference.
 ## Row schema (shared by both paths)
 
 ```
-epoch,rpm,speed,coolant,throttle,lat,lon
+epoch,rpm,speed,coolant,throttle,lat,lon,soc_pct,pack_v,pack_a,pack_temp_c,odo_km,ev_mode
 ```
 One row per second while the engine is on. `epoch` is UTC from the DS3231
 (battery-backed) RTC; without it the timestamps are junk, which is why the RTC
 is non-negotiable on the DIY board. `lat,lon` are degrees ×10⁷ (signed; WGS84,
 e.g. `-338687241,1512109053`), written when the NEO-8M has a fix — a consumer
-draws the trip route on a map from the row pairs, skipping `0,0` rows.
+draws the trip route on a map from the row pairs, skipping `0,0` rows. EV/PHEV
+fields (`soc_pct`, `pack_v`, `pack_a`, `pack_temp_c`, `odo_km`, `ev_mode`) are
+appended for new firmware; old 7-field rows are still accepted by the parser.
 
 ## Build & verify (DIY path)
 
