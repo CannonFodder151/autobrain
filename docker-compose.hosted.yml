@@ -2,7 +2,7 @@
 # Restored to match the actual running services (AUT-101). Project name: autobrain-hosted.
 # App images from ghcr.io (multi-arch: the Oracle host is arm64 and Docker Hub :hosted tags are
 # amd64-only since AUT-967; ghcr :hosted carries amd64+arm64, AUT-1114).
-# Non-secret config interpolates from the Portainer stack env; secret-class
+# AUT-2000: post-consolidation count: 10 (worker folded into backend). ai kept separate — uses autobrain-ai:hosted image with Playwright/Chromium, not present in backend image. Next: rebuild backend image with Playwright to merge ai too (AUT-2000-C2).
 # values come from ${SECRETS_DIR:-/data/autobrain/secrets} via the *_FILE pattern
 # (AUT-1533). Env must stay applied via the stack so redeploys never revert
 # SMTP2GO/SMTP_* (see AUT-97/AUT-101).
@@ -150,9 +150,11 @@ services:
   backend:
     image: ghcr.io/cannonfodder151/autobrain-backend:hosted-arm64@sha256:80053f3d6d4642c3f199fc3755b0d34c68f458faaa804195f6373cf3a68dd638
     restart: unless-stopped
-    command: sh -c "export AI_ROUTER_API_KEY=$(cat /run/secrets/ai_router_api_key) && python -m app.db.bootstrap && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    # AUT-2000: Celery worker+beat folded into backend, matching prod.yml pattern.
+    command: sh -c "export AI_ROUTER_API_KEY=$(cat /run/secrets/ai_router_api_key) && python -m app.db.bootstrap && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
       <<: [*db-env, *core-env, *router-env]
+      PYTHONPATH: /app
       SECRET_KEY_FILE: /run/secrets/backend_secret_key
       MINIO_PUBLIC_ENDPOINT: ${APP_BASE_URL:-https://hosted.autobrainservice.app}
       AI_ROUTER_TIMEOUT_SECONDS: 120
@@ -271,39 +273,6 @@ services:
     expose:
       - "8000"
       - "8001"
-
-  worker:
-    # AUT-2482: pinned to post-fix worker digest (built 2026-09-04 from main 16b784c, includes AUT-2506 op.get_inspector fix).
-    # AUT-1878: bumped to arm64 digest from 9d81e4d build (hosted-arm64), which adds
-    # the deterministic /proc-based HEALTHCHECK that fixes the stale celerybeat-schedule
-    # mtime false-negative. NOTE: this pin is arm64-only; amd64 arm still building.
-    image: ghcr.io/cannonfodder151/autobrain-worker:hosted-arm64@sha256:41db9068ef1b0fb431d3a003a9f41d2e70fd5fa8b21eb1937e2e0f32f27043c5
-    restart: unless-stopped
-    # AUT-1242/C1: beat scheduler embedded in the worker (-B), matching the dev
-    # compose. Removes the separate beat container.
-    command: sh -c "export AI_ROUTER_API_KEY=$(cat /run/secrets/ai_router_api_key) && celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2"
-    environment:
-      <<: [*db-env, *core-env, *router-env]
-      PYTHONPATH: /app
-      SECRET_KEY_FILE: /run/secrets/backend_secret_key
-      # AUT-1858: the daily NSW Fuel API poll (AUT-1813) runs as a Celery task
-      # in this worker; it reads the keys from the secret files like the backend.
-      FUEL_NSW_API_KEY_FILE: /run/secrets/fuel_nsw_api_key
-      FUEL_NSW_API_SECRET_FILE: /run/secrets/fuel_nsw_api_secret
-      FUEL_NSW_ENABLED: "true"
-      # AUT-1932: VIC Servo Saver — approved partner key (AUT-1813 phase).
-      FUEL_VIC_API_KEY_FILE: /run/secrets/fuel_vic_api_key
-      FUEL_VIC_API_SECRET_FILE: /run/secrets/fuel_vic_api_secret
-      FUEL_VIC_ENABLED: "true"
-      # AUT-2218: QLD fuel — same wiring as the backend so the celery beat task
-      # in this worker can poll the QLD feed alongside NSW/VIC.
-      FUEL_QLD_API_KEY_FILE: /run/secrets/fuel_qld_api_key
-    <<: *secrets
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
 
   # AUT-1673: firmware release + distribution service for OBD ESP32 dongles.
   # Owns firmware manifests, MinIO signed blob URLs, the serial-number
