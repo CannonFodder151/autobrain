@@ -3,11 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'core/auth_state.dart';
-import 'core/connectivity_service.dart';
 import 'core/config.dart';
 import 'core/theme.dart';
 import 'core/models.dart';
-import 'widgets/stale_hint.dart';
 import 'community_garage/screens/share_link_view.dart';
 import 'screens/advisor/overview_screen.dart';
 import 'screens/auth/login_screen.dart';
@@ -17,7 +15,7 @@ import 'screens/auth/signup_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/settings/license_screen.dart';
 
-class AutoBrainApp extends StatefulWidget {
+class AutoBrainApp extends StatelessWidget {
   const AutoBrainApp({super.key});
 
   static String? initialFragment;
@@ -64,46 +62,37 @@ class AutoBrainApp extends StatefulWidget {
     return fragment == 'license';
   }
 
+  /// Maps an Ownership Advisor deep-link path token to the Overview tab
+  /// index. Tokens outside the closed set fall through to the default
+  /// Overview tab.
   static int? advisorTabFromUrl() {
     final segs = Uri.base.pathSegments;
     if (segs.isEmpty || segs.first != 'advisor') return null;
     if (segs.length == 1) return 0;
     switch (segs[1]) {
-      case 'value': return 1;
-      case 'replace': return 2;
-      case 'upgrade': return 3;
-      case 'finance': return 4;
-      case 'dream': return 5;
-      case 'ai': return 6;
-      default: return 0;
+      case 'value':
+        return 1;
+      case 'replace':
+        return 2;
+      case 'upgrade':
+        return 3;
+      case 'finance':
+        return 4;
+      case 'dream':
+        return 5;
+      case 'ai':
+        return 6;
+      default:
+        return 0;
     }
   }
 
   @override
-  State<AutoBrainApp> createState() => _AutoBrainAppState();
-}
-
-class _AutoBrainAppState extends State<AutoBrainApp> {
-  @override
-  void initState() {
-    super.initState();
-    ConnectivityService.instance.addListener(_rebuild);
-  }
-
-  @override
-  void dispose() {
-    ConnectivityService.instance.removeListener(_rebuild);
-    super.dispose();
-  }
-
-  void _rebuild() => setState(() {});
-
-  @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthState>();
-    final resetToken = AutoBrainApp.resetTokenFromUrl();
-    final shareToken = AutoBrainApp.shareTokenFromUrl();
-    final advisorTab = AutoBrainApp.advisorTabFromUrl();
+    final resetToken = resetTokenFromUrl();
+    final shareToken = shareTokenFromUrl();
+    final advisorTab = advisorTabFromUrl();
 
     Widget home;
     if (resetToken != null) {
@@ -113,14 +102,14 @@ class _AutoBrainAppState extends State<AutoBrainApp> {
     } else if (shareToken != null) {
       home = ShareLinkView(token: shareToken);
     } else if (auth.isLoggedIn) {
-      if (AutoBrainApp.licenseRequested()) {
+      if (licenseRequested()) {
         home = const LicenseScreen();
       } else if (advisorTab != null) {
         home = _AdvisorDeepLink(tabIndex: advisorTab);
       } else {
         home = const HomeScreen();
       }
-    } else if (AutoBrainApp.signupRequested() && auth.signupEnabled) {
+    } else if (signupRequested() && auth.signupEnabled) {
       home = const SignupScreen();
     } else {
       home = const LoginScreen();
@@ -135,26 +124,12 @@ class _AutoBrainAppState extends State<AutoBrainApp> {
       home: home,
       builder: (context, child) {
         final content = child ?? const SizedBox.shrink();
-        final banner = ConnectivityService.instance.isOnline
-            ? null
-            : MaterialBanner(
-                content: Text(
-                  'Offline — showing cached data',
-                  style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: Theme.of(context).colorScheme.onErrorContainer),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                elevation: 1,
-                backgroundColor: Theme.of(context).colorScheme.errorContainer,
-              );
-        final body = banner == null
-            ? content
-            : Column(children: [banner, Expanded(child: content)]);
+        // Clamp font scale so desktop zoom can't balloon text beyond a readable
+        // ceiling (AUT-2526). Mobile keeps its OS default through the same path.
         final wrapped = MediaQuery.withClampedTextScaling(
           maxTextScale: 1.5,
           minTextScale: 1.0,
-          child: body,
+          child: content,
         );
         if (!(kDebugMode || kProfileMode)) {
           return wrapped;
@@ -178,7 +153,8 @@ class _AutoBrainAppState extends State<AutoBrainApp> {
                 child: Container(
                   width: double.infinity,
                   color: Colors.black.withOpacity(0.55),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 2),
                   child: Text(
                     'api: $apiHost  probe: $validation',
                     style: const TextStyle(
@@ -197,6 +173,9 @@ class _AutoBrainAppState extends State<AutoBrainApp> {
   }
 }
 
+/// Renders the Ownership Advisor for the user's current vehicle at the
+/// tab matching a `/advisor/{value|replace|upgrade|finance|dream|ai}`
+/// deep-link. Falls back to the Overview tab if no vehicle is selected.
 class _AdvisorDeepLink extends StatefulWidget {
   const _AdvisorDeepLink({required this.tabIndex});
   final int tabIndex;
@@ -217,21 +196,6 @@ class _AdvisorDeepLinkState extends State<_AdvisorDeepLink> {
 
   Future<void> _load() async {
     final auth = context.read<AuthState>();
-    // Cache-first: render immediately from cache if available.
-    final cached = await auth.api.getCachedDecoded('/vehicles', null);
-    if (cached != null) {
-      final data = cached as List;
-      final vehicles = data
-          .map((e) => Vehicle.fromJson(e as Map<String, dynamic>))
-          .toList();
-      if (!mounted) return;
-      setState(() {
-        _vehicle = Vehicle.resolveSelection(vehicles, null);
-        _loading = false;
-      });
-    }
-    // Background refresh if online.
-    if (!ConnectivityService.instance.isOnline) return;
     try {
       final data = await auth.api.get('/vehicles') as List;
       final vehicles = data
@@ -239,7 +203,7 @@ class _AdvisorDeepLinkState extends State<_AdvisorDeepLink> {
           .toList();
       if (!mounted) return;
       setState(() {
-        _vehicle = Vehicle.resolveSelection(vehicles, _vehicle);
+        _vehicle = Vehicle.resolveSelection(vehicles, null);
         _loading = false;
       });
     } catch (_) {

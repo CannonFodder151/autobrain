@@ -3,13 +3,11 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/auth_state.dart';
-import '../../core/connectivity_service.dart';
 import '../../core/download.dart';
 import '../../core/geoloc.dart';
 import '../../core/models.dart';
 import '../../core/trip_datetime.dart';
 import '../../core/trip_route.dart';
-import '../../widgets/stale_hint.dart';
 import '../../widgets/trip_route_map.dart';
 
 class LogbookScreen extends StatefulWidget {
@@ -23,7 +21,6 @@ class LogbookScreen extends StatefulWidget {
 class _LogbookScreenState extends State<LogbookScreen> {
   List<LogEntry> _entries = const [];
   bool _loading = true;
-  bool _stale = false;
   int _fy = _currentFy();
 
   static int _currentFy() {
@@ -39,29 +36,15 @@ class _LogbookScreenState extends State<LogbookScreen> {
 
   Future<void> _load() async {
     final api = context.read<AuthState>().api;
-    final path = '/vehicles/${widget.vehicleId}/logbook?fy=$_fy';
-    final q = {'fy': '$_fy'};
-    final cached = await api.getCachedDecoded(path, q);
-    if (cached != null) {
-      _entries = (cached as List)
-          .map((e) => LogEntry.fromJson(e as Map<String, dynamic>))
-          .toList();
-      _stale = true;
-      if (!mounted) return;
-      setState(() => _loading = false);
-    }
-    if (!mounted) return;
-    if (!ConnectivityService.instance.isOnline) return;
+    setState(() => _loading = true);
     try {
-      final data = await api.get(path) as List;
+      final data = await api
+              .get('/vehicles/${widget.vehicleId}/logbook?fy=$_fy') as List;
       _entries = data
           .map((e) => LogEntry.fromJson(e as Map<String, dynamic>))
           .toList();
-      _stale = false;
-    } catch (_) {
-      if (_entries.isEmpty) _stale = true;
-    }
-    if (mounted) setState(() => _loading = false);
+    } catch (_) {}
+    setState(() => _loading = false);
   }
 
   Future<void> _startTrip() async {
@@ -421,17 +404,13 @@ class _LogbookScreenState extends State<LogbookScreen> {
         icon: const Icon(Icons.add),
         label: const Text('Start trip'),
       ),
-      body: _loading && _entries.isEmpty
+      body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
                 children: [
-                  StaleHint(
-                    isStale: _stale,
-                    isOffline: !ConnectivityService.instance.isOnline,
-                  ),
                   DropdownButtonFormField<int>(
               value: _fy,
               decoration: const InputDecoration(labelText: 'Financial year'),
@@ -508,7 +487,7 @@ class _LogbookScreenState extends State<LogbookScreen> {
                   ),
                 ),
               ),
-            if (_entries.isEmpty && _stale)
+            if (_entries.isEmpty)
               const Padding(
                 padding: EdgeInsets.only(top: 40),
                 child: Center(

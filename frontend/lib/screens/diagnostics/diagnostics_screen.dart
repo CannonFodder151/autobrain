@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/auth_state.dart';
-import '../../core/connectivity_service.dart';
 import '../../core/models.dart';
-import '../../widgets/stale_hint.dart';
 import 'add_diagnostic_screen.dart';
 
 class DiagnosticsScreen extends StatefulWidget {
@@ -18,7 +16,6 @@ class DiagnosticsScreen extends StatefulWidget {
 class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
   List<Diagnostic> _items = const [];
   bool _loading = true;
-  bool _stale = false;
 
   @override
   void initState() {
@@ -28,29 +25,15 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
 
   Future<void> _load() async {
     final api = context.read<AuthState>().api;
-    final path = '/vehicles/${widget.vehicleId}/diagnostics';
-    final q = <String, String>? null;
-    final cached = await api.getCachedDecoded(path, q);
-    if (cached != null) {
-      _items = (cached as List)
-          .map((e) => Diagnostic.fromJson(e as Map<String, dynamic>))
-          .toList();
-      _stale = true;
-      if (!mounted) return;
-      setState(() => _loading = false);
-    }
-    if (!mounted) return;
-    if (!ConnectivityService.instance.isOnline) return;
+    setState(() => _loading = true);
     try {
-      final data = await api.get(path) as List;
+      final data = await api.get(
+              '/vehicles/${widget.vehicleId}/diagnostics') as List;
       _items = data
           .map((e) => Diagnostic.fromJson(e as Map<String, dynamic>))
           .toList();
-      _stale = false;
-    } catch (_) {
-      if (_items.isEmpty) _stale = true;
-    }
-    if (mounted) setState(() => _loading = false);
+    } catch (_) {}
+    setState(() => _loading = false);
   }
 
   Future<void> _addToService(Diagnostic d) async {
@@ -120,21 +103,15 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
       ),
       body: RefreshIndicator(
         onRefresh: _load,
-        child: _loading && _items.isEmpty
+        child: _loading
             ? const Center(child: CircularProgressIndicator())
-            : _items.isEmpty && _stale
+            : _items.isEmpty
                 ? const Center(child: Text('No diagnoses yet'))
                 : ListView.builder(
                     padding: const EdgeInsets.all(16),
-                    itemCount: _items.length + 1,
+                    itemCount: _items.length,
                     itemBuilder: (context, i) {
-                      if (i == 0) {
-                        return StaleHint(
-                          isStale: _stale,
-                          isOffline: !ConnectivityService.instance.isOnline,
-                        );
-                      }
-                      final d = _items[i - 1];
+                      final d = _items[i];
                       final resolved = d.isResolved;
                       return Card(
                         child: Padding(

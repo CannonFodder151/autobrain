@@ -4,10 +4,8 @@ import 'package:provider/provider.dart';
 
 import '../../core/api_client.dart';
 import '../../core/auth_state.dart';
-import '../../core/connectivity_service.dart';
 import '../../core/download.dart';
 import '../../core/models.dart';
-import '../../widgets/stale_hint.dart';
 
 class ReceiptsScreen extends StatefulWidget {
   const ReceiptsScreen({super.key, required this.vehicleId});
@@ -20,7 +18,6 @@ class ReceiptsScreen extends StatefulWidget {
 class _ReceiptsScreenState extends State<ReceiptsScreen> {
   List<Receipt> _receipts = const [];
   bool _loading = true;
-  bool _stale = false;
 
   @override
   void initState() {
@@ -30,29 +27,15 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
 
   Future<void> _load() async {
     final api = context.read<AuthState>().api;
-    final path = '/vehicles/${widget.vehicleId}/receipts';
-    final q = <String, String>? null;
-    final cached = await api.getCachedDecoded(path, q);
-    if (cached != null) {
-      _receipts = (cached as List)
-          .map((e) => Receipt.fromJson(e as Map<String, dynamic>))
-          .toList();
-      _stale = true;
-      if (!mounted) return;
-      setState(() => _loading = false);
-    }
-    if (!mounted) return;
-    if (!ConnectivityService.instance.isOnline) return;
+    setState(() => _loading = true);
     try {
-      final data = await api.get(path) as List;
+      final data = await api.get(
+              '/vehicles/${widget.vehicleId}/receipts') as List;
       _receipts = data
           .map((e) => Receipt.fromJson(e as Map<String, dynamic>))
           .toList();
-      _stale = false;
-    } catch (_) {
-      if (_receipts.isEmpty) _stale = true;
-    }
-    if (mounted) setState(() => _loading = false);
+    } catch (_) {}
+    setState(() => _loading = false);
   }
 
   Future<void> _pickAndUpload() async {
@@ -149,9 +132,9 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
       ),
       body: RefreshIndicator(
         onRefresh: _load,
-        child: _loading && _receipts.isEmpty
+        child: _loading
             ? const Center(child: CircularProgressIndicator())
-            : _receipts.isEmpty && _stale
+            : _receipts.isEmpty
                 ? const Center(
                     child: Padding(
                       padding: EdgeInsets.all(24),
@@ -163,15 +146,9 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
                   )
                 : ListView.builder(
                     padding: const EdgeInsets.only(bottom: 96),
-                    itemCount: _receipts.length + 1,
+                    itemCount: _receipts.length,
                     itemBuilder: (context, i) {
-                      if (i == 0) {
-                        return StaleHint(
-                          isStale: _stale,
-                          isOffline: !ConnectivityService.instance.isOnline,
-                        );
-                      }
-                      final r = _receipts[i - 1];
+                      final r = _receipts[i];
                       final statusColor = switch (r.ocrStatus) {
                         'done' => Colors.green,
                         'failed' => Colors.red,

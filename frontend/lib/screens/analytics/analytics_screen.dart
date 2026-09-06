@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/auth_state.dart';
-import '../../core/connectivity_service.dart';
 import '../../core/models.dart';
-import '../../widgets/stale_hint.dart';
 
 class AnalyticsScreen extends StatefulWidget {
   const AnalyticsScreen({super.key, required this.vehicleId});
@@ -17,7 +15,6 @@ class AnalyticsScreen extends StatefulWidget {
 class _AnalyticsScreenState extends State<AnalyticsScreen> {
   Analytics? _analytics;
   bool _loading = true;
-  bool _stale = false;
 
   @override
   void initState() {
@@ -27,24 +24,13 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
 
   Future<void> _load() async {
     final api = context.read<AuthState>().api;
-    final path = '/vehicles/${widget.vehicleId}/analytics';
-    final cached = await api.getCachedDecoded(path, null);
-    if (cached != null) {
-      _analytics = Analytics.fromJson(cached as Map<String, dynamic>);
-      _stale = true;
-      if (!mounted) return;
-      setState(() => _loading = false);
-    }
-    if (!mounted) return;
-    if (!ConnectivityService.instance.isOnline) return;
+    setState(() => _loading = true);
     try {
-      final data = await api.get(path) as Map<String, dynamic>;
-      _analytics = Analytics.fromJson(data);
-      _stale = false;
-    } catch (_) {
-      if (_analytics == null) _stale = true;
-    }
-    if (mounted) setState(() => _loading = false);
+      final data = await api.get(
+              '/vehicles/${widget.vehicleId}/analytics') as Map<String, dynamic>;
+      setState(() => _analytics = Analytics.fromJson(data));
+    } catch (_) {}
+    setState(() => _loading = false);
   }
 
   @override
@@ -54,17 +40,13 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       appBar: AppBar(title: const Text('Analytics')),
       body: RefreshIndicator(
         onRefresh: _load,
-        child: _loading && _analytics == null
+        child: _loading
             ? const Center(child: CircularProgressIndicator())
-            : a == null && _stale
+            : a == null
                 ? const Center(child: Text('No data yet'))
                 : ListView(
                     padding: const EdgeInsets.all(16),
                     children: [
-                      StaleHint(
-                        isStale: _stale,
-                        isOffline: !ConnectivityService.instance.isOnline,
-                      ),
                       Text('Cost of ownership',
                           style: Theme.of(context).textTheme.titleLarge),
                       const SizedBox(height: 8),
