@@ -44,6 +44,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Added (AUT-2447)
 - backend(advisor): Ownership Advisor Upgrade module — deterministic upgrade options + similar suggestions + trade-up estimate. New `GET /api/v1/advisor/upgrade` route anchors on the value module's cached market median. No 9Router. No AI. Free accounts get 403. New schemas `UpgradeOption`, `SimilarVehicleSuggestion`, `TradeUpDelta`, `AdvisorUpgradeData`. New helpers `compute_upgrade`, `find_upgrade_options`, `find_similar_vehicles`, `build_trade_up`, `_amortize_monthly`, `_similarity_score`, `_clamp_finance_term/rate/deposit_pct`, `_tier_label`, `_median_for`. Tests: `backend/tests/test_advisor_upgrade.py`.
 
+
 ### Added (AUT-2478)
 - feat(frontend,advisor): Ownership Advisor launch card on `HomeScreen` — a full-width purple (`#6366F1`) branded card above the feature grid with title, tagline, and a `Wrap` of six `_ModuleChip` pills (Value/Replace/Upgrade/Finance/Dream/AI) mirroring the 6-module Overview shell per AUT-2451. The existing feature-tile entry is preserved so users who scroll past the launch card still reach `AdvisorOverviewScreen(vehicleId:)` via `_AdvisorEntry`. Copy matches the `#changelog` embed payload for sibling AUT-2477 (module names, "deterministic where possible, AI only for the final call"). New test `test/advisor_home_card_test.dart` (4 cases: card found, title, tagline, chip count). Closes AUT-2478.
 
@@ -175,10 +176,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed (AUT-2383)
 - fix(frontend,servo-spy): CARTO basemap tile URL query param was `?api_key=` but CARTO requires `?key=` — the watermark persisted because the API silently ignored the wrong parameter. Updated tile URL template in `frontend/lib/screens/servo_spy/servo_spy_screen.dart` to use `?key=$_cartoApiKey`; updated comment in `docker/frontend/Dockerfile`. Caching is already optimal: tiles are immutable `{z}/{x}/{y}` hashes so CDN/browser cache-hit rate is naturally high — no extra layer needed.
 
-### Fixed (AUT-2319)
-- fix(backend): `_station_out` body lifted out of `app/api/v1/fuel_servo.py` into `app/services/fuel_servo.py` as the pure function `annotate_station` (no DB/AI/FastAPI). The AUT-2201 station-annotation unit test now imports `annotate_station` directly instead of `app.api.v1.fuel_servo._station_out`, sidestepping the router's transitive imports (`app.models`/`app.services.fuel_feeds`) that were blocking collection. The route keeps a thin `_station_out` compat wrapper that delegates to `annotate_station`. `annotate_station` preserves the current `FuelStationOut` shape including the AUT-2381 `source`/`best_source`/`source_score`/`flag_reason` per-price fields.
-- note: the AUT-2277 duplicate-`FuelPrice`-class fix (already on main as of 0.3.224, deployed to AutoBrain-Hosted arm64 in 0.3.234) supersedes the original `extend_existing=True` approach from AUT-2319's first draft; this rebase keeps only the test/lift refactor.
-
 ## [0.3.234] - 2026-09-04
 
 ### Fixed (AUT-2484)
@@ -224,6 +221,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed (AUT-2683)
 - fix(backend): import `PowertrainType` in `app/schemas/vehicle.py` so the enum is defined before use. Missing import caused `NameError` at backend startup on every redeploy, returning 502 on all frontend requests.
+
 
 ### Added (AUT-2434)
 - backend: vehicle powertrain field (`ICE | EV | HEV | PHEV`). New `PowertrainType` enum on `Vehicle` model with default `ICE`. Alembic migration `aut2434_vehicle_powertrain` adds `vehicles.powertrain VARCHAR(8) NOT NULL DEFAULT 'ICE'` — all pre-existing rows backfill to ICE. API responses (`VehicleOut`) now include `powertrain`; create/update accept `powertrain` in request bodies. Tests: `backend/tests/test_aut2434_powertrain.py` (6 offline cases: column present, enum locked to 4 tokens, Create/Update/Out serialization, default-ICE contract).
