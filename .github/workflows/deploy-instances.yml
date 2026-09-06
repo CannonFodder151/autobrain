@@ -16,7 +16,7 @@
 # The promotion order + per-tier health gating live inside the script (AUT-107);
 # a tier that fails health blocks promotion to the next tier.
 
-name: Upgrade instances (Demo → Default → Hosted)
+name: Upgrade hosted instance only (AUT-2409)
 
 on:
   workflow_run:
@@ -94,7 +94,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Upgrade all instances along the upgrade path
+      - name: Upgrade hosted instance only (AUT-2409: hosted-only deploys, 03:00-04:00 AEST window)
         run: ./scripts/upgrade-instances.sh
 
       - name: Report status to Discord
@@ -107,4 +107,4 @@ jobs:
           fi
           curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
             -H "Content-Type: application/json" \
-            -d "{\"channel\":\"status\",\"title\":\"AutoBrain instances upgrade — $STATE\",\"description\":\"Demo -> Default -> Hosted redeploy via the upgrade path (AUT-1847).\",\"color\":\"$COLOR\",\"author\":\"Deployment Lead\",\"fields\":[{\"name\":\"Trigger\",\"value\":\"${{ github.event_name }}\",\"inline\":true},{\"name\":\"State\",\"value\":\"$STATE\",\"inline\":true},{\"name\":\"Run\",\"value\":\"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\",\"inline\":false}]}"
+            -d "{\"channel\":\"status\",\"title\":\"AutoBrain instances upgrade — $STATE\",\"description\":\"Hosted (EP5) only via the upgrade path (AUT-2409). Demo/default stacks are off-limits.\",\"color\":\"$COLOR\",\"author\":\"Deployment Lead\",\"fields\":[{\"name\":\"Trigger\",\"value\":\"${{ github.event_name }}\",\"inline\":true},{\"name\":\"State\",\"value\":\"$STATE\",\"inline\":true},{\"name\":\"Run\",\"value\":\"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\",\"inline\":false}]}"
