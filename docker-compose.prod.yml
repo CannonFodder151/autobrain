@@ -46,7 +46,11 @@ x-backend-base: &backend-base
     # Enable with FUEL_VIC_ENABLED=true once key/secret are provisioned.
     FUEL_VIC_API_KEY: ${FUEL_VIC_API_KEY:-}
     FUEL_VIC_API_SECRET: ${FUEL_VIC_API_SECRET:-}
-    FUEL_VIC_ENABLED: "false"
+    FUEL_VIC_ENABLED: "true"
+    # AUT-2218: QLD DirectAPI subscription token (AUT-1813 phase). Read by
+    # backend/app/core/config.py:110 as settings.FUEL_QLD_API_KEY. Empty key
+    # disables the feed (mirrors the NSW no-key pattern).
+    FUEL_QLD_API_KEY: ${FUEL_QLD_API_KEY:-}
   depends_on:
     postgres:
       condition: service_healthy
@@ -150,7 +154,13 @@ services:
     shm_size: "256m"
     tmpfs:
       - /tmp
-      - /ms-playwright
+    # AUT-2258: /ms-playwright is NOT tmpfs-mounted. It used to be, which
+    # shadowed the image's chrome-sandbox SUID binary at runtime (the tmpfs
+    # is empty, the autobrain user can't chown to root, so the sandbox
+    # silently falls back to --no-sandbox). The image's /ms-playwright is
+    # read-only by definition (Playwright browsers + chrome-sandbox helper),
+    # so tmpfs-mounting it served no security purpose; removing the mount
+    # restores the CWE-250 mitigation.
     env_file: .env
     environment:
       AI_ROUTER_URL: ${AI_ROUTER_URL}
@@ -167,6 +177,8 @@ services:
       args:
         API_BASE_URL: ${API_BASE_URL:-http://localhost:8000/api/v1}
         WS_BASE_URL: ${WS_BASE_URL:-ws://localhost:8000/ws}
+        # AUT-2220: CARTO basemap key. Public-by-design; empty -> public basemap.
+        CARTO_API_KEY: ${CARTO_API_KEY:-}
     image: ${DOCKERHUB_USERNAME:-autobrain}/autobrain-frontend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     read_only: true
@@ -179,6 +191,17 @@ services:
     # Host :80 preserved; container runs nginx-unprivileged on :8080 (non-root).
     ports:
       - "80:8080"
+    # AUT-2389: probe the backend upstream (not just nginx) so Portainer flips
+    # the frontend unhealthy when the backend is unreachable/5xx. nginx-only
+    # probes hid AUT-1964 — nginx stays up while the upstream is dead.
+    environment:
+      BACKEND_URL: ${BACKEND_URL:-http://backend:8000}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- \"${BACKEND_URL:-http://backend:8000}/health\" | grep -q '\"status\":\"ok\"'"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     depends_on:
       - backend
       - ai

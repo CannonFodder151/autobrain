@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/auth_state.dart';
 import '../../core/models.dart';
+import '../../widgets/responsive.dart';
 
 class VehicleTimelineScreen extends StatefulWidget {
   const VehicleTimelineScreen({super.key, required this.vehicleId});
@@ -53,30 +54,39 @@ class _VehicleTimelineScreenState extends State<VehicleTimelineScreen> {
             ? const Center(child: CircularProgressIndicator())
             : _events.isEmpty
                 ? const Center(child: Text('No events yet'))
-                : ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _events.length,
-                    itemBuilder: (context, i) {
-                      final e = _events[i];
-                      return Card(
-                        child: ListTile(
-                          leading: CircleAvatar(child: Icon(_icon(e.eventType))),
-                          title: Text(e.title),
-                          subtitle: Text(
-                            '${DateFormat.yMMMd().format(DateTime.parse(e.occurredOn))}'
-                            '${e.odometerKm != null ? ' · ${e.odometerKm} km' : ''}',
-                          ),
-                          trailing: e.amount != null
-                              ? Text(
-                                  '${e.amount!.toStringAsFixed(0)}',
-                                  style: Theme.of(context).textTheme.titleSmall,
-                                )
-                              : null,
-                        ),
-                      );
-                    },
+                : Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 700),
+                      child: ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: _events.length,
+                        itemBuilder: (context, i) {
+                          final e = _events[i];
+                          return Card(
+                            child: ListTile(
+                              leading: CircleAvatar(child: Icon(_icon(e.eventType))),
+                              title: Text(e.title),
+                              subtitle: Text(
+                                '${DateFormat.yMMMd().format(DateTime.parse(e.occurredOn))}'
+                                '${e.odometerKm != null ? ' · ${e.odometerKm} km' : ''}',
+                              ),
+                              trailing: e.amount != null
+                                  ? Text(
+                                      '${e.amount!.toStringAsFixed(0)}',
+                                      style: Theme.of(context).textTheme.titleSmall,
+                                    )
+                                  : null,
+                            ),
+                          );
+                        },
+                      ),
+                    ),
                   ),
-      ),
-    );
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
   }
 }

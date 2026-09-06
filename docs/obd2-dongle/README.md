@@ -4,25 +4,19 @@ Build documentation for the custom AutoBrain OBD2 dongle: a phone-free trip
 logger that plugs into the car's OBD-II port and records trips (time, RPM,
 speed, GPS route) to on-board flash with no phone and no network.
 
-**Board this is written for: the ESP32-WROOM-32 DevKit.** The CAN decoder is
-built into the WROOM chip itself (Espressif calls it **TWAI**) — the firmware
-talks to it directly via `driver/twai.h`. You do **not** buy or solder an
-external CAN decoder/controller (no MCP2515, no SPI CAN board). The only CAN
-part you buy is the small **transceiver** level-shifter (MCP2551 or
-SN65HVD230), which is electrically required: no devkit pin may connect to the
-car's ~12 V CAN bus directly.
+**⚠️ Choose the guide that matches your devkit board:**
 
-## Contents
-
-| Doc | What's in it |
-|---|---|
-| [`01-bom.md`](01-bom.md) | Exact shopping list, ~US$20–35 total |
-| [`02-wiring.md`](02-wiring.md) | Full pin map + every wire between modules |
-| [`03-soldering-guide.md`](03-soldering-guide.md) | **Step-by-step soldering guide** — order, checkpoints, smoke test |
-| [`04-flash-and-test.md`](04-flash-and-test.md) | Flash the firmware, bench test, first car install |
+| Doc | What's in it | Board |
+|---|---|---|
+| [`nodemcu32s-build-guide.md`](nodemcu32s-build-guide.md) | **Primary guide** — BOM, pin map, soldering, flash, bench test | **NodeMCU-32S** (AliExpress linked in AUT-2741) |
+| [`archive/03-soldering-guide.md`](archive/03-soldering-guide.md) | Archived DOIT-style soldering guide | **DOIT WROOM-32 devkit** (old) |
+| [`archive/02-wiring.md`](archive/02-wiring.md) | Archived DOIT-style pin map | **DOIT WROOM-32 devkit** (old) |
+| [`archive/01-bom.md`](archive/01-bom.md) | Archived BOM (migrated into `nodemcu32s-build-guide.md`) | — |
+| [`archive/04-flash-and-test.md`](archive/04-flash-and-test.md) | Archived flash/test (migrated into `nodemcu32s-build-guide.md`) | — |
+| [`archive/build-guide.md`](../firmware/esp32-diy/docs/archive/build-guide.md) | Archived firmware build pointer | — |
 
 Firmware source: [`firmware/esp32-diy/`](../../firmware/esp32-diy/) (pin map in
-`include/config.h` — the docs here must match it).
+`include/config.h` — the guide must match it).
 
 ## How it works (one paragraph)
 

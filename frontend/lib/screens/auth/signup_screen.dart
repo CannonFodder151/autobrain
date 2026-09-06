@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/auth_state.dart';
+import '../../widgets/responsive.dart';
 import 'login_screen.dart';
 
 /// Self-service Free-tier account creation (hosted instance).
@@ -71,8 +72,8 @@ class _SignupScreenState extends State<SignupScreen> {
             end: Alignment.bottomRight,
             colors: [
               scheme.primary,
-              scheme.primary.withValues(alpha: 0.75),
-              scheme.secondary.withValues(alpha: 0.6),
+              scheme.primary.withOpacity(0.75),
+              scheme.secondary.withOpacity(0.6),
             ],
           ),
         ),
@@ -80,7 +81,12 @@ class _SignupScreenState extends State<SignupScreen> {
           child: Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(24),
+              child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Container(
                     padding: const EdgeInsets.all(10),
@@ -89,7 +95,7 @@ class _SignupScreenState extends State<SignupScreen> {
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.15),
+                          color: Colors.black.withOpacity(0.15),
                           blurRadius: 24,
                           offset: const Offset(0, 8),
                         ),
@@ -127,7 +133,7 @@ class _SignupScreenState extends State<SignupScreen> {
                       borderRadius: BorderRadius.circular(24),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.18),
+                          color: Colors.black.withOpacity(0.18),
                           blurRadius: 32,
                           offset: const Offset(0, 12),
                         ),

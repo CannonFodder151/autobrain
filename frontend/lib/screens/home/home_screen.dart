@@ -6,12 +6,15 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/api_client.dart';
 import '../../core/auth_state.dart';
 import '../../core/models.dart';
+import '../../widgets/responsive.dart';
 import '../../widgets/vehicle_selector.dart';
+import '../../widgets/rego_status_badge.dart';
 import '../admin/admin_screen.dart';
 import '../analytics/analytics_screen.dart';
 import '../../community_garage/community_garage_screen.dart';
 import '../diagnostics/diagnostics_screen.dart';
 import '../fuel/fuel_screen.dart';
+import '../fuel/petrol_price_map_screen.dart';
 import '../logbook/logbook_screen.dart';
 import '../mods/mods_screen.dart';
 import '../notifications/notifications_screen.dart';
@@ -25,6 +28,7 @@ import '../valuation/valuation_screen.dart';
 import '../vehicles/vehicle_list_screen.dart';
 import '../vehicles/vehicle_timeline_screen.dart';
 import '../servo_spy/servo_spy_screen.dart';
+import '../advisor/overview_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -167,39 +171,63 @@ class _HomeScreenState extends State<HomeScreen> {
                 : ListView(
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                     children: [
-                      if (_selected != null) _HeroCard(vehicle: _selected!),
-                      const SizedBox(height: 12),
-                      VehicleSelector(
-                    vehicles: _vehicles,
-                    selected: _selected,
-                    onChanged: (v) => setState(() => _selected = v),
-                    onManage: () async {
-                      await Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const VehicleListScreen(),
+                      if (_selected != null)
+                        Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 600),
+                            child: _HeroCard(vehicle: _selected!),
+                          ),
                         ),
-                      );
-                      _load();
-                    },
-                  ),
-                  if (_selected == null)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 40),
-                      child: Center(
-                        child: Text('Add a vehicle to get started.',
-                            style: TextStyle(color: Colors.grey)),
+                      const SizedBox(height: 12),
+                      Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 600),
+                          child: VehicleSelector(
+                            vehicles: _vehicles,
+                            selected: _selected,
+                            onChanged: (v) => setState(() => _selected = v),
+                            onManage: () async {
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const VehicleListScreen(),
+                                ),
+                              );
+                              _load();
+                            },
+                          ),
+                        ),
                       ),
-                    ),
-                  if (_selected != null) ...[
-                    const SizedBox(height: 20),
-                    Text('Features',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 10),
-                    _FeatureGrid(vehicle: _selected!),
-                  ],
-                ],
-              ),
+                      if (_selected == null)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 40),
+                          child: Center(
+                            child: Text('Add a vehicle to get started.',
+                                style: TextStyle(color: Colors.grey)),
+                          ),
+                        ),
+                      if (_selected != null) ...[
+                        const SizedBox(height: 20),
+                        Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 600),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text('Features',
+                                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.w700)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 600),
+                            child: _FeatureGrid(vehicle: _selected!),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
       ),
     );
   }
@@ -219,7 +247,7 @@ class _HeroCard extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [scheme.primary, scheme.primary.withValues(alpha: 0.7), scheme.secondary],
+          colors: [scheme.primary, scheme.primary.withOpacity(0.7), scheme.secondary],
         ),
       ),
       child: Row(
@@ -257,6 +285,14 @@ class _HeroCard extends StatelessWidget {
                         value: vehicle.rego ?? '—'),
                   ],
                 ),
+                if (vehicle.hasRegoData) ...[
+                  const SizedBox(height: 10),
+                  RegoStatusBadge(
+                    vehicle: vehicle,
+                    premium: context.watch<AuthState>().premium,
+                    dense: true,
+                  ),
+                ],
               ],
             ),
           ),
@@ -264,7 +300,7 @@ class _HeroCard extends StatelessWidget {
             width: 72,
             height: 72,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.18),
+              color: Colors.white.withOpacity(0.18),
               shape: BoxShape.circle,
             ),
             child: Icon(
@@ -311,6 +347,7 @@ class _FeatureGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = context.isDesktop;
     final items = [
       _Feature('Timeline', Icons.timeline, const Color(0xFF0B6B6A),
           VehicleTimelineScreen(vehicleId: vehicle.id)),
@@ -323,6 +360,8 @@ class _FeatureGrid extends StatelessWidget {
             LogbookScreen(vehicleId: vehicle.id)),
       _Feature('Diagnostics', Icons.medical_services, const Color(0xFFEA580C),
           DiagnosticsScreen(vehicleId: vehicle.id)),
+      const _Feature('Petrol Prices', Icons.map, Color(0xFF0E7490),
+          PetrolPriceMapScreen()),
       _Feature('Mods', Icons.tune, const Color(0xFF7C3AED),
           ModsScreen(vehicleId: vehicle.id)),
       _Feature('Receipts', Icons.receipt_long, const Color(0xFFDB2777),
@@ -338,18 +377,25 @@ class _FeatureGrid extends StatelessWidget {
       if (!kIsWeb)
         _Feature('OBD', Icons.settings_input_component, const Color(0xFF334155),
             ObdScreen(vehicleId: vehicle.id)),
+      _Feature('Ownership Advisor', Icons.insights,
+          const Color(0xFF6366F1),
+          _AdvisorEntry(vehicle: vehicle)),
       const _Feature('Servo Spy', Icons.local_gas_station, Color(0xFFF59E0B),
           ServoSpyScreen()),
       const _Feature('Community Garage', Icons.groups, Color(0xFF0D9488),
           CommunityGarageScreen()),
     ];
+    final width = MediaQuery.of(context).size.width;
+    final cols = isDesktop
+        ? (width > 1400 ? 4 : 3)
+        : 2;
     return GridView.count(
-      crossAxisCount: 3,
+      crossAxisCount: cols,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       mainAxisSpacing: 12,
       crossAxisSpacing: 12,
-      childAspectRatio: 0.92,
+      childAspectRatio: isDesktop ? 1.1 : 0.92,
       children: [
         for (final f in items)
           _FeatureTile(feature: f),
@@ -379,7 +425,7 @@ class _FeatureTile extends StatelessWidget {
               width: 46,
               height: 46,
               decoration: BoxDecoration(
-                color: feature.color.withValues(alpha: 0.14),
+                color: feature.color.withOpacity(0.14),
                 shape: BoxShape.circle,
               ),
               child: Icon(feature.icon, color: feature.color, size: 24),
@@ -408,107 +454,13 @@ class _Feature {
   final Widget screen;
 }
 
-/// Offers the downloadable iOS/Android apps to a logged-in user.
-class DownloadAppDialog extends StatelessWidget {
-  const DownloadAppDialog({super.key});
-
-  static const _androidUrl = 'https://play.google.com/store/apps/details?id=com.autobrainservice.app';
-  static const _iosUrl = 'https://apps.apple.com/app/autobrain';
-
-  Future<void> _open(BuildContext context, String url) async {
-    final ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-    if (!ok && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open the link.')),
-      );
-    }
-  }
+/// Bridges the home grid to the Ownership Advisor entry point. The overview
+/// screen needs the live vehicleId, which the grid already filters for on
+/// `_Feature`s that need a vehicle; this indirection unpacks the id.
+class _AdvisorEntry extends StatelessWidget {
+  const _AdvisorEntry({required this.vehicle});
+  final Vehicle vehicle;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return AlertDialog(
-      title: const Text('Get the AutoBrain app'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'Install AutoBrain on your phone for the full experience — offline cache, '
-            'push notifications and faster access.',
-            style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 14),
-          ),
-          const SizedBox(height: 18),
-          FilledButton.tonalIcon(
-            onPressed: () => _open(context, _androidUrl),
-            icon: const Icon(Icons.android),
-            label: const Text('Get it on Google Play'),
-          ),
-          const SizedBox(height: 10),
-          FilledButton.tonalIcon(
-            onPressed: () => _open(context, _iosUrl),
-            icon: const Icon(Icons.apple),
-            label: const Text('Get on the App Store'),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
-        ),
-      ],
-    );
-  }
-}
-
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({
-    required this.message,
-    required this.onRetry,
-    this.sessionExpired = false,
-    this.onLogout,
-  });
-  final String message;
-  final VoidCallback onRetry;
-  final bool sessionExpired;
-  final VoidCallback? onLogout;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(sessionExpired ? Icons.lock_clock : Icons.cloud_off,
-                size: 56, color: scheme.error),
-            const SizedBox(height: 16),
-            Text(message, textAlign: TextAlign.center),
-            const SizedBox(height: 16),
-            if (sessionExpired && onLogout != null) ...[
-              FilledButton.tonalIcon(
-                onPressed: onLogout,
-                icon: const Icon(Icons.logout),
-                label: const Text('Log out'),
-              ),
-              const SizedBox(height: 8),
-              TextButton.icon(
-                onPressed: onRetry,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Retry'),
-              ),
-            ] else
-              FilledButton.tonalIcon(
-                onPressed: onRetry,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Retry'),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+  Widget build(BuildContext context) =>
+      AdvisorOverviewScreen(vehicleId: vehicle.id);

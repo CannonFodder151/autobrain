@@ -1,10 +1,11 @@
 """Vehicle profile and unified timeline event model."""
 
+import enum
 import uuid
 from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
@@ -12,6 +13,20 @@ from app.db.session import Base
 
 def _uuid() -> str:
     return str(uuid.uuid4())
+
+
+class PowertrainType(str, enum.Enum):
+    """Canonical powertrain tokens exposed in API responses (AUT-2434).
+
+    Stored as the enum's string ``value`` (e.g. ``"ICE"``) so DB rows stay
+    readable without a join. New vehicles default to ICE; pre-existing rows
+    are backfilled to ICE by the AUT-2434 alembic migration.
+    """
+
+    ICE = "ICE"
+    EV = "EV"
+    HEV = "HEV"
+    PHEV = "PHEV"
 
 
 if TYPE_CHECKING:
@@ -44,6 +59,13 @@ class Vehicle(Base):
     club_reg: Mapped[bool] = mapped_column(default=False)  # club reg => no ATO logbook
     auto_suggest_service: Mapped[bool] = mapped_column(default=False)  # AUT-1275: suggest next service when odo updates
     fuel_type: Mapped[str | None] = mapped_column(String(16))  # AUT-1819: drives default price shown on map/list
+    powertrain: Mapped[str] = mapped_column(String(8), default=PowertrainType.ICE.value)  # AUT-2434: ICE/EV/HEV/PHEV
+    # Rego status (cached from lookup). AUT-2415 surfaces the badge; AUT-2416
+    # uses the expiry date to drive notifications. status is free-text so the
+    # lookup provider can set "registered" / "valid" / "current" / "active" / etc.
+    rego_status: Mapped[str | None] = mapped_column(String(40))
+    rego_expiry_date: Mapped[date | None] = mapped_column(Date, index=True)
+    rego_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

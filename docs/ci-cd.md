@@ -76,9 +76,14 @@ See `docs/mobile-release.md` for the full runbook. In short:
 - verifies the requested `version` matches `pubspec.yaml` (`vX.Y.Z+N`),
 - installs the Play upload keystore from repo secrets,
 - verifies the Play-locked package identity (`com.autobrainservice.app`),
-- builds `appbundle` + `apk`, verifies signatures (AAB v1, APK v2/v3, upload-key
-  SHA1 fingerprint match),
-- publishes a **draft** GitHub Release with the `.aab` + top changelog entry,
+- builds `appbundle`, verifies signatures (AAB v1, upload-key SHA1 fingerprint
+  match), publishes a GitHub Release with the `.aab` + top changelog entry,
+- **APK build is throttled** (AUT-2619): the `.apk` (used for the apksigner
+  v2/v3 scheme + upload-certificate fingerprint check, plus the alternate-store
+  feeds) is only built when the mobile code (`lib/`, `assets/`) changed since
+  the previous release tag **and** at least 48h have passed since the last
+  APK build (tracked via a floating `apk-built` tag ref). Pure version bumps
+  skip the APK; the `.aab` is never throttled.
 - posts customer-facing notes to Discord `#changelog` and a staff summary to
   `#updates` via the n8n Discord Reporter (best-effort — a reporter outage never
   fails the release).

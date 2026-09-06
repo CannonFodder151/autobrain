@@ -228,3 +228,46 @@ A diagnostic auto-flips to `resolved` when its linked service is completed.
 | POST   | `/v1/{module}` | Infer — `diagnostics`, `service-prediction`, `ocr`, `fuel-ocr`, `odometer`, `resale`, `mod-impact` |
 
 All modules are deterministic (temperature 0) and validate/clamp numeric output (`resale` clamps low ≤ estimated ≤ high).
+
+## Ownership Advisor (`/advisor`) — premium-only, paid tier
+
+The Ownership Advisor is a single in-app surface with six sub-modules. Five are deterministic; one (AI Advisor) reasons over the others via 9Router. Full IA, routing and fallback contract in [`docs/adr/0001-ownership-advisor.md`](adr/0001-ownership-advisor.md). All routes require the user to have access to a `vehicle_id` (owner or accepted share); Dream Car additionally takes a target `{make, model, year}` in the body. Entitlement gate: free accounts get `403`; demo accounts get `403` on AI Advisor only.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | `/advisor/value` | Current vehicle market value (low / mid / high), comparables (same make/model/year ±3y), trade-in band. Deterministic only. |
+| GET    | `/advisor/replace` | Used replacement cost, new replacement cost, funding gap (`replace_cost - current_value - trade_in`), monthly saving target. Deterministic only. |
+| GET    | `/advisor/upgrade` | Next 1-2 tier options (same model), similar-vehicle suggestions, trade-up delta (monthly + total). Deterministic only. |
+| POST   | `/advisor/finance` | Body `{down_payment, term_months, rate_pct}`. Returns amortization table + total cost + effective monthly for `{buy, finance, lease}`. Novated lease returns `{mode: "novated", status: "coming_soon"}`. Deterministic only. |
+| POST   | `/advisor/dream` | Body `{make, model, year}`. Returns lookup (live market median), affordability analysis, repayment estimate (re-uses `/advisor/finance` calc). |
+| POST   | `/advisor/ai` | Body `{question, value, replace, upgrade, finance, dream?}`. Returns `{decision, confidence, rationale, next_actions, model, based_on}`. Routes through 9Router (`AI_ROUTER_URL`); deterministic fallback when unreachable — `model` is `"rule-based-fallback"` and the response shape is identical. |
+
+Response envelope (every advisor response):
+
+```json
+{
+  "module": "value|replace|upgrade|finance|dream|ai",
+  "vehicle_id": "<uuid or null>",
+  "generated_at": "<iso8601>",
+  "model": "rule-based-fallback|rule-based+ai|9router/<combo>",
+  "data": { /* module-specific structured output */ },
+  "factors": { /* optional provenance / signals */ }
+}
+```
+
+Caching: every response is cacheable for **24 h**. Frontend offline cache key is `sha256("advisor:{module}:{vehicle_id}:{stable_body_hash}")`; backend `market_listing_cache` keys remain `(make, model, year)`. Rate-limited via the existing `require_ai_rate_limit` dependency on AI paths.
+## Home Assistant Integration (AUT-2541)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET`  | `/ha/vehicles` | All accessible vehicles (HA token auth) |
+| `GET`  | `/ha/vehicles/{id}/service-intervals` | Upcoming service intervals |
+| `GET`  | `/ha/vehicles/{id}/analytics` | Analytics summary |
+| `GET`  | `/ha/service-reminders` | All service reminders (all accessible vehicles) |
+| `POST` | `/ha/tokens` | Create a new HA integration token |
+| `GET`  | `/ha/tokens` | List the caller's HA tokens |
+| `DELETE` | `/ha/tokens/{id}` | Revoke a token |
+
+HA endpoints are authenticated via the `X-HA-API-Key` header (`abha_...`).
+The token-management path (`/ha/tokens`) takes the normal Bearer JWT. Full
+setup guide: [`docs/home-assistant-integration.md`](home-assistant-integration.md).

@@ -2,7 +2,7 @@
 
 from datetime import date, datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class FuelLogCreate(BaseModel):
@@ -51,6 +51,7 @@ class FuelStats(BaseModel):
     total_cost: float
     avg_l_per_100km: float | None
     avg_cost_per_km: float | None
+    avg_litres_per_fill: float | None  # mean litres across all fills (AUT-2201)
     last_log: FuelLogOut | None
     series: list[dict]
 
@@ -82,13 +83,70 @@ class FuelPriceQuote(BaseModel):
     distance_km: float | None = None  # set in nearest mode
 
 
+class FuelPriceOut(BaseModel):
+    """A cached petrol price feed row, served to the price-map frontend."""
+
+    state: str
+    station_code: str
+    station_name: str | None = None
+    brand: str | None = None
+    address: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    fuel_type: str
+    price: float | None = None
+    currency: str = "AUD"
+    updated_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
 class SevenElevenPricesOut(BaseModel):
-    """Accurate 7-Eleven fuel prices (projectzerothree.info). Deterministic, no AI."""
+    """7-Eleven fuel price lookup result (AUT-1887)."""
 
     source: str = "projectzerothree"
-    updated: int | None = None  # upstream snapshot timestamp (unix)
-    as_of: str | None = None  # when we fetched/cached (ISO)
+    updated: str | None = None
+    as_of: str | None = None
     mode: str  # "cheapest" | "nearest"
     fuel_type: str
     region: str | None = None
     quotes: list[FuelPriceQuote]
+
+
+class FuelPriceWatchlistIn(BaseModel):
+    """Per-user servo-spy fuel price watch (AUT-1859)."""
+
+    state: str
+    station_code: str
+    fuel_type: str
+    direction: str = "both"  # "up" | "down" | "both"
+    threshold_pct: float = 5.0
+
+    @field_validator("direction")
+    @classmethod
+    def _direction_in_set(cls, v: str) -> str:
+        if v not in ("up", "down", "both"):
+            raise ValueError("direction must be one of up, down, both")
+        return v
+
+    @field_validator("threshold_pct")
+    @classmethod
+    def _threshold_positive(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError("threshold_pct must be > 0")
+        return v
+
+
+class FuelPriceWatchlistOut(BaseModel):
+    """Persisted servo-spy watch row (AUT-1859)."""
+
+    id: int
+    user_id: int
+    state: str
+    station_code: str
+    fuel_type: str
+    direction: str
+    threshold_pct: float
+    created_at: datetime | None = None
+
+    model_config = {"from_attributes": True}

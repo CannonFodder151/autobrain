@@ -21,7 +21,7 @@ self-signup + MFA enforced. Deployed via Portainer on the Oracle Cloud VM.
 
 | Service | Image | Role |
 |---------|-------|------|
-| postgres | `pgvector/pgvector:pg16` | Datastore + `vector` extension (pgvector) |
+| postgres | `pgvector/pgvector:pg17` | Datastore + `vector` extension (pgvector) |
 | redis | `redis:7-alpine` | Cache + Celery broker/result backend |
 | minio | `minio/minio` | Receipts/photos S3 storage |
 | backend | `autobrain-backend:hosted` | API + WebSocket on :8000 |
@@ -61,7 +61,7 @@ reads configuration exclusively from environment variables.
 ## Vectorisation (pgvector)
 
 Semantic search uses pgvector columns, installed by migrations
-(`alembic: g7h8i9j0k1l2`, `h1i2j3k4l5m6`).
+(`alembic: g7h8i9j0k1l2`, `h1i2j3k4l5m6`). See `docs/ai/vector.md` for full schema and embedding pipeline.
 
 - **Extension/columns:** `CREATE EXTENSION vector`; `embedding vector(1536)`
   columns on `diagnostics`, `service_records`, `modifications`, `receipts`
@@ -75,7 +75,7 @@ Semantic search uses pgvector columns, installed by migrations
   plus pgvector cosine distance (`a <=> b` cast to `vector`, bound parameter)
   when the query embedding succeeds via 9Router `/embeddings`. Results are
   deduped and ranked by score; keyword-only fallback if embeddings unavailable.
-- Postgres image in hosted/dev/prod is `pgvector/pgvector:pg16` so the
+- Postgres image in hosted/dev/prod is `pgvector/pgvector:pg17` so the
   extension is available at migration time.
 
 ## Upgrade path (AUT-1847)

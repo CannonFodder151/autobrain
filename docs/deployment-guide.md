@@ -148,6 +148,86 @@ Run it from the repo checkout on a host that can reach Portainer (the
 `deploy-instances.yml` `upgrade` job does exactly this, with the
 `PORTAINER_API_KEY`/`PORTAINER_URL` repo secrets injected by GitHub).
 
+Defaults stay `127.0.0.1` — `EXPOSE_LAN=0` means nothing is reachable off-host.
+Never commit `BIND_ADDRESS=0.0.0.0` to a shared `.env`.
+
+**Host-level firewall (required when `EXPOSE_LAN=1`):**
+
+Docker publishing to `0.0.0.0` exposes the port on every interface. Lock the host
+firewall to trusted LAN ranges only. Example with `ufw`:
+
+```bash
+# Allow LAN subnet only (adjust to your network)
+sudo ufw allow from 192.168.1.0/24 to any port 8000 proto tcp   # backend
+sudo ufw allow from 192.168.1.0/24 to any port 8001 proto tcp   # ai gateway
+sudo ufw allow from 192.168.1.0/24 to any port 8080 proto tcp   # frontend
+sudo ufw deny 8000                                                  # block WAN
+sudo ufw deny 8001
+sudo ufw deny 8080
+```
+
+Or with `iptables`:
+
+```bash
+sudo iptables -I INPUT -p tcp --dport 8000 -s 192.168.1.0/24 -j ACCEPT
+sudo iptables -I INPUT -p tcp --dport 8001 -s 192.168.1.0/24 -j ACCEPT
+sudo iptables -I INPUT -p tcp --dport 8080 -s 192.168.1.0/24 -j ACCEPT
+sudo iptables -A INPUT -p tcp --dport 8000 -j DROP
+sudo iptables -A INPUT -p tcp --dport 8001 -j DROP
+sudo iptables -A INPUT -p tcp --dport 8080 -j DROP
+```
+
+Verify after enabling:
+
+```bash
+# From a LAN device:
+curl http://<dev-host-ip>:8000/health
+# From WAN (should fail):
+curl --connect-timeout 5 http://<dev-host-ip>:8000/health
+```
+
+Restore the default (localhost-only) when LAN testing is done:
+
+```bash
+sed -i 's/^EXPOSE_LAN=1/EXPOSE_LAN=0/; s/^BIND_ADDRESS=0.0.0.0/BIND_ADDRESS=127.0.0.1/' .env
+docker compose up -d
+```
+
+## Deploy (hosted) — the upgrade path (AUT-1847)
+
+**Always use the GitHub Actions runner on the Oracle VM** to build hosted
+images (do NOT build locally). The `build-hosted.yml` workflow (on every merge
+to `main`, or via `workflow_dispatch`) builds multi-arch images on the
+self-hosted runners (x64 + ARM64 on the Oracle VM) and pushes them to ghcr.io
+with the `:hosted` tag.
+
+Deployment is **owned by the Deployment Lead**, not automatic (board direction,
+AUT-1847): after `build-hosted.yml` (or `dockerhub-publish.yml` for Demo/Default)
+completes, CI posts a Discord `#ops` notification (author "Deployment Lead")
+that an image is published and ready to promote. The Deployment Lead then
+triggers the `deploy-instances.yml` workflow (`workflow_dispatch`), which runs
+the upgrade path:
+
+1. `scripts/upgrade-instances.sh` redeploys each Portainer stack in promotion
+   order (Demo → Default → Hosted) via
+   `PUT /api/stacks/{id}?endpointId={ep}&pullImage=true`, preserving the stack
+   env and volumes (`Prune: false`).
+2. Each tier is health-checked (`/health`) before the next is promoted; a failed
+   tier stops the rollout (AUT-107).
+3. DB migrations run on backend boot, so a redeploy is a full upgrade.
+4. `scripts/prune-images.sh` drops dangling images on EP2/EP5 after success.
+
+```bash
+# Manual run (any tier ordering / verification override):
+./scripts/upgrade-instances.sh                       # promote all tiers
+UPGRADE_DRY_RUN=1 ./scripts/upgrade-instances.sh     # resolve + health only
+UPGRADE_TIERS="autobrain-hosted|5|https://hosted.autobrainservice.app/health|" \
+  ./scripts/upgrade-instances.sh                     # Hosted only
+```
+Run it from the repo checkout on a host that can reach Portainer (the
+`deploy-instances.yml` `upgrade` job does exactly this, with the
+`PORTAINER_API_KEY`/`PORTAINER_URL` repo secrets injected by GitHub).
+
 Portainer stack updates pull images (`pullImage=true`) and recreate changed
 services (AUT-372). This is intended so CI-published images reach the tier, and
 it is safe for the frontend because the stack pins a static IP.
@@ -167,6 +247,13 @@ upgrade path):
   (`PAPERCLIP_API_KEY`, `CI_TRIAGE_WEBHOOK_SECRET`). `docker-compose.hosted.yml`
   now defaults the DB vars so a redeploy never fails at interpolation even if
   the env is incomplete.
+- Secret path (AUT-1853): `docker-compose.hosted.yml` defaults `SECRETS_DIR` to
+  `/data/autobrain/secrets`. The HostED Portainer stack env should set
+  `SECRETS_DIR=/data/autobrain/secrets` (or rely on the compose default); never
+  `/opt/autobrain/secrets` — the snap dockerd masks `/opt` read-only. Before
+  redeploying the HostED stack, provision + re-seed `/data/autobrain/secrets`
+  (see docs/security.md "Oracle VM path migration (AUT-1853)"), then remove the
+  legacy `autobrain-opt-guard.sh` `/opt` remount cron workaround.
 
 ### Nginx Proxy Manager + the hosted frontend (AUT-372)
 
@@ -281,6 +368,25 @@ First boot runs `python -m app.db.bootstrap` (Alembic, falling back to
 >
 > New columns on existing tables still require a real Alembic migration (never
 > rely on `create_all` — it only creates missing *tables*).
+>
+> **Production must NEVER fall back to `init_db()`.** The bootstrap at
+> `app/db/bootstrap.py` runs `alembic upgrade head`; if that fails (e.g. a
+> broken migration like AUT-2482's `op.get_inspector()` crash on
+> `aut1859_fuel_price_alerts.py`) it silently falls back to
+> `Base.metadata.create_all`, which only emits *missing tables* — it cannot
+> add new columns, partial unique indexes, or any DDL Alembic was meant to
+> apply. The first symptom is a runtime `UndefinedColumnError` (e.g.
+> `column notification_deliveries.user_id does not exist`) on a Celery task
+> that reads the table — not at boot. If you ever see
+> `alembic_failed_falling_back_to_create_all` in backend logs on a hosted
+> environment, the deploy is broken: stop, fix the migration, re-run
+> `alembic upgrade head` via the backend bootstrap path
+> (`python -m app.db.bootstrap`), and verify the worker log carries
+> `alembic_migrations_applied` on the next boot. Do not paper over it with
+> `create_all`. Reproduce the broken state with
+> `docker compose -f docker-compose.hosted.yml run --rm backend alembic
+> upgrade head` from a workstation against a clone of the hosted DB
+> (redacted secrets) before shipping a fix.
 
 ```bash
 docker compose exec backend alembic revision --autogenerate -m "change"

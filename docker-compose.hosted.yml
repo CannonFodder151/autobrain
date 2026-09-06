@@ -3,19 +3,26 @@
 # App images from ghcr.io (multi-arch: the Oracle host is arm64 and Docker Hub :hosted tags are
 # amd64-only since AUT-967; ghcr :hosted carries amd64+arm64, AUT-1114).
 # Non-secret config interpolates from the Portainer stack env; secret-class
-# values come from /opt/autobrain/secrets via the *_FILE pattern (AUT-1533).
-# Env must stay applied via the stack so redeploys never revert SMTP2GO/SMTP_* (see AUT-97/AUT-101).
+# values come from ${SECRETS_DIR:-/data/autobrain/secrets} via the *_FILE pattern
+# (AUT-1533). Env must stay applied via the stack so redeploys never revert
+# SMTP2GO/SMTP_* (see AUT-97/AUT-101).
 
 # Secret-file pattern (AUT-1533): secret-class values are bind-mounted from
-# /opt/autobrain/secrets (root:1000, 0640) and loaded into process env at
-# container start by docker/lib-load-secrets.sh. They never appear in
-# `docker inspect`. Seed with scripts/seed-secrets.sh BEFORE deploying this
-# file; see docs/security.md ("Secret-file pattern & broker auth").
+# ${SECRETS_DIR:-/data/autobrain/secrets} (root:1000, 0640) and loaded into
+# process env at container start by docker/lib-load-secrets.sh. They never
+# appear in `docker inspect`. Seed with scripts/seed-secrets.sh BEFORE
+# deploying this file; see docs/security.md ("Secret-file pattern & broker auth").
+# AUT-1853: the default is /data/autobrain/secrets, NOT /opt/autobrain/secrets —
+# the snap dockerd on the Oracle VM mounts /opt from a read-only core24 squashfs
+# and masks the host /opt, so a bind on /opt/autobrain/secrets fails with
+# "read-only file system". /data is on the daemon-visible rootfs and is never
+# masked, so the stack no longer depends on the /opt remount workaround
+# (autobrain-opt-guard.sh).
 
 x-secrets: &secrets
   volumes:
     - type: bind
-      source: ${SECRETS_DIR:-/opt/autobrain/secrets}
+      source: ${SECRETS_DIR:-/data/autobrain/secrets}
       target: /run/secrets
       read_only: true
 
@@ -48,6 +55,11 @@ x-router-env: &router-env
   AI_ROUTER_URL: ${AI_ROUTER_URL:-http://9router:20128/v1}
   AI_ROUTER_API_KEY_FILE: /run/secrets/ai_router_api_key
   AI_ROUTER_MODEL: ${AI_ROUTER_MODEL:-General-Use}
+  # AUT-2091: full OpenRouter model id. The 9Router on Hosted does not resolve
+  # the bare `text-embedding-3-small` alias, so the backend must hit the full
+  # route. Companion fix: backend/worker commands export AI_ROUTER_API_KEY from
+  # the secret file (config.py reads AI_ROUTER_API_KEY, not *_FILE).
+  EMBEDDING_MODEL: ${EMBEDDING_MODEL:-openrouter/openai/text-embedding-3-small}
 
 services:
   postgres:
@@ -65,7 +77,7 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - type: bind
-        source: ${SECRETS_DIR:-/opt/autobrain/secrets}/postgres_password
+        source: ${SECRETS_DIR:-/data/autobrain/secrets}/postgres_password
         target: /run/secrets/postgres_password
         read_only: true
     healthcheck:
@@ -83,7 +95,7 @@ services:
     volumes:
       - redis-data:/data
       - type: bind
-        source: ${SECRETS_DIR:-/opt/autobrain/secrets}/redis_password
+        source: ${SECRETS_DIR:-/data/autobrain/secrets}/redis_password
         target: /run/secrets/redis_password
         read_only: true
     healthcheck:
@@ -122,11 +134,11 @@ services:
     volumes:
       - minio-data:/data
       - type: bind
-        source: ${SECRETS_DIR:-/opt/autobrain/secrets}/minio_access_key
+        source: ${SECRETS_DIR:-/data/autobrain/secrets}/minio_access_key
         target: /run/secrets/minio_access_key
         read_only: true
       - type: bind
-        source: ${SECRETS_DIR:-/opt/autobrain/secrets}/minio_secret_key
+        source: ${SECRETS_DIR:-/data/autobrain/secrets}/minio_secret_key
         target: /run/secrets/minio_secret_key
         read_only: true
     healthcheck:
@@ -136,9 +148,9 @@ services:
       retries: 10
 
   backend:
-    image: ghcr.io/cannonfodder151/autobrain-backend:hosted@sha256:09a7ff2d0773e0d43d5505fc5158734c92f0c47bdc13b51540f8693facf40576
+    image: ghcr.io/cannonfodder151/autobrain-backend:hosted-arm64@sha256:80053f3d6d4642c3f199fc3755b0d34c68f458faaa804195f6373cf3a68dd638
     restart: unless-stopped
-    command: sh -c "python -m app.db.bootstrap && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    command: sh -c "export AI_ROUTER_API_KEY=$(cat /run/secrets/ai_router_api_key) && python -m app.db.bootstrap && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
       <<: [*db-env, *core-env, *router-env]
       SECRET_KEY_FILE: /run/secrets/backend_secret_key
@@ -158,7 +170,12 @@ services:
       # Enable with FUEL_VIC_ENABLED=true once key/secret are provisioned.
       FUEL_VIC_API_KEY_FILE: /run/secrets/fuel_vic_api_key
       FUEL_VIC_API_SECRET_FILE: /run/secrets/fuel_vic_api_secret
-      FUEL_VIC_ENABLED: "false"
+      FUEL_VIC_ENABLED: "true"
+      # AUT-2218: QLD DirectAPI subscription token (AUT-1813 phase). Pydantic
+      # settings loads FUEL_QLD_API_KEY from FUEL_QLD_API_KEY_FILE at startup;
+      # the secrets anchor below mounts ${SECRETS_DIR} read-only, so the file
+      # resolves when seed-secrets.sh provisions fuel_qld_api_key.
+      FUEL_QLD_API_KEY_FILE: /run/secrets/fuel_qld_api_key
       AI_GATEWAY_API_KEY_FILE: /run/secrets/ai_gateway_api_key
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@autobrain.io}
       ADMIN_DISPLAY_NAME: AutoBrain Admin
@@ -172,6 +189,10 @@ services:
       SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-no-reply@autobrainservice.app}
       SMTP_FROM_NAME: AutoBrain
       APP_BASE_URL: ${APP_BASE_URL:-https://hosted.autobrainservice.app}
+      # AUT-2231: compose-level default so a fresh hosted stack never boots with an
+      # empty CORS allow-list (same-origin only). Override per environment via the
+      # Portainer stack env. JSON list shape required by app/core/config.py.
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-["https://hosted.autobrainservice.app","https://hub.autobrainservice.app"]}
       MFA_ENFORCED: "true"
       LOGIN_MAX_ATTEMPTS: 5
       LOGIN_WINDOW_SECONDS: 10800
@@ -236,42 +257,6 @@ services:
       default:
         ipv4_address: 172.18.0.15
 
-  dongle-server:
-    image: ghcr.io/cannonfodder151/autobrain-dongle-server:hosted@sha256:aaa00cf3b98425939f372003ba7198c0ad483afe6cbb9bbf096d1c82da928e9c
-    restart: unless-stopped
-    command: ["uvicorn", "dongle_server.main:app", "--host", "0.0.0.0", "--port", "8012"]
-    environment:
-      <<: *core-env
-      AUTOBRIAN_BACKEND_URL: http://backend:8000
-      # AUT-1673: dongle-server internal key + web auth injected via Portainer
-      # stack env (encrypted at rest), matching the HUB_* secret pattern.
-      DONGLE_SERVER_API_KEY: ${DONGLE_SERVER_API_KEY}
-      MINIO_ENDPOINT: minio:9000
-      MINIO_EXTERNAL_ENDPOINT: ${APP_BASE_URL:-https://hosted.autobrainservice.app}
-      MINIO_BUCKET: ${MINIO_BUCKET:-autobrain-assets}
-      MINIO_ACCESS_KEY_FILE: /run/secrets/minio_access_key
-      MINIO_SECRET_KEY_FILE: /run/secrets/minio_secret_key
-      MINIO_SECURE: "true"
-      WEB_UI_BASIC_USER: ${DONGLE_WEB_BASIC_USER}
-      WEB_UI_BASIC_PASSWORD: ${DONGLE_WEB_BASIC_PASSWORD}
-      DATABASE_URL: sqlite+aiosqlite:///./dongle.db
-      ENVIRONMENT: production
-    <<: *secrets
-    volumes:
-      - dongle-server-data:/data
-    expose:
-      - "8012"
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8012/health', timeout=3).status==200 else 1)"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-    depends_on:
-      minio:
-        condition: service_healthy
-      backend:
-        condition: service_started
-
   ai:
     image: ghcr.io/cannonfodder151/autobrain-ai:hosted@sha256:ba0f2d194fe0241b8cda5678c6ea79e94ceea67481f6993ba41c338830a698cf
     restart: unless-stopped
@@ -288,11 +273,15 @@ services:
       - "8001"
 
   worker:
-    image: ghcr.io/cannonfodder151/autobrain-worker:hosted@sha256:bca661931060c4cffa017624e6dd0c8a6f79c2ba57f3805b6e039b37cc141242
+    # AUT-2482: pinned to post-fix worker digest (built 2026-09-04 from main 16b784c, includes AUT-2506 op.get_inspector fix).
+    # AUT-1878: bumped to arm64 digest from 9d81e4d build (hosted-arm64), which adds
+    # the deterministic /proc-based HEALTHCHECK that fixes the stale celerybeat-schedule
+    # mtime false-negative. NOTE: this pin is arm64-only; amd64 arm still building.
+    image: ghcr.io/cannonfodder151/autobrain-worker:hosted-arm64@sha256:41db9068ef1b0fb431d3a003a9f41d2e70fd5fa8b21eb1937e2e0f32f27043c5
     restart: unless-stopped
     # AUT-1242/C1: beat scheduler embedded in the worker (-B), matching the dev
     # compose. Removes the separate beat container.
-    command: celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2
+    command: sh -c "export AI_ROUTER_API_KEY=$(cat /run/secrets/ai_router_api_key) && celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2"
     environment:
       <<: [*db-env, *core-env, *router-env]
       PYTHONPATH: /app
@@ -305,7 +294,10 @@ services:
       # AUT-1932: VIC Servo Saver — approved partner key (AUT-1813 phase).
       FUEL_VIC_API_KEY_FILE: /run/secrets/fuel_vic_api_key
       FUEL_VIC_API_SECRET_FILE: /run/secrets/fuel_vic_api_secret
-      FUEL_VIC_ENABLED: "false"
+      FUEL_VIC_ENABLED: "true"
+      # AUT-2218: QLD fuel — same wiring as the backend so the celery beat task
+      # in this worker can poll the QLD feed alongside NSW/VIC.
+      FUEL_QLD_API_KEY_FILE: /run/secrets/fuel_qld_api_key
     <<: *secrets
     depends_on:
       postgres:
@@ -318,18 +310,21 @@ services:
   # whitelist (paid-account gate), and the ops web GUI. Shares the hosted
   # stack's MinIO and Postgres where applicable (SQLite in the local compose).
   dongle-server:
-    image: ghcr.io/cannonfodder151/autobrain-dongle-server:hosted@sha256:aaa00cf3b98425939f372003ba7198c0ad483afe6cbb9bbf096d1c82da928e9c
+    image: ghcr.io/cannonfodder151/autobrain-dongle-server:hosted@sha256:c5768948a9dfd85f2b6e513896b3cbf2b77f6046576cd39152327f2ce9d47b28
     restart: unless-stopped
     environment:
       <<: *core-env
-      AUTOBRIAN_BACKEND_URL: http://backend:8000
+      AUTOBRAIN_BACKEND_URL: http://backend:8000
       DONGLE_SERVER_API_KEY_FILE: /run/secrets/dongle_server_api_key
       MINIO_ENDPOINT: minio:9000
-      MINIO_EXTERNAL_ENDPOINT: ${MINIO_EXTERNAL_ENDPOINT:-}
+      # AUT-2211: default to the hosted public URL + TLS so signed-URL host
+      # headers resolve on first deploy. Stack env (Portainer EP5) can still
+      # override via MINIO_EXTERNAL_ENDPOINT/MINIO_SECURE if needed.
+      MINIO_EXTERNAL_ENDPOINT: ${MINIO_EXTERNAL_ENDPOINT:-${APP_BASE_URL:-https://hosted.autobrainservice.app}}
       MINIO_BUCKET: ${MINIO_BUCKET:-autobrain-assets}
       MINIO_ACCESS_KEY_FILE: /run/secrets/minio_access_key
       MINIO_SECRET_KEY_FILE: /run/secrets/minio_secret_key
-      MINIO_SECURE: ${MINIO_SECURE:-false}
+      MINIO_SECURE: ${MINIO_SECURE:-true}
       WEB_UI_BASIC_USER: ${WEB_UI_BASIC_USER:-admin}
       WEB_UI_BASIC_PASSWORD_FILE: /run/secrets/dongle_web_basic_password
       FIRMWARE_BUCKET_PREFIX: dongle_firmware
@@ -342,7 +337,14 @@ services:
       - "8000"
 
   frontend:
-    image: ghcr.io/cannonfodder151/autobrain-frontend:hosted@sha256:44654bb84213906e6c00feb55054afac5c0bf8a34e61f4e19d32766f51785ef0
+    image: ghcr.io/cannonfodder151/autobrain-frontend@sha256:f8cde5cdfa2604c852790404e228b91e21d2abc689399c3da578596bba969cc4
+    # AUT-2087: pinned to the verified arm64 child manifest digest of the
+    # autobrain-frontend :hosted OCI image index. Earlier pin
+    # (`@sha256:8937c2bb…`) targeted an arm64 image whose nginx + busybox
+    # binaries were x86_64 ELF (digest pin overrode the buildx platform
+    # flag). New pin resolves on the Oracle VM (aarch64) to a real arm64
+    # image. PR #409 (AUT-2087) unpinned the Dockerfile nginx base so
+    # future :hosted multi-arch rebuilds do not regress.
     restart: unless-stopped
     # AUT-473: localhost-bound. External clients reach the app via Cloudflare ->
     # npm (:443), which proxies to the frontend over the docker network. Never
@@ -363,6 +365,18 @@ services:
     networks:
       default:
         ipv4_address: 172.18.0.14
+    # AUT-2389: probe the backend upstream (not just nginx) so Portainer flips
+    # the frontend unhealthy when the backend is unreachable/5xx. nginx-only
+    # probes hid AUT-1964 — nginx stays up while the upstream is dead. The
+    # :hosted image's wget lives at /usr/bin/wget (nginx-unprivileged alpine).
+    environment:
+      BACKEND_URL: ${BACKEND_URL:-http://backend:8000}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- \"${BACKEND_URL:-http://backend:8000}/health\" | grep -q '\"status\":\"ok\"'"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     depends_on:
       - backend
       - ai
@@ -392,6 +406,50 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
+
+  # AUT-2469: GitHub Actions ARM64 self-hosted runner on EP5.
+  # Replaces the standalone `myoung34/github-runner:latest` container that was
+  # restart-looping on EP5:
+  #   `ldd: ./bin/libcoreclr.so: No such file or directory`
+  #   `./config.sh: line 78: ./bin/Runner.Listener: No such file or directory`
+  # The myoung34 image is amd64-only (libcoreclr.so + Runner.Listener are
+  # amd64 .NET binaries); the Oracle VM (EP5) is aarch64. Official image:
+  # `ghcr.io/actions/actions-runner:latest` (multi-arch, includes linux/arm64).
+  # Registration is re-derived every boot via the PAT in /run/secrets/github_pat
+  # (AUT-1533 *_FILE pattern), so the short-lived runner token never needs to
+  # be persisted across container recreates. ARM CI on Hosted is unblocked.
+  gh-runner:
+    # AUT-2469: the official image ships amd64 + arm64 binaries; on EP5 Docker
+    # pulls the arm64 variant. We build a thin wrapper that only adds the
+    # registration-token-refresh entrypoint; the build runs on the x64 runner,
+    # but buildx cross-builds the arm64 variant (the Oracle VM is aarch64).
+    # Pin the base by digest (AUT-1533); update this digest when rotating.
+    build:
+      context: .
+      dockerfile: docker/runner/Dockerfile
+      args:
+        RUNNER_BASE_IMAGE: ${GH_RUNNER_BASE_IMAGE:-ghcr.io/actions/actions-runner:latest}
+    image: ghcr.io/cannonfodder151/autobrain-gh-runner:arm64-latest
+    pull_policy: always
+    restart: unless-stopped
+    privileged: true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - type: bind
+        source: ${SECRETS_DIR:-/data/autobrain/secrets}
+        target: /run/secrets
+        read_only: true
+    environment:
+      GITHUB_PAT_FILE: /run/secrets/github_pat
+      GITHUB_REPOSITORY: ${GITHUB_REPOSITORY:-CannonFodder151/autobrain}
+      RUNNER_NAME: ${RUNNER_NAME:-gh-runner-autobrain-arm64}
+      RUNNER_LABELS: ${RUNNER_LABELS:-self-hosted,Linux,ARM64}
+      RUNNER_GROUP: ${RUNNER_GROUP:-Default}
+      RUNNER_REPLACE: ${RUNNER_REPLACE:-true}
+      DISABLE_RUNNER_UPDATE: ${DISABLE_RUNNER_UPDATE:-false}
+    # CMD ["/entrypoint.sh", "run"] lives in the wrapper Dockerfile (docker/runner)
+    # so the runner entrypoint can refresh the registration token before
+    # delegating. No command override needed in compose.
 
   # 9Router AI router (AUT-473). Published on `0.0.0.0:20128` so it is reachable
   # on the host's public interface, but the host firewall (`fw-keeper`) restricts
@@ -435,7 +493,6 @@ volumes:
    hub-data:
    9router-data:
      external: true
-   dongle-server-data:
 
 # AUT-372: pin the default network subnet + a static frontend IP. The host-level
 # nginx-proxy-manager (npm) caches the resolved frontend container IP, so a

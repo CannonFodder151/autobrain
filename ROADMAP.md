@@ -21,11 +21,18 @@
 
 ## In progress
 
-- Phase 1 code review & improvement initiative
+- Phase 1 code review & improvement initiative (see child issues AUT-2000..AUT-2004)
 - Mobile app split into `autobrain-mobile` repo
-- Reduce container count: consolidate beat into worker, merge AI gateway into backend image, fold worker+beat into the backend container (9 → 6 containers)
-- Vectorise data for efficient storage
-- Make AI functions less AI-dependent (deterministic-first, AI fallback)
+- Reduce container count: consolidate beat into worker, merge AI gateway into backend image, fold worker+beat into the backend container (9 → 6 containers) — AUT-2000
+- Vectorise data for efficient storage — AUT-2001 (schema documented in `docs/ai/vector.md`)
+- Make AI functions less AI-dependent (deterministic-first, AI fallback) — AUT-2002
+- More modular code: extract shared utils, reduce cross-imports — AUT-2003
+- Rewrite/refresh all documentation — AUT-2004 (this issue)
+
+## Recently completed (Phase 1 documentation)
+
+- Vector store schema documented in `docs/ai/vector.md` (pgvector HNSW, hybrid search, fallback behaviour)
+- Documentation index updated in `docs/README.md`
 
 ## Planned (short term)
 

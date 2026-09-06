@@ -327,6 +327,38 @@ def test_compress_to_webp() -> None:
     assert (img.width, img.height) == (32, 24)
 
 
+def test_compress_to_webp_applies_exif_orientation() -> None:
+    """AUT-1946: portrait iPhone photos carry EXIF Orientation=6; the stored
+    webp must be rotated so it renders right-way-up in the garage feed.
+    """
+    import io
+
+    from PIL import Image
+
+    # 32x24 landscape pixels with EXIF Orientation=6 (rotate-90° CW) — the
+    # canonical iPhone portrait case.
+    src = Image.new("RGB", (32, 24), (10, 20, 30))
+    buf = io.BytesIO()
+    src.save(buf, format="JPEG")
+    img = Image.open(io.BytesIO(buf.getvalue()))
+    exif = img.getexif()
+    exif[0x0112] = 6
+    out_buf = io.BytesIO()
+    img.save(out_buf, format="JPEG", exif=exif.tobytes())
+    jpeg_with_exif = out_buf.getvalue()
+
+    # Confirm the input really carries Orientation=6 — if Pillow silently
+    # drops it on re-save, the test below would exercise the wrong code path.
+    raw = Image.open(io.BytesIO(jpeg_with_exif))
+    assert raw.getexif().get(0x0112) == 6, "test setup lost the EXIF orientation tag"
+
+    webp = compress_to_webp(jpeg_with_exif, "image/jpeg")
+    decoded = Image.open(io.BytesIO(webp))
+    # 32x24 source with rotate-90° CW becomes 24x32 (portrait pixels stored).
+    assert (decoded.width, decoded.height) == (24, 32)
+    assert decoded.getexif().get(0x0112) is None  # orientation tag stripped
+
+
 @pytest.mark.asyncio
 async def test_snapshot_deterministic() -> None:
     async with _SessionLocal() as db:

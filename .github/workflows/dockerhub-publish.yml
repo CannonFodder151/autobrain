@@ -117,7 +117,11 @@ jobs:
   auto-bump:
     needs: changelog-gate
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, linux, x64, vm2]
+    # AUT-2600: vm2 runner (gh-runner-autobrain-2) is offline. Route through the
+    # legacy x64 runner instead so publish is not fully blocked. AUT-1798 added
+    # vm2 to escape the legacy runner's dockerd wedge (AUT-1720); once the vm2
+    # runner is restored (AUT-2710) this should flip back to `vm2`.
+    runs-on: [self-hosted, linux, x64]
     permissions:
       contents: write
     steps:
@@ -146,10 +150,90 @@ jobs:
           echo "::error::auto-bump push failed after 3 attempts (non-fast-forward)"
           exit 1
 
-  publish:
+  # AUT-2162: split the per-arch Docker Hub pushes into parallel jobs so the
+  # multi-arch :latest/:hosted/:${VERSION} manifest list is assembled from BOTH
+  # per-arch child manifests (previously amd64-only, which produced a stale
+  # single-arch :latest index on Demo/Default stacks — EP2 stack 68 and EP2
+  # stack 73 ran 0.3.201 while :latest-amd64 was 0.3.205). Each per-arch leg
+  # re-runs the version_only skip decision (cheap: a `git diff --name-only`)
+  # because GitHub Actions job outputs cannot cross job boundaries without an
+  # intermediate aggregator, and adding one would force a third serial hop.
+  github-release:
+    # AUT-2055: cut a GitHub Release whenever auto-bump produced a new
+    # v* tag, with the matching CHANGELOG.md section as the body. If the
+    # auto-bump job was a no-op (no [Unreleased] bullets) the tag won't
+    # exist and this job exits cleanly without creating a release.
     needs: auto-bump
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, linux, x64]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Determine latest version and release body
+        id: info
+        run: |
+          set -euo pipefail
+          VERSION="$(grep -E 'APP_VERSION: str' backend/app/core/config.py | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/')"
+          if ! git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "no tag v$VERSION — auto-bump was a no-op, nothing to release"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # If the API release for this tag already exists, don't duplicate it.
+          if curl -fsSL -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/${{ github.repository }}/releases/tags/v$VERSION" >/dev/null 2>&1; then
+            echo "release v$VERSION already exists — skipping"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          # Extract the [VERSION] section from CHANGELOG.md (first matching block).
+          BODY="$(awk -v v="## [$VERSION] - " '
+            $0 ~ v {f=1; next}
+            /^## \[/ && f {f=0}
+            f
+          ' CHANGELOG.md)"
+          if [ -z "$BODY" ]; then
+            BODY="Auto-bump release v$VERSION. See CHANGELOG.md for the full history."
+          fi
+          # Use a heredoc so multiline body survives the GITHUB_ENV dance.
+          {
+            echo "body<<EOF"
+            echo "$BODY"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+      - name: 'Create GitHub release (AUT-2600: use REST API — gh CLI not on self-hosted runners)'
+        if: steps.info.outputs.skip != 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.info.outputs.version }}
+          BODY: ${{ steps.info.outputs.body }}
+        run: |
+          set -euo pipefail
+          # AUT-2600: `gh release create` exits 127 on the self-hosted x64/vm2
+          # runner (gh not installed), which blocks publish-amd64/arm64 via
+          # `needs:`. Use the GitHub REST API directly instead — curl is always
+          # present. The GITHUB_TOKEN (auto-injected, Contents: write) is sufficient.
+          git push origin "v$VERSION" || echo "tag push may have already happened — continuing"
+          # --verify-tag is implicit: the API rejects if the tag doesn't exist.
+          RELEASE_PAYLOAD=$(printf '{"tag_name":"v%s","target":"main","name":"v%s","body":%s}' \
+            "$VERSION" "$VERSION" "$(printf '%s' "$BODY" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')")
+          curl -fsSL -X POST \
+            -H "Authorization: bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/releases" \
+            -d "$RELEASE_PAYLOAD" > /dev/null
+          echo "==> released v$VERSION"
+
+  publish-amd64:
+    needs: [auto-bump, github-release]
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux, x64, vm2]
+    runs-on: [self-hosted, linux, x64]
     permissions:
       contents: read
     steps:
@@ -183,6 +267,18 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Verify runner arch
+        # AUT-2097 (port from build-hosted.yml): catch a qemu-user-x86_64 shim
+        # on what claims to be an amd64 runner before any build runs.
+        run: |
+          set -euo pipefail
+          got="$(uname -m)"
+          if [ "$got" != "x86_64" ]; then
+            echo "::error::runner arch mismatch: want amd64 (=x86_64), got $got"
+            exit 1
+          fi
+          echo "==> runner arch OK: $got (amd64)"
 
       - name: Build and push images (linux/amd64)
         if: steps.version_only.outputs.skip != 'true'
@@ -221,13 +317,116 @@ jobs:
             --build-arg API_BASE_URL=${API_BASE_URL} --build-arg WS_BASE_URL=${WS_BASE_URL} \
             -f docker/frontend/Dockerfile .
 
-  publish-manifest:
-    # Tag the amd64 images as the default platform manifest (AUT-967).
-    # Multi-arch manifests (amd64+arm64) are built by build-hosted.yml when
-    # the arm64 runner is available.
-    needs: publish
+  # AUT-2162: arm64 leg. Routes to the Oracle VM arm64 runner ([self-hosted,
+  # linux, ARM64]) and emits :latest-arm64, :hosted-arm64, :${VERSION}-arm64
+  # so publish-manifest can assemble a true multi-arch index from BOTH
+  # per-arch children (AUT-2097 cache scoping + verification gate ported
+  # verbatim from build-hosted.yml).
+  publish-arm64:
+    needs: [auto-bump, github-release]
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux, x64, vm2]
+    runs-on: [self-hosted, linux, ARM64]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Skip publish when the push only cut a version (AUT-240)
+        id: version_only
+        run: |
+          BEFORE="${{ github.event.before }}"
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          CHANGED="$(git diff --name-only "$BEFORE" "$GITHUB_SHA" || true)"
+          NONVERSION="$(printf '%s\n' "$CHANGED" | grep -vE '^(CHANGELOG\.md|backend/app/core/config\.py|ai/app/main\.py|frontend/pubspec\.yaml|scripts/bump-version\.sh|scripts/auto-bump\.sh)$' || true)"
+          if [ -n "$CHANGED" ] && [ -z "$NONVERSION" ]; then
+            echo "version-only push (auto-bump) — skipping image publish"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: docker/setup-buildx-action@v3
+        if: steps.version_only.outputs.skip != 'true'
+
+      - uses: docker/login-action@v3
+        if: steps.version_only.outputs.skip != 'true'
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Verify runner arch
+        # AUT-2097: catch a qemu-user-x86_64 shim on the arm64 runner before
+        # any build runs. Without this, an amd64 runner accidentally labelled
+        # ARM64 would silently ship x86_64 layers under an arm64 manifest.
+        run: |
+          set -euo pipefail
+          got="$(uname -m)"
+          if [ "$got" != "aarch64" ]; then
+            echo "::error::runner arch mismatch: want arm64 (=aarch64), got $got"
+            exit 1
+          fi
+          echo "==> runner arch OK: $got (arm64)"
+
+      - name: Build and push images (linux/arm64)
+        if: steps.version_only.outputs.skip != 'true'
+        env:
+          API_BASE_URL: https://hosted.autobrainservice.app/api/v1
+          WS_BASE_URL: wss://hosted.autobrainservice.app/ws
+          # AUT-2097: scope GHA buildx cache per-arch so the arm64 build
+          # cannot pull amd64 layer blobs from a cross-arch cache namespace.
+          CACHE_FROM: type=gha,scope=dockerhub-publish-arm64
+          CACHE_TO: type=gha,scope=dockerhub-publish-arm64,mode=max
+        run: |
+          set -euo pipefail
+          VERSION="$(grep -E 'APP_VERSION: str' backend/app/core/config.py | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/')"
+          echo "==> building images tagged with version $VERSION (linux/arm64)"
+          for svc in backend worker ai frontend; do
+            case "$svc" in
+              backend)  ctx=.;        df=docker/backend/Dockerfile;   args="";;
+              worker)   ctx=.;        df=docker/worker/Dockerfile;     args="";;
+              ai)       ctx=.;        df=docker/ai/Dockerfile;         args="";;
+              frontend) ctx=.;        df=docker/frontend/Dockerfile;   args="--build-arg API_BASE_URL=${API_BASE_URL} --build-arg WS_BASE_URL=${WS_BASE_URL}";;
+            esac
+            for tag in latest hosted "$VERSION"; do
+              echo "==> building autobrain-${svc}:${tag}-arm64"
+              docker buildx build --platform linux/arm64 --push \
+                --cache-from "${CACHE_FROM}" \
+                --cache-to "${CACHE_TO}" \
+                -t "cannonfodder151/autobrain-${svc}:${tag}-arm64" \
+                ${args} -f "${df}" "${ctx}"
+            done
+          done
+
+      - name: Build and push default-tier frontend image (linux/arm64)
+        if: steps.version_only.outputs.skip != 'true'
+        env:
+          API_BASE_URL: https://default.autobrainservice.app/api/v1
+          WS_BASE_URL: wss://default.autobrainservice.app/ws
+        run: |
+          set -euo pipefail
+          echo "==> building autobrain-frontend:default-arm64"
+          docker buildx build --platform linux/arm64 --push \
+            -t "cannonfodder151/autobrain-frontend:default-arm64" \
+            --build-arg API_BASE_URL=${API_BASE_URL} --build-arg WS_BASE_URL=${WS_BASE_URL} \
+            -f docker/frontend/Dockerfile .
+
+  publish-manifest:
+    # AUT-2162: assemble :latest/:hosted/:${VERSION} multi-arch manifests from
+    # BOTH :amd64 and :arm64 children. Previously this job only consumed the
+    # :amd64 children, leaving the floating :latest index a single-arch list
+    # that lagged the per-arch children by N publishes (Demo/Default ran
+    # 0.3.201 while :latest-amd64 was 0.3.205). Both per-arch legs also gate
+    # on their own version_only skip so a version-only auto-bump push skips
+    # manifest assembly here as well.
+    needs: [publish-amd64, publish-arm64]
+    if: github.event_name != 'pull_request'
+    runs-on: [self-hosted, linux, x64]
     permissions:
       contents: read
     steps:
@@ -259,29 +458,54 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Assemble amd64 manifest tags
+      # AUT-2097: refuse to assemble the multi-arch manifest if either arch
+      # leg failed. Without this gate, a failed arm64 build would still let
+      # imagetools promote amd64 into both slots of the arm64-bearing index.
+      - name: Gate manifest assembly on per-arch verification
         if: steps.version_only.outputs.skip != 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          set -euo pipefail
+          for svc in backend worker ai frontend; do
+            for arch in amd64 arm64; do
+              for tag in latest hosted "$VERSION"; do
+                img="cannonfodder151/autobrain-${svc}:${tag}-${arch}"
+                if ! docker buildx imagetools inspect "$img" >/dev/null 2>&1; then
+                  echo "::error::$img missing — per-arch build for $arch did not publish. Aborting manifest assembly."
+                  exit 1
+                fi
+              done
+            done
+          done
+
+      - name: Assemble multi-arch manifest tags
+        if: steps.version_only.outputs.skip != 'true'
+        id: version
         run: |
           set -euo pipefail
           VERSION="$(grep -E 'APP_VERSION: str' backend/app/core/config.py | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/')"
-          echo "==> tagging amd64 images as default platform manifests (version $VERSION)"
+          echo "VERSION=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "==> assembling multi-arch manifests from amd64 + arm64 children (version $VERSION)"
           for svc in backend worker ai frontend; do
             for tag in latest hosted "$VERSION"; do
               echo "==> manifest autobrain-${svc}:${tag}"
               docker buildx imagetools create \
                 -t "cannonfodder151/autobrain-${svc}:${tag}" \
-                "cannonfodder151/autobrain-${svc}:${tag}-amd64"
+                "cannonfodder151/autobrain-${svc}:${tag}-amd64" \
+                "cannonfodder151/autobrain-${svc}:${tag}-arm64"
             done
           done
           echo "==> manifest autobrain-frontend:default"
           docker buildx imagetools create \
             -t "cannonfodder151/autobrain-frontend:default" \
-            "cannonfodder151/autobrain-frontend:default-amd64"
+            "cannonfodder151/autobrain-frontend:default-amd64" \
+            "cannonfodder151/autobrain-frontend:default-arm64"
 
   sync-changelog:
     needs: publish-manifest
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux, x64, vm2]
+    runs-on: [self-hosted, linux, x64]
     permissions:
       contents: write
     steps:

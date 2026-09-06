@@ -113,7 +113,7 @@ jobs:
   # ecosystem-aware vuln source for Dart/Flutter), gated to fail on HIGH/CRITICAL.
   flutter-audit:
     name: Flutter — osv-scanner (pubspec.lock)
-    runs-on: [self-hosted, linux, x64, vm2]
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
       - name: Set up Flutter
@@ -146,7 +146,182 @@ jobs:
           # non-zero automatically on any finding (no `--exit-code` flag in v1).
           osv-scanner scan --format=table --lockfile=pubspec.lock
 
-  # (6) AUT-1881 pin-guard — fail any compose `image:` reference that is not
+  # (6a) AUT-2390 compose-config-diff — prevent AUT-1964 typo recurrence.
+  # When a PR touches any `docker-compose*.yml`, run `docker compose config`
+  # on the PR version (with `.env.example` stubbed in for required vars) and
+  # on the main-branch version, extract the set of env-var keys referenced
+  # by each, and block the PR on any key rename (e.g. AUTOBRIAN_BACKEND_URL
+  # -> AUTOBRAIN_BACKEND_URL) or new key that is not declared in
+  # `.env.example`. A renamed key is silent at deploy time — the new name
+  # interpolates empty, the old name keeps its value, and nothing breaks
+  # until production hits the empty field.
+  compose-config-diff:
+    name: "Compose config diff — env-var rename detector (AUT-2390)"
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect modified docker-compose files
+        id: detect
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.sha || 'origin/main' }}
+        run: |
+          set -euo pipefail
+          # Only run when the PR actually changes a compose file; otherwise
+          # pass (empty list). On push to main we run unconditionally.
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            mapfile -t CHANGED < <(git diff --name-only "$BASE_REF"...HEAD -- 'docker-compose*.yml' || true)
+          else
+            mapfile -t CHANGED < <(git diff --name-only HEAD~1...HEAD -- 'docker-compose*.yml' || true)
+          fi
+          if [ ${#CHANGED[@]} -eq 0 ]; then
+            echo "changed=" >> "$GITHUB_OUTPUT"
+            echo "no compose files changed; skipping"
+            exit 0
+          fi
+          {
+            printf 'changed<<EOF\n'
+            printf '%s\n' "${CHANGED[@]}"
+            printf 'EOF\n'
+          } >> "$GITHUB_OUTPUT"
+      - name: Install docker compose
+        if: steps.detect.outputs.changed != ''
+        run: |
+          set -euo pipefail
+          # Self-hosted x64 runner already has the compose plugin on the
+          # PATH; make sure `docker compose config` resolves either way.
+          docker compose version
+      - name: Build a stub .env for compose interpolation
+        if: steps.detect.outputs.changed != ''
+        run: |
+          set -euo pipefail
+          # .env.example keys, stubbed with safe placeholder values so
+          # `docker compose config` can interpolate `${VAR}` and
+          # `${VAR:?...}` references without erroring. Values are never
+          # read by this gate — only key names matter.
+          : > .env.ci
+          while IFS= read -r line; do
+            # Skip comments / blanks.
+            case "$line" in ''|\#*) continue ;; esac
+            # Take only the first `=` so values with `=` survive.
+            key="${line%%=*}"
+            case "$key" in
+              # Secrets/digests stay empty in the stub; we're not running
+              # the stack, only resolving the compose graph.
+              *) printf '%s=ci-stub\n' "$key" >> .env.ci ;;
+            esac
+          done < .env.example
+          echo "--- .env.ci keys ---"
+          cut -d= -f1 .env.ci | sort
+      - name: Compose config diff vs main
+        if: steps.detect.outputs.changed != ''
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.sha || 'origin/main' }}
+        run: |
+          set -euo pipefail
+          CHANGED_FILES="${{ steps.detect.outputs.changed }}"
+          # extract_env_keys <compose-rendered.yml> -> sorted unique keys
+          extract_env_keys() {
+            # `environment:` (map form) and inline `${VAR}` interpolations.
+            # List-form environment and env_file: file paths are intentionally
+            # not in scope — those are operator inputs, not key declarations.
+            python3 - "$1" <<'PY'
+          import re, sys, pathlib
+          text = pathlib.Path(sys.argv[1]).read_text()
+          keys = set()
+          for m in re.finditer(r'(?m)^[ \t]*([A-Z][A-Z0-9_]*):[ \t]*[^\s#]', text):
+              keys.add(m.group(1))
+          for m in re.finditer(r'\$\{([A-Z][A-Z0-9_]*)', text):
+              keys.add(m.group(1))
+          for k in sorted(keys):
+              print(k)
+          PY
+          }
+          render() {
+            local f="$1" out="$2"
+            docker compose --env-file .env.ci -f "$f" config > "$out" 2>render.err
+          }
+          # Drive the loop without a `while | pipe` subshell so $fail
+          # propagates back to the step.
+          fail=0
+          tmpdir="$(mktemp -d)"
+          trap 'rm -rf "$tmpdir"' EXIT
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            [ -f "$f" ] || continue
+            echo "==> $f"
+            pr_render="$tmpdir/$(basename "$f").pr"; main_render="$tmpdir/$(basename "$f").main"
+            if ! render "$f" "$pr_render"; then
+              echo "::error file=$f::docker compose config failed on PR version (see render.err)" >&2
+              sed 's/^/  /' render.err >&2 || true
+              fail=1
+              continue
+            fi
+            git show "$BASE_REF:$f" > "$f.main" 2>/dev/null || {
+              echo "::notice file=$f::new file in PR; no base to diff" >&2
+              continue
+            }
+            if ! render "$f.main" "$main_render"; then
+              echo "::notice file=$f::docker compose config failed on main version; skipping diff" >&2
+              continue
+            fi
+            pr_keys="$(extract_env_keys "$pr_render")"
+            main_keys="$(extract_env_keys "$main_render")"
+            printf '%s\n' "$pr_keys"  > "$tmpdir/pr.keys"
+            printf '%s\n' "$main_keys" > "$tmpdir/main.keys"
+            sort -u -o "$tmpdir/pr.keys"  "$tmpdir/pr.keys"
+            sort -u -o "$tmpdir/main.keys" "$tmpdir/main.keys"
+            added="$(comm -13 "$tmpdir/main.keys" "$tmpdir/pr.keys" || true)"
+            removed="$(comm -23 "$tmpdir/main.keys" "$tmpdir/pr.keys" || true)"
+            # Rename detection: any added key with 1-edit / fuzzy match to
+            # some removed key (catches AUTOBRIAN <-> AUTOBRAIN).
+            if [ -n "$added" ] && [ -n "$removed" ]; then
+              printf '%s\n' "$added"   > "$tmpdir/added.txt"
+              printf '%s\n' "$removed" > "$tmpdir/removed.txt"
+              pairs="$(python3 - "$tmpdir/added.txt" "$tmpdir/removed.txt" <<'PY'
+          import difflib, sys
+          added   = [l.rstrip() for l in open(sys.argv[1]) if l.strip()]
+          removed = [l.rstrip() for l in open(sys.argv[2]) if l.strip()]
+          for a in added:
+              for r in removed:
+                  if a == r: continue
+                  if len(a) == len(r) and sum(x!=y for x,y in zip(a,r)) <= 2:
+                      print(f"RENAME? {r} -> {a}  (1-edit)")
+                  if abs(len(a)-len(r)) <= 2:
+                      ratio = difflib.SequenceMatcher(None, a, r).ratio()
+                      if ratio >= 0.85:
+                          print(f"FUZZY   {r} -> {a}  (ratio {ratio:.2f})")
+          PY
+          )"
+              if [ -n "$pairs" ]; then
+                echo "::error file=$f::possible env-var rename detected (AUT-2390, AUT-1964):" >&2
+                echo "$pairs" | sed 's/^/  /' >&2
+                fail=1
+              fi
+            fi
+            # Pure adds must exist in .env.example (so reviewers know
+            # where to put the value).
+            if [ -n "$added" ]; then
+              cut -d= -f1 .env.example | sort -u > "$tmpdir/envex.keys"
+              printf '%s\n' "$added" | grep -v '^$' | sort -u > "$tmpdir/added.uniq"
+              missing="$(comm -23 "$tmpdir/added.uniq" "$tmpdir/envex.keys" || true)"
+              if [ -n "$missing" ]; then
+                echo "::error file=$f::new env-var keys not declared in .env.example (AUT-2390):" >&2
+                echo "$missing" | sed 's/^/  /' >&2
+                echo "  Add the key(s) to .env.example or split the rename clearly in the PR description." >&2
+                fail=1
+              fi
+            fi
+            rm -f "$f.main" render.err
+          done <<< "$CHANGED_FILES"
+          exit $fail
+      - name: Result
+        if: steps.detect.outputs.changed != ''
+        run: |
+          echo "OK: no env-var renames or undeclared keys detected (AUT-2390)."
+
+  # (6b) AUT-1881 pin-guard — fail any compose `image:` reference that is not
   # pinned by `@sha256` digest. Complements the postgres/nginx/python pin
   # guards in trivy-image-scan.yml and ensures the floating `:hosted` /
   # `:latest` tags cannot re-appear in compose without a digest pin.
@@ -189,17 +364,17 @@ jobs:
   report-status:
     name: Report gate result to Discord #status
     if: always()
-    needs: [gitleaks, trivy-config, pip-audit, flutter-audit, pin-guard]
+    needs: [gitleaks, trivy-config, pip-audit, flutter-audit, compose-config-diff, pin-guard]
     runs-on: [self-hosted, linux, x64]
     steps:
       - name: Report to Discord #status
         env:
-          RESULT: ${{ needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.flutter-audit.result == 'success' && needs.pin-guard.result == 'success' && 'clean' || 'findings' }}
-          COLOR: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.flutter-audit.result == 'success' && needs.pin-guard.result == 'success') && '0x57F287' || '0xED4245' }}
-          TITLE: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.flutter-audit.result == 'success' && needs.pin-guard.result == 'success') && 'PR security gate clean' || 'PR security gate found issues' }}
+          RESULT: ${{ needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.flutter-audit.result == 'success' && needs.compose-config-diff.result == 'success' && needs.pin-guard.result == 'success' && 'clean' || 'findings' }}
+          COLOR: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.flutter-audit.result == 'success' && needs.compose-config-diff.result == 'success' && needs.pin-guard.result == 'success') && '0x57F287' || '0xED4245' }}
+          TITLE: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.flutter-audit.result == 'success' && needs.compose-config-diff.result == 'success' && needs.pin-guard.result == 'success') && 'PR security gate clean' || 'PR security gate found issues' }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
             -H "Content-Type: application/json" \
             -d "$(jq -nc --arg c status --arg t "$TITLE" --arg col "$COLOR" --arg u "$RUN_URL" \
-              '{channel:$c,title:$t,description:"AUT-1746 PR gate: gitleaks + trivy config + pip-audit + flutter osv-scanner (pubspec.lock).",color:$col,author:"Security Scan",fields:[{name:"Scope",value:"secrets, IaC, python, flutter",inline:true},{name:"Run",value:$u,inline:true}]}')"
+              '{channel:$c,title:$t,description:"AUT-1746 PR gate: gitleaks + trivy config + pip-audit + flutter osv-scanner (pubspec.lock) + compose env-var diff (AUT-2390).",color:$col,author:"Security Scan",fields:[{name:"Scope",value:"secrets, IaC, python, flutter, compose-env",inline:true},{name:"Run",value:$u,inline:true}]}')"

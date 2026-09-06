@@ -4,6 +4,7 @@ import asyncio
 import base64
 import io
 import json
+import time
 from celery import shared_task
 
 from app.core.logging import get_logger
@@ -37,6 +38,20 @@ def _run(coro):
             _loop = asyncio.new_event_loop()
             asyncio.set_event_loop(_loop)
         return _loop.run_until_complete(coro)
+    except RuntimeError as exc:
+        # "Event loop is closed" / "Future attached to a different loop" — the
+        # persistent loop is wedged (e.g. one task killed the loop). Recreate
+        # it on the next call so a single bad task does not poison the rest
+        # of the worker (AUT-2256: hosted scheduled_backup failure class).
+        if "closed" in str(exc).lower() or "different loop" in str(exc).lower():
+            logger.warning("async_task_loop_recreate", error=str(exc))
+            try:
+                _loop.close()
+            except Exception:
+                pass
+            _loop = None
+        logger.exception("async_task_failed")
+        raise
     except Exception:
         logger.exception("async_task_failed")
         raise
@@ -194,6 +209,65 @@ def run_daily_notification_checks() -> None:
 
 
 @shared_task
+def check_fuel_price_alerts() -> None:
+    """AUT-1859: evaluate servo-spy watch lists against the latest prices.
+
+    Deterministic-first: a pure price-change comparison (no AI) decides whether
+    each watched station/fuel-type crossed the user's % threshold since the
+    previous day. Alerts reuse the user's existing notification channels.
+
+    Runs after the daily NSW poll so it evaluates fresh data; it also runs
+    standalone (beat) so cached-snapshot-only instances still alert.
+    """
+    from datetime import date
+
+    from sqlalchemy import select
+
+    from app.models.fuel_price import FuelPriceSnapshot, FuelPriceWatchlist
+    from app.services.fuel_prices import compute_price_change
+    from app.services.notify import deliver_fuel_price_alert
+
+    async def _run():
+        async with SessionLocal() as db:
+            watch_ids = list((await db.scalars(select(FuelPriceWatchlist.id))).all())
+            for wid in watch_ids:
+                w = await db.get(FuelPriceWatchlist, wid)
+                if not w:
+                    continue
+                fp = await db.scalar(
+                    select(FuelPriceSnapshot).where(
+                        FuelPriceSnapshot.state == w.state,
+                        FuelPriceSnapshot.station_code == w.station_code,
+                        FuelPriceSnapshot.fuel_type == w.fuel_type,
+                    )
+                )
+                if not fp:
+                    logger.info("fuel_alert_no_price", watch_id=wid, station=w.station_code)
+                    continue
+                pct, direction = compute_price_change(fp.price, fp.previous_price)
+                if direction is None:
+                    continue  # not enough history yet (first poll) — no alert
+                if w.direction not in ("both", direction):
+                    continue
+                if abs(pct) < w.threshold_pct:
+                    continue
+                # One alert per (user, station, fuel, direction, day).
+                day = date.today().isoformat()
+                kind = f"fuel_price:{direction}:{w.station_code}:{w.fuel_type}:{day}"
+                label = (fp.brand or fp.station_name or "Station")
+                title = f"{label} {fp.fuel_type} price {direction} {abs(pct):.1f}%"
+                description = (
+                    f"{fp.station_name or w.station_code} {fp.fuel_type}: "
+                    f"{fp.previous_price} → {fp.price} c/L "
+                    f"({'%.1f' % pct}% vs yesterday)"
+                )
+                await deliver_fuel_price_alert(db, w.user_id, kind, title, description)
+                logger.info("fuel_alert_evaluated", watch_id=wid, direction=direction, pct=pct)
+
+    _run(_run())
+
+
+@shared_task
 def purge_stale_pending_accounts() -> None:
     """Delete invited/self-signed-up accounts that never completed registration."""
     from datetime import datetime, timedelta, timezone
@@ -237,17 +311,33 @@ def _minio_put_with_retry(client, bucket: str, key: str, data: bytes, content_ty
             if attempt == _MINIO_PUT_ATTEMPTS - 1:
                 raise
             logger.warning("minio_put_retry", attempt=attempt + 1, key=key, error=str(exc))
-            import time
             time.sleep(_MINIO_PUT_BACKOFF * (attempt + 1))
 
 
 @shared_task
 def scheduled_backup() -> None:
-    """Daily full-DB snapshot stored to MinIO. Admin backup safety-net."""
+    """Daily full-DB snapshot stored to MinIO. Admin backup safety-net.
+
+    AUT-2256: hosted backups were silently failing because (a) minio secrets
+    missing on the worker → empty creds raise on every put, (b) one bad task
+    poisoned the persistent event loop so subsequent tasks ran on a wedged
+    loop, (c) the prune path raised on transient errors and turned the whole
+    job into a Celery FAIL with no recoverable signal. Now: skip-with-loud-log
+    on missing config (no Celery failure spam), reset a wedged loop, and
+    isolate the prune so a prune error never fails the upload.
+    """
     from app.core.config import settings
 
     if not settings.BACKUP_ENABLED:
         logger.info("scheduled_backup_skipped", reason="BACKUP_ENABLED is False")
+        return
+    if not settings.MINIO_ACCESS_KEY or not settings.MINIO_SECRET_KEY:
+        logger.error(
+            "scheduled_backup_skipped",
+            reason="minio_credentials_missing",
+            bucket=settings.MINIO_BUCKET,
+            endpoint=settings.MINIO_ENDPOINT,
+        )
         return
 
     import io as _io
@@ -257,14 +347,27 @@ def scheduled_backup() -> None:
     from app.services.backup import dump_backup, serialize_all
 
     async def _do():
+        started = time.monotonic()
         async with SessionLocal() as db:
             data = await serialize_all(db)
             stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
             key = f"backups/autobrain-backup-{stamp}.json"
             payload = dump_backup(data)
             _minio_put_with_retry(get_minio(), settings.MINIO_BUCKET, key, payload, "application/json")
-            await _prune_backups()
-            logger.info("scheduled_backup_done", key=key, size=len(payload))
+            try:
+                await _prune_backups()
+            except Exception:
+                # Prune is best-effort retention, never let it fail the daily
+                # snapshot upload — a successful put with a prune error is
+                # better than a Celery FAIL that loses the snapshot.
+                logger.exception("backup_prune_top_level_failed")
+            logger.info(
+                "scheduled_backup_done",
+                key=key,
+                size=len(payload),
+                tables=len(data.get("data") or {}),
+                duration_seconds=round(time.monotonic() - started, 3),
+            )
 
     async def _prune_backups():
         from datetime import timedelta
@@ -318,6 +421,50 @@ def backfill_entity_embeddings() -> None:
 
     _run(_backfill())
 
+
+@shared_task
+def poll_nsw_fuel_prices() -> None:
+    """Daily NSW Fuel API poll (AUT-1813).
+
+    Honours Nathan's constraint: poll once per day per instance (enforced via
+    the per-instance poll-state row), never the API quota (2500/month → ~81/day
+    headroom at one/day/instance). Falls back silently to the existing cache
+    on any transport/HTTP error — the map keeps serving cached prices.
+    """
+    from datetime import datetime, timezone
+
+    from app.core.config import settings
+    from app.services import fuel_prices as fuel_svc
+
+    async def _poll():
+        if not fuel_svc.enabled():
+            logger.info("nsw_fuel_poll_skipped", reason="disabled_or_unconfigured")
+            return
+        instance_id = settings.INSTANCE_ID or _hostname()
+        async with SessionLocal() as db:
+            if not await fuel_svc.should_poll(db, instance_id, "NSW"):
+                logger.info("nsw_fuel_poll_skipped", reason="already_polled_today", instance_id=instance_id)
+                return
+            try:
+                records = await fuel_svc.fetch_nsw_prices()
+            except Exception:
+                logger.exception("nsw_fuel_poll_failed", instance_id=instance_id)
+                return
+            count = await fuel_svc.store_nsw_prices(db, records)
+            await fuel_svc.mark_polled(db, instance_id, "NSW")
+            logger.info("nsw_fuel_poll_done", count=count, instance_id=instance_id)
+            # AUT-1859: re-evaluate servo-spy alerts against the freshly cached prices.
+            check_fuel_price_alerts.delay()
+
+    _run(_poll())
+
+
+def _hostname() -> str:
+    import socket
+
+    return socket.gethostname()
+
+
 def queue_embedding(entity_type: str, entity_id: str) -> None:
     """Best-effort async embed trigger; a broker hiccup never breaks write paths."""
     try:
@@ -342,13 +489,17 @@ def fire_and_forget(task, *args, **kwargs) -> None:
 
 
 @shared_task
-def ingest_fuel_prices() -> None:
-    """Scheduled fuel-price pipeline (Servo Spy, AUT-1817).
+def ingest_fuel_all() -> None:
+    """Scheduled fuel-price pipeline (Servo Spy, AUT-1817 + AUT-2375).
 
-    Pulls WA FuelWatch, NSW FuelCheck and QLD Fuel Prices into Postgres. Each
-    feed is independent — a single feed's failure is logged and does not abort
-    the others (see ``app.services.fuel_feeds.ingest_all_fuel``). Deterministic,
-    no AI, no spend.
+    Runs every enabled feed (WA FuelWatch, NSW FuelCheck, QLD DirectAPI, and
+    SA/TAS/NT once AUT-2374 ships them) into Postgres. Each feed is independent
+    — a single feed's failure is logged and does not abort the others (see
+    ``app.services.fuel_feeds.ingest_all_fuel``). Deterministic, no AI, no spend.
+
+    Beat fires this ONCE per day at 02:00 AEST (off-peak); the /fuel/stations and
+    /fuel/stations/{id}/history endpoints only serve cached DB rows so they
+    never fan out to upstream APIs on a client request.
     """
     from app.services.fuel_feeds import ingest_all_fuel
 
@@ -356,10 +507,103 @@ def ingest_fuel_prices() -> None:
         async with SessionLocal() as db:
             summary = await ingest_all_fuel(db)
             for source, res in summary.items():
-                logger.info("fuel_ingest_summary", source=source, **res)
+                logger.info("fuel_ingest_summary", **res)
             await db.commit()
 
     _run(_ingest())
+
+
+# Backwards-compat alias so older dispatch sites / dashboards keep working
+# while the beat schedule migrates. Will be removed once no caller is left.
+ingest_fuel_prices = ingest_fuel_all
+
+
+def _run_single_source_ingest(source: str, fn) -> dict:
+    """Run a single ``ingest_<source>_*`` ingestor and return its summary."""
+    from app.services import fuel_feeds as feeds
+
+    async def _ingest():
+        async with SessionLocal() as db:
+            res = await fn(db)
+            logger.info("fuel_ingest_summary", **res)
+            await db.commit()
+            return res
+
+    return _run(_ingest())
+
+
+@shared_task
+def ingest_fuel_wa() -> None:
+    """AUT-2375: per-source manual-trigger ingest (WA FuelWatch)."""
+    from app.services.fuel_feeds import ingest_wa_fuelwatch
+
+    return _run_single_source_ingest("wa", ingest_wa_fuelwatch)
+
+
+@shared_task
+def ingest_fuel_nsw() -> None:
+    """AUT-2375: per-source manual-trigger ingest (NSW FuelCheck)."""
+    from app.services.fuel_feeds import ingest_nsw_fuelcheck
+
+    return _run_single_source_ingest("nsw", ingest_nsw_fuelcheck)
+
+
+@shared_task
+def ingest_fuel_qld() -> None:
+    """AUT-2375: per-source manual-trigger ingest (QLD Fuel Prices)."""
+    from app.services.fuel_feeds import ingest_qld_fuel_prices
+
+    return _run_single_source_ingest("qld", ingest_qld_fuel_prices)
+
+
+@shared_task
+def refresh_sca_parts_cache() -> dict:
+    """Nightly SCA parts cache prewarm (AUT-2419).
+
+    Walks every distinct (make, model, year) in the vehicles table and forces
+    a fresh SCA lookup so the next user click returns from cache. Failures on
+    individual vehicles are logged and skipped — one bad vehicle never aborts
+    the rest. The return dict is logged as ``sca_cache_prewarm_done`` so
+    ops can graph duration/success over the first few runs.
+    """
+    from app.services import parts_guide
+
+    async def _prewarm() -> dict:
+        async with SessionLocal() as db:
+            sigs = await parts_guide.list_vehicle_signatures(db)
+        if not sigs:
+            logger.info("sca_cache_prewarm_done", vehicles=0, ok=0, failed=0,
+                        duration_s=0.0)
+            return {"vehicles": 0, "ok": 0, "failed": 0, "duration_s": 0.0}
+
+        sem = asyncio.Semaphore(4)
+
+        async def _one(sig: dict) -> str:
+            async with sem:
+                try:
+                    async with SessionLocal() as db:
+                        await parts_guide.lookup_sca_parts(
+                            db, make=sig["make"] or "", model=sig["model"] or "",
+                            year=sig["year"], refresh=True,
+                        )
+                    return "ok"
+                except Exception:
+                    logger.exception("sca_cache_prewarm_vehicle_failed",
+                                     make=sig["make"], model=sig["model"],
+                                     year=sig["year"])
+                    return "failed"
+
+        started = time.monotonic()
+        outcomes = await asyncio.gather(*(_one(s) for s in sigs))
+        duration = time.monotonic() - started
+        ok = sum(1 for o in outcomes if o == "ok")
+        failed = len(outcomes) - ok
+        summary = {"vehicles": len(sigs), "ok": ok, "failed": failed,
+                   "duration_s": round(duration, 2)}
+        logger.info("sca_cache_prewarm_done", **summary)
+        return summary
+
+    return _run(_prewarm())
 
 
 def _pdf_text(data: bytes) -> str:

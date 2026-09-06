@@ -24,6 +24,34 @@ class FuelPriceOut(BaseModel):
     fuel_type: str
     price: float  # cents per litre
     effective_at: datetime
+    cost_per_km: float | None = None  # $/km for this price vs vehicle avg L/100km (AUT-2201)
+    avg_fill_cost: float | None = None  # $ per fill for this price vs vehicle avg litres/fill
+    # AUT-2381: which upstream emitted this row + the arbitration result for
+    # (station, fuel_type, day). The UI uses ``best_source`` to badge the
+    # reading as "trusted" / "government" / "chain".
+    source: str | None = None
+    best_source: str | None = None
+    source_score: float | None = None
+    flag_reason: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class FuelPriceHistoryOut(BaseModel):
+    """One row of a station's per-(fuel_type, source, day) price history.
+
+    Used by ``GET /api/v1/fuel/stations/{station_id}/history`` (AUT-2374 +
+    AUT-2381). The UI shows one row per source so the user can see which
+    upstream the day's price came from.
+    """
+
+    fuel_type: str
+    source: str | None = None
+    price: float
+    effective_at: datetime
+    best_source: str | None = None
+    source_score: float | None = None
+    flag_reason: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -36,6 +64,30 @@ class FuelBrandOut(BaseModel):
 class AttributionOut(BaseModel):
     attribution: list[str]
     sources: list[str]
+
+
+class FuelHistoryPoint(BaseModel):
+    """AUT-2375: one historical price point in the 30-day series."""
+
+    fuel_type: str
+    price: float
+    effective_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class FuelStationHistoryOut(BaseModel):
+    """AUT-2375: 30-day price history for a single station (one series per fuel).
+
+    Served exclusively from the ``fuel_prices`` cache populated by the daily
+    Celery ingest — never fans out to the upstream API on a client request.
+    """
+
+    station_id: str
+    source: str
+    fuel_type: str | None = None  # if set, only the matching series is returned
+    days: int
+    series: list[FuelHistoryPoint]
 
 
 FuelStationOut.model_rebuild()

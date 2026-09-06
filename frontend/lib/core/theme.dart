@@ -58,8 +58,8 @@ class AppTheme {
           borderRadius: BorderRadius.circular(16),
           side: BorderSide(
             color: isDark
-                ? primaryBlue.withValues(alpha: 0.25)
-                : accentBlue.withValues(alpha: 0.20),
+                ? primaryBlue.withOpacity(0.25)
+                : accentBlue.withOpacity(0.20),
           ),
         ),
         margin: EdgeInsets.zero,
@@ -84,8 +84,8 @@ class AppTheme {
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(
             color: isDark
-                ? primaryBlue.withValues(alpha: 0.18)
-                : accentBlue.withValues(alpha: 0.18),
+                ? primaryBlue.withOpacity(0.18)
+                : accentBlue.withOpacity(0.18),
           ),
         ),
         focusedBorder: OutlineInputBorder(
@@ -99,7 +99,7 @@ class AppTheme {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       dividerTheme: DividerThemeData(
-        color: (isDark ? primaryBlue : accentBlue).withValues(alpha: 0.15),
+        color: (isDark ? primaryBlue : accentBlue).withOpacity(0.15),
       ),
     );
   }

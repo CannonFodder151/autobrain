@@ -184,12 +184,18 @@ Stack-config hardening from the AUT-1486/AUT-1498 audit. Applies to
 
 ### How it works
 
-- Secret-class values live in `/opt/autobrain/secrets/<name>` on the host
-  (`root:1000`, mode `0640`). The dir is bind-mounted read-only at
+- Secret-class values live in `${SECRETS_DIR:-/data/autobrain/secrets}/<name>` on
+  the host (`root:1000`, mode `0640`). The dir is bind-mounted read-only at
   `/run/secrets` into `backend`, `worker`, `ai`; postgres/redis/minio mount
   only the files they need. The bind source honours `${SECRETS_DIR}` — set it
-  in the stack env when the host rootfs is read-only (Oracle VM runs Ubuntu
-  Core; hosted uses `/data/autobrain/secrets`, AUT-1535).
+  in the stack env to override the default. AUT-1853: the default is
+  `/data/autobrain/secrets`, NOT `/opt/autobrain/secrets`. The snap dockerd on
+  the Oracle VM mounts `/opt` from a read-only core24 squashfs, masking the host
+  `/opt`; any bind under `/opt/...` fails with "read-only file system".
+  `/data` sits on the daemon-visible rootfs and is never masked, so hosted no
+  longer depends on the `autobrain-opt-guard.sh` `/opt` remount workaround.
+  (Earlier AUT-1535 noted the Oracle VM rootfs is read-only Core; `/opt` is
+  masked, so secrets live under `/data` instead.)
 - At container start, `docker/lib-load-secrets.sh` exports each `FOO_FILE`
   var's file content as `FOO`, and derives authenticated
   `REDIS_URL`/`CELERY_*_URL` from `/run/secrets/redis_password`
@@ -204,15 +210,33 @@ Stack-config hardening from the AUT-1486/AUT-1498 audit. Applies to
 
 1. Dump the current stack env to a temp file, then seed:
    `sudo ./scripts/seed-secrets.sh /tmp/stack-env.txt` — writes all mapped
-   secret files, generating a broker password if none exists.
+   secret files to `${SECRETS_DIR:-/data/autobrain/secrets}` (pass an explicit
+   second arg to override), generating a broker password if none exists.
 2. Shred the dump: `shred -u /tmp/stack-env.txt`.
 3. Update the Portainer stack from `docker-compose.hosted.yml` (secret-class
    keys can be dropped from the stack env) and redeploy.
 4. Verify: `docker inspect <svc>` shows no plain secrets; every service
-   healthy; `redis-cli -a $(sudo cat /opt/autobrain/secrets/redis_password)
+   healthy; `redis-cli -a $(sudo cat ${SECRETS_DIR:-/data/autobrain/secrets}/redis_password)
    ping` → PONG; unauthenticated `redis-cli ping` → NOAUTH.
 5. Rotate any secret by rewriting its file and restarting the consuming
    services (broker rotation restarts redis + backend + worker).
+6. **Oracle VM path migration (AUT-1853):** the running AutoBrain-Hosted stack
+   previously seeded secrets into `/opt/autobrain/secrets` and relied on the
+   `autobrain-opt-guard.sh` root-cron job to re-unmask `/opt` inside the snap
+   dockerd mount namespace after every dockerd restart. To make the fix durable:
+   - Provision the daemon-visible dir: `sudo mkdir -p /data/autobrain/secrets &&
+     sudo chmod 0750 /data/autobrain/secrets && sudo chgrp 1000 /data/autobrain/secrets`.
+   - Re-seed from the current stack env dump into `/data/autobrain/secrets`
+     (`seed-secrets.sh /tmp/stack-env.txt /data/autobrain/secrets`). Regenerate
+     the still-EMPTY secrets (Stripe, SMTP, IAP Apple) with real provider
+     credentials — these cannot be recovered by the agent and must be supplied
+     by Nathan before those integrations re-enable.
+   - Ensure the Portainer stack env sets `SECRETS_DIR=/data/autobrain/secrets`
+     (or rely on the compose default) and redeploy via `build-hosted.yml`
+     (images) + Portainer EP5 stack update (`pullImage:true`).
+   - Only after the stack is healthy on `/data/autobrain/secrets`, remove the
+     `/opt` workaround: `sudo rm -f /usr/local/bin/autobrain-opt-guard.sh &&
+     sudo crontab -l | grep -v autobrain-opt-guard | crontab -`.
 
 ### Image tag policy
 

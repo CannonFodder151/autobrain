@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/auth_state.dart';
 import '../../core/models.dart';
+import '../../widgets/responsive.dart';
 
 class ShareVehicleScreen extends StatefulWidget {
   const ShareVehicleScreen({super.key, required this.vehicle});
@@ -114,9 +115,12 @@ class _ShareVehicleScreenState extends State<ShareVehicleScreen> {
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 640),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
               TextField(
                 controller: _email,
                 keyboardType: TextInputType.emailAddress,
@@ -150,7 +154,9 @@ class _ShareVehicleScreenState extends State<ShareVehicleScreen> {
                 const Text('Not shared with anyone yet.')
               else if (!_loading && _error == null)
                 for (final s in _accepted) _inviteTile(s, pending: false),
-            ],
+              ],
+              ),
+            ),
           ),
         ),
       ),

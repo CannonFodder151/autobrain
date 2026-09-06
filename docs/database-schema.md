@@ -12,7 +12,7 @@ Managed by SQLAlchemy models (`backend/app/models/`) and Alembic migrations (`ba
 PostgreSQL runs the `pgvector/pgvector:pg17` image (pgvector extension pre-installed; pinned by digest, AUT-1749).
 For the pg16 → pg17 major-bump migration procedure, see `postgres-pg17-upgrade.md`.
 Embeddings are generated via 9Router's OpenAI-compatible `/v1/embeddings` endpoint (model: `text-embedding-3-small`, 1536-dim).
-The following tables carry an `embedding vector(1536)` column (created by the `g7h8i9j0k1l2` migration) with `ivfflat` cosine-similarity indexes:
+The following tables carry an `embedding vector(1536)` column (created by the `g7h8i9j0k1l2` migration) with HNSW cosine-similarity indexes:
 
 - **diagnostics** — symptoms + AI response summary
 - **service_records** — description + notes + steps
@@ -22,6 +22,8 @@ The following tables carry an `embedding vector(1536)` column (created by the `g
 The `embedding` columns exist at the **database layer only** (raw SQL in the
 migration) — the SQLAlchemy models do not map them, so writes go through raw
 SQL (`backfill_entity_embedding` in `backend/app/services/search.py`).
+
+See `docs/ai/vector.md` for full schema, embedding pipeline, and hybrid search implementation.
 
 Search is hybrid: keyword ILIKE runs always; vector cosine similarity layers on
 top when the embedding router is reachable. Both paths return ranked results via

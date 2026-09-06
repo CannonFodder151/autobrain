@@ -19,6 +19,7 @@ below are mirrors kept in-repo for offline reading and PR review.
 | [ai-models.md](ai-models.md) | AI module descriptions |
 | [module-breakdown.md](module-breakdown.md) | AI gateway — per-module breakdown (deterministic-first) |
 | [ai-router-integration.md](ai-router-integration.md) | 9Router / AI_ROUTER_URL integration |
+| [ai/vector.md](ai/vector.md) | Vector store schema, embedding pipeline, hybrid search implementation |
 | [module-boundaries.md](module-boundaries.md) | Backend + AI gateway module layout & ownership |
 | [obd-integration.md](obd-integration.md) | OBD-II port roadmap & next steps |
 | [container-architecture.md](container-architecture.md) | Container image layout, healthchecks, upgrade path |
@@ -37,6 +38,7 @@ below are mirrors kept in-repo for offline reading and PR review.
 | [test-strategy.md](test-strategy.md) | Test environments, coverage areas, triage flow, sign-off bar |
 | [qa-run-logs.md](qa-run-logs.md) | Chronological verified test passes and verification runs |
 | [user-testing-results.md](user-testing-results.md) | Verified bug reports, feature verification, test-pass outcomes |
+| [task-pipeline.md](task-pipeline.md) | Sub-task & follow-up creation pattern, verify-then-comment flow, curl examples |
 
 **Rule:** when behaviour changes, update the matching Outline document and the
 mirror here in the same change.

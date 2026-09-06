@@ -69,7 +69,7 @@ class TripRouteMap extends StatelessWidget {
             right: 0,
             bottom: 0,
             child: Container(
-              color: Colors.black.withValues(alpha: 0.55),
+              color: Colors.black.withOpacity(0.55),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               child: const Text(
                 '© OpenStreetMap contributors',

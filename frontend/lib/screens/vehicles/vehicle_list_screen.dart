@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 
 import '../../core/auth_state.dart';
 import '../../core/models.dart';
+import '../../widgets/rego_status_badge.dart';
+import '../../widgets/responsive.dart';
 import 'add_vehicle_screen.dart';
 import 'edit_vehicle_screen.dart';
 import 'share_vehicle_screen.dart';
@@ -118,7 +120,9 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDemo = context.watch<AuthState>().isDemo;
+    final auth = context.watch<AuthState>();
+    final isDemo = auth.isDemo;
+    final isPremium = auth.premium;
     final pending = _invites.where((i) => i['status'] == 'pending').toList();
     return Scaffold(
       appBar: AppBar(title: const Text('Vehicles')),
@@ -141,68 +145,112 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  if (pending.isNotEmpty) ...[
-                    Text('Vehicle invites',
-                        style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: 8),
-                    for (final i in pending) _InviteCard(
-                      invite: i,
-                      busy: _busyInvite == i['id'],
-                      onAccept: () => _respond(i['id'] as String, 'accept'),
-                      onDeny: () => _respond(i['id'] as String, 'deny'),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                  for (final v in _vehicles)
-                    Card(
-                      child: ListTile(
-                        leading: Icon(
-                          v.isShared
-                              ? Icons.group
-                              : Icons.directions_car,
-                        ),
-                        title: Text(v.dropdownLabel),
-                        subtitle: Text(
-                          '${v.make ?? ''} ${v.model ?? ''} ${v.year ?? ''}'
-                          '${v.bodyType != null ? ' · ${v.bodyType}' : ''}'
-                          '${v.colour != null ? ' · ${v.colour}' : ''}'
-                          '${v.rego != null ? ' · ${v.rego}' : ''}'.trim(),
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (v.isPrimary)
-                              const Icon(Icons.star, color: Colors.amber),
-                            PopupMenuButton<String>(
-                              onSelected: (action) {
-                                if (action == 'edit') _edit(v);
-                                if (action == 'share') _share(v);
-                                if (action == 'delete') _delete(v);
-                                if (action == 'remove') _removeShared(v);
-                              },
-                              itemBuilder: (_) => v.isShared
-                                  ? const [
-                                      PopupMenuItem(
-                                          value: 'remove',
-                                          child: Text('Remove access')),
-                                    ]
-                                  : const [
-                                      PopupMenuItem(
-                                          value: 'edit',
-                                          child: Text('Edit details')),
-                                      PopupMenuItem(
-                                          value: 'share',
-                                          child: Text('Share')),
-                                      PopupMenuItem(
-                                          value: 'delete',
-                                          child: Text('Delete')),
-                                    ],
+                  Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 700),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (pending.isNotEmpty) ...[
+                            Text('Vehicle invites',
+                                style: Theme.of(context).textTheme.titleMedium),
+                            const SizedBox(height: 8),
+                            for (final i in pending) _InviteCard(
+                              invite: i,
+                              busy: _busyInvite == i['id'],
+                              onAccept: () => _respond(i['id'] as String, 'accept'),
+                              onDeny: () => _respond(i['id'] as String, 'deny'),
                             ),
+                            const SizedBox(height: 16),
                           ],
-                        ),
-                        onTap: v.isShared ? null : () => _edit(v),
+                          for (final v in _vehicles)
+                            Card(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 8),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    InkWell(
+                                      onTap: v.isShared ? null : () => _edit(v),
+                                      child: Row(
+                                        children: [
+                                          Icon(v.isShared
+                                              ? Icons.group
+                                              : Icons.directions_car),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(v.dropdownLabel,
+                                                    style: Theme.of(context)
+                                                        .textTheme
+                                                        .titleMedium),
+                                                Text(
+                                                  '${v.make ?? ''} ${v.model ?? ''} ${v.year ?? ''}'
+                                                  '${v.bodyType != null ? ' · ${v.bodyType}' : ''}'
+                                                  '${v.colour != null ? ' · ${v.colour}' : ''}'
+                                                  '${v.rego != null ? ' · ${v.rego}' : ''}'
+                                                      .trim(),
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .bodySmall,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          if (v.isPrimary)
+                                            const Padding(
+                                              padding: EdgeInsets.only(right: 4),
+                                              child: Icon(Icons.star,
+                                                  color: Colors.amber),
+                                            ),
+                                          PopupMenuButton<String>(
+                                            onSelected: (action) {
+                                              if (action == 'edit') _edit(v);
+                                              if (action == 'share') _share(v);
+                                              if (action == 'delete') _delete(v);
+                                              if (action == 'remove') _removeShared(v);
+                                            },
+                                            itemBuilder: (_) => v.isShared
+                                                ? const [
+                                                    PopupMenuItem(
+                                                        value: 'remove',
+                                                        child: Text('Remove access')),
+                                                  ]
+                                                : const [
+                                                    PopupMenuItem(
+                                                        value: 'edit',
+                                                        child: Text('Edit details')),
+                                                    PopupMenuItem(
+                                                        value: 'share',
+                                                        child: Text('Share')),
+                                                    PopupMenuItem(
+                                                        value: 'delete',
+                                                        child: Text('Delete')),
+                                                  ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    if (v.hasRegoData)
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                            left: 36, top: 4, bottom: 4),
+                                        child: RegoStatusBadge(
+                                          vehicle: v,
+                                          premium: isPremium,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
+                  ),
                 ],
               ),
             ),

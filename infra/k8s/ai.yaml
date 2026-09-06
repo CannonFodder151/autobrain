@@ -47,6 +47,13 @@ spec:
               port: 8001
             initialDelaySeconds: 30
             periodSeconds: 15
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
           volumeMounts:
             - name: tmp
               mountPath: /tmp

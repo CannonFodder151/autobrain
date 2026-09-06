@@ -1,13 +1,16 @@
 #!/bin/sh
-# AUT-1533: seed /opt/autobrain/secrets from a Portainer-stack env dump.
-# Usage: sudo ./scripts/seed-secrets.sh stack-env.txt [/opt/autobrain/secrets]
+# AUT-1533: seed the secret dir from a Portainer-stack env dump.
+# Usage: sudo ./scripts/seed-secrets.sh stack-env.txt [/data/autobrain/secrets]
+#   AUT-1853: default target is /data/autobrain/secrets — NOT /opt/autobrain/secrets.
+#   The snap dockerd on the Oracle VM masks host /opt (read-only core24 squashfs),
+#   so bind-mounts under /opt fail. /data is daemon-visible and never masked.
 #   stack-env.txt is KEY=VALUE lines (the current hosted stack env). Values are
 #   written one-per-file, mode 0640 group 1000 (containers run uid 1000), then
 #   the input file should be shredded. Idempotent; empty values -> empty file.
 set -eu
 
 ENV_FILE="${1:?usage: seed-secrets.sh <stack-env-file> [secrets-dir]}"
-DIR="${2:-/opt/autobrain/secrets}"
+DIR="${2:-/data/autobrain/secrets}"
 
 # KEY in stack env -> secret file name. Keys not listed here are non-secret
 # config and stay in the Portainer stack env.
@@ -24,10 +27,12 @@ seed() {
             -e 's/^MINIO_ACCESS_KEY$/minio_access_key/' \
             -e 's/^MINIO_SECRET_KEY$/minio_secret_key/' \
             -e 's/^REDIS_PASSWORD$/redis_password/' \
+            -e 's/^GITHUB_PAT$/github_pat/' \
             -e 's/^AI_ROUTER_API_KEY$/ai_router_api_key/' \
             -e 's/^AI_GATEWAY_API_KEY$/ai_gateway_api_key/' \
             -e 's/^REGO_LOOKUP_API_KEY$/rego_lookup_api_key/' \
             -e 's/^MARKET_DATA_API_KEY$/market_data_api_key/' \
+            -e 's/^CARTO_API_KEY$/carto_api_key/' \
             -e 's/^FUEL_NSW_API_KEY$/fuel_nsw_api_key/' \
             -e 's/^FUEL_NSW_API_SECRET$/fuel_nsw_api_secret/' \
             -e 's/^FUEL_VIC_API_KEY$/fuel_vic_api_key/' \

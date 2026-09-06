@@ -5,6 +5,7 @@ All settings are read from environment variables (see .env.example).
 
 import secrets
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -61,6 +62,7 @@ class Settings(BaseSettings):
     # AI router (9Router) — all AI services read this at runtime
     AI_ROUTER_URL: str = "http://your-9router-instance:port"
     AI_ROUTER_API_KEY: str = ""
+    AI_ROUTER_API_KEY_FILE: str = ""  # AUT-1533: secret-file pattern
     AI_ROUTER_TIMEOUT_SECONDS: int = 60
     AI_LOCAL_BASE_URL: str = "http://ai:8001"
     AI_GATEWAY_API_KEY: str = ""  # shared secret backend->AI gateway (Bearer)
@@ -102,7 +104,17 @@ class Settings(BaseSettings):
     FUEL_VIC_API_KEY: str = ""
     FUEL_VIC_API_SECRET: str = ""
     FUEL_VIC_ENABLED: bool = False
-    FUEL_QLD_API_URL: str = "https://www.fuelpricesqld.com.au/"
+    # QLD direct fuel API (FuelPricesQLD DirectAPI v1.5). Bearer-auth bearer
+    # subscription token from QLD; bound from QLD_FUEL_API_KEY env. When empty
+    # the QLD feed is skipped (mirrors the NSW no-key pattern). Open-data
+    # fallback (www.fuelpricesqld.com.au) can be kept for one cycle behind the
+    # FUEL_QLD_USE_OPEN_FALLBACK flag for partial-outage resilience.
+    FUEL_QLD_API_KEY: str = ""
+    FUEL_QLD_API_URL: str = "https://fppdirectapi-prod.fuelpricesqld.com.au"
+    FUEL_QLD_OPEN_DATA_URL: str = "https://www.fuelpricesqld.com.au/"
+    FUEL_QLD_COUNTRY_ID: int = 21  # Australia
+    FUEL_QLD_REGION_LEVEL: int = 3  # state
+    FUEL_QLD_USE_OPEN_FALLBACK: bool = False
     FUEL_WA_SITES_URL: str = "https://industryprd.fuelwatch.wa.gov.au/api/sites"
     FUEL_WA_PRICES_URL: str = "https://industryprd.fuelwatch.wa.gov.au/api/report/weekly-retail-prices"
     FUEL_NSW_URL: str = "https://api.transport.nsw.gov.au/v1/fuel"
@@ -154,7 +166,7 @@ class Settings(BaseSettings):
     APP_BASE_URL: str = "http://localhost:8000"
 
     # Versioning (local only; the GitHub update check was removed — AUT-461)
-    APP_VERSION: str = "0.3.198"  # mirror frontend/pubspec.yaml version
+    APP_VERSION: str = "0.3.239"  # mirror frontend/pubspec.yaml version
 
     # Scheduled backup (daily). When set, beats stores a full JSON snapshot to MinIO.
     BACKUP_ENABLED: bool = True
@@ -273,6 +285,18 @@ class Settings(BaseSettings):
                 + ", ".join(offenders)
                 + " — set real values in the deployment env (see .env.example)"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _load_file_secrets(self) -> "Settings":
+        """AUT-1533: resolve *_FILE env vars so config reads the same keys
+        regardless of whether lib-load-secrets.sh has already sourced them.
+        Plain env takes precedence; file is the fallback. Missing files are
+        silently skipped so optional credentials stay optional."""
+        if not self.AI_ROUTER_API_KEY and self.AI_ROUTER_API_KEY_FILE:
+            p = Path(self.AI_ROUTER_API_KEY_FILE)
+            if p.is_file():
+                self.AI_ROUTER_API_KEY = p.read_text(encoding="utf-8").strip()
         return self
 
     @model_validator(mode="after")

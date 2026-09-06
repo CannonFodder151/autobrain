@@ -32,13 +32,12 @@ concurrency:
 
 jobs:
   auto-bump:
-    # x64 jobs run on the new vm2 runner (gh-runner-autobrain-2). The legacy
-    # x64 runner (gh-runner-autobrain) is currently degraded (AUT-1781); routing
-    # on `vm2` guarantees dispatch to the healthy new runner. Re-balance across
-    # legacy+new again by dropping `vm2` once AUT-1781 is repaired. ARM builds
-    # stay pinned to the Oracle VM arm64 runner below.
+    # AUT-2600: vm2 runner (gh-runner-autobrain-2) is offline. Route through the
+    # legacy x64 runner instead so the hosted image build is not fully blocked.
+    # AUT-1798 added vm2 to escape the legacy runner's dockerd wedge (AUT-1720);
+    # once the vm2 runner is restored (AUT-2710) this should flip back to `vm2`.
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, linux, x64, vm2]
+    runs-on: [self-hosted, linux, x64]
     permissions:
       contents: write
     steps:
@@ -78,7 +77,7 @@ jobs:
       matrix:
         include:
           - arch: amd64
-            runs_on: [self-hosted, linux, x64, vm2]
+            runs_on: [self-hosted, linux, x64]
           # arm64 builds stay on the Oracle VM arm64 runner (gh-runner-autobrain-arm64).
           - arch: arm64
             runs_on: [self-hosted, linux, ARM64]
@@ -100,12 +99,39 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}
 
+      - name: Verify runner arch (${{ matrix.arch }})
+        # AUT-2097: catch a qemu-user-x86_64 shim on the arm64 runner before any
+        # build runs. If the runner claims ARM64 but uname reports x86_64, every
+        # image it produces is contaminated regardless of --platform.
+        run: |
+          set -euo pipefail
+          want="${{ matrix.arch }}"
+          got="$(uname -m)"
+          case "$want" in
+            amd64) norm="x86_64";;
+            arm64) norm="aarch64";;
+            *) echo "::error::unknown matrix arch $want"; exit 2;;
+          esac
+          if [ "$got" != "$norm" ]; then
+            echo "::error::runner arch mismatch: want $want (=$norm), got $got"
+            exit 1
+          fi
+          echo "==> runner arch OK: $got ($want)"
+
       - name: Build and push images (linux/${{ matrix.arch }})
         env:
           TAG: ${{ github.event.inputs.tag || 'hosted' }}
           ARCH: ${{ matrix.arch }}
           API_BASE_URL: ${{ github.event.inputs.api_base_url || 'https://hosted.autobrainservice.app/api/v1' }}
           WS_BASE_URL: ${{ github.event.inputs.ws_base_url || 'wss://hosted.autobrainservice.app/ws' }}
+          # AUT-2220: CARTO basemap key (public-by-design).
+          CARTO_API_KEY: ${{ secrets.CARTO_API_KEY || '' }}
+          # AUT-2097: scope GHA buildx cache per-arch so the arm64 build cannot
+          # pull amd64 layer blobs from the x64 cache namespace (cache poisoning
+          # produced OCI manifests that declared arm64 but shipped amd64 layers,
+          # crashing on the Oracle VM with exec format error).
+          CACHE_FROM: ${{ matrix.arch == 'arm64' && '' || format('type=gha,scope=build-hosted-{0}', matrix.arch) }}
+          CACHE_TO: ${{ format('type=gha,scope=build-hosted-{0},mode=max', matrix.arch) }}
         run: |
           set -euo pipefail
           for svc in backend worker ai frontend; do
@@ -113,18 +139,54 @@ jobs:
               backend)  ctx=.;        df=docker/backend/Dockerfile;   args="";;
               worker)   ctx=.;        df=docker/worker/Dockerfile;     args="";;
               ai)       ctx=.;        df=docker/ai/Dockerfile;         args="";;
-              frontend) ctx=.;        df=docker/frontend/Dockerfile;   args="--build-arg API_BASE_URL=${API_BASE_URL} --build-arg WS_BASE_URL=${WS_BASE_URL}";;
+              frontend) ctx=.;        df=docker/frontend/Dockerfile;   args="--build-arg API_BASE_URL=${API_BASE_URL} --build-arg WS_BASE_URL=${WS_BASE_URL} --build-arg CARTO_API_KEY=${CARTO_API_KEY}";;
             esac
             echo "==> building autobrain-${svc}:${TAG}-${ARCH} for linux/${ARCH}"
+            # shellcheck disable=SC2086
+            cache_from_args=()
+            if [ -n "${CACHE_FROM}" ]; then
+              cache_from_args=(--cache-from "${CACHE_FROM}")
+            fi
             docker buildx build --platform linux/${ARCH} --push \
+              "${cache_from_args[@]}" \
+              --cache-to   "${CACHE_TO}" \
               -t "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}-${ARCH}" \
               ${args} -f "${df}" "${ctx}"
           done
 
+      - name: Verify pushed image arch (${{ matrix.arch }})
+        # AUT-2097: post-build smoke test. Pulls each freshly-pushed :hosted-ARCH
+        # image and runs `uname -m` inside it. If BuildKit served amd64 layers
+        # under an arm64 manifest, this step fails the job before manifest
+        # assembly promotes the bad digest to the :hosted multi-arch tag.
+        env:
+          TAG: ${{ github.event.inputs.tag || 'hosted' }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          norm=""
+          case "$ARCH" in
+            amd64) norm="x86_64";;
+            arm64) norm="aarch64";;
+            *) echo "::error::unknown arch $ARCH"; exit 2;;
+          esac
+          for svc in backend worker ai frontend; do
+            img="ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}-${ARCH}"
+            echo "==> verifying $img"
+            got="$(docker run --rm --platform linux/${ARCH} "$img" uname -m)"
+            if [ "$got" != "$norm" ]; then
+              echo "::error::$img reports arch=$got, expected $norm — refusing to assemble manifest"
+              exit 1
+            fi
+            # /bin/sh -c true catches the exec format error case directly.
+            docker run --rm --platform linux/${ARCH} "$img" /bin/sh -c 'true'
+          done
+          echo "==> all ${ARCH} images verified"
+
   build-manifest:
     needs: build
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux, x64, vm2]
+    runs-on: [self-hosted, linux, x64]
     permissions:
       contents: read
       packages: write
@@ -134,6 +196,25 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}
+
+      # AUT-2097: refuse to assemble the multi-arch :hosted manifest if either
+      # arch side failed its post-build verification. Without this gate, a
+      # failing build job would still let imagetools promote amd64 into both
+      # slots of the arm64-bearing :hosted index.
+      - name: Gate manifest assembly on per-arch verification
+        env:
+          TAG: ${{ github.event.inputs.tag || 'hosted' }}
+        run: |
+          set -euo pipefail
+          for svc in backend worker ai frontend; do
+            for arch in amd64 arm64; do
+              img="ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}-${arch}"
+              if ! docker buildx imagetools inspect "$img" >/dev/null 2>&1; then
+                echo "::error::$img missing — per-arch build for $arch did not publish. Aborting manifest assembly."
+                exit 1
+              fi
+            done
+          done
 
       - name: Assemble multi-arch manifests
         id: digest
