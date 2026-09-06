@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Added (AUT-2706)
+- firmware+backend: per-row `ev_mode` flag and vehicle-type detection. The ESP32-DIY firmware now computes `ev_mode` per trip row (0=ICE / 1=EV / 2=HYBRID) from RPM-vs-pack_current hysteresis and classifies vehicle type from the dominant ev_mode over the first trip (1=EV, 2=HEV, 4=PHEV), persisting it to the backend via `POST /devices/{device_id}/vehicle-type`. Vehicle type is stored on the `Device` model (`vehicle_type` string column, new Alembic migration `aut2706_device_vehicle_type.py`) with a `DeviceVehicleTypeIn` schema. EV manufacturer PID tables keyed by VIN WMI are selected per AUT-2702, Mode 01 0x2F fuel level is reported for PHEVs, and the firmware self-check (`firmware/esp32-diy/test/self_check.cpp`) now covers the new EV profile and vehicle-type paths. Closes AUT-2706.
 
 ### Fixed (AUT-1929)
 - fix(ci): replace the broken `dart pub audit` step in `.github/workflows/security-pr-gate.yml` with `osv-scanner --lockfile=pubspec.lock`. The `dart pub audit` subcommand is not recognized on the runner's Flutter stable-3.47.2, causing the Flutter dependency audit job to fail red on every PR/push to main regardless of diff content. The new step uses osv-scanner v1.9.2 against `pubspec.lock` and fails on HIGH/CRITICAL findings only. Repo-wide fix — unblocks merge of all open PRs.
