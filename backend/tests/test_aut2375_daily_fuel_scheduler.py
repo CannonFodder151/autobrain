@@ -57,7 +57,7 @@ def test_per_source_tasks_are_registered_for_manual_retry() -> None:
     without re-running the whole sweep."""
     from app.workers import tasks as worker_tasks
 
-    for source in ("wa", "nsw", "qld"):
+    for source in ("wa", "nsw", "qld", "sa"):
         fn = getattr(worker_tasks, f"ingest_fuel_{source}", None)
         assert fn is not None, f"missing ingest_fuel_{source}"
         # Celery @shared_task adds .delay / .apply_async.
