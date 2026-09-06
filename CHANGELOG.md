@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-2216)
+- fix(backend,AUT-2216): resolve `ADMIN_INITIAL_PASSWORD_FILE` in Pydantic settings. The hosted compose mounts `ADMIN_INITIAL_PASSWORD_FILE=/run/secrets/admin_initial_password` and the secrets loader (`lib-load-secrets.sh`) exports `ADMIN_INITIAL_PASSWORD` from it, but the `_load_file_secrets` model_validator only handled `AI_ROUTER_API_KEY_FILE`. When the Pydantic settings were instantiated without the shell-sourced env (e.g. tests, direct config reads), `ADMIN_INITIAL_PASSWORD` stayed empty and `seed_admin()` silently skipped, leaving the hosted admin unseeded and returning 401. Added the `ADMIN_INITIAL_PASSWORD_FILE` field + resolver (env wins over file, missing file is silent). Added `backend/tests/test_admin_password_file.py` covering file load, env precedence, and missing-file fallback.
+
 ### Fixed (AUT-1929)
 - fix(ci): replace the broken `dart pub audit` step in `.github/workflows/security-pr-gate.yml` with `osv-scanner --lockfile=pubspec.lock`. The `dart pub audit` subcommand is not recognized on the runner's Flutter stable-3.47.2, causing the Flutter dependency audit job to fail red on every PR/push to main regardless of diff content. The new step uses osv-scanner v1.9.2 against `pubspec.lock` and fails on HIGH/CRITICAL findings only. Repo-wide fix — unblocks merge of all open PRs.
 

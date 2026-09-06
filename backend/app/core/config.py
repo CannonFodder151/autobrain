@@ -125,6 +125,7 @@ class Settings(BaseSettings):
     ADMIN_EMAIL: str = ""
     ADMIN_DISPLAY_NAME: str = "AutoBrain Admin"
     ADMIN_INITIAL_PASSWORD: str = ""
+    ADMIN_INITIAL_PASSWORD_FILE: str = ""  # AUT-2216: secret-file pattern
 
     # Demo mode: seeds a read-only demo account + sample data. No AI, no writes.
     DEMO_MODE: bool = False
@@ -297,6 +298,10 @@ class Settings(BaseSettings):
             p = Path(self.AI_ROUTER_API_KEY_FILE)
             if p.is_file():
                 self.AI_ROUTER_API_KEY = p.read_text(encoding="utf-8").strip()
+        if not self.ADMIN_INITIAL_PASSWORD and self.ADMIN_INITIAL_PASSWORD_FILE:
+            p = Path(self.ADMIN_INITIAL_PASSWORD_FILE)
+            if p.is_file():
+                self.ADMIN_INITIAL_PASSWORD = p.read_text(encoding="utf-8").strip()
         return self
 
     @model_validator(mode="after")
