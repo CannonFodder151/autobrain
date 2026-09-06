@@ -32,6 +32,7 @@ dependencies:
   flutter_map: ^8.3.1
   latlong2: ^0.10.1
   flutter_blue_plus: 1.32.8
+  connectivity_plus: ^6.0.0
   in_app_purchase: ^3.2.1
   connectivity_plus: ^6.0.3
 

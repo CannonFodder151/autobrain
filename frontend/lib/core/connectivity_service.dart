@@ -1,35 +1,38 @@
-/// Live network connectivity state, broadcast via ValueNotifier so any widget
-/// can subscribe without re-creating a stream listener each time.
-library;
-
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart';
 
-/// Process-wide singleton. Widgets listen via [isOnline] or [addListener].
-class ConnectivityService {
-  ConnectivityService._();
-  static final instance = ConnectivityService._();
-
-  bool _online = true;
-  bool get isOnline => _online;
-
-  final Set<VoidCallback> _listeners = {};
-
-  void addListener(VoidCallback cb) => _listeners.add(cb);
-  void removeListener(VoidCallback cb) => _listeners.remove(cb);
-
-  Future<void> init() async {
-    await _check();
-    Connectivity.instance.onConnectivityChanged.listen((_) => _check());
+class ConnectivityService with ChangeNotifier {
+  ConnectivityService._() {
+    _subscription = Connectivity().onConnectivityChanged.listen(_onChange);
+    _checkInitial();
   }
 
-  Future<void> _check() async {
-    final result = await Connectivity().checkConnectivity();
-    final online = result != ConnectivityResult.none;
-    if (online != _online) {
-      _online = online;
-      for (final cb in Set.of(_listeners)) {
-        cb();
-      }
+  static final ConnectivityService instance = ConnectivityService._();
+
+  final Connectivity _connectivity = Connectivity();
+  StreamSubscription<List<ConnectivityResult>>? _subscription;
+
+  final ValueNotifier<bool> isOnline = ValueNotifier<bool>(true);
+
+  Future<void> _checkInitial() async {
+    final result = await _connectivity.checkConnectivity();
+    _update(result);
+  }
+
+  void _onChange(List<ConnectivityResult> results) {
+    _update(results);
+  }
+
+  void _update(List<ConnectivityResult> results) {
+    final online = results.any((r) => r != ConnectivityResult.none);
+    final changed = isOnline.value != online;
+    if (changed) {
+      isOnline.value = online;
+      notifyListeners();
     }
+  }
+
+  Future<void> disposeAsync() async {
+    await _subscription?.cancel();
   }
 }

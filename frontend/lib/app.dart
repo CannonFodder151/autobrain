@@ -101,29 +101,30 @@ class _AutoBrainAppState extends State<AutoBrainApp> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthState>();
+    final connectivity = context.watch<ConnectivityService>();
     final resetToken = AutoBrainApp.resetTokenFromUrl();
     final shareToken = AutoBrainApp.shareTokenFromUrl();
     final advisorTab = AutoBrainApp.advisorTabFromUrl();
 
-    Widget home;
+    Widget screen;
     if (resetToken != null) {
-      home = ResetPasswordScreen(token: resetToken);
+      screen = ResetPasswordScreen(token: resetToken);
     } else if (!AppConfig.serverConfigured) {
-      home = const ServerSetupScreen();
+      screen = const ServerSetupScreen();
     } else if (shareToken != null) {
-      home = ShareLinkView(token: shareToken);
+      screen = ShareLinkView(token: shareToken);
     } else if (auth.isLoggedIn) {
       if (AutoBrainApp.licenseRequested()) {
-        home = const LicenseScreen();
+        screen = const LicenseScreen();
       } else if (advisorTab != null) {
-        home = _AdvisorDeepLink(tabIndex: advisorTab);
+        screen = _AdvisorDeepLink(tabIndex: advisorTab);
       } else {
-        home = const HomeScreen();
+        screen = const HomeScreen();
       }
     } else if (AutoBrainApp.signupRequested() && auth.signupEnabled) {
-      home = const SignupScreen();
+      screen = const SignupScreen();
     } else {
-      home = const LoginScreen();
+      screen = const LoginScreen();
     }
 
     return MaterialApp(
@@ -132,29 +133,29 @@ class _AutoBrainAppState extends State<AutoBrainApp> {
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       themeMode: auth.darkMode ? ThemeMode.dark : ThemeMode.light,
-      home: home,
+      home: Stack(
+        children: [
+          screen,
+          if (!connectivity.isOnline.value)
+            Positioned(
+              left: 0,
+              right: 0,
+              top: 0,
+              child: MaterialBanner(
+                leading: const Icon(Icons.wifi_off, color: Colors.white),
+                content: const Text('No internet connection'),
+                actions: const [],
+                backgroundColor: const Color(0xFF202020),
+              ),
+            ),
+        ],
+      ),
       builder: (context, child) {
         final content = child ?? const SizedBox.shrink();
-        final banner = ConnectivityService.instance.isOnline
-            ? null
-            : MaterialBanner(
-                content: Text(
-                  'Offline — showing cached data',
-                  style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: Theme.of(context).colorScheme.onErrorContainer),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                elevation: 1,
-                backgroundColor: Theme.of(context).colorScheme.errorContainer,
-              );
-        final body = banner == null
-            ? content
-            : Column(children: [banner, Expanded(child: content)]);
         final wrapped = MediaQuery.withClampedTextScaling(
           maxTextScale: 1.5,
           minTextScale: 1.0,
-          child: body,
+          child: content,
         );
         if (!(kDebugMode || kProfileMode)) {
           return wrapped;
@@ -217,7 +218,6 @@ class _AdvisorDeepLinkState extends State<_AdvisorDeepLink> {
 
   Future<void> _load() async {
     final auth = context.read<AuthState>();
-    // Cache-first: render immediately from cache if available.
     final cached = await auth.api.getCachedDecoded('/vehicles', null);
     if (cached != null) {
       final data = cached as List;
@@ -230,8 +230,7 @@ class _AdvisorDeepLinkState extends State<_AdvisorDeepLink> {
         _loading = false;
       });
     }
-    // Background refresh if online.
-    if (!ConnectivityService.instance.isOnline) return;
+    if (!ConnectivityService.instance.isOnline.value) return;
     try {
       final data = await auth.api.get('/vehicles') as List;
       final vehicles = data
