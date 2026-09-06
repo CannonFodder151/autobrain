@@ -10,6 +10,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Added (AUT-2703)
+- feat(firmware,backend,frontend): extend trip CSV row schema with EV/PHEV fields (`soc_pct,pack_v,pack_a,pack_temp_c,odo_km,ev_mode`) for AUT-2437. `format_trip_row` in `obd_pids.h` now emits 13-field rows (old 7-field rows still accepted via default args). CSV header updated to `epoch,rpm,speed,coolant,throttle,lat,lon,soc_pct,pack_v,pack_a,pack_temp_c,odo_km,ev_mode`. `csv_to_gps_json` (upload_payload.h), backend `parse_board_csv` (trip_gps.py), and frontend `tripCsvToJson` (dongle_relay.dart) all tolerate both old and new row lengths via fixed-position reads. Dart tests expanded with backward-compat + EV-field cases. C++ self_check expanded with EV-field assertions + old-format CSV tolerance.
+
 ### Fixed (AUT-2600)
 - fix(frontend): add missing `child:` label on the `ConstrainedBox` wrapping `ListView.builder` in `vehicle_timeline_screen.dart` (line 60). The widget was passed as a positional argument, misaligning the formal argument list and tripping dart2js on every `ConstrainedBox` inside the body (the compile error attached to login_screen.dart / home_screen.dart / signup_screen.dart were the downstream effect). Closes the second-half of AUT-2600 (unblocks `build-hosted.yml` amd64+arm64 `flutter build web` for the AUT-2446 Replace + AUT-2447 Upgrade release).
 

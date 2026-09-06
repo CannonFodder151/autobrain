@@ -66,12 +66,46 @@ int main() {
     assert(bus_active(2, false, 2));       // at threshold
     assert(bus_active(0, true));           // any valid PID wins
 
-    // trip row format
+    // trip row format — EV/PHEV fields appended (AUT-2703)
     char row[64];
     format_trip_row(row, sizeof row, 1713000000, 826, 75, 44, 50);
-    assert(strcmp(row, "1713000000,826,75,44,50,0,0\n") == 0);
+    assert(strcmp(row, "1713000000,826,75,44,50,0,0,0,0,0,0,0,0\n") == 0);
     format_trip_row(row, sizeof row, 1713000000, 826, 75, 44, 50, 123456789, -987654321);
-    assert(strcmp(row, "1713000000,826,75,44,50,123456789,-987654321\n") == 0);
+    assert(strcmp(row, "1713000000,826,75,44,50,123456789,-987654321,0,0,0,0,0,0\n") == 0);
+    // EV fields populated
+    format_trip_row(row, sizeof row, 1713000000, 826, 75, 44, 50, 0, 0, 85, 400, 120, 28, 45000, 1);
+    assert(strcmp(row, "1713000000,826,75,44,50,0,0,85,400,120,28,45000,1\n") == 0);
+    assert(strlen(row) == 50);  // 13-field row with EV data
+
+    // ---- board CSV -> gps_samples JSON (AUT-918 upload payload, AUT-2703 tolerant) ----
+    char gps[512];
+    const char* csv =
+        "epoch,rpm,speed,coolant,throttle,lat,lon,soc_pct,pack_v,pack_a,pack_temp_c,odo_km,ev_mode\n"
+        "1767200400,826,75,44,50,0,0,0,0,0,0,0,0\n"            // no fix -> dropped
+        "1767200401,830,76,44,51,-338687241,1512109053,0,0,0,0,0,0\n"
+        "1767200402,840,78,45,52,-338687250,1512109060,85,400,-50,28,45000,1\n"
+        "junk-rows-are-skipped\n"
+        "1767200403,850,80,45,53,0,0,0,0,0,0,0,0\n";
+    // Old-format CSV (7 fields) — also tolerated (backward-compat).
+    const char* csv_old =
+        "epoch,rpm,speed,coolant,throttle,lat,lon\n"
+        "1767200401,830,76,44,51,-338687241,1512109053\n";
+    csv_to_gps_json(csv, gps, sizeof gps);
+    assert(strstr(gps, "\"t\":1767200401") != NULL);
+    assert(strstr(gps, "\"t\":1767200402") != NULL);
+    assert(strstr(gps, "\"t\":1767200400") == NULL);  // 0,0 fix dropped
+    // Exactly two samples + array brackets.
+    size_t opens = 0, closes = 0;
+    for (char* c = gps; *c; c++) {
+        if (*c == '{') opens++;
+        if (*c == '}') closes++;
+    }
+    assert(opens == 2 && closes == 2);
+
+    // Old-format CSV (7 fields) — also tolerated (backward-compat).
+    csv_to_gps_json(csv_old, gps, sizeof gps);
+    assert(strstr(gps, "\"t\":1767200401") != NULL);
+    assert(strstr(gps, "\"t\":1767200402") == NULL);  // new-format rows absent
 
     // NMEA GPS parsing (Sydney: 33°52'S 151°12'E)
     int32_t lat = 0, lon = 0;

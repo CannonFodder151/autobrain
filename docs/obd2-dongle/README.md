@@ -22,7 +22,7 @@ Firmware source: [`firmware/esp32-diy/`](../../firmware/esp32-diy/) (pin map in
 
 The WROOM wakes on ignition (CAN bus activity or ACC 12 V via a divider),
 samples RPM/speed over OBD-II once per second, appends GPS lat/lon from a
-NEO-8M, and writes CSV rows (`epoch,rpm,speed,coolant,throttle,lat,lon`) to
+NEO-8M, and writes CSV rows (`epoch,rpm,speed,coolant,throttle,lat,lon,soc_pct,pack_v,pack_a,pack_temp_c,odo_km,ev_mode`) to
 LittleFS flash. When the engine goes off it closes the trip, deep-sleeps at
 ~0.2–1 mA (transceiver in standby, GPS unpowered), and uploads the trip over
 WiFi/BLE later. Deterministic hardware signals decide everything — no AI on

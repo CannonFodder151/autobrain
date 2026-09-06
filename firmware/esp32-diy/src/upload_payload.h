@@ -38,7 +38,9 @@ inline void epoch_to_iso(uint32_t t, char* out, size_t n) {
 
 // Convert one trip CSV dump to a gps_samples JSON array string. Rows are
 // epoch,...,lat,lon with lat/lon as degrees x10^7; 0,0 (no fix) and malformed
-// rows are skipped. Returns bytes written (excluding NUL).
+// rows are skipped. Tolerates both old 7-field rows and new 13-field rows
+// (AUT-2703: EV/PHEV fields appended but the parser reads only fields it needs).
+// Returns bytes written (excluding NUL).
 inline size_t csv_to_gps_json(const char* csv, char* out, size_t n) {
     size_t used = 0;
     snprintf(out, n, "[");
@@ -48,7 +50,8 @@ inline size_t csv_to_gps_json(const char* csv, char* out, size_t n) {
     while (*p) {
         const char* nl = strchr(p, '\n');
         size_t len = nl ? (size_t)(nl - p) : strlen(p);
-        // epoch,rpm,speed,coolant,throttle,lat,lon (lat/lon degrees x10^7).
+        // epoch,rpm,speed,coolant,throttle,lat,lon[,soc_pct,pack_v,pack_a,pack_temp_c,odo_km,ev_mode]
+        // Fixed-position reads tolerate both old (7-field) and new (13-field) rows.
         uint32_t epoch = 0;
         int32_t lat = 0, lon = 0;
         if (len > 0 &&
