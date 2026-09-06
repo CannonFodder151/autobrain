@@ -20,6 +20,7 @@
 #include "config.h"
 #include "dtc.h"
 #include "obd_pids.h"
+#include "ev_pids.h"
 #include "rtc_ds3231.h"
 #include "trip_store.h"
 #include "ble_sync.h"
@@ -34,6 +35,68 @@ using namespace autobrain;
 static RtcDs3231 rtc;
 static TripStore trips;
 static BleSync ble;
+
+// ---- EV profile (AUT-2702) ----
+// Per-device EV profile, selected on first trip or over BLE provisioning.
+// Non-zero means an EV profile is active; otherwise the ICE trip loop uses
+// standard mode-01 PIDs only.
+static const EvProfile* g_ev_profile = nullptr;
+static char g_ev_wmi[4] = "";
+
+// Select an EV profile from the VIN's WMI prefix (first 3 chars). Called
+// once per boot before ignition probing; idempotent on repeat drives.
+static void select_ev_profile(const char* vin) {
+    char wmi[4];
+    if (autobrain::vin_wmi(vin, wmi)) {
+        g_ev_profile = autobrain::ev_profile_for_wmi(wmi);
+        snprintf(g_ev_wmi, sizeof g_ev_wmi, "%s", wmi);
+        Serial.printf("EV profile: %s (%s)\n", g_ev_profile->make, wmi);
+    } else {
+        g_ev_profile = &autobrain::GENERIC_EV;
+        Serial.println("VIN too short — falling back to generic EV profile");
+    }
+}
+
+// Mode-22 OBD request; true on a valid 0x7E8 response within window.
+static bool pid_request_m22(uint16_t pid, uint8_t out[8], uint32_t timeout_ms = 80) {
+    if (!can_ok) return false;
+    uint8_t req[8];
+    autobrain::build_mode22_request(req, pid);
+    twai_message_t msg = {};
+    msg.identifier = 0x7DF;
+    msg.data_length_code = 8;
+    memcpy(msg.data, req, 8);
+    if (twai_transmit(&msg, pdMS_TO_TICKS(20)) != ESP_OK) return false;
+    uint32_t end = millis() + timeout_ms;
+    while ((int32_t)(end - millis()) > 0) {
+        twai_message_t rx;
+        if (twai_receive(&rx, pdMS_TO_TICKS(10)) != ESP_OK) continue;
+        if (rx.data_length_code >= 3 &&
+            autobrain::is_valid_mode22_response(rx.data, pid)) {
+            memcpy(out, rx.data, 8);
+            return true;
+        }
+    }
+    return false;
+}
+
+// Pull the four EV channels for the active profile. Fills the decoded values
+// so the trip loop / BLE can expose them. Returns true if at least one read
+// succeeded; the app can treat false as "EV data unavailable this sample".
+static bool ev_read_pack(int32_t out[4]) {
+    if (!g_ev_profile) return false;
+    uint8_t resp[8];
+    bool ok = false;
+    ok |= pid_request_m22(g_ev_profile->soc_pct.pid, resp);
+    out[EV_CH_SOC] = ev_decode_value(resp, EV_CH_SOC);
+    ok |= pid_request_m22(g_ev_profile->pack_v.pid, resp);
+    out[EV_CH_PACK_V] = ev_decode_value(resp, EV_CH_PACK_V);
+    ok |= pid_request_m22(g_ev_profile->pack_i.pid, resp);
+    out[EV_CH_PACK_I] = ev_decode_value(resp, EV_CH_PACK_I);
+    ok |= pid_request_m22(g_ev_profile->pack_temp.pid, resp);
+    out[EV_CH_PACK_TEMP] = ev_decode_value(resp, EV_CH_PACK_TEMP);
+    return ok;
+}
 
 // ---------- CAN ----------
 static bool can_ok = false;
