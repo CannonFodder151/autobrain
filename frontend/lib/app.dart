@@ -127,8 +127,8 @@ class AutoBrainApp extends StatelessWidget {
         // Clamp font scale so desktop zoom can't balloon text beyond a readable
         // ceiling (AUT-2526). Mobile keeps its OS default through the same path.
         final wrapped = MediaQuery.withClampedTextScaling(
-          maxScale: 1.5,
-          minScale: 1.0,
+          maxTextScale: 1.5,
+          minTextScale: 1.0,
           child: content,
         );
         if (!(kDebugMode || kProfileMode)) {
