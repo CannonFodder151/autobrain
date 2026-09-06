@@ -97,3 +97,23 @@ CVE-2026-76641  # expat: same package; no runtime impact
 # Trivy 0.74 + a fully populated DB will resolve itself; for now, suppress the
 # noisy placeholder so PRs don't get blocked on DB freshness. Reviewer: Sec.
 CVE-2026-80256  # nginx placeholder; trivy 0.70 false-positive on missing metadata
+
+# --- AUT-1600-PR: nginx libuuid/util-linux HIGH CVEs (pending upstream rebuild) -----
+# Source: libuuid (util-linux 2.42.1-r0) in nginxinc/nginx-unprivileged:stable-alpine.
+# CVE-2026-53612/53613/53614: TOCTOU/SUID mount bypasses require filesystem
+#   mount operations or SUID mount(8) — nginx frontend does neither.
+# CVE-2026-76642: external mount helper post-hooks require privileged mount paths —
+#   nginx serves static files from a read-only image layer, no mount operations.
+# CVE-2026-78408/78409/78410: nsenter cgroup leak, symlink tree escape, bind-mount
+#   source pinning — all require process spawning, cgroup namespaces, or bind-mount
+#   source control, none of which the nginx frontend container performs.
+# The nginxinc/nginx-unprivileged image rebuilds periodically; once the Alpine
+# 3.24.1 util-linux package reaches 2.42.3-r0/r1, drop these entries.
+# Time-boxed: re-check 2026-12-31.
+CVE-2026-53612  # util-linux TOCTOU mount: nginx frontend does no mount ops
+CVE-2026-53613  # util-linux ancestor dir swap: requires mount, not present
+CVE-2026-53614  # util-linux SUID mount bypass: nginx runs non-root unprivileged
+CVE-2026-76642  # util-linux mount post-hooks: no privileged mount paths
+CVE-2026-78408  # util-linux nsenter cgroup: nginx never spawns nsenter
+CVE-2026-78409  # util-linux X-mount.subdir symlink escape: no mount ops
+CVE-2026-78410  # util-linux bind-mount source pinning: no bind mounts
