@@ -27,6 +27,7 @@ env:
   THRESHOLD: '2.8.4-r0'
   IMAGE_TAG: 'nginxinc/nginx-unprivileged:stable-alpine'
   PINNED_DIGEST: 'sha256:ee055adf39a3cc6c2b8fc5734342d42728fa5fcaa5e8798fd24e4117ac969b2a'
+  DISCORD_REPORT_WEBHOOK: ${{ secrets.DISCORD_REPORT_WEBHOOK }}
 
 jobs:
   check:
@@ -158,7 +159,7 @@ jobs:
             COLOR="0xFEE75C"
             DESC="New digest but libexpat not yet at the fix threshold. Will retry tomorrow."
           fi
-          curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
+          curl -s -X POST "$DISCORD_REPORT_WEBHOOK" \
             -H "Content-Type: application/json" \
             -d "$(jq -nc --arg c ops --arg t "$TITLE" --arg col "$COLOR" --arg u "$RUN_URL" --arg d "$DESC" \
               '{channel:$c,title:$t,description:$d,color:$col,author:"libexpat fix-detect",fields:[{name:"Run",value:$u,inline:true},{name:"Threshold",value:"2.8.4-r0",inline:true}]}')"
