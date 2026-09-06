@@ -214,6 +214,8 @@ async def test_recompute_efficiency_and_stats_end_to_end() -> None:
         assert stats.series[1]["l_per_100km"] == 8.0
         assert stats.series[2]["l_per_100km"] == 10.0
         assert stats.series[0]["l_per_100km"] is None
+        # AUT-2053: avg fill volume = mean of full-tank fills (50+40+30)/3 = 40.0
+        assert stats.avg_fill_litres == 40.0
 
 
 @pytest.mark.asyncio

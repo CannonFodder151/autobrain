@@ -30,9 +30,8 @@ from app.schemas.fuel_servo import (
     FuelStationHistoryOut,
     FuelStationOut,
 )
+from app.services import fuel as fuel_svc
 from app.services import fuel_feeds as feeds
-from app.services.fuel import compute_fuel_stats
-from app.services.fuel_servo import annotate_price
 from app.services.ownership import get_accessible_vehicle
 
 logger = get_logger(__name__)
@@ -105,6 +104,10 @@ async def fuel_stations(
     fuel_type: str | None = Query(default=None, description="Filter to a canonical fuel type (91/95/98/E10/Diesel/LPG)"),
     vehicle_id: str | None = Query(default=None, description="Annotate prices with this vehicle's per-station cost (AUT-2201)"),
     limit: int = Query(50, ge=1, le=200),
+    vehicle_id: str | None = Query(
+        default=None,
+        description="Annotate each price with cost-per-km and avg-fill-cost for this vehicle (AUT-2053).",
+    ),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_fuel_access),
 ):
@@ -114,15 +117,19 @@ async def fuel_stations(
     MVP). When ``fuel_type`` is given, only stations with a price for that fuel
     are returned, and each carries just that fuel's latest price.
 
-    When ``vehicle_id`` is given (must be accessible to ``user``), every price
-    carries ``cost_per_km`` ($/km, from avg L/100km) and ``avg_fill_cost`` ($,
-    from avg litres/fill) — deterministic, no AI.
+    If ``vehicle_id`` is provided and the user can access that vehicle, each
+    price is annotated with the cost-per-km (price × avg L/100km / 100) and
+    avg-fill-cost (price × avg fill litres) derived from the vehicle's own fuel
+    stats — fully deterministic, no AI.
     """
     _set_attribution(response)
     stats = None
     if vehicle_id is not None:
-        await get_accessible_vehicle(db, vehicle_id, user)
-        stats = await compute_fuel_stats(db, vehicle_id)
+        try:
+            await get_accessible_vehicle(db, vehicle_id, user)
+            stats = await fuel_svc.compute_fuel_stats(db, vehicle_id)
+        except HTTPException:
+            stats = None
     stations = list((await db.scalars(select(FuelStation))).all())
     hits: list[tuple[float, FuelStation]] = []
     for s in stations:
@@ -154,8 +161,12 @@ async def fuel_stations(
 async def station_prices(
     station_id: str,
     response: Response,
+    vehicle_id: str | None = Query(
+        default=None,
+        description="Annotate each price with cost-per-km and avg-fill-cost for this vehicle (AUT-2053).",
+    ),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_fuel_access),
+    user: User = Depends(require_fuel_access),
 ):
     """All fuel prices at a station (detail sheet)."""
     _set_attribution(response)
@@ -166,7 +177,14 @@ async def station_prices(
         select(FuelPrice).where(FuelPrice.station_id == station_id)
         .order_by(FuelPrice.fuel_type, FuelPrice.effective_at.desc())
     )).all())
-    return _station_out(station, prices, None, None)
+    stats = None
+    if vehicle_id is not None:
+        try:
+            await get_accessible_vehicle(db, vehicle_id, user)
+            stats = await fuel_svc.compute_fuel_stats(db, vehicle_id)
+        except HTTPException:
+            stats = None
+    return _station_out(station, prices, None, stats)
 
 
 @router.get("/attribution", response_model=AttributionOut)
@@ -234,49 +252,52 @@ async def _latest_price(db: AsyncSession, station_id: str, fuel_type: str) -> Fu
     )).first()
 
 
+def _project_price(p: FuelPrice, stats) -> tuple[float | None, float | None]:
+    """Project a vehicle's stats onto a single station price (AUT-2053).
+
+    Returns (cost_per_km, avg_fill_cost) — both None when stats are absent or
+    missing the required inputs. cost_per_km requires avg_l_per_100km;
+    avg_fill_cost requires avg_fill_litres.
+    """
+    if stats is None:
+        return None, None
+    price_per_l = p.price / 100.0  # cents → dollars
+    cost_per_km: float | None = None
+    avg_fill_cost: float | None = None
+    if stats.avg_l_per_100km is not None and stats.avg_l_per_100km > 0:
+        cost_per_km = round(price_per_l * stats.avg_l_per_100km / 100.0, 4)
+    if stats.avg_fill_litres is not None and stats.avg_fill_litres > 0:
+        avg_fill_cost = round(price_per_l * stats.avg_fill_litres, 2)
+    return cost_per_km, avg_fill_cost
+
+
 def _station_out(
     s: FuelStation,
     prices: list[FuelPrice],
     dist: float | None,
-    stats: "FuelStats | None" = None,
+    stats=None,
 ) -> FuelStationOut:
-    # AUT-2319: thin compat wrapper; real implementation lives in
-    # ``app.services.fuel_servo.annotate_station`` so unit tests can import
-    # it without pulling in the full FastAPI router chain.
-    return annotate_station(s, prices, dist, stats)
-
-
-@router.get(
-    "/stations/{station_id}/history",
-    response_model=list[FuelPriceHistoryOut],
-)
-async def station_price_history(
-    station_id: str,
-    response: Response,
-    fuel_type: str | None = Query(default=None, description="Filter to one canonical fuel type"),
-    days: int = Query(default=30, ge=1, le=90, description="Look-back window in days"),
-    db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_fuel_access),
-) -> list[FuelPriceHistoryOut]:
-    """Price history (per source) for a station.
-
-    AUT-2374: price-history endpoint, last N days per station.
-    AUT-2381: every row carries ``best_source`` and ``source_score`` so the
-    frontend can badge the day's reading (trusted / government / chain).
-
-    Returns one row per (fuel_type, source, day) — newest first. Rows without
-    arbitration metadata (legacy rows from before AUT-2381) still come back;
-    the UI treats missing fields as "uncertified".
-    """
-    _set_attribution(response)
-    station = await db.get(FuelStation, station_id)
-    if not station:
-        raise HTTPException(status_code=404, detail="Station not found")
-    since = datetime.now(timezone.utc) - timedelta(days=days)
-    q = (
-        select(FuelPrice)
-        .where(FuelPrice.station_id == station_id, FuelPrice.effective_at >= since)
-        .order_by(FuelPrice.effective_at.desc(), FuelPrice.fuel_type, FuelPrice.source)
+    return FuelStationOut(
+        id=s.id,
+        source=s.source,
+        brand=s.brand,
+        name=s.name,
+        address=s.address,
+        lat=s.lat,
+        lon=s.lon,
+        logo=feeds.BRAND_LOGOS.get((s.brand or "").lower()),
+        distance_km=round(dist, 2) if dist is not None else None,
+        prices=[
+            FuelPriceOut(
+                fuel_type=p.fuel_type,
+                price=p.price,
+                effective_at=p.effective_at,
+                cost_per_km=cpkm,
+                avg_fill_cost=afc,
+            )
+            for p in prices
+            for cpkm, afc in [_project_price(p, stats)]
+        ],
     )
     if fuel_type:
         q = q.where(FuelPrice.fuel_type == fuel_type)
