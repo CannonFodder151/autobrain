@@ -77,6 +77,18 @@ class ApiClient {
   Future<void> invalidateCache(String prefix) =>
       OfflineCache.instance.invalidateByPrefix(prefix);
 
+  /// Read a previously-cached response for [path]+[query] and decode it.
+  /// Returns null when nothing is cached or the cached entry is stale.
+  /// Exposed so screens can render cache-first without waiting for a round-trip.
+  Future<dynamic>? getCachedDecoded(String path, Map<String, String>? query) {
+    final cacheKey = _cacheKey(path, query);
+    final ttl = _ttlFor(path, query);
+    if (ttl == null) return null;
+    return OfflineCache.instance
+        .get(cacheKey, allowStale: true)
+        .then((e) => e == null ? null : _decodeBody(e.body));
+  }
+
   /// Per-endpoint cache TTLs. Anything not listed here is not cached. The
   /// list deliberately excludes auth flows, exports, uploads, billing, and
   /// OBD real-time data — caching those is unsafe.
@@ -86,6 +98,7 @@ class ApiClient {
     '/auth/me': Duration(minutes: 30),
     '/social/feed': Duration(minutes: 5),
     '/fuel-prices': Duration(minutes: 15),
+    '/fuel/stations': Duration(minutes: 15),
   };
 
   /// Build a deterministic cache key for a path+query. We use the literal
@@ -195,6 +208,10 @@ class ApiClient {
           OfflineCache.instance.put(cacheKey, response.body, ttl: ttl)
               .catchError((_) {}),
         );
+        // Mirror ultra-hot endpoints into the 10 s in-memory layer.
+        if (path == '/vehicles' || path == '/social/feed') {
+          OfflineCache.instance.putUltraHot(cacheKey, response.body);
+        }
       }
       return _decode(response);
     } on TimeoutException catch (_) {

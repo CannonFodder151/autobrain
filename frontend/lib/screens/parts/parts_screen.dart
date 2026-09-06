@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/auth_state.dart';
+import '../../core/connectivity_service.dart';
 import '../../core/models.dart';
+import '../../widgets/stale_hint.dart';
 import 'add_part_screen.dart';
 import 'sca_lookup_results_screen.dart';
 
@@ -17,6 +19,7 @@ class PartsScreen extends StatefulWidget {
 class _PartsScreenState extends State<PartsScreen> {
   List<Part> _parts = const [];
   bool _loading = true;
+  bool _stale = false;
 
   @override
   void initState() {
@@ -31,15 +34,29 @@ class _PartsScreenState extends State<PartsScreen> {
 
   Future<void> _load() async {
     final api = context.read<AuthState>().api;
-    setState(() => _loading = true);
+    final path = '/vehicles/${widget.vehicle.id}/parts';
+    final q = <String, String>? null;
+    final cached = await api.getCachedDecoded(path, q);
+    if (cached != null) {
+      _parts = (cached as List)
+          .map((e) => Part.fromJson(e as Map<String, dynamic>))
+          .toList();
+      _stale = true;
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
+    if (!mounted) return;
+    if (!ConnectivityService.instance.isOnline) return;
     try {
-      final data =
-          await api.get('/vehicles/${widget.vehicle.id}/parts') as List;
+      final data = await api.get(path) as List;
       _parts = data
           .map((e) => Part.fromJson(e as Map<String, dynamic>))
           .toList();
-    } catch (_) {}
-    setState(() => _loading = false);
+      _stale = false;
+    } catch (_) {
+      if (_parts.isEmpty) _stale = true;
+    }
+    if (mounted) setState(() => _loading = false);
   }
 
   Future<void> _adjust(Part p, int delta) async {
@@ -113,11 +130,15 @@ class _PartsScreenState extends State<PartsScreen> {
       ),
       body: RefreshIndicator(
         onRefresh: _load,
-        child: _loading
+        child: _loading && _parts.isEmpty
             ? const Center(child: CircularProgressIndicator())
             : ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
+                  StaleHint(
+                    isStale: _stale,
+                    isOffline: !ConnectivityService.instance.isOnline,
+                  ),
                   if (low.isNotEmpty)
                     Card(
                       color: Theme.of(context).colorScheme.errorContainer,
