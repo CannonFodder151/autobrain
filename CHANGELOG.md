@@ -354,6 +354,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Added (AUT-2284 N2)
 - feat(frontend): boot-config debug banner now fires under `kDebugMode || kProfileMode` (was `kDebugMode` only). Profile-mode testers — Flutter DevTools / profilers, perf runs — no longer lose API-base visibility just because the build is a `flutter run --profile` rather than `--debug`. Overlay in `AutoBrainApp.build` shows `api: <host> probe: <ok|fail|not run>` via a translucent black bar across the top of every screen. Release builds still hide it. Closes AUT-2284 N2.
 
+### Added (AUT-2352, AUT-2353, AUT-2354)
+- fix(frontend): boot-time reachability probe + debug banner for `AppConfig` (AUT-2352/2353/2354). Closes the three PR-#445 must-fix follow-ups from QA re-review.
+  - `AppConfig.validate({http.Client?, timeout})` probes `${apiOrigin}/healthz` and populates `lastValidationOk` / `lastValidationError`. Caller-injected `http.Client` keeps tests hermetic. Default API/WS URLs now default to `https://hosted.autobrainservice.app` (the QA M3 finding: `localhost:8000` was a foot-gun for release builds).
+  - `lib/main.dart` runs the probe in release builds only (`!kDebugMode` keeps hot-reload snappy); on failure it mounts a new `MisconfiguredBackendScreen` with a Retry button (`pushAndRemoveUntil` per AUT-2272 M2).
+  - `MaterialApp.builder` returns a debug-only `Banner` in `app.dart` showing `API: …  WS: …  boot=ok|fail|not-run` for QA/dev to confirm the resolved backend at boot. Release builds pass `builder: null`.
+  - `frontend/test/config_validation_test.dart` covers 2xx, 5xx, timeout, connection-refused, malformed URL, and empty `apiBase` against a `MockClient`.
+
+### Security (AUT-1745)
+- sec(market-data): `docs_url`, `redoc_url`, and `openapi_url` are now env-gated and default to disabled. When `ENVIRONMENT=production` (the hosted + prod compose default), `/docs`, `/openapi.json`, and `/redoc` all return 404 — closing the unauthenticated API-surface enumeration on the market-data FastAPI service (CWE-200). `/health` and authenticated `/search`, `/sca-parts` are unchanged. Regression covered by `market-data/test_docs_disabled.py` (prod: 404, non-prod: 200, /health always 200). `redoc` remains always-off by design. Companion fix in `CannonFodder151/rego-lookup-api` adds the same gating + test (PR #47).
+
 ## [0.3.221] - 2026-09-03
 ### Added
 - Servo Spy: `/api/v1/fuel/stations` accepts an optional `vehicle_id` query param. When supplied, every `FuelPriceOut` is annotated with `cost_per_km` ($/km, derived from the vehicle's avg L/100km) and `avg_fill_cost` ($, derived from the vehicle's avg litres/fill). Deterministic, no AI. Vehicle is ownership-checked via the standard accessible-vehicle helper. Closes AUT-2201.
