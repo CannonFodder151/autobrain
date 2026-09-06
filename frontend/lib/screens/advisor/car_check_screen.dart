@@ -200,7 +200,7 @@ class _CarCheckScreenState extends State<CarCheckScreen> {
     final theme = Theme.of(context);
     return Card(
       child: ListTile(
-        leading: color != null ? CircleAvatar(backgroundColor: color.withValues(alpha: 0.15), child: Icon(Icons.info, color: color)) : null,
+        leading: color != null ? CircleAvatar(backgroundColor: color.withOpacity(0.15), child: Icon(Icons.info, color: color)) : null,
         title: Text(title, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
         trailing: Text(value, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
       ),
@@ -232,12 +232,12 @@ class _CarCheckScreenState extends State<CarCheckScreen> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.10),
+                color: color.withOpacity(0.10),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Column(
                 children: [
-                  CircleAvatar(backgroundColor: color.withValues(alpha: 0.25), child: Icon(_verdictIcon(d.verdict), color: color, size: 32)),
+                  CircleAvatar(backgroundColor: color.withOpacity(0.25), child: Icon(_verdictIcon(d.verdict), color: color, size: 32)),
                   const SizedBox(height: 8),
                   Text(_verdictLabel(d.verdict), style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700, color: color)),
                   if (deltaPct != null && mid != null && asking != null)
