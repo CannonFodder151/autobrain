@@ -18,7 +18,7 @@ void main() async {
   await ConnectivityService.instance.init();
   // Drop expired SQLite cache rows before the first screen reads them.
   // Best-effort; never blocks boot on failure.
-  unawaited(OfflineCache.instance.clearExpired().catchError((_) {}));
+  OfflineCache.instance.clearExpired().catchError((_) {});
   // Boot-time reachability probe (AUT-2272 M0). Failures do not throw — we
   // mount MisconfiguredBackendScreen so the user can retry instead of
   // staring at a blank window. Server picker + login still work once the

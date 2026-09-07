@@ -2,6 +2,7 @@
 /// can subscribe without re-creating a stream listener each time.
 library;
 
+import 'package:flutter/foundation.dart' show VoidCallback;
 import 'package:connectivity_plus/connectivity_plus.dart';
 
 // VoidCallback is in dart:ui, re-exported via flutter/foundation; add explicit
