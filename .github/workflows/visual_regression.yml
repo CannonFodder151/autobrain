@@ -6,6 +6,7 @@ on:
   pull_request:
     paths:
       - 'frontend/test/**'
+      - 'frontend/lib/**'
       - '.github/workflows/visual_regression.yml'
 
 concurrency:
