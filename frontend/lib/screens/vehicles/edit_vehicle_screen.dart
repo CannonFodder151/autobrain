@@ -193,11 +193,11 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   TextFormField(
-                    controller: _nickname,
-                    decoration: const InputDecoration(labelText: 'Nickname'),
-                    validator: (v) => v == null || v.isEmpty ? 'Required' : null,
-                  ),
-                  const SizedBox(height: 12),
+                controller: _nickname,
+                decoration: const InputDecoration(labelText: 'Nickname'),
+                validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+              ),
+              const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 value: _vehicleType,
                 decoration: const InputDecoration(labelText: 'Vehicle type'),
