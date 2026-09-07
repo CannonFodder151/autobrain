@@ -10,6 +10,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Fixed (AUT-2960)
+- fix(backend): PDF export table header text was black on dark background (unreadable). Header cells now use a cloned `BodyText` style with `textColor=colors.white` and `fontName=Helvetica-Bold` so the `TEXTCOLOR` table style (which only affects raw strings, not Paragraphs) is no longer relied upon. Applies to both service history and build sheet PDFs.
+- feat(backend,AUT-2960): vehicle rego now included in the PDF title on the front page. Service history: `Service History — {label} — {rego}`; build sheet: `Build Sheet — {label} — {rego}`. When rego is empty, title remains clean (no trailing separator). Updated API callers in `services.py` and `mods.py` to pass `vehicle.rego`. Added `test_pdf_export_rego_in_title` test.
+
 ### Added (AUT-2616)
 - feat(backend,rego): backfill `engine`/`transmission` from the local spec table when the rego-lookup-api provider returns them blank. The scraper (`rego-lookup-api`) only extracts `vin`, `make`, `model`, `year`, `colour`, `body_type` from state sites — it cannot get `engine` or `transmission`. Backend `_map_provider` now backfills those fields from the existing `_AU_PREFIX` table by `(make, model)`, then tries VIN-WMI decode as a second fallback. Provider values always take precedence over the local spec. Tests: `backend/tests/test_aut2616_rego_spec_backfill.py` (16 cases). This closes the vehicle-screen table gap where Engine/Transmission were blank after a successful real lookup.
 
