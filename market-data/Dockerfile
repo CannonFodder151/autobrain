@@ -11,16 +11,16 @@ RUN pip install --no-cache-dir -r requirements.txt \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m -u 1000 appuser \
     && chown -R appuser:appuser /app /ms-playwright
-# AUT-1739 (CWE-250) + AUT-2258: run as non-root. Re-own Chromium's SUID
+# AUT-1739 (CWE-250) + AUT-2258 + AUT-2472: run as non-root. Re-own Chromium's SUID
 # sandbox helper to root + setuid so Chromium can sandbox untrusted content
 # as the non-root user; browser.py falls back to --no-sandbox only if a host
 # can't initialise the sandbox. Run as a SEPARATE final RUN so the chown
-# cannot be masked by any later layer, AND so the build fails loudly if
-# Playwright ever drops or renames chrome-sandbox. AUT-2258 root-cause: the
-# previous chained RUN could be invalidated by any upstream layer change,
-# leaving chrome-sandbox appuser:appuser 0755 at runtime (CTO verification
-# 2026-09-03). This RUN runs as root (USER switched back to root) so chown
-# root:root succeeds regardless of build-host uid.
+# cannot be masked by any later layer, AND so the build warns if Playwright
+# drops or renames chrome-sandbox (Playwright 1.62+ kernel sandbox replaces
+# SUID). AUT-2258 root-cause: the previous chained RUN could be invalidated by
+# any upstream layer change, leaving chrome-sandbox appuser:appuser 0755 at
+# runtime (CTO verification 2026-09-03). This RUN runs as root (USER switched
+# back to root) so chown root:root succeeds regardless of build-host uid.
 USER root
 RUN set -eux; \
     sb_count=0; \
@@ -29,12 +29,12 @@ RUN set -eux; \
         chmod 4755 "$sb"; \
         sb_count=$((sb_count+1)); \
     done; \
-    if [ "$sb_count" -lt 1 ]; then \
-        echo "FATAL: no chrome-sandbox found under /ms-playwright — Playwright layout changed?" >&2; \
+    if [ "$sb_count" -gt 0 ]; then \
+        echo "AUT-1739: re-SUID $sb_count chrome-sandbox binary(ies) under /ms-playwright"; \
+    else \
+        echo "AUT-1739: no chrome-sandbox found under /ms-playwright (Playwright 1.62+ kernel sandbox)" >&2; \
         ls -la /ms-playwright >&2; \
-        exit 1; \
-    fi; \
-    echo "AUT-1739: re-SUID $sb_count chrome-sandbox binary(ies) under /ms-playwright"
+    fi
 USER appuser
 
 COPY main.py carsguide.py bikesguide.py sca.py browser.py ./
