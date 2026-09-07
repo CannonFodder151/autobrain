@@ -42,24 +42,26 @@ inline bool is_valid_pid_response(const uint8_t* d, uint8_t pid) {
     return d && d[0] == 0x41 && d[1] == pid;
 }
 
-// Row: epoch,rpm,speed,coolant,throttle,lat,lon[,soc_pct,pack_v,pack_a,pack_temp_c,odo_km,ev_mode]
-// EV/PHEV fields appended for AUT-2703 (backward-compatible: old firmware emits
-// 7-field rows; the parser tolerates both via fixed-position reads).
+// Row: epoch,rpm,speed,coolant,throttle,soc_pct,pack_v,pack_a,pack_temp_c,odo_km,ev_mode,lat,lon
+// EV/PHEV fields default to sentinel values so old callers and short rows from
+// pre-EV firmware still parse correctly (backward-compatible).
 inline int format_trip_row(char* buf, size_t bufsz, uint32_t epoch,
                            uint16_t rpm, uint8_t speed, int8_t coolant, uint8_t throttle,
-                           int32_t lat_1e7, int32_t lon_1e7,
-                           uint8_t soc_pct = 0, uint16_t pack_v = 0, int16_t pack_a = 0,
-                           int8_t pack_temp_c = 0, uint32_t odo_km = 0, uint8_t ev_mode = 0) {
-    return snprintf(buf, bufsz, "%lu,%u,%u,%d,%u,%ld,%ld,%u,%u,%d,%d,%u,%u\n",
+                           uint8_t soc_pct = 255, uint16_t pack_v = 0, int16_t pack_a = 0,
+                           int8_t pack_temp_c = -128, uint32_t odo_km = 0, uint8_t ev_mode = 0,
+                           int32_t lat_1e7 = 0, int32_t lon_1e7 = 0) {
+    return snprintf(buf, bufsz,
+                    "%lu,%u,%u,%d,%u,%u,%u,%d,%d,%u,%u,%ld,%ld\n",
                     (unsigned long)epoch, (unsigned)rpm, (unsigned)speed,
-                    (int)coolant, (unsigned)throttle, (long)lat_1e7, (long)lon_1e7,
-                    (unsigned)soc_pct, (unsigned)pack_v, (int)pack_a,
-                    (int)pack_temp_c, (unsigned)odo_km, (unsigned)ev_mode);
+                    (int)coolant, (unsigned)throttle,
+                    (unsigned)soc_pct, (unsigned)pack_v, (int)pack_a, (int)pack_temp_c,
+                    (unsigned)odo_km, (unsigned)ev_mode,
+                    (long)lat_1e7, (long)lon_1e7);
 }
 
-// CSV header written once at trip start. EV/PHEV fields appended AUT-2703.
+// CSV header written once at trip start.
 inline const char* trip_header() {
-    return "epoch,rpm,speed,coolant,throttle,lat,lon,soc_pct,pack_v,pack_a,pack_temp_c,odo_km,ev_mode\n";
+    return "epoch,rpm,speed,coolant,throttle,soc_pct,pack_v,pack_a,pack_temp_c,odo_km,ev_mode,lat,lon\n";
 }
 
 // NMEA-0183 GGA fix quality: 0 = invalid, >0 = valid fix. Pure, host-testable.

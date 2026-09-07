@@ -34,6 +34,8 @@ class Device(Base):
     api_key_prefix: Mapped[str] = mapped_column(String(10), index=True)
     api_key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     vehicle_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("vehicles.id"))
+    # AUT-2706: last vehicle type classification from the dongle (0=unknown/1=ICE/2=EV/3=HEV/4=PHEV)
+    vehicle_type: Mapped[str | None] = mapped_column(String(8), nullable=True)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

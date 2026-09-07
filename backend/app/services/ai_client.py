@@ -135,3 +135,66 @@ async def run_advisor_ai(
         return None
     _advisor_cache_put(cache_key, result)
     return result
+
+
+# --- AI Car Check (AUT-2651) -----------------------------------------------
+# Same 24h in-process cache as run_advisor_ai.
+
+_CAR_CHECK_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+_CAR_CHECK_CACHE_TTL_SECONDS = 24 * 60 * 60
+_CAR_CHECK_CACHE_MAX_ENTRIES = 1024
+
+
+def _car_check_cache_key(vehicle_id: str | None, payload: dict[str, Any]) -> str:
+    canonical = json.dumps(payload or {}, sort_keys=True, default=str, separators=(",", ":"))
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return f"{(vehicle_id or '')}|{digest}"
+
+
+def _car_check_cache_get(key: str) -> dict[str, Any] | None:
+    entry = _CAR_CHECK_CACHE.get(key)
+    if entry is None:
+        return None
+    expires_at, value = entry
+    if expires_at < time.time():
+        _CAR_CHECK_CACHE.pop(key, None)
+        return None
+    return value
+
+
+def _car_check_cache_put(key: str, value: dict[str, Any]) -> None:
+    if len(_CAR_CHECK_CACHE) >= _CAR_CHECK_CACHE_MAX_ENTRIES:
+        cutoff = time.time()
+        stale = [k for k, (exp, _) in _CAR_CHECK_CACHE.items() if exp < cutoff]
+        for k in stale[: max(1, len(_CAR_CHECK_CACHE) - _CAR_CHECK_CACHE_MAX_ENTRIES + 1)]:
+            _CAR_CHECK_CACHE.pop(k, None)
+        if len(_CAR_CHECK_CACHE) >= _CAR_CHECK_CACHE_MAX_ENTRIES:
+            for k in list(_CAR_CHECK_CACHE.keys())[: len(_CAR_CHECK_CACHE) - _CAR_CHECK_CACHE_MAX_ENTRIES + 1]:
+                _CAR_CHECK_CACHE.pop(k, None)
+    _CAR_CHECK_CACHE[key] = (time.time() + _CAR_CHECK_CACHE_TTL_SECONDS, value)
+
+
+async def run_car_check_ai(
+    vehicle_id: str | None,
+    payload: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Call the AI gateway for the Car Check (AUT-2651).
+
+    Input: ``{deal_score, listing: {price, year, odometer_km, make,
+    model, listing_url, title}}`` — the deterministic deal score + parsed
+    listing from the backend car-check service.
+
+    Returns the parsed result dict (summary / red_flags / green_flags), or
+    ``None`` when the gateway is unreachable. The caller renders the
+    deterministic fallback (``app.services.car_check.car_check_fallback``)
+    so the route always answers.
+    """
+    cache_key = _car_check_cache_key(vehicle_id, payload or {})
+    cached = _car_check_cache_get(cache_key)
+    if cached is not None:
+        return cached
+    result = await _call("car-check", payload or {})
+    if not isinstance(result, dict):
+        return None
+    _car_check_cache_put(cache_key, result)
+    return result

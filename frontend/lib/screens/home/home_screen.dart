@@ -5,10 +5,12 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api_client.dart';
 import '../../core/auth_state.dart';
+import '../../core/connectivity_service.dart';
 import '../../core/models.dart';
 import '../../widgets/responsive.dart';
 import '../../widgets/vehicle_selector.dart';
 import '../../widgets/rego_status_badge.dart';
+import '../../widgets/stale_hint.dart';
 import '../admin/admin_screen.dart';
 import '../analytics/analytics_screen.dart';
 import '../../community_garage/community_garage_screen.dart';
@@ -29,6 +31,7 @@ import '../vehicles/vehicle_list_screen.dart';
 import '../vehicles/vehicle_timeline_screen.dart';
 import '../servo_spy/servo_spy_screen.dart';
 import '../advisor/overview_screen.dart';
+import '../advisor/car_check_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -41,6 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Vehicle> _vehicles = const [];
   Vehicle? _selected;
   bool _loading = true;
+  bool _stale = false;
   String? _loadError;
   bool _sessionExpired = false;
 
@@ -52,8 +56,28 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _load() async {
     final api = context.read<AuthState>().api;
+    // Cache-first: render immediately from cache if available.
+    final cached = await api.getCachedDecoded('/vehicles', null);
+    if (cached != null) {
+      final data = cached as List;
+      final vehicles = data
+          .map((e) => Vehicle.fromJson(e as Map<String, dynamic>))
+          .toList();
+      if (mounted) {
+        setState(() {
+          _vehicles = vehicles;
+          _selected = Vehicle.resolveSelection(vehicles, _selected);
+          _loading = false;
+          _stale = true;
+        });
+      }
+    }
+    // Background refresh if online.
+    if (!ConnectivityService.instance.isOnline) {
+      if (mounted && _loading) setState(() => _loading = false);
+      return;
+    }
     setState(() {
-      _loading = true;
       _loadError = null;
       _sessionExpired = false;
     });
@@ -62,19 +86,26 @@ class _HomeScreenState extends State<HomeScreen> {
       final vehicles = data
           .map((e) => Vehicle.fromJson(e as Map<String, dynamic>))
           .toList();
-      _vehicles = vehicles;
-      _selected = Vehicle.resolveSelection(vehicles, _selected);
+      if (!mounted) return;
+      setState(() {
+        _vehicles = vehicles;
+        _selected = Vehicle.resolveSelection(vehicles, _selected);
+        _loading = false;
+        _stale = false;
+      });
     } on ApiException catch (e) {
+      if (!mounted) return;
       if (e.statusCode == 401) {
         _loadError = 'Your login has expired. Please log in again.';
         _sessionExpired = true;
       } else {
         _loadError = 'Could not reach the server. Check your connection or server settings.';
       }
+      setState(() => _loading = false);
     } catch (_) {
       _loadError = 'Could not reach the server. Check your connection or server settings.';
+      setState(() => _loading = false);
     }
-    setState(() => _loading = false);
   }
 
   void _showDownload() {
@@ -206,6 +237,14 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                       if (_selected != null) ...[
+                        const SizedBox(height: 20),
+                        Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 600),
+                            child: _OwnershipAdvisorLaunchCard(
+                                vehicle: _selected!),
+                          ),
+                        ),
                         const SizedBox(height: 20),
                         Center(
                           child: ConstrainedBox(
@@ -370,6 +409,8 @@ class _FeatureGrid extends StatelessWidget {
           PartsScreen(vehicle: vehicle)),
       _Feature('Valuation', Icons.sell, const Color(0xFF059669),
           ValuationScreen(vehicleId: vehicle.id)),
+      const _Feature('Car Check', Icons.fact_check, Color(0xFF7C3AED),
+          CarCheckScreen()),
       _Feature('Analytics', Icons.insights, const Color(0xFFCA8A04),
           AnalyticsScreen(vehicleId: vehicle.id)),
       _Feature('Notifications', Icons.notifications_active,
@@ -493,10 +534,141 @@ class _ErrorView extends StatelessWidget {
             const SizedBox(height: 16),
             FilledButton.tonal(onPressed: onRetry, child: const Text('Retry')),
             if (sessionExpired)
-              TextButton(
-                  onPressed: onLogout, child: const Text('Log in again')),
+              TextButton(onPressed: onLogout, child: const Text('Log in again')),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _OwnershipAdvisorLaunchCard extends StatelessWidget {
+  const _OwnershipAdvisorLaunchCard({required this.vehicle});
+  final Vehicle vehicle;
+
+  static const _modules = <_ModuleChipData>[
+    _ModuleChipData('Value', Icons.sell, Color(0xFF059669)),
+    _ModuleChipData('Replace', Icons.swap_horiz, Color(0xFF2563EB)),
+    _ModuleChipData('Upgrade', Icons.upgrade, Color(0xFF7C3AED)),
+    _ModuleChipData('Finance', Icons.calculate, Color(0xFF0B6B6A)),
+    _ModuleChipData('Dream', Icons.star, Color(0xFFDB2777)),
+    _ModuleChipData('AI', Icons.psychology, Color(0xFF0891B2)),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: const Color(0xFF6366F1),
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => AdvisorOverviewScreen(vehicleId: vehicle.id),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: const BoxDecoration(
+                      color: Color(0x2FFFFFFF),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.insights,
+                        color: Colors.white, size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Ownership Advisor',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(
+                          'Live now',
+                          style: TextStyle(
+                            color: Color(0xFFE0E7FF),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.4,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.arrow_forward,
+                      color: Colors.white, size: 20),
+                ],
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'What should you do with your car? Value, replace, upgrade, '
+                'finance, dream — six answers, one screen. Deterministic '
+                'where possible, AI only for the final call.',
+                style: TextStyle(color: Colors.white, fontSize: 13, height: 1.35),
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final m in _modules) _ModuleChip(data: m),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ModuleChipData {
+  const _ModuleChipData(this.label, this.icon, this.color);
+  final String label;
+  final IconData icon;
+  final Color color;
+}
+
+class _ModuleChip extends StatelessWidget {
+  const _ModuleChip({required this.data});
+  final _ModuleChipData data;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.18),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(data.icon, color: Colors.white, size: 14),
+          const SizedBox(width: 6),
+          Text(
+            data.label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -2,9 +2,12 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/api_client.dart';
 import '../../core/auth_state.dart';
+import '../../core/connectivity_service.dart';
 import '../../core/download.dart';
 import '../../core/models.dart';
+import '../../widgets/stale_hint.dart';
 import 'add_fuel_screen.dart';
 
 class FuelScreen extends StatefulWidget {
@@ -18,6 +21,7 @@ class FuelScreen extends StatefulWidget {
 class _FuelScreenState extends State<FuelScreen> {
   List<FuelLog> _logs = const [];
   bool _loading = true;
+  bool _stale = false;
   int? _fy; // null = all time; otherwise Australian FY (e.g. 2026)
 
   int get _currentFy {
@@ -33,16 +37,31 @@ class _FuelScreenState extends State<FuelScreen> {
 
   Future<void> _load() async {
     final api = context.read<AuthState>().api;
-    setState(() => _loading = true);
+    final path = '/vehicles/${widget.vehicleId}/fuel${_fy != null ? '?fy=$_fy' : ''}';
+    final q = _fy != null ? {'fy': '$_fy'} : null;
+    // Cache-first: render immediately from cache.
+    final cached = await api.getCachedDecoded(path, q);
+    if (cached != null) {
+      _logs = (cached as List)
+          .map((e) => FuelLog.fromJson(e as Map<String, dynamic>))
+          .toList();
+      _stale = true;
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
+    if (!mounted) return;
+    // Background refresh if online.
+    if (!ConnectivityService.instance.isOnline) return;
     try {
-      final data = await api.get(
-              '/vehicles/${widget.vehicleId}/fuel'
-          '${_fy != null ? '?fy=$_fy' : ''}') as List;
+      final data = await api.get(path) as List;
       _logs = data
           .map((e) => FuelLog.fromJson(e as Map<String, dynamic>))
           .toList();
-    } catch (_) {}
-    setState(() => _loading = false);
+      _stale = false;
+    } catch (_) {
+      if (_logs.isEmpty) _stale = true;
+    }
+    if (mounted) setState(() => _loading = false);
   }
 
   List<FlSpot> _efficiencySpots() {
@@ -127,6 +146,10 @@ class _FuelScreenState extends State<FuelScreen> {
             : ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
+                  StaleHint(
+                    isStale: _stale,
+                    isOffline: !ConnectivityService.instance.isOnline,
+                  ),
                   _SummaryCard(logs: _logs),
                   const SizedBox(height: 12),
                   Wrap(

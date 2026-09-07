@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/auth_state.dart';
+import '../../core/connectivity_service.dart';
 import '../../core/download.dart';
 import '../../core/models.dart';
+import '../../widgets/stale_hint.dart';
 import 'add_mod_screen.dart';
 
 class ModsScreen extends StatefulWidget {
@@ -17,6 +19,7 @@ class ModsScreen extends StatefulWidget {
 class _ModsScreenState extends State<ModsScreen> {
   List<Modification> _mods = const [];
   bool _loading = true;
+  bool _stale = false;
 
   @override
   void initState() {
@@ -26,14 +29,29 @@ class _ModsScreenState extends State<ModsScreen> {
 
   Future<void> _load() async {
     final api = context.read<AuthState>().api;
-    setState(() => _loading = true);
+    final path = '/vehicles/${widget.vehicleId}/mods';
+    final q = <String, String>? null;
+    final cached = await api.getCachedDecoded(path, q);
+    if (cached != null) {
+      _mods = (cached as List)
+          .map((e) => Modification.fromJson(e as Map<String, dynamic>))
+          .toList();
+      _stale = true;
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
+    if (!mounted) return;
+    if (!ConnectivityService.instance.isOnline) return;
     try {
-      final data = await api.get('/vehicles/${widget.vehicleId}/mods') as List;
+      final data = await api.get(path) as List;
       _mods = data
           .map((e) => Modification.fromJson(e as Map<String, dynamic>))
           .toList();
-    } catch (_) {}
-    setState(() => _loading = false);
+      _stale = false;
+    } catch (_) {
+      if (_mods.isEmpty) _stale = true;
+    }
+    if (mounted) setState(() => _loading = false);
   }
 
   Future<void> _export(String fmt) async {
@@ -122,11 +140,15 @@ class _ModsScreenState extends State<ModsScreen> {
       ),
       body: RefreshIndicator(
         onRefresh: _load,
-        child: _loading
+        child: _loading && _mods.isEmpty
             ? const Center(child: CircularProgressIndicator())
             : ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
+                  StaleHint(
+                    isStale: _stale,
+                    isOffline: !ConnectivityService.instance.isOnline,
+                  ),
                   Card(
                     child: ListTile(
                       leading: const Icon(Icons.payments),

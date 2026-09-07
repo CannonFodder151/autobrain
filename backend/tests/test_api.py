@@ -158,6 +158,46 @@ def test_pdf_export_builds() -> None:
     assert len(pdf) > 1000
 
 
+def test_pdf_export_rego_in_title() -> None:
+    from io import BytesIO
+    from pypdf import PdfReader
+    from app.services.export import export_service_history_pdf, export_build_sheet_pdf
+
+    class R:
+        service_date = "2026-01-01"
+        odometer_km = 1000
+        service_type = "scheduled"
+        workshop = ""
+        cost = 120.5
+        currency = "AUD"
+        items = []
+        notes = None
+
+    class M:
+        install_date = "2026-06-01"
+        name = "Cat-back exhaust"
+        category = "Exhaust"
+        brand = "XForce"
+        cost = 500.0
+        notes = None
+        photo_keys = []
+
+    pdf = export_service_history_pdf([R()], "Toyota Corolla", rego="3B4PV")
+    assert pdf[:4] == b"%PDF"
+    text = PdfReader(BytesIO(pdf)).pages[0].extract_text()
+    assert "3B4PV" in text
+
+    pdf_mod = export_build_sheet_pdf([M()], "Toyota Corolla", rego="3B4PV")
+    assert pdf_mod[:4] == b"%PDF"
+    text2 = PdfReader(BytesIO(pdf_mod)).pages[0].extract_text()
+    assert "3B4PV" in text2
+
+    # No rego - no double dash
+    pdf_no_rego = export_service_history_pdf([R()], "Toyota Corolla")
+    text3 = PdfReader(BytesIO(pdf_no_rego)).pages[0].extract_text()
+    assert "---" not in text3
+
+
 def test_notification_preference_defaults() -> None:
     from app.schemas.notification import NotificationPreferenceIn
 
