@@ -10,23 +10,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
-
-## [0.3.247] - 2026-09-07
-
-### Added (AUT-2400)
-- feat(frontend,AUT-2400): stale-while-revalidate + offline banner UX. New `ConnectivityService` singleton (connectivity_plus) exposes live online/offline state. `OfflineCache` gains 10s ultra-hot in-memory layer. `ApiClient.getCachedDecoded()` enables cache-first reads. All 10 list screens (vehicles, fuel, services, logbook, mods, parts, receipts, diagnostics, timeline, analytics, social feed) now render cached data immediately and refresh in background. `AutoBrainApp` is now `StatefulWidget` and surfaces a `MaterialBanner` when offline. `StaleHint` widget shows cache staleness on list screens. New dependency: `connectivity_plus: ^6.0.3`. `pubspec.lock` updated. No new DB tables. Closes AUT-2400.
-
-## [0.3.245] - 2026-09-06
-
-### Fixed (AUT-2216)
-- fix(backend,AUT-2216): resolve `ADMIN_INITIAL_PASSWORD_FILE` in Pydantic settings. The hosted compose mounts `ADMIN_INITIAL_PASSWORD_FILE=/run/secrets/admin_initial_password` and the secrets loader (`lib-load-secrets.sh`) exports `ADMIN_INITIAL_PASSWORD` from it, but the `_load_file_secrets` model_validator only handled `AI_ROUTER_API_KEY_FILE`. When the Pydantic settings were instantiated without the shell-sourced env (e.g. tests, direct config reads), `ADMIN_INITIAL_PASSWORD` stayed empty and `seed_admin()` silently skipped, leaving the hosted admin unseeded and returning 401. Added the `ADMIN_INITIAL_PASSWORD_FILE` field + resolver (env wins over file, missing file is silent). Added `backend/tests/test_admin_password_file.py` covering file load, env precedence, and missing-file fallback.
-
-### Fixed (AUT-1929)
-- fix(ci): replace the broken `dart pub audit` step in `.github/workflows/security-pr-gate.yml` with `osv-scanner --lockfile=pubspec.lock`. The `dart pub audit` subcommand is not recognized on the runner's Flutter stable-3.47.2, causing the Flutter dependency audit job to fail red on every PR/push to main regardless of diff content. The new step uses osv-scanner v1.9.2 against `pubspec.lock` and fails on HIGH/CRITICAL findings only. Repo-wide fix — unblocks merge of all open PRs.
-
-## [0.3.244] - 2026-09-06
-### Added (AUT-2384)
-- feat(frontend,AUT-2384): wire the existing-but-dead `OfflineCache` (sqflite) into `ApiClient` so GET requests cache successful responses and fall back to cache on network failure. Per-endpoint TTL table in `ApiClient._cacheTtls` (safe-list only: vehicles, auth/me, social/feed, fuel-prices; auth, exports, uploads, billing, admin, OBD excluded). Read-through on `SocketException`/`TimeoutException`/`HandshakeException`; HTTP 4xx/5xx surfaced as-is. Prefix-based invalidation via `api.invalidateCache(path)`. In-memory hot layer (LRU 64) over SQLite. Boot-time `clearExpired()` in `lib/main.dart`. No new dependencies. Closes AUT-2384 Layers 2+3.
+### Fixed (AUT-2960)
+- fix(backend): PDF export table header text was black on dark background (unreadable). Header cells now use a cloned `BodyText` style with `textColor=colors.white` and `fontName=Helvetica-Bold` so the `TEXTCOLOR` table style (which only affects raw strings, not Paragraphs) is no longer relied upon. Applies to both service history and build sheet PDFs.
+- feat(backend,AUT-2960): vehicle rego now included in the PDF title on the front page. Service history: `Service History — {label} — {rego}`; build sheet: `Build Sheet — {label} — {rego}`. When rego is empty, title remains clean (no trailing separator). Updated API callers in `services.py` and `mods.py` to pass `vehicle.rego`. Added `test_pdf_export_rego_in_title` test.
 
 ## [0.3.243] - 2026-09-06
 ### Fixed (AUT-2656)
@@ -194,6 +180,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed (AUT-2383)
 - fix(frontend,servo-spy): CARTO basemap tile URL query param was `?api_key=` but CARTO requires `?key=` — the watermark persisted because the API silently ignored the wrong parameter. Updated tile URL template in `frontend/lib/screens/servo_spy/servo_spy_screen.dart` to use `?key=$_cartoApiKey`; updated comment in `docker/frontend/Dockerfile`. Caching is already optimal: tiles are immutable `{z}/{x}/{y}` hashes so CDN/browser cache-hit rate is naturally high — no extra layer needed.
+
+### Fixed (AUT-2319)
+- fix(backend): `_station_out` body lifted out of `app/api/v1/fuel_servo.py` into `app/services/fuel_servo.py` as the pure function `annotate_station` (no DB/AI/FastAPI). The AUT-2201 station-annotation unit test now imports `annotate_station` directly instead of `app.api.v1.fuel_servo._station_out`, sidestepping the router's transitive imports (`app.models`/`app.services.fuel_feeds`) that were blocking collection. The route keeps a thin `_station_out` compat wrapper that delegates to `annotate_station`. `annotate_station` preserves the current `FuelStationOut` shape including the AUT-2381 `source`/`best_source`/`source_score`/`flag_reason` per-price fields.
+- note: the AUT-2277 duplicate-`FuelPrice`-class fix (already on main as of 0.3.224, deployed to AutoBrain-Hosted arm64 in 0.3.234) supersedes the original `extend_existing=True` approach from AUT-2319's first draft; this rebase keeps only the test/lift refactor.
 
 ## [0.3.234] - 2026-09-04
 
