@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.249] - 2026-09-07
+
 ### Fixed (AUT-2656)
 - fix(frontend): remove duplicate `_vehicleId` declarations in servo_spy_screen.dart (2 locations) and add `package:flutter/foundation.dart` import in connectivity_service.dart to resolve dart2js compile errors on arm64 runner. Restores dockerhub-publish + build-hosted arm64 image builds.
 
