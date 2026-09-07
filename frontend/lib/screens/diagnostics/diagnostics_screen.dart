@@ -29,7 +29,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
   Future<void> _load() async {
     final api = context.read<AuthState>().api;
     final path = '/vehicles/${widget.vehicleId}/diagnostics';
-    final q = <String, String>? null;
+    final q = <String, String>{};
     final cached = await api.getCachedDecoded(path, q);
     if (cached != null) {
       _items = (cached as List)
