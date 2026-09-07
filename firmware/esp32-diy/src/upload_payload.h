@@ -13,9 +13,11 @@
 // The backend surface is POST /devices/{device_id}/trips with:
 //   {"trips":[{"device_trip_id":..,"started_at":ISO,"ended_at":ISO,"gps_samples":[...]}]}
 // started_at/ended_at are ISO-8601 UTC (pydantic datetime). gps_samples come
-// from the board CSV rows (epoch,rpm,speed,coolant,throttle,lat,lon) where
-// lat/lon are degrees x10^7 and 0,0 means "no fix" — the server re-cleans
-// them deterministically via the same rules the app logbook uses.
+// from the board CSV rows where the last two fields are lat/lon (degrees x10^7)
+// and 0,0 means "no fix" — the server re-cleans them deterministically via the
+// same rules the app logbook uses. Intermediate EV fields (soc_pct, pack_v,
+// pack_a, pack_temp_c, odo_km, ev_mode) are accepted by the row schema but
+// currently ignored by gps extraction (lat/lon are always the last two fields).
 namespace autobrain {
 
 // epoch -> "YYYY-MM-DDTHH:MM:SSZ" (UTC, no tz lib). Howard-Hinnant civil

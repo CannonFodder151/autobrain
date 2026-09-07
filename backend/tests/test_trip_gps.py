@@ -47,6 +47,32 @@ garbage,line,that,is,not,numeric
 1723400003,14.1,3009,3.9,376388000,1451940000
 """
 
+NEW_BOARD_CSV = """\
+epoch,rpm,speed,coolant,throttle,soc_pct,pack_v,pack_a,pack_temp_c,odo_km,ev_mode,lat,lon
+1723400000,826,75,44,50,80,400,-5,25,142500,1,376385000,1451936000
+1723400001,830,76,44,51,255,0,0,-128,0,0,0,0
+1723400002,840,78,45,52,95,398,-3,24,142600,0,376386500,1451937000
+"""
+
+
+def test_parse_board_csv_accepts_new_ev_schema() -> None:
+    """New 13-field EV rows parse identically: lat/lon are the last two fields."""
+    samples = parse_board_csv(NEW_BOARD_CSV)
+    assert [s["t"] for s in samples] == [1723400000, 1723400002]
+    assert samples[0]["lat"] == pytest.approx(37.6385, abs=1e-7)
+    assert samples[0]["lon"] == pytest.approx(145.1936, abs=1e-7)
+    assert samples[1] == {"t": 1723400002, "lat": 37.63865, "lon": 145.1937}
+
+
+def test_parse_board_csv_mixed_old_and_new_rows() -> None:
+    """Short rows from old firmware + new EV rows coexist in one dump."""
+    mixed = BOARD_CSV + NEW_BOARD_CSV.split("\n", 1)[1]  # skip new header
+    samples = parse_board_csv(mixed)
+    assert [s["t"] for s in samples] == [
+        1723400000, 1723400002, 1723400003,  # old rows
+        1723400000, 1723400002,              # new EV rows (same epochs, but lat/lon differ)
+    ]
+
 
 def test_parse_board_csv_accepts_board_schema() -> None:
     samples = parse_board_csv(BOARD_CSV)
