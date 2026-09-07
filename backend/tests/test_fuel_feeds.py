@@ -18,8 +18,11 @@ os.environ["POSTGRES_DB"] = "d"
 os.environ["ENVIRONMENT"] = "development"
 
 import asyncio  # noqa: E402
+import logging  # noqa: E402
+from unittest.mock import AsyncMock  # noqa: E402
 
 from app.services import fuel_feeds as feeds  # noqa: E402
+from app.workers import tasks  # noqa: E402
 
 WA_SITES = [
     {"Sitedid": 1, "Name": "Caltex Perth", "Brand": "Caltex", "Address": "10 Main St",
@@ -167,3 +170,22 @@ def test_ingest_qld_skips_when_no_key() -> None:
     res = asyncio.run(feeds.ingest_qld_fuel_prices(db=None))  # type: ignore[arg-type]
     assert res["skipped"] == "no_api_key"
     assert res["stations"] == 0
+
+
+def test_ingest_fuel_summary_logging_no_duplicate_keyword_error() -> None:
+    stub_summary = {
+        "wa": {"source": "wa", "stations": 1, "prices": 2},
+        "nsw": {"source": "nsw", "stations": 3, "prices": 4},
+        "qld": {"source": "qld", "stations": 5, "prices": 6},
+    }
+    logger_mock = AsyncMock()
+    original_logger = tasks.logger
+    tasks.logger = logger_mock
+    try:
+        for source, res in stub_summary.items():
+            tasks.logger.info("fuel_ingest_summary", **res)
+        assert logger_mock.info.call_count == 3
+        for source, res in stub_summary.items():
+            logger_mock.info.assert_any_call("fuel_ingest_summary", source=source, stations=res["stations"], prices=res["prices"])
+    finally:
+        tasks.logger = original_logger
