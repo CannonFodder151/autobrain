@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-2656)
+- fix(frontend): remove duplicate `_vehicleId` declarations in servo_spy_screen.dart (2 locations) and add `package:flutter/foundation.dart` import in connectivity_service.dart to resolve dart2js compile errors on arm64 runner. Restores dockerhub-publish + build-hosted arm64 image builds.
+
 ## [0.3.248] - 2026-09-07
 ### Fixed (AUT-2960)
 - fix(backend): PDF export table header text was black on dark background (unreadable). Header cells now use a cloned `BodyText` style with `textColor=colors.white` and `fontName=Helvetica-Bold` so the `TEXTCOLOR` table style (which only affects raw strings, not Paragraphs) is no longer relied upon. Applies to both service history and build sheet PDFs.
