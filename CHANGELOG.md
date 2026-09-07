@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+
+## [0.3.248] - 2026-09-07
 ### Fixed (AUT-2960)
 - fix(backend): PDF export table header text was black on dark background (unreadable). Header cells now use a cloned `BodyText` style with `textColor=colors.white` and `fontName=Helvetica-Bold` so the `TEXTCOLOR` table style (which only affects raw strings, not Paragraphs) is no longer relied upon. Applies to both service history and build sheet PDFs.
 - feat(backend,AUT-2960): vehicle rego now included in the PDF title on the front page. Service history: `Service History — {label} — {rego}`; build sheet: `Build Sheet — {label} — {rego}`. When rego is empty, title remains clean (no trailing separator). Updated API callers in `services.py` and `mods.py` to pass `vehicle.rego`. Added `test_pdf_export_rego_in_title` test.
@@ -424,6 +426,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Servo Spy: surface backend per-vehicle `cost_per_km` ($/km) and `avg_fill_cost` ($ per fill) in the list rows and station detail sheet alongside the existing $/L price. List + detail requests now send the active `vehicle_id`; metrics fall back to `—` when the API omits them (no vehicle selected or no fuel logs). Tests extended in `servo_spy_list_sort_test.dart`.
 ### Fixed (AUT-2208)
 - fix(frontend): Servo Spy map can no longer render as a blank white screen. Added a `surfaceContainerHighest` background under the `FlutterMap` so the map area is never pure white, surfaced a centred empty-state overlay ("No fuel stations within N km — Try increasing the distance in Filters") when `/fuel/stations` returns `[]`, and moved the fetch-error banner from the bottom of the map to the top with a Retry action so it is impossible to look at the map and miss a station-fetch failure. Loading spinner now sits on a translucent scrim so the user always sees the map area behind it. New tests: `frontend/test/servo_spy_map_render_test.dart` covers render-with-stations, stations-fetch-error banner, and empty-state overlay paths.
+### Security (AUT-2067)
+- bump `python:3.13-slim` digest to `sha256:cc9dffa47c8294ba9bb795a8dfaeb7b76f2b30acade2c52a461a2999d127eb00` across `docker/ai/Dockerfile`, `docker/backend/Dockerfile`, `docker/worker/Dockerfile`, `market-data/Dockerfile` (and `PYTHON_BASE_IMAGE` in `.github/workflows/trivy-image-scan.yml`). Closes 3 HIGH CVEs in libffi/libssl/libsecret shipped by the previous digest (AUT-2067).
 
 ## [0.3.215] - 2026-09-03
 
