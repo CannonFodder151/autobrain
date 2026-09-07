@@ -44,13 +44,11 @@ x-backend-base: &backend-base
     FUEL_NSW_API_KEY: ${FUEL_NSW_API_KEY:-}
     FUEL_NSW_API_SECRET: ${FUEL_NSW_API_SECRET:-}
     FUEL_NSW_ENABLED: "true"
-    # AUT-1932: VIC Servo Saver — approved partner key (AUT-1813 phase).
-    # Enable with FUEL_VIC_ENABLED=true once key/secret are provisioned.
+    # AUT-1813/AUT-1932: VIC Servo Saver — approved partner key + secret.
     FUEL_VIC_API_KEY: ${FUEL_VIC_API_KEY:-}
     FUEL_VIC_API_SECRET: ${FUEL_VIC_API_SECRET:-}
     FUEL_VIC_ENABLED: "true"
-    # AUT-2218: QLD DirectAPI subscription token (AUT-1813 phase). Read by
-    # backend/app/core/config.py:110 as settings.FUEL_QLD_API_KEY. Empty key
+    # AUT-2218: QLD DirectAPI subscription token (AUT-1813 phase). Empty key
     # disables the feed (mirrors the NSW no-key pattern).
     FUEL_QLD_API_KEY: ${FUEL_QLD_API_KEY:-}
     # AUT-2610: SA SAFPIS ingester (AUT-2406). Same Informed Sources subscriber

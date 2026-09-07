@@ -166,8 +166,7 @@ services:
       FUEL_NSW_API_KEY_FILE: /run/secrets/fuel_nsw_api_key
       FUEL_NSW_API_SECRET_FILE: /run/secrets/fuel_nsw_api_secret
       FUEL_NSW_ENABLED: "true"
-      # AUT-1932: VIC Servo Saver — approved partner key (AUT-1813 phase).
-      # Enable with FUEL_VIC_ENABLED=true once key/secret are provisioned.
+      # AUT-1813/AUT-1932: VIC Servo Saver — approved partner key + secret via secret file.
       FUEL_VIC_API_KEY_FILE: /run/secrets/fuel_vic_api_key
       FUEL_VIC_API_SECRET_FILE: /run/secrets/fuel_vic_api_secret
       FUEL_VIC_ENABLED: "true"
@@ -295,12 +294,11 @@ services:
       FUEL_NSW_API_KEY_FILE: /run/secrets/fuel_nsw_api_key
       FUEL_NSW_API_SECRET_FILE: /run/secrets/fuel_nsw_api_secret
       FUEL_NSW_ENABLED: "true"
-      # AUT-1932: VIC Servo Saver — approved partner key (AUT-1813 phase).
+      # AUT-1813/AUT-1932: VIC Servo Saver — approved partner key + secret.
       FUEL_VIC_API_KEY_FILE: /run/secrets/fuel_vic_api_key
       FUEL_VIC_API_SECRET_FILE: /run/secrets/fuel_vic_api_secret
       FUEL_VIC_ENABLED: "true"
-      # AUT-2218: QLD fuel — same wiring as the backend so the celery beat task
-      # in this worker can poll the QLD feed alongside NSW/VIC.
+      # AUT-2218: QLD fuel — celery beat polls alongside NSW/VIC.
       FUEL_QLD_API_KEY_FILE: /run/secrets/fuel_qld_api_key
       # AUT-2610: SA SAFPIS ingester — same wiring as backend.
       FUEL_SA_API_KEY_FILE: /run/secrets/fuel_sa_api_key
