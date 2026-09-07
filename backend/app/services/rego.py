@@ -44,28 +44,92 @@ _AU_PREFIX: dict[str, tuple] = {
     "RAV": ("Toyota", "RAV4", 2022, "2.5L Hybrid", "CVT"),
     "KLU": ("Toyota", "Kluger", 2020, "3.5L V6", "Automatic"),
     "LAN": ("Toyota", "LandCruiser", 2019, "4.5L Turbo Diesel", "Automatic"),
+    "PRD": ("Toyota", "Prado", 2021, "2.8L Turbo Diesel", "Automatic"),
+    "YAR": ("Toyota", "Yaris", 2022, "1.5L 4-cyl", "CVT"),
+    "CRO": ("Toyota", "Corolla Cross", 2022, "2.0L 4-cyl", "CVT"),
+    "FOT": ("Toyota", "Fortuner", 2020, "2.8L Turbo Diesel", "Automatic"),
     "HON": ("Honda", "Civic", 2022, "1.5L Turbo", "CVT"),
     "ACC": ("Honda", "Accord", 2019, "2.0L Turbo", "Automatic"),
     "HRV": ("Honda", "HR-V", 2021, "1.8L 4-cyl", "CVT"),
+    "CRV": ("Honda", "CR-V", 2021, "1.5L Turbo", "CVT"),
+    "PIL": ("Honda", "Pilot", 2020, "3.5L V6", "Automatic"),
+    "RID": ("Honda", "Ridgeline", 2021, "3.5L V6", "Automatic"),
     "MAZ": ("Mazda", "CX-5", 2019, "2.5L 4-cyl", "Automatic"),
     "MZD": ("Mazda", "Mazda3", 2021, "2.0L 4-cyl", "Automatic"),
+    "CX3": ("Mazda", "CX-3", 2021, "2.0L 4-cyl", "Automatic"),
+    "CX8": ("Mazda", "CX-8", 2020, "2.5L 4-cyl", "Automatic"),
+    "CX9": ("Mazda", "CX-9", 2020, "2.5L Turbo", "Automatic"),
+    "BT5": ("Mazda", "BT-50", 2021, "3.0L Turbo Diesel", "Automatic"),
     "FOR": ("Ford", "Ranger", 2021, "2.0L Bi-Turbo", "Automatic"),
-    "FOC": ("Ford", "Focus", 2019, "1.5L Turbo", "Automatic"),
-    "MUS": ("Ford", "Mustang", 2022, "5.0L V8", "Automatic"),
+    "ECO": ("Ford", "EcoSport", 2021, "1.0L Turbo", "Automatic"),
+    "EVE": ("Ford", "Everest", 2021, "2.0L Turbo Diesel", "Automatic"),
     "HOL": ("Holden", "Commodore", 2019, "3.6L V6", "Automatic"),
+    "COL": ("Holden", "Colorado", 2021, "2.8L Turbo Diesel", "Automatic"),
+    "TRA": ("Holden", "Trailblazer", 2021, "1.4L Turbo", "Automatic"),
     "SUB": ("Subaru", "Outback", 2018, "2.5L Boxer", "CVT"),
+    "FST": ("Subaru", "Forester", 2021, "2.5L Boxer", "CVT"),
+    "XV": ("Subaru", "XV", 2021, "2.0L Boxer", "CVT"),
+    "WRX": ("Subaru", "WRX", 2021, "2.4L Turbo", "CVT"),
+    "LEV": ("Subaru", "Levorg", 2020, "1.8L Turbo", "CVT"),
     "BMW": ("BMW", "3 Series", 2020, "2.0L Turbo", "Automatic"),
+    "X5": ("BMW", "X5", 2021, "3.0L Turbo", "Automatic"),
+    "X3": ("BMW", "X3", 2020, "2.0L Turbo", "Automatic"),
+    "X1": ("BMW", "X1", 2021, "2.0L Turbo", "Automatic"),
+    "M3": ("BMW", "M3", 2021, "3.0L Twin-Turbo", "Automatic"),
+    "M4": ("BMW", "M4", 2021, "3.0L Twin-Turbo", "Automatic"),
     "AUD": ("Audi", "A4", 2019, "2.0L Turbo", "Automatic"),
+    "Q5": ("Audi", "Q5", 2021, "2.0L Turbo", "Automatic"),
+    "Q3": ("Audi", "Q3", 2020, "1.4L Turbo", "Automatic"),
+    "Q7": ("Audi", "Q7", 2021, "3.0L Turbo", "Automatic"),
+    "A3": ("Audi", "A3", 2021, "1.4L Turbo", "Automatic"),
+    "A5": ("Audi", "A5", 2020, "2.0L Turbo", "Automatic"),
     "MER": ("Mercedes-Benz", "C-Class", 2020, "2.0L Turbo", "Automatic"),
+    "GLC": ("Mercedes-Benz", "GLC", 2021, "2.0L Turbo", "Automatic"),
+    "GLA": ("Mercedes-Benz", "GLA", 2020, "1.3L Turbo", "Automatic"),
+    "A-C": ("Mercedes-Benz", "A-Class", 2021, "1.3L Turbo", "Automatic"),
+    "E-C": ("Mercedes-Benz", "E-Class", 2020, "2.0L Turbo", "Automatic"),
+    "GLE": ("Mercedes-Benz", "GLE", 2021, "3.0L Turbo", "Automatic"),
     "NIS": ("Nissan", "X-Trail", 2020, "2.5L 4-cyl", "CVT"),
     "NAV": ("Nissan", "Navara", 2019, "2.3L Turbo Diesel", "Automatic"),
+    "PAT": ("Nissan", "Patrol", 2021, "5.6L V8", "Automatic"),
+    "QAS": ("Nissan", "Qashqai", 2021, "1.3L Turbo", "CVT"),
+    "LEA": ("Nissan", "Leaf", 2021, "110kW Electric", "Direct Drive"),
+    "JUKE": ("Nissan", "Juke", 2021, "1.0L Turbo", "DCT"),
     "HYU": ("Hyundai", "i30", 2021, "2.0L 4-cyl", "Automatic"),
+    "TUCS": ("Hyundai", "Tucson", 2021, "2.0L 4-cyl", "Automatic"),
+    "SAN": ("Hyundai", "Santa Fe", 2021, "2.2L Turbo Diesel", "Automatic"),
+    "ION": ("Hyundai", "i20", 2022, "1.4L 4-cyl", "Automatic"),
+    "KON": ("Hyundai", "Kona", 2021, "2.0L 4-cyl", "Automatic"),
+    "VEN": ("Hyundai", "Venue", 2021, "1.6L 4-cyl", "Automatic"),
+    "IONIQ5": ("Hyundai", "IONIQ 5", 2022, "125kW Electric", "Direct Drive"),
     "KIA": ("Kia", "Sportage", 2021, "2.0L 4-cyl", "Automatic"),
+    "SOR": ("Kia", "Sorento", 2021, "2.2L Turbo Diesel", "Automatic"),
+    "SEL": ("Kia", "Seltos", 2021, "2.0L 4-cyl", "Automatic"),
+    "CER": ("Kia", "Cerato", 2021, "2.0L 4-cyl", "Automatic"),
+    "STO": ("Kia", "Stonic", 2021, "1.4L Turbo", "Automatic"),
+    "RIO": ("Kia", "Rio", 2021, "1.4L 4-cyl", "Automatic"),
+    "EV6": ("Kia", "EV6", 2022, "168kW Electric", "Direct Drive"),
     "VW": ("Volkswagen", "Golf", 2020, "1.4L Turbo", "DSG"),
+    "TIG": ("Volkswagen", "Tiguan", 2021, "2.0L Turbo", "DSG"),
+    "TRO": ("Volkswagen", "T-Roc", 2021, "1.4L Turbo", "DSG"),
+    "PAS": ("Volkswagen", "Passat", 2020, "2.0L Turbo", "DSG"),
+    "AMO": ("Volkswagen", "Amarok", 2021, "3.0L V6 Turbo Diesel", "Automatic"),
+    "POL": ("Volkswagen", "Polo", 2021, "1.0L Turbo", "DSG"),
+    "ART": ("Volkswagen", "Arteon", 2021, "2.0L Turbo", "DSG"),
     "MIT": ("Mitsubishi", "Triton", 2020, "2.4L Turbo Diesel", "Automatic"),
+    "OUT": ("Mitsubishi", "Outlander", 2021, "2.4L 4-cyl", "CVT"),
+    "ASX": ("Mitsubishi", "ASX", 2021, "2.0L 4-cyl", "CVT"),
+    "ECL": ("Mitsubishi", "Eclipse Cross", 2021, "2.4L 4-cyl", "CVT"),
+    "PAJ": ("Mitsubishi", "Pajero", 2020, "3.8L V6", "Automatic"),
     "ISU": ("Isuzu", "D-Max", 2021, "3.0L Turbo Diesel", "Automatic"),
+    "MU-X": ("Isuzu", "MU-X", 2021, "3.0L Turbo Diesel", "Automatic"),
     "RAM": ("Ram", "1500", 2022, "5.7L HEMI V8", "Automatic"),
     "JEE": ("Jeep", "Grand Cherokee", 2020, "3.6L V6", "Automatic"),
+    "WRA": ("Jeep", "Wrangler", 2021, "2.0L Turbo", "Automatic"),
+    "GLADIATOR": ("Jeep", "Gladiator", 2021, "3.6L V6", "Automatic"),
+    "CHE": ("Chevrolet", "Camaro", 2022, "6.2L V8", "Automatic"),
+    "SIL": ("Chevrolet", "Silverado", 2021, "5.3L V8", "Automatic"),
+    "EQU": ("Chevrolet", "Equinox", 2021, "1.5L Turbo", "Automatic"),
 }
 
 # Personalised-plate word decoding: word -> (make, model)
@@ -189,6 +253,140 @@ def _to_int(value) -> int | None:
     return int(digits) if digits else None
 
 
+def _build_specs() -> dict[tuple[str, str], tuple[str, str]]:
+    """Build (make, model) -> (engine, transmission) from the prefix tables."""
+    specs: dict[tuple[str, str], tuple[str, str]] = {}
+    for prefix, (make, model, year, engine, transmission) in list(_AU_PREFIX.items()):
+        specs[(make.lower(), model.lower())] = (engine, transmission)
+    for (state_key, prefix), (make, model, year, engine, transmission) in list(_STATE_PREFIX.items()):
+        specs[(make.lower(), model.lower())] = (engine, transmission)
+    return specs
+
+
+_SPECS = _build_specs()
+
+_VIN_WMI: dict[str, tuple[str, str]] = {
+    "JN": ("Toyota", "Corolla"),
+    "JTD": ("Toyota", "Camry"),
+    "JYA": ("Yamaha", "FZ6S"),
+    "JY1": ("Yamaha", "YZF-R1"),
+    "VF1": ("Renault", "Clio"),
+    "WBA": ("BMW", "3 Series"),
+    "WDD": ("Mercedes-Benz", "C-Class"),
+    "WAU": ("Audi", "A4"),
+    "ZAR": ("Alfa Romeo", "Giulia"),
+    "SAJ": ("Jaguar", "XF"),
+    "SAL": ("Land Rover", "Discovery"),
+    "WP0": ("Porsche", "911"),
+    "YS2": ("Scania", "G-series"),
+    "XLR": ("Ford", "Falcon"),
+    "6F1": ("Ford", "Ranger"),
+    "6FP": ("Ford", "Focus"),
+    "MMM": ("Mitsubishi", "Triton"),
+    "JMB": ("Mitsubishi", "Outlander"),
+    "JN1": ("Nissan", "Navara"),
+    "VSK": ("Nissan", "X-Trail"),
+    "ZCM": ("Mazda", "CX-5"),
+    "MM8": ("Mazda", "Mazda3"),
+    "KNM": ("Kia", "Sportage"),
+    "U5Y": ("Kia", "Seltos"),
+    "TMA": ("Hyundai", "i30"),
+    "KMH": ("Hyundai", "Tucson"),
+    "LGW": ("GWM", "Tank"),
+    "LFV": ("Volkswagen", "Golf"),
+    "WVW": ("Volkswagen", "Tiguan"),
+    "JH4": ("Honda", "Civic"),
+    "JHM": ("Honda", "Accord"),
+    "1C3": ("Chrysler", "300"),
+    "2C3": ("Chrysler", "300"),
+    "1FA": ("Ford", "Mustang"),
+    "1FT": ("Ford", "F-150"),
+    "1G1": ("Chevrolet", "Camaro"),
+    "1GC": ("Chevrolet", "Silverado"),
+    "WBS": ("BMW", "M3"),
+    "5YJ": ("Tesla", "Model 3"),
+    "7SA": ("Tesla", "Model Y"),
+    "3C6": ("Dodge", "Ram"),
+    "1C6": ("Dodge", "Charger"),
+    "ZFF": ("Ferrari", "488"),
+    "SCB": ("Bentley", "Continental"),
+    "SCC": ("Lotus", "Elise"),
+    "XMC": ("Nissan", "Patrol"),
+    "JN8": ("Nissan", "Patrol"),
+    "MNA": ("Mitsubishi", "Pajero"),
+    "MMC": ("Mitsubishi", "Outlander"),
+    "JN6": ("Nissan", "Navara"),
+    "JS2": ("Suzuki", "Jimny"),
+    "JS3": ("Suzuki", "Vitara"),
+    "JN3": ("Nissan", "370Z"),
+    "KNJ": ("Toyota", "HiLux"),
+    "MR0": ("Toyota", "LandCruiser"),
+    "JTJ": ("Lexus", "RX"),
+    "JTH": ("Lexus", "IS"),
+    # Note: WMI only identifies the manufacturer (first 3 chars). Different
+    # models under the same manufacturer share the WMI, so the (make, model)
+    # above is a representative pairing. Positions 4–8 encode the specific
+    # model and require per-manufacturer decoding tables (future enhancement).
+}
+
+
+def _backfill_spec(make: str, model: str) -> tuple[str, str]:
+    """Return (engine, transmission) from the local spec table by make+model."""
+    if not make:
+        return "", ""
+    make_l = make.lower()
+    # Exact match first
+    key = (make_l, model.lower())
+    if key in _SPECS:
+        return _SPECS[key]
+    # Fuzzy make-only fallback (first make match)
+    for (mk, _md), spec in _SPECS.items():
+        if mk == make_l:
+            return spec
+    return "", ""
+
+
+_VIN_YEAR_CODES: dict[str, int] = {
+    "A": 2010, "B": 2011, "C": 2012, "D": 2013, "E": 2014,
+    "F": 2015, "G": 2016, "H": 2017,
+    "J": 2018, "K": 2019, "L": 2020, "M": 2021, "N": 2022,
+    "P": 2023, "R": 2024, "S": 2025, "T": 2026,
+    "V": 2027, "W": 2028, "X": 2029, "Y": 2030,
+    "1": 2031, "2": 2032, "3": 2033, "4": 2034, "5": 2035,
+    "6": 2036, "7": 2037, "8": 2038, "9": 2039,
+    # Note: I, O, Q, Z are excluded — they could be confused with 1/0.
+}
+
+
+def _backfill_year_from_vin(vin: str | None) -> int | None:
+    """Decode model year from VIN position 10 (ISO 3779).
+
+    The 10th character of a modern VIN encodes the model year using a 30-year
+    cycle of letters/digits. Codes map to a year in [2010, 2039]. We only
+    return years in a reasonable range (1980-2099) to filter out garbage
+    VINs / pre-1980 vehicles.
+    """
+    if not vin or not isinstance(vin, str) or len(vin) < 10:
+        return None
+    code = vin[9].upper()
+    year = _VIN_YEAR_CODES.get(code)
+    if year is not None and 1980 <= year <= 2099:
+        return year
+    return None
+
+
+def _backfill_spec_from_vin(vin: str | None) -> tuple[str, str]:
+    """Decode the VIN WMI (first 3 chars) and look up spec."""
+    if not vin or not isinstance(vin, str) or len(vin) < 3:
+        return "", ""
+    wmi = vin[:3]
+    make_model = _VIN_WMI.get(wmi)
+    if make_model:
+        key = (make_model[0].lower(), make_model[1].lower())
+        return _SPECS.get(key, ("", ""))
+    return "", ""
+
+
 def _map_provider(data, plate: str, state: str) -> dict | None:
     """Map a plateapi.com.au (or similar) response onto our schema.
 
@@ -196,6 +394,11 @@ def _map_provider(data, plate: str, state: str) -> dict | None:
     depth-first search. plateapi wraps the vehicle payload under `vehicle`.
     The free tier returns a production-year *range* (no VIN) — that's mapped to
     a representative year and VIN is left blank rather than fabricated.
+
+    Missing ``engine``/``transmission`` from the provider are backfilled from
+    the local spec table (``_SPECS``) by (make, model). As a last resort the
+    AI gateway enriches unknowns; when the AI is unreachable the fields stay
+    blank rather than crashing the lookup.
     """
     # Explicit failure flags
     success = _first(data, ["success", "ok"])
@@ -228,14 +431,30 @@ def _map_provider(data, plate: str, state: str) -> dict | None:
     else:
         status_norm = status_raw or "registered"
 
+    engine = str(get("engine", "engine_number", "engine_no", "engine_size") or "")
+    transmission = str(get("transmission", "gearbox", "transmission_type") or "")
+
+    make_str = str(get("make", "manufacturer", "brand") or "")
+    model_str = str(get("model", "series", "variant", "model_name") or "")
+
+    # Backfill engine/transmission from the local spec table when the provider
+    # does not return them (rego-lookup-api only scrapes vin, make, model,
+    # year, colour, body_type from state sites).
+    if not engine or not transmission:
+        engine, transmission = _backfill_spec(make_str, model_str)
+        if not engine and not transmission:
+            engine, transmission = _backfill_spec_from_vin(vin)
+    if year is None:
+        year = _backfill_year_from_vin(vin)
+
     return {
         "rego": str(get("registration_number", "registration_no", "rego", "plate", "registration") or plate),
         "vin": str(vin) if vin else None,
-        "make": str(get("make", "manufacturer", "brand") or ""),
-        "model": str(get("model", "series", "variant", "model_name") or ""),
+        "make": make_str,
+        "model": model_str,
         "year": year,
-        "engine": str(get("engine", "engine_number", "engine_no", "engine_size") or ""),
-        "transmission": str(get("transmission", "gearbox", "transmission_type") or ""),
+        "engine": engine,
+        "transmission": transmission,
         "body_type": str(get("body", "body_type", "body_style", "body_type_description") or ""),
         "colour": str(get("colour", "color", "vehicle_colour") or ""),
         "expiry_date": str(get("expiry_date", "registration_expiry", "rego_expiry") or ""),
