@@ -14,6 +14,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Added (AUT-2400)
 - feat(frontend,AUT-2400): stale-while-revalidate + offline banner UX. New `ConnectivityService` singleton (connectivity_plus) exposes live online/offline state. `OfflineCache` gains 10s ultra-hot in-memory layer. `ApiClient.getCachedDecoded()` enables cache-first reads. All 10 list screens (vehicles, fuel, services, logbook, mods, parts, receipts, diagnostics, timeline, analytics, social feed) now render cached data immediately and refresh in background. `AutoBrainApp` is now `StatefulWidget` and surfaces a `MaterialBanner` when offline. `StaleHint` widget shows cache staleness on list screens. New dependency: `connectivity_plus: ^6.0.3`. `pubspec.lock` updated. No new DB tables. Closes AUT-2400.
 
+### Fixed (AUT-2881)
+- fix(backend,AUT-2881): receipt OCR now runs synchronously during upload. Previously `POST /vehicles/{id}/receipts` stored the file and dispatched a Celery task, returning immediately with `ocr_status=pending`; the app showed "uploaded, enter details manually" because the Celery worker could be down. Now the endpoint runs `_pdf_text` + `extract_receipt` inline (matching the fuel-receipt flow), stores extracted items + vendor/total/tax, and returns `ocr_status=done` or `failed` in the response. AI normalization still uses the deterministic fallback first, then 9Router enrichment; rate-limit and auth are unchanged. Also fixed pre-existing syntax errors in `fuel_servo.py` (duplicate `vehicle_id` param, orphaned `await` in sync helper) that blocked import of the entire `app.api.v1` package.
+
 ## [0.3.245] - 2026-09-06
 
 ### Fixed (AUT-2216)

@@ -25,7 +25,6 @@ from app.schemas.fuel_servo import (
     AttributionOut,
     FuelBrandOut,
     FuelHistoryPoint,
-    FuelPriceHistoryOut,
     FuelPriceOut,
     FuelStationHistoryOut,
     FuelStationOut,
@@ -102,11 +101,10 @@ async def fuel_stations(
     lon: float = Query(..., description="Search centre longitude"),
     radius_km: float = Query(25, gt=0, le=2000, description="Search radius in km"),
     fuel_type: str | None = Query(default=None, description="Filter to a canonical fuel type (91/95/98/E10/Diesel/LPG)"),
-    vehicle_id: str | None = Query(default=None, description="Annotate prices with this vehicle's per-station cost (AUT-2201)"),
     limit: int = Query(50, ge=1, le=200),
     vehicle_id: str | None = Query(
         default=None,
-        description="Annotate each price with cost-per-km and avg-fill-cost for this vehicle (AUT-2053).",
+        description="Annotate prices with this vehicle's per-station cost. Combines per-station cost (AUT-2201) with cost-per-km and avg-fill-cost annotation (AUT-2053).",
     ),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_fuel_access),
@@ -299,7 +297,3 @@ def _station_out(
             for cpkm, afc in [_project_price(p, stats)]
         ],
     )
-    if fuel_type:
-        q = q.where(FuelPrice.fuel_type == fuel_type)
-    rows = list((await db.scalars(q)).all())
-    return [FuelPriceHistoryOut.model_validate(r) for r in rows]

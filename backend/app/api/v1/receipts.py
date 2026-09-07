@@ -1,8 +1,11 @@
 """Receipt & parts scanner routes (OCR + AI extraction)."""
 
+import base64
+import io
 import json
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from pypdf import PdfReader
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,7 +20,8 @@ from app.models.receipt import ExtractedItem, Receipt
 from app.models.service import ServiceItem, ServiceRecord
 from app.models.user import User
 from app.schemas.receipt import ApplyToServiceRequest, ReceiptOut
-from app.workers.tasks import fire_and_forget, process_receipt, queue_embedding
+from app.services.ai_client import extract_receipt
+from app.workers.tasks import queue_embedding
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/vehicles/{vehicle_id}/receipts", tags=["receipts"])
@@ -33,6 +37,16 @@ def _ext(filename: str | None) -> str:
     return filename.rsplit(".", 1)[-1].lower()
 
 
+def _pdf_text(data: bytes) -> str:
+    """Extract text from a PDF for downstream OCR/AI extraction."""
+    try:
+        reader = PdfReader(io.BytesIO(data))
+        return "\n".join(page.extract_text() or "" for page in reader.pages)
+    except Exception:
+        logger.exception("pdf_text_extraction_failed")
+        return ""
+
+
 @router.post("", response_model=ReceiptOut, status_code=201)
 async def upload_receipt(
     vehicle_id: str,
@@ -41,7 +55,7 @@ async def upload_receipt(
     user: User = Depends(require_write),
     _: User = Depends(require_ai_rate_limit),
 ) -> Receipt:
-    """Upload a receipt for AI OCR + parts extraction."""
+    """Upload a receipt and run OCR synchronously so extracted data is available immediately."""
     await get_accessible_vehicle(db, vehicle_id, user)
     data = await file.read()
     if len(data) > MAX_BYTES:
@@ -55,18 +69,56 @@ async def upload_receipt(
         )
     await ensure_bucket()
     key = f"receipts/{vehicle_id}/{Receipt.__tablename__}_upload_{_rand()}.{_ext(file.filename)}"
-    url = await upload_object(key, data, content_type)
+    await upload_object(key, data, content_type)
     receipt = Receipt(
         vehicle_id=vehicle_id,
         file_key=key,
         original_name=file.filename,
         content_type=content_type,
-        ocr_status="pending",
+        ocr_status="processing",
     )
     db.add(receipt)
     await db.commit()
     await db.refresh(receipt)
-    fire_and_forget(process_receipt, receipt.id)
+
+    try:
+        content = _pdf_text(data) if content_type == "application/pdf" else ""
+        payload = {
+            "content": content,
+            "content_base64": base64.b64encode(data).decode() if content_type != "application/pdf" else "",
+            "content_type": content_type,
+            "filename": file.filename,
+            "vehicle_id": vehicle_id,
+        }
+        result = await extract_receipt(payload)
+        if result:
+            receipt.ocr_status = "done"
+            receipt.vendor = result.get("vendor")
+            receipt.total = result.get("total")
+            receipt.tax = result.get("tax")
+            receipt.currency = result.get("currency", "AUD")
+            receipt.invoice_date = result.get("invoice_date")
+            receipt.extracted = json.dumps(result)
+            for item in result.get("items", []):
+                db.add(
+                    ExtractedItem(
+                        receipt_id=receipt.id,
+                        kind=item.get("kind", "part"),
+                        name=item.get("name", "Item"),
+                        quantity=int(item.get("quantity", 1)),
+                        unit_cost=float(item.get("unit_cost", 0.0)),
+                        warranty_months=item.get("warranty_months"),
+                    )
+                )
+        else:
+            receipt.ocr_status = "failed"
+    except Exception:
+        logger.exception("receipt_ocr_sync_failed", receipt_id=receipt.id)
+        receipt.ocr_status = "failed"
+
+    await db.commit()
+    await db.refresh(receipt)
+    queue_embedding("receipt", str(receipt.id))
     return receipt
 
 @router.get("", response_model=list[ReceiptOut])
@@ -89,7 +141,7 @@ async def delete_receipt(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_write),
 ) -> None:
-    """Delete a scanned receipt (e.g. one stuck on 'pending' after OCR failed)."""
+    """Delete a scanned receipt (e.g. one stuck on 'failed' after OCR failed)."""
     await get_accessible_vehicle(db, vehicle_id, user)
     receipt = await db.get(Receipt, receipt_id)
     if not receipt or receipt.vehicle_id != vehicle_id:
@@ -188,4 +240,3 @@ def _rand() -> str:
 def _today():
     from datetime import date
     return date.today()
-
