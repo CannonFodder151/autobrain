@@ -5,10 +5,12 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api_client.dart';
 import '../../core/auth_state.dart';
+import '../../core/connectivity_service.dart';
 import '../../core/models.dart';
 import '../../widgets/responsive.dart';
 import '../../widgets/vehicle_selector.dart';
 import '../../widgets/rego_status_badge.dart';
+import '../../widgets/stale_hint.dart';
 import '../admin/admin_screen.dart';
 import '../analytics/analytics_screen.dart';
 import '../../community_garage/community_garage_screen.dart';
@@ -42,6 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Vehicle> _vehicles = const [];
   Vehicle? _selected;
   bool _loading = true;
+  bool _stale = false;
   String? _loadError;
   bool _sessionExpired = false;
 
@@ -53,8 +56,28 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _load() async {
     final api = context.read<AuthState>().api;
+    // Cache-first: render immediately from cache if available.
+    final cached = await api.getCachedDecoded('/vehicles', null);
+    if (cached != null) {
+      final data = cached as List;
+      final vehicles = data
+          .map((e) => Vehicle.fromJson(e as Map<String, dynamic>))
+          .toList();
+      if (mounted) {
+        setState(() {
+          _vehicles = vehicles;
+          _selected = Vehicle.resolveSelection(vehicles, _selected);
+          _loading = false;
+          _stale = true;
+        });
+      }
+    }
+    // Background refresh if online.
+    if (!ConnectivityService.instance.isOnline) {
+      if (mounted && _loading) setState(() => _loading = false);
+      return;
+    }
     setState(() {
-      _loading = true;
       _loadError = null;
       _sessionExpired = false;
     });
@@ -63,19 +86,26 @@ class _HomeScreenState extends State<HomeScreen> {
       final vehicles = data
           .map((e) => Vehicle.fromJson(e as Map<String, dynamic>))
           .toList();
-      _vehicles = vehicles;
-      _selected = Vehicle.resolveSelection(vehicles, _selected);
+      if (!mounted) return;
+      setState(() {
+        _vehicles = vehicles;
+        _selected = Vehicle.resolveSelection(vehicles, _selected);
+        _loading = false;
+        _stale = false;
+      });
     } on ApiException catch (e) {
+      if (!mounted) return;
       if (e.statusCode == 401) {
         _loadError = 'Your login has expired. Please log in again.';
         _sessionExpired = true;
       } else {
         _loadError = 'Could not reach the server. Check your connection or server settings.';
       }
+      setState(() => _loading = false);
     } catch (_) {
       _loadError = 'Could not reach the server. Check your connection or server settings.';
+      setState(() => _loading = false);
     }
-    setState(() => _loading = false);
   }
 
   void _showDownload() {

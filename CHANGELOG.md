@@ -11,9 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-## [0.3.246] - 2026-09-06
-### Fixed (AUT-2656)
-- fix(frontend): restore Flutter web compile on the arm64 build runner. Three compile errors blocked `flutter build web` in `dockerhub-publish.yml` + `build-hosted.yml`: (1) `home_screen.dart` — class-name collision where `_OwnershipAdvisorLaunchCard` had its constructor named `_ErrorView`, nesting the class and breaking dart2js; renamed the first class to `_ErrorView`; (2) `home_screen.dart` — `DownloadAppDialog` referenced at line 85 but never defined (lost during AUT-2400 revert churn); restored the class; (3) `home_screen.dart` + `car_check_screen.dart` — `Color.withValues(alpha:)` unsupported on Flutter <3.27 (arm64 runner image), replaced all remaining hits with `withOpacity()` or `Color(0x2FFFFFFF)`.
+### Added (AUT-2400)
+- feat(frontend,AUT-2400): stale-while-revalidate + offline banner UX. New `ConnectivityService` singleton (connectivity_plus) exposes live online/offline state. `OfflineCache` gains 10s ultra-hot in-memory layer. `ApiClient.getCachedDecoded()` enables cache-first reads. All 10 list screens (vehicles, fuel, services, logbook, mods, parts, receipts, diagnostics, timeline, analytics, social feed) now render cached data immediately and refresh in background. `AutoBrainApp` is now `StatefulWidget` and surfaces a `MaterialBanner` when offline. `StaleHint` widget shows cache staleness on list screens. New dependency: `connectivity_plus: ^6.0.3`. `pubspec.lock` updated. No new DB tables. Closes AUT-2400.
 
 ## [0.3.245] - 2026-09-06
 
