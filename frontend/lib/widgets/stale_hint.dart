@@ -25,7 +25,7 @@ class StaleHint extends StatelessWidget {
           style: TextStyle(color: color, fontSize: 11),
         ),
         visualDensity: VisualDensity.compact,
-        pad: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       ),
     );
   }

@@ -217,16 +217,7 @@ class ApiClient {
     } on TimeoutException catch (_) {
       if (shouldCache) return _fallbackToCache(path, query);
       rethrow;
-    } on SocketException catch (_) {
-      if (shouldCache) return _fallbackToCache(path, query);
-      rethrow;
-    } on TlsException catch (_) {
-      if (shouldCache) return _fallbackToCache(path, query);
-      rethrow;
-    } on HandshakeException catch (_) {
-      if (shouldCache) return _fallbackToCache(path, query);
-      rethrow;
-    } on HttpException catch (_) {
+    } on Exception catch (_) {
       if (shouldCache) return _fallbackToCache(path, query);
       rethrow;
     } catch (e) {
