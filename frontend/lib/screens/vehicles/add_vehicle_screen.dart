@@ -182,7 +182,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-              if (_maxVehicles != null)
+                  if (_maxVehicles != null)
                 Card(
                   color: _atLimit
                       ? Theme.of(context).colorScheme.errorContainer

@@ -440,7 +440,7 @@ class _FeatureGrid extends StatelessWidget {
       childAspectRatio: isDesktop ? 1.35 : 0.92,
       children: [
         for (final f in items)
-          _FeatureTile(feature: f, isDesktop: isDesktop),
+          _FeatureTile(feature: f),
       ],
     );
   }
