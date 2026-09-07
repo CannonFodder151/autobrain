@@ -27,7 +27,7 @@ RUN flutter build web \
     --dart-define=WS_BASE_URL=${WS_BASE_URL} \
     --dart-define=CARTO_API_KEY=${CARTO_API_KEY}
 
-FROM nginxinc/nginx-unprivileged:stable-alpine@sha256:45ce1e2e699234253d1def7baa96218a5d00b498d1ba0cbb1a17b6bdf73d1351
+FROM nginxinc/nginx-unprivileged:stable-alpine@sha256:ee1643aef6b99d1058aa79b74679ba3e63094a98a1144a4326def7bae77d293b
 COPY --from=build /build/build/web /usr/share/nginx/html
 COPY docker/frontend/nginx.conf /etc/nginx/conf.d/default.conf
 COPY docker/frontend/security-headers.inc /etc/nginx/conf.d/security-headers.inc
