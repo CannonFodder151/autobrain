@@ -192,7 +192,7 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-              TextFormField(
+                  TextFormField(
                 controller: _nickname,
                 decoration: const InputDecoration(labelText: 'Nickname'),
                 validator: (v) => v == null || v.isEmpty ? 'Required' : null,

@@ -178,10 +178,10 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 640),
             child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
               if (_maxVehicles != null)
                 Card(
                   color: _atLimit

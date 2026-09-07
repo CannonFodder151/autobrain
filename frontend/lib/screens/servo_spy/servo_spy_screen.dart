@@ -718,7 +718,7 @@ class _StationSheet extends StatelessWidget {
     }
   }
 
-  Future<void> _openHistory() async {
+  Future<void> _openHistory(BuildContext context) async {
     final stationId = station.id;
     if (stationId == null || stationId.isEmpty) return;
     final stationName = station.name ?? 'Station';
@@ -779,7 +779,7 @@ class _StationSheet extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: FilledButton.tonalIcon(
-              onPressed: () => _openHistory(),
+              onPressed: () => _openHistory(context),
               icon: const Icon(Icons.show_chart),
               label: const Text('30-day price history'),
             ),
