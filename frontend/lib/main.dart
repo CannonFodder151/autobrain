@@ -16,29 +16,23 @@ void main() async {
   AutoBrainApp.initialFragment = Uri.base.fragment;
   await AppConfig.load();
   await ConnectivityService.instance.init();
-  // Drop expired SQLite cache rows before the first screen reads them.
-  // Best-effort; never blocks boot on failure.
   unawaited(OfflineCache.instance.clearExpired().catchError((_) {}));
-  // Boot-time reachability probe (AUT-2272 M0). Failures do not throw — we
-  // mount MisconfiguredBackendScreen so the user can retry instead of
-  // staring at a blank window. Server picker + login still work once the
-  // probe passes.
   await AppConfig.validate();
   final bootError = AppConfig.lastValidationOk == false;
+  final connectivity = ConnectivityService.instance;
+
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => AuthState(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AuthState()),
+        Provider<ConnectivityService>.value(value: connectivity),
+      ],
       child: bootError
           ? const MisconfiguredBackendScreen()
           : const AutoBrainApp(),
     ),
   );
-  // Resume background OBD trip recording (auto-connect + any buffered trip)
-  // without the user having to open the OBD screen. No-op when no vehicle has
-  // been set up with an adapter yet.
+
   ObdTripMonitor.instance.start();
-  // Phone-side auto trip path (AUT-367): re-arms the car-kit BT + GPS speed
-  // monitor on the same recorder, so a drive starts logging without Android
-  // Auto approval or an OBD adapter.
   CarKitTripMonitorService.instance.start();
 }
