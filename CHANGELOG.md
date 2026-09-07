@@ -11,8 +11,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.253] - 2026-09-07
 ### Fixed (AUT-2656)
-- fix(frontend,ci,AUT-2656): pin Flutter image + fix all remaining arm64 build errors. (1) `docker/frontend/Dockerfile`: pin `ghcr.io/cirruslabs/flutter:stable` → `:3.27.7` (the `:stable` tag auto-upgraded to 3.47.2, breaking dart2js with API changes including `MediaQuery.withClampedTextScaling` parameter renames, deprecated/removed APIs, and transitive import changes). (2) `connectivity_service.dart`: add missing `VoidCallback` import from `foundation.dart`. (3) `api_client.dart`: replace platform-specific `SocketException`/`TlsException`/`HandshakeException`/`HttpException` type-catch clauses (unavailable on web/dart2js) with a single `on Exception` catch. (4) `offline_cache.dart`: replace `rethrow` inside `.catchError()` callback (invalid in Dart 3 — `rethrow` only allowed in `catch` blocks) with `throw e`. (5) `main.dart`: remove `unawaited()` call (not exported by newer Dart SDK `foundation.dart`) — fire-and-forget `.catchError((_) {})` is sufficient. (6) `stale_hint.dart`: `Chip.pad` → `Chip.padding` (renamed in Flutter 3.27+). (7) Replace `final q = <String, String>? null;` (invalid Dart syntax causing cascading `Can't find ')' to match '('` parse errors in diagnostics, mods, parts, receipts, vehicle_timeline) with `<String, String>{}`. (8) Fix `children:`/`child:`/`key:` indentation in `login_screen.dart`, `signup_screen.dart`, `add_vehicle_screen.dart`, `edit_vehicle_screen.dart` (root cause of the secondary cascade — misaligned formal args). (9) `servo_spy_screen.dart`: remove duplicate `_vehicleId` declarations in `_ServoSpyMapState` and `_ServoSpyListState`. (10) `analytics_screen.dart`: restructure null-check to promote `a` from `Analytics?` to `Analytics` before accessing `.summary`/`.monthly`/`.insights`/`.forecast`.
+- fix(frontend): restore flutter web compile on arm64 runner. PR #530 (AUT-2478) introduced a class name collision in `home_screen.dart` — the `_OwnershipAdvisorLaunchCard` class had its constructor renamed to `_ErrorView`, nesting it and breaking dart2js. Separated `_ErrorView` as its own top-level class and restored `_ErrorView.build` body. Also fixed `servo_spy_screen.dart` `_openHistory()` missing `BuildContext` argument (passed `context` to `Navigator.of(context)` but the method signature lacked the parameter, causing `context` to resolve to the enclosing `build` scope).
+
+## [0.3.252] - 2026-09-07
+### Fixed (AUT-2726)
+- fix(backend,frontend): apply missing rego columns to existing vehicles + clearer server error messages. `backend/app/db/bootstrap.py` now falls back from `alembic upgrade head` to `alembic upgrade heads` before `create_all`, so a database that predates the `m3rge05` merge migration (which adds `rego_status`, `rego_expiry_date`, `rego_checked_at`, `powertrain`, `rego_state` to `vehicles`) no longer silently skips column creation — `create_all` does not add columns to existing tables, leaving vehicles without rego state and the frontend showing a masked 500 ("Could not reach the server"). `frontend/lib/screens/home/home_screen.dart` now distinguishes `ApiException` (server error, surface the status code + message) from a genuine network timeout so users see the real failure instead of a misleading connection error. Immediate mitigation: missing columns applied directly to hosted, demo, and default databases; `alembic_version` stamped to `m3rge05` on all three.
+
+## [0.3.251] - 2026-09-07
+### Added (AUT-2706)
+- firmware+backend: per-row `ev_mode` flag and vehicle-type detection. The ESP32-DIY firmware now computes `ev_mode` per trip row (0=ICE / 1=EV / 2=HYBRID) from RPM-vs-pack_current hysteresis and classifies vehicle type from the dominant ev_mode over the first trip (1=EV, 2=HEV, 4=PHEV), persisting it to the backend via `POST /devices/{device_id}/vehicle-type`. Vehicle type is stored on the `Device` model (`vehicle_type` string column, new Alembic migration `aut2706_device_vehicle_type.py`) with a `DeviceVehicleTypeIn` schema. EV manufacturer PID tables keyed by VIN WMI are selected per AUT-2702, Mode 01 0x2F fuel level is reported for PHEVs, and the firmware self-check (`firmware/esp32-diy/test/self_check.cpp`) now covers the new EV profile and vehicle-type paths. Closes AUT-2706.
+
+## [0.3.250] - 2026-09-07
+
+### Fixed (AUT-2656)
+- fix(frontend): replace reverted `withValues(alpha:)` with `withOpacity(alpha:)` in car_check_screen.dart to restore dart2js arm64 build.
+
+## [0.3.249] - 2026-09-07
+
+### Fixed (AUT-2656)
+- fix(frontend): remove duplicate `_vehicleId` declarations in servo_spy_screen.dart (2 locations) and add `package:flutter/foundation.dart` import in connectivity_service.dart to resolve dart2js compile errors on arm64 runner. Restores dockerhub-publish + build-hosted arm64 image builds.
 
 ## [0.3.248] - 2026-09-07
 ### Fixed (AUT-2960)
@@ -36,7 +55,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [0.3.240] - 2026-09-06
 ### Added (AUT-2703)
 - feat(firmware,backend,frontend): extend trip CSV row schema with EV/PHEV fields (`soc_pct,pack_v,pack_a,pack_temp_c,odo_km,ev_mode`) for AUT-2437. `format_trip_row` in `obd_pids.h` now emits 13-field rows (old 7-field rows still accepted via default args). CSV header updated to `epoch,rpm,speed,coolant,throttle,lat,lon,soc_pct,pack_v,pack_a,pack_temp_c,odo_km,ev_mode`. `csv_to_gps_json` (upload_payload.h), backend `parse_board_csv` (trip_gps.py), and frontend `tripCsvToJson` (dongle_relay.dart) all tolerate both old and new row lengths via fixed-position reads. Dart tests expanded with backward-compat + EV-field cases. C++ self_check expanded with EV-field assertions + old-format CSV tolerance.
-
 ### Fixed (AUT-2600)
 - fix(frontend): add missing `child:` label on the `ConstrainedBox` wrapping `ListView.builder` in `vehicle_timeline_screen.dart` (line 60). The widget was passed as a positional argument, misaligning the formal argument list and tripping dart2js on every `ConstrainedBox` inside the body (the compile error attached to login_screen.dart / home_screen.dart / signup_screen.dart were the downstream effect). Closes the second-half of AUT-2600 (unblocks `build-hosted.yml` amd64+arm64 `flutter build web` for the AUT-2446 Replace + AUT-2447 Upgrade release).
 
@@ -185,10 +203,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed (AUT-2383)
 - fix(frontend,servo-spy): CARTO basemap tile URL query param was `?api_key=` but CARTO requires `?key=` — the watermark persisted because the API silently ignored the wrong parameter. Updated tile URL template in `frontend/lib/screens/servo_spy/servo_spy_screen.dart` to use `?key=$_cartoApiKey`; updated comment in `docker/frontend/Dockerfile`. Caching is already optimal: tiles are immutable `{z}/{x}/{y}` hashes so CDN/browser cache-hit rate is naturally high — no extra layer needed.
-
-### Fixed (AUT-2319)
-- fix(backend): `_station_out` body lifted out of `app/api/v1/fuel_servo.py` into `app/services/fuel_servo.py` as the pure function `annotate_station` (no DB/AI/FastAPI). The AUT-2201 station-annotation unit test now imports `annotate_station` directly instead of `app.api.v1.fuel_servo._station_out`, sidestepping the router's transitive imports (`app.models`/`app.services.fuel_feeds`) that were blocking collection. The route keeps a thin `_station_out` compat wrapper that delegates to `annotate_station`. `annotate_station` preserves the current `FuelStationOut` shape including the AUT-2381 `source`/`best_source`/`source_score`/`flag_reason` per-price fields.
-- note: the AUT-2277 duplicate-`FuelPrice`-class fix (already on main as of 0.3.224, deployed to AutoBrain-Hosted arm64 in 0.3.234) supersedes the original `extend_existing=True` approach from AUT-2319's first draft; this rebase keeps only the test/lift refactor.
 
 ## [0.3.234] - 2026-09-04
 
