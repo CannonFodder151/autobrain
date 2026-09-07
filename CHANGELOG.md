@@ -14,6 +14,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Added (AUT-2400)
 - feat(frontend,AUT-2400): stale-while-revalidate + offline banner UX. New `ConnectivityService` singleton (connectivity_plus) exposes live online/offline state. `OfflineCache` gains 10s ultra-hot in-memory layer. `ApiClient.getCachedDecoded()` enables cache-first reads. All 10 list screens (vehicles, fuel, services, logbook, mods, parts, receipts, diagnostics, timeline, analytics, social feed) now render cached data immediately and refresh in background. `AutoBrainApp` is now `StatefulWidget` and surfaces a `MaterialBanner` when offline. `StaleHint` widget shows cache staleness on list screens. New dependency: `connectivity_plus: ^6.0.3`. `pubspec.lock` updated. No new DB tables. Closes AUT-2400.
 
+### Security (AUT-2060)
+- Bumped `python:3.13-slim` base image digest from `7ce4b6d...` to `cc9dffa...` (2026-08-31 Docker Hub latest) in `docker/backend/Dockerfile`, `docker/ai/Dockerfile`, `docker/worker/Dockerfile`, and `market-data/Dockerfile`. New digest ships `libssl3t64` 3.5.7-1~deb13u2, resolving CVE-2026-14456 (OpenSSL QUIC DoS) and related HIGH CVEs. Updated `PYTHON_BASE_IMAGE` env var in `.github/workflows/trivy-image-scan.yml`. Removed resolved CVE-2026-14456 suppression from `.trivyignore`.
+
 ## [0.3.245] - 2026-09-06
 
 ### Fixed (AUT-2216)
@@ -25,6 +28,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [0.3.244] - 2026-09-06
 ### Added (AUT-2384)
 - feat(frontend,AUT-2384): wire the existing-but-dead `OfflineCache` (sqflite) into `ApiClient` so GET requests cache successful responses and fall back to cache on network failure. Per-endpoint TTL table in `ApiClient._cacheTtls` (safe-list only: vehicles, auth/me, social/feed, fuel-prices; auth, exports, uploads, billing, admin, OBD excluded). Read-through on `SocketException`/`TimeoutException`/`HandshakeException`; HTTP 4xx/5xx surfaced as-is. Prefix-based invalidation via `api.invalidateCache(path)`. In-memory hot layer (LRU 64) over SQLite. Boot-time `clearExpired()` in `lib/main.dart`. No new dependencies. Closes AUT-2384 Layers 2+3.
+
+### Security (AUT-2060)
+- Bumped `python:3.13-slim` base image digest from `7ce4b6d...` to `cc9dffa...` (2026-08-31 Docker Hub latest) in `docker/backend/Dockerfile`, `docker/ai/Dockerfile`, `docker/worker/Dockerfile`, and `market-data/Dockerfile`. New digest ships `libssl3t64` 3.5.7-1~deb13u2, resolving CVE-2026-14456 (OpenSSL QUIC DoS) and related HIGH CVEs. Updated `PYTHON_BASE_IMAGE` env var in `.github/workflows/trivy-image-scan.yml`. Removed resolved CVE-2026-14456 suppression from `.trivyignore`.
+>>>>>>> a32d58f (security(AUT-2060): bump python:3.13-slim + nginx frontend digests, fix image-scan)
 
 ## [0.3.243] - 2026-09-06
 ### Fixed (AUT-2656)
