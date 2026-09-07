@@ -11,6 +11,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-2914)
+- fix(ci): restore `m3rge06_merge_aut2541_and_aut2706.py` alembic merge migration accidentally deleted in PR #564, fixing the single-head guard (AUT-702) and the `pytest — model metadata + alembic heads` check.
+- fix(frontend, AUT-2656): restore flutter web compile on arm64 runner by fixing home_screen.dart class collision. Remove unused `ConnectivityService` import, stale `_stale` state, cache-first render block, and dead `CarCheck` feature tile; replace deprecated `withValues(alpha:)` with `withOpacity(alpha:)`. Closes AUT-2656.
+
 ## [0.3.243] - 2026-09-06
 ### Fixed (AUT-2656)
 - fix(frontend): restore flutter web compile on arm64 runner. Three compile errors blocked `flutter build web` in the dockerhub-publish + build-hosted arm64 jobs: (1) `login_screen.dart:199` — `children:` under-indented by 2 spaces; (2) `signup_screen.dart:85` — `child:` under-indented by 2 spaces; (3) `reset_password_web.dart` — `import 'dart:html'` unsupported by Flutter ≥3.22 web builds (CanvasKit renderer), replaced with no-op `clearUrlToken()` (token detection in `app.dart` reads the fragment before navigation, so no data loss).
