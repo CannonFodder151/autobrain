@@ -77,6 +77,7 @@ SOURCE_TRUST: dict[str, SourceTrust] = {
     "nsw": SourceTrust.GOVERNMENT_FREE,       # NSW FuelCheck
     # Government paid (Bearer subscription).
     "qld_direct": SourceTrust.GOVERNMENT_PAID,
+    "sa": SourceTrust.GOVERNMENT_PAID,            # SA SAFPIS (Informed Sources, AUT-2406)
     # Retail free (third party, no key).
     "qld": SourceTrust.RETAIL_FREE,           # QLD open-data fallback
     "7eleven": SourceTrust.RETAIL_FREE,       # projectzerothree.info
@@ -505,6 +506,39 @@ def _parse_qld_geo_regions(regions_raw: Any, level: int) -> int | None:
     return None
 
 
+# --------------------------------------------------------------------------- #
+# SA SAFPIS (Fuel Pricing Information Scheme, Informed Sources aggregator)
+# --------------------------------------------------------------------------- #
+# AUT-2406: SA SAFPIS reuses the same Informed Sources DirectAPI shape as
+# FuelPricesQLD (GetCountryBrands / GetFuelTypes / GetCountryGeographicRegions
+# / GetFullSiteDetails / GetSitesPrices), so the existing ``_parse_qld_*``
+# parsers are reused as-is. The one difference: SA prices are in
+# **TENTHS OF A CENT** (e.g. 1356.0 → 135.6 c/L), not QLD's integer cents.
+# Sentinel ``Price = 9999.0`` means "product unavailable" — drop those rows.
+# Authorization: ``Authorization: FPDAPI SubscriberToken=<GUID>`` (same
+# header style as QLD), but the base URL is api.safuelprices.com.au.
+SA_SENTINEL_TENTHS_CENT = 9999.0
+
+
+def _sa_tenths_cent_to_dollars(raw: Any) -> float | None:
+    """Convert an Informed Sources SA price field (tenths of a cent) to dollars.
+
+    * 1356.0 → 135.6 c/L → 1.356 $/L (drop into ``FuelPrice.price``).
+    * 9999.0 → product unavailable → ``None`` (drop the row, do not store 0).
+    * None / blank / non-numeric → ``None``.
+    """
+    if raw is None:
+        return None
+    try:
+        v = float(raw)
+    except (TypeError, ValueError):
+        return None
+    if v == SA_SENTINEL_TENTHS_CENT:
+        return None
+    cpl = v / 10.0  # tenths of a cent → cents per litre
+    return round(cpl / 100.0, 3)  # cents per litre → dollars per litre
+
+
 # Public open-data fallback (kept for one cycle). Same parser as AUT-1817.
 def _parse_qld(raw: Any) -> tuple[list[dict], dict[str, list[tuple[str, float, datetime]]]]:
     rows: list[dict] = []
@@ -790,6 +824,7 @@ async def ingest_all_fuel(db: AsyncSession) -> dict:
         ("wa", ingest_wa_fuelwatch),
         ("nsw", ingest_nsw_fuelcheck),
         ("qld", ingest_qld_fuel_prices),
+        ("sa", ingest_sa_fuel),
     ):
         try:
             summary[name] = await fn(db)
@@ -797,3 +832,118 @@ async def ingest_all_fuel(db: AsyncSession) -> dict:
             logger.error("fuel_ingest_failed", source=name, error=str(exc))
             summary[name] = {"source": name, "stations": 0, "prices": 0, "error": str(exc)}
     return summary
+
+
+# --------------------------------------------------------------------------- #
+# SA SAFPIS
+# --------------------------------------------------------------------------- #
+
+async def _fetch_sa_direct(
+    client: httpx.AsyncClient | None,
+) -> tuple[dict[int, str], dict[int, str], list[dict], dict[str, list[tuple[str, float, datetime]]]]:
+    """Call the 5 SA SAFPIS endpoints; return (brand_map, fuel_map, stations, prices).
+
+    Endpoint contract mirrors FuelPricesQLD DirectAPI v1.5 (Informed Sources),
+    so the existing ``_parse_qld_brands`` / ``_parse_qld_fuel_types`` /
+    ``_parse_qld_geo_regions`` / ``_parse_qld_direct_sites`` parsers are reused.
+    Only the price conversion differs: SA prices are tenths-of-a-cent, handled
+    in ``_parse_sa_prices``.
+    """
+    base = settings.FUEL_SA_API_URL.rstrip("/")
+    sub_token = settings.FUEL_SA_API_KEY
+    headers = {
+        "Authorization": f"FPDAPI SubscriberToken={sub_token}",
+        "Content-Type": "application/json",
+    }
+    country = settings.FUEL_QLD_COUNTRY_ID  # Informed Sources uses the same country id for AU
+    geo_id = settings.FUEL_SA_GEO_REGION_ID
+    brands_raw = await _fetch_json(f"{base}/Subscriber/GetCountryBrands", headers=headers, params={"countryId": country}, client=client)
+    fuel_types_raw = await _fetch_json(f"{base}/Subscriber/GetFuelTypes", headers=headers, params={"countryId": country}, client=client)
+    regions_raw = await _fetch_json(f"{base}/Subscriber/GetCountryGeographicRegions", headers=headers, params={"countryId": country}, client=client)
+    brand_map = _parse_qld_brands(brands_raw)
+    fuel_map = _parse_qld_fuel_types(fuel_types_raw)
+    # Sanity: make sure geo_id resolves to the expected SA region (4). We trust
+    # the configured region id but log a mismatch so a future API drift is
+    # caught during the daily beat rather than silently serving the wrong state.
+    resolved_geo = _parse_qld_geo_regions(regions_raw, 3)
+    if resolved_geo is not None and resolved_geo != geo_id:
+        logger.warning("fuel_sa_geo_region_mismatch", expected=geo_id, resolved=resolved_geo)
+    sites_raw = await _fetch_json(
+        f"{base}/Subscriber/GetFullSiteDetails",
+        headers=headers,
+        params={"countryId": country, "geoRegionLevel": 3, "geoRegionId": geo_id},
+        client=client,
+    )
+    prices_raw = await _fetch_json(
+        f"{base}/Subscriber/GetSitesPrices",
+        headers=headers,
+        params={"countryId": country, "geoRegionLevel": 3, "geoRegionId": geo_id},
+        client=client,
+    )
+    stations = _parse_qld_direct_sites(sites_raw, brand_map)
+    prices = _parse_sa_direct_prices(prices_raw, fuel_map)
+    return brand_map, fuel_map, stations, prices
+
+
+def _parse_sa_direct_prices(
+    prices_raw: Any,
+    fuel_id_to_name: dict[int, str],
+) -> dict[str, list[tuple[str, float, datetime]]]:
+    """Parse ``GetSitesPrices`` for SA — same shape as QLD DirectAPI.
+
+    The only difference from ``_parse_qld_direct_prices``: SA prices are in
+    **tenths of a cent**, so we use ``_sa_tenths_cent_to_dollars`` (which also
+    drops the ``9999.0`` sentinel). QLD's integer-cents heuristic must NOT be
+    applied here (AUT-2406: "Do NOT use the QLD integer-cents heuristic").
+    """
+    rows: list = []
+    if isinstance(prices_raw, dict):
+        rows = prices_raw.get("S") or prices_raw.get("sites") or []
+    elif isinstance(prices_raw, list):
+        rows = prices_raw
+    out: dict[str, list[tuple[str, float, datetime]]] = {}
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        sid = _first(r, ["S", "SiteId", "Id"])
+        if sid is None:
+            continue
+        sid = str(sid)
+        ts = _to_dt(_first(r, ["LastUpdated", "LastModified"]))
+        for k, v in r.items():
+            if not isinstance(k, str) or not _QLD_FUEL_FIELD_RE.match(k):
+                continue
+            try:
+                fuel_id = int(k[1:])
+            except ValueError:
+                continue
+            fuel_name = fuel_id_to_name.get(fuel_id)
+            ft = _normalise_fuel_type(fuel_name)
+            price_dollars = _sa_tenths_cent_to_dollars(v)  # SA: tenths of a cent
+            if ft and price_dollars is not None:
+                out.setdefault(sid, []).append((ft, price_dollars, ts))
+    return out
+
+
+async def ingest_sa_fuel(db: AsyncSession, *, client: httpx.AsyncClient | None = None) -> dict:
+    """SA SAFPIS Servo Spy feed (AUT-2406).
+
+    Informed Sources aggregator for SA (same API platform as QLD DirectAPI).
+    Subscriber Token GUID in ``FUEL_SA_API_KEY``; empty key = skip (mirrors NSW).
+    """
+    if not settings.FUEL_SA_API_KEY:
+        logger.info("fuel_sa_skipped_no_key")
+        return {"source": "sa", "stations": 0, "prices": 0, "skipped": "no_api_key"}
+    try:
+        _, _, stations, prices = await _fetch_sa_direct(client)
+        logger.info("fuel_sa_direct_ok", stations=len(stations), prices=sum(len(v) for v in prices.values()))
+        # Reuse the generic `_ingest` (it handles upsert + arbitration).
+        # Source "sa" rows land in fuel_stations.source='sa'.
+        result = await _ingest(db, "sa", stations, prices)
+        # Patch the source label in the summary so callers see "sa".
+        if result and result.get("source") == "sa":
+            return result
+        return {"source": "sa", "stations": len(stations), "prices": sum(len(v) for v in prices.values())}
+    except Exception as exc:  # noqa: BLE001
+        logger.error("fuel_sa_direct_failed", error=str(exc))
+        return {"source": "sa", "stations": 0, "prices": 0, "error": str(exc)}
