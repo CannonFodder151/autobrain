@@ -183,7 +183,6 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
   String? _selectedFuelType;
   String? _vehicleId;
   double _maxDistanceKm = 25;
-  String? _vehicleId; // AUT-2053: for $/km + avg fill cost projection
   final MapController _mapController = MapController();
   LatLng? _mapCenter;
 
@@ -236,7 +235,6 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
       final current = Vehicle.resolveSelection(vehicles, null);
       _vehicleId = current?.id;
       _selectedFuelType = current?.fuelType;
-      _vehicleId = current?.id; // AUT-2053
 
       _fuelTypes = await fetchFuelTypes(api);
       if (_selectedFuelType == null || !_fuelTypes.contains(_selectedFuelType)) {
@@ -829,7 +827,6 @@ class _ServoSpyListState extends State<_ServoSpyList> {
   String? _vehicleId;
   double _maxDistanceKm = 25;
   ServoSortMetric _sortMetric = ServoSortMetric.price;
-  String? _vehicleId; // AUT-2053
   late final ApiClient _api;
   Map<String, double>? _pos;
 
@@ -862,7 +859,6 @@ class _ServoSpyListState extends State<_ServoSpyList> {
       final current = Vehicle.resolveSelection(vehicles, null);
       _vehicleId = current?.id;
       _selectedFuelType = current?.fuelType;
-      _vehicleId = current?.id; // AUT-2053
 
       _fuelTypes = await fetchFuelTypes(_api);
       if (_selectedFuelType == null || !_fuelTypes.contains(_selectedFuelType)) {
