@@ -50,8 +50,8 @@ permissions:
 
 env:
   POSTGRES_IMAGE: 'pgvector/pgvector:pg17@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f'
-  NGINX_FRONTEND_IMAGE: 'nginxinc/nginx-unprivileged:stable-alpine@sha256:45ce1e2e699234253d1def7baa96218a5d00b498d1ba0cbb1a17b6bdf73d1351'
-  PYTHON_BASE_IMAGE: 'python:3.13-slim@sha256:7ce4b6dfe35e55397b7cda544f8a13f191b7ae28dc5aad71fe664dbc9bc2623f'
+  NGINX_FRONTEND_IMAGE: 'nginxinc/nginx-unprivileged:stable-alpine@sha256:ee1643aef6b99d1058aa79b74679ba3e63094a98a1144a4326def7bae77d293b'
+  PYTHON_BASE_IMAGE: 'python:3.13-slim@sha256:cc9dffa47c8294ba9bb795a8dfaeb7b76f2b30acade2c52a461a2999d127eb00'
 
 jobs:
   image-scan:
