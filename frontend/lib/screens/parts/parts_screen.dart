@@ -35,7 +35,7 @@ class _PartsScreenState extends State<PartsScreen> {
   Future<void> _load() async {
     final api = context.read<AuthState>().api;
     final path = '/vehicles/${widget.vehicle.id}/parts';
-    final q = <String, String>? null;
+    final q = <String, String>{};
     final cached = await api.getCachedDecoded(path, q);
     if (cached != null) {
       _parts = (cached as List)

@@ -2,6 +2,7 @@
 /// can subscribe without re-creating a stream listener each time.
 library;
 
+import 'package:flutter/foundation.dart' show VoidCallback;
 import 'package:connectivity_plus/connectivity_plus.dart';
 
 /// Process-wide singleton. Widgets listen via [isOnline] or [addListener].

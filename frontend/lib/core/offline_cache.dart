@@ -49,9 +49,9 @@ class OfflineCache {
       _db = d;
       _opening = null;
       return d;
-    }).catchError((_) {
+    }).catchError((e) {
       _opening = null;
-      rethrow;
+      throw e;
     });
     try {
       return await _opening!;

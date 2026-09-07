@@ -30,7 +30,7 @@ class _ModsScreenState extends State<ModsScreen> {
   Future<void> _load() async {
     final api = context.read<AuthState>().api;
     final path = '/vehicles/${widget.vehicleId}/mods';
-    final q = <String, String>? null;
+    final q = <String, String>{};
     final cached = await api.getCachedDecoded(path, q);
     if (cached != null) {
       _mods = (cached as List)

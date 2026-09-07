@@ -83,11 +83,11 @@ class _SignupScreenState extends State<SignupScreen> {
               padding: const EdgeInsets.all(24),
               child: Center(
                 child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 480),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
+                  constraints: const BoxConstraints(maxWidth: 480),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(

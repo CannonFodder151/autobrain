@@ -50,15 +50,23 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   @override
   Widget build(BuildContext context) {
     final a = _analytics;
+    if (a == null && _loading) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Analytics')),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (a == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Analytics')),
+        body: const Center(child: Text('No data yet')),
+      );
+    }
     return Scaffold(
       appBar: AppBar(title: const Text('Analytics')),
       body: RefreshIndicator(
         onRefresh: _load,
-        child: _loading && _analytics == null
-            ? const Center(child: CircularProgressIndicator())
-            : a == null && _stale
-                ? const Center(child: Text('No data yet'))
-                : ListView(
+        child: ListView(
                     padding: const EdgeInsets.all(16),
                     children: [
                       StaleHint(
@@ -77,6 +85,99 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                                   '\$${a.summary.totalCostOfOwnership.toStringAsFixed(0)}',
                             ),
                           ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _MetricCard(
+                              label: 'Per km',
+                              value: a.summary.costPerKm != null
+                                  ? '\$${a.summary.costPerKm!.toStringAsFixed(2)}'
+                                  : '—',
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _MetricCard(
+                              label: 'Fuel',
+                              value:
+                                  '\$${a.summary.fuelTotal.toStringAsFixed(0)}',
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _MetricCard(
+                              label: 'Service',
+                              value:
+                                  '\$${a.summary.serviceTotal.toStringAsFixed(0)}',
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _MetricCard(
+                              label: 'Mods',
+                              value:
+                                  '\$${a.summary.modTotal.toStringAsFixed(0)}',
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (a.monthly.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        Text('Monthly spend',
+                            style: Theme.of(context).textTheme.titleLarge),
+                        for (final m in a.monthly)
+                          Card(
+                            child: ListTile(
+                              dense: true,
+                              title: Text(m.month),
+                              subtitle: Text(
+                                'Fuel \$${m.fuel.toStringAsFixed(0)} · '
+                                'Service \$${m.service.toStringAsFixed(0)} · '
+                                'Mods \$${m.mod.toStringAsFixed(0)}',
+                              ),
+                            ),
+                          ),
+                      ],
+                      const SizedBox(height: 16),
+                      Text('AI insights',
+                          style: Theme.of(context).textTheme.titleLarge),
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              for (final insight in a.insights)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: Text('• $insight'),
+                                ),
+                              const Divider(),
+                              Text(
+                                '12-month forecast: '
+                                '\$${a.forecast.next12Months.toStringAsFixed(0)}',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold),
+                              ),
+                              Text(
+                                '(${a.forecast.basis})',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+              ),
+        ),
+      ),
+    );
+  }
+}
                           const SizedBox(width: 8),
                           Expanded(
                             child: _MetricCard(
