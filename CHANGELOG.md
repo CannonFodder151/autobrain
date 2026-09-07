@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+
+## [0.3.252] - 2026-09-07
 ### Fixed (AUT-2726)
 - fix(backend,frontend): apply missing rego columns to existing vehicles + clearer server error messages. `backend/app/db/bootstrap.py` now falls back from `alembic upgrade head` to `alembic upgrade heads` before `create_all`, so a database that predates the `m3rge05` merge migration (which adds `rego_status`, `rego_expiry_date`, `rego_checked_at`, `powertrain`, `rego_state` to `vehicles`) no longer silently skips column creation — `create_all` does not add columns to existing tables, leaving vehicles without rego state and the frontend showing a masked 500 ("Could not reach the server"). `frontend/lib/screens/home/home_screen.dart` now distinguishes `ApiException` (server error, surface the status code + message) from a genuine network timeout so users see the real failure instead of a misleading connection error. Immediate mitigation: missing columns applied directly to hosted, demo, and default databases; `alembic_version` stamped to `m3rge05` on all three.
 
