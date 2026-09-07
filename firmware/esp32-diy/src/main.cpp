@@ -36,15 +36,12 @@ static RtcDs3231 rtc;
 static TripStore trips;
 static BleSync ble;
 
-// ---- EV profile (AUT-2702) ----
-// Per-device EV profile, selected on first trip or over BLE provisioning.
-// Non-zero means an EV profile is active; otherwise the ICE trip loop uses
-// standard mode-01 PIDs only.
+// ---- EV profile + vehicle type (AUT-2702, AUT-2706) ----
 static const EvProfile* g_ev_profile = nullptr;
 static char g_ev_wmi[4] = "";
+static uint8_t g_vehicle_type = 0;  // 0=unknown, 1=ICE, 2=EV, 3=HEV, 4=PHEV
+static bool g_vehicle_type_classified = false;
 
-// Select an EV profile from the VIN's WMI prefix (first 3 chars). Called
-// once per boot before ignition probing; idempotent on repeat drives.
 static void select_ev_profile(const char* vin) {
     char wmi[4];
     if (autobrain::vin_wmi(vin, wmi)) {
@@ -55,6 +52,35 @@ static void select_ev_profile(const char* vin) {
         g_ev_profile = &autobrain::GENERIC_EV;
         Serial.println("VIN too short — falling back to generic EV profile");
     }
+}
+
+// AUT-2706: per-row EV mode classification (0=ICE/1=EV/2=HYBRID via RPM vs pack_current).
+inline uint8_t classify_ev_mode(uint16_t rpm, int16_t pack_current_a) {
+    if (rpm == 0 && pack_current_a != 0) return 1;   // EV
+    if (rpm > 0 && pack_current_a != 0) return 2;    // HYBRID
+    return 0;                                         // ICE
+}
+
+// AUT-2706: classify vehicle type from first trip's predominant ev_mode.
+static void classify_vehicle_type(uint32_t trip_rows, uint32_t ev_mode_counts[3]) {
+    if (g_vehicle_type_classified || trip_rows == 0) return;
+    uint8_t dominant = 0;
+    uint32_t max_count = 0;
+    for (uint8_t m = 0; m < 3; m++) {
+        if (ev_mode_counts[m] > max_count) {
+            max_count = ev_mode_counts[m];
+            dominant = m;
+        }
+    }
+    if (dominant == 1) {
+        g_vehicle_type = (g_ev_profile && strcmp(g_ev_profile->wmi, "GEN") != 0) ? 2 : 1;
+    } else if (dominant == 2) {
+        g_vehicle_type = 4;
+    } else {
+        g_vehicle_type = 1;
+    }
+    g_vehicle_type_classified = true;
+    Serial.printf("Vehicle type: %u (rows=%u)\n", g_vehicle_type, trip_rows);
 }
 
 // Mode-22 OBD request; true on a valid 0x7E8 response within window.
@@ -80,22 +106,25 @@ static bool pid_request_m22(uint16_t pid, uint8_t out[8], uint32_t timeout_ms = 
     return false;
 }
 
-// Pull the four EV channels for the active profile. Fills the decoded values
-// so the trip loop / BLE can expose them. Returns true if at least one read
-// succeeded; the app can treat false as "EV data unavailable this sample".
+// Pull the four EV channels for the active profile.
 static bool ev_read_pack(int32_t out[4]) {
     if (!g_ev_profile) return false;
     uint8_t resp[8];
     bool ok = false;
     ok |= pid_request_m22(g_ev_profile->soc_pct.pid, resp);
-    out[EV_CH_SOC] = ev_decode_value(resp, EV_CH_SOC);
+    out[EV_CH_SOC] = ok ? ev_decode_value(resp, EV_CH_SOC) : 0;
     ok |= pid_request_m22(g_ev_profile->pack_v.pid, resp);
-    out[EV_CH_PACK_V] = ev_decode_value(resp, EV_CH_PACK_V);
+    out[EV_CH_PACK_V] = ok ? ev_decode_value(resp, EV_CH_PACK_V) : 0;
     ok |= pid_request_m22(g_ev_profile->pack_i.pid, resp);
-    out[EV_CH_PACK_I] = ev_decode_value(resp, EV_CH_PACK_I);
+    out[EV_CH_PACK_I] = ok ? ev_decode_value(resp, EV_CH_PACK_I) : 0;
     ok |= pid_request_m22(g_ev_profile->pack_temp.pid, resp);
-    out[EV_CH_PACK_TEMP] = ev_decode_value(resp, EV_CH_PACK_TEMP);
+    out[EV_CH_PACK_TEMP] = ok ? ev_decode_value(resp, EV_CH_PACK_TEMP) : 0;
     return ok;
+}
+
+// Mode 01 PID 0x2F: fuel level for PHEVs (AUT-2706).
+static bool fuel_level_read(uint8_t out[8]) {
+    return pid_request(0x2F, out, 60);
 }
 
 // ---------- CAN ----------
@@ -250,26 +279,52 @@ static void run_trip() {
     if (dtc_valid) ble.publishDtc(dtc_text());
     gps_start();
 
+    // AUT-2706: select EV profile from VIN (provisioned over BLE).
+    Preferences prefs;
+    WifiCfg cfg;
+    wifi_cfg_load(cfg, prefs);
+    if (cfg.vin[0] && g_ev_profile == nullptr) {
+        select_ev_profile(cfg.vin);
+    }
+
     uint32_t quiet = 0;
     uint32_t rows = 0;
+    uint32_t ev_mode_counts[3] = {0, 0, 0};  // ICE/EV/HYBRID counts (AUT-2706)
+    uint32_t odo_km = 0;
     while (true) {
         gps.update();                       // drain NMEA, refresh fix state
         int32_t lat = gps.lat(), lon = gps.lon();
         bool gps_moving = gps.moving();     // fix + speed: phone-dead movement
         bool any = false;
         if (can_ok) {
-            uint8_t rpm[8], spd[8];
+            uint8_t rpm[8], spd[8], fuel[8];
             bool have_rpm = pid_request(0x0C, rpm);
             bool have_spd = pid_request(0x0D, spd);
             bool acc = digitalRead(ACC_PIN) == HIGH;
-            if (have_rpm || have_spd || acc || gps_moving) {
-                char row[64];
+
+            // AUT-2706: EV pack + fuel level (PHEV).
+            int32_t ev_vals[4] = {0};
+            bool have_ev = g_ev_profile && ev_read_pack(ev_vals);
+            bool have_fuel = fuel_level_read(fuel);
+
+            uint16_t rpm_val = have_rpm ? pid_rpm(rpm[2], rpm[3]) : 0;
+            uint8_t speed_val = have_spd ? pid_speed(spd[2]) : 0;
+            int16_t pack_a = (int16_t)(have_ev ? ev_vals[EV_CH_PACK_I] : 0);
+            uint8_t ev_mode = have_ev ? classify_ev_mode(rpm_val, pack_a) : 0;
+
+            if (have_rpm || have_spd || acc || gps_moving || have_fuel) {
+                char row[96];
                 format_trip_row(row, sizeof row, rtc.unixTime(),
-                                have_rpm ? pid_rpm(rpm[2], rpm[3]) : 0,
-                                have_spd ? pid_speed(spd[2]) : 0,
-                                0, 0, lat, lon);
+                                rpm_val, speed_val,
+                                0, 0, lat, lon,
+                                (uint8_t)(have_ev ? ev_vals[EV_CH_SOC] / 100 : 0),
+                                (uint16_t)(have_ev ? ev_vals[EV_CH_PACK_V] / 100 : 0),
+                                pack_a,
+                                (int8_t)(have_ev ? ev_vals[EV_CH_PACK_TEMP] / 100 : 0),
+                                odo_km, ev_mode);
                 trips.appendRow(row);
                 any = true;
+                if (ev_mode < 3) ev_mode_counts[ev_mode]++;
                 // Refresh the stored-code snapshot periodically while the
                 // bus is alive (AUT-1573) — codes are unreadable once the
                 // engine is off, so this window is the only chance.
@@ -292,6 +347,9 @@ static void run_trip() {
         if (should_sleep(quiet, TRIP_END_MS)) break;  // sustained silence => engine off
         delay(SAMPLE_MS);
     }
+
+    // AUT-2706: classify vehicle type on first trip; persist on WiFi upload.
+    classify_vehicle_type(rows, ev_mode_counts);
 
     if (trips.endTrip()) {
         trips.refreshIndex();
@@ -322,6 +380,17 @@ static void wifi_upload_opportunity(uint32_t window_ms) {
         delay(backoff_delay_ms(attempt++, WIFI_BACKOFF_BASE_MS, WIFI_BACKOFF_CAP_MS));
         up.disconnect();
     }
+    // AUT-2706: push vehicle type classification to backend after trip upload.
+    if (g_vehicle_type_classified && cfg.enabled && WiFi.status() == WL_CONNECTED) {
+        char body[128];
+        snprintf(body, sizeof body,
+                 "{\"device_id\":\"%s\",\"vehicle_type\":%u,\"vin\":\"%s\"}",
+                 cfg.device_id, g_vehicle_type, cfg.vin[0] ? cfg.vin : "");
+        if (up.uploadVehicleType(cfg, body)) {
+            Serial.printf("Vehicle type %u persisted to backend\n", g_vehicle_type);
+        }
+    }
+
     // AUT-1573: push the latest DTC snapshot once trips are drained. Only
     // when the ECU actually answered this session — never wipe app-side codes
     // because a parked board had no bus to ask.

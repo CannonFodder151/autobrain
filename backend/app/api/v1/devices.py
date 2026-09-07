@@ -36,6 +36,7 @@ from app.schemas.device import (
     DeviceOut,
     DeviceTripsIn,
     DeviceTripsResult,
+    DeviceVehicleTypeIn,
     DeviceVerifyIn,
     DeviceVerifyOut,
 )
@@ -243,3 +244,21 @@ async def push_codes(
         )
     await db.commit()
     return {"accepted": len(codes), "vehicle_id": vehicle.id}
+
+
+@router.post("/{device_id}/vehicle-type", status_code=200)
+async def push_vehicle_type(
+    device_id: str,
+    payload: DeviceVehicleTypeIn,
+    db: AsyncSession = Depends(get_db),
+    device: Device = Depends(get_device_from_key),
+) -> dict:
+    """AUT-2706: persist classified vehicle type from the dongle."""
+    if device.id != device_id:
+        raise HTTPException(status_code=404, detail="Device not found")
+    device.last_seen_at = datetime.now(timezone.utc)
+    labels = {0: "unknown", 1: "ICE", 2: "EV", 3: "HEV", 4: "PHEV"}
+    label = labels.get(payload.vehicle_type, "unknown")
+    device.vehicle_type = label
+    await db.commit()
+    return {"vehicle_type": label, "vehicle_type_code": payload.vehicle_type}

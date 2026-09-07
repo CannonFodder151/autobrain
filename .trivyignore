@@ -67,6 +67,7 @@ CVE-2026-56862  # gosu-stdlib: crypto/tls KeyUpdate; gosu does no TLS
 GHSA-6v7p-g79w-8964  # msgpack OOB read/crash on Unpacker reuse: NOT imported; unreachable
 CVE-2026-57585  # msgpack: CVE alias of GHSA-6v7p-g79w-8964 (same advisory); unreachable
 CVE-2025-47273  # setuptools PackageIndex path traversal: build-time only, no runtime install path
+CVE-2025-47273  # setuptools PackageIndex path traversal: build-time only, no runtime install path
 GHSA-5rjg-fvgr-3xxf  # setuptools: GHSA alias of CVE-2025-47273; build-time only
 
 # --- AUT-1793 / python base image OpenSSL QUIC DoS -----------------------------------
@@ -88,6 +89,7 @@ CVE-2026-14456  # openssl QUIC DoS: AutoBrain does not use QUIC anywhere
 # re-check 2026-12-28: if upstream nginx releases patched alpine build, bump image digest.
 CVE-2026-66046  # expat DoS: no network exposure in AutoBrain nginx frontend
 CVE-2026-76641  # expat: same package; no runtime impact
+
 
 # --- AUT-2762: nginx libuuid (util-linux) HIGH CVEs (alpine 3.24.1 base package; no upstream fix yet) ---
 # Source: libuuid in nginxinc/nginx-unprivileged:stable-alpine@sha256:45ce1e2e...

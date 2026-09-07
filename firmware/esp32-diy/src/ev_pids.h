@@ -21,7 +21,7 @@ struct EvProfile {
     EvPid pack_temp;
 };
 
-// Known EV manufacturer profiles (WMI → Mode-22 PID set).
+// Known EV manufacturer profiles (WMI -> Mode-22 PID set).
 // WMI = first 3 chars of the 17-char VIN (World Manufacturer Identifier).
 // Sources: SAE J1979 §6, OEM service docs, community reverse-engineering.
 // ponytail: PID tables are incomplete for some makers; add rows as EVs ship
@@ -103,7 +103,7 @@ inline bool is_valid_mode22_response(const uint8_t* d, uint16_t pid) {
 inline int32_t ev_decode_value(const uint8_t* data, EvChannel ch) {
     if (!data) return 0;
     if (ch == EV_CH_SOC) {
-        return (int32_t)(data[3] * 100);               // percent → percent*100
+        return (int32_t)(data[3] * 100);               // percent -> percent*100
     }
     if (ch == EV_CH_PACK_I) {
         uint16_t raw = ((uint16_t)data[3] << 8) | data[4];

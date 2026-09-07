@@ -24,34 +24,10 @@ class FuelPriceOut(BaseModel):
     fuel_type: str
     price: float  # cents per litre
     effective_at: datetime
-    cost_per_km: float | None = None  # $/km for this price vs vehicle avg L/100km (AUT-2201)
-    avg_fill_cost: float | None = None  # $ per fill for this price vs vehicle avg litres/fill
-    # AUT-2381: which upstream emitted this row + the arbitration result for
-    # (station, fuel_type, day). The UI uses ``best_source`` to badge the
-    # reading as "trusted" / "government" / "chain".
-    source: str | None = None
-    best_source: str | None = None
-    source_score: float | None = None
-    flag_reason: str | None = None
-
-    model_config = {"from_attributes": True}
-
-
-class FuelPriceHistoryOut(BaseModel):
-    """One row of a station's per-(fuel_type, source, day) price history.
-
-    Used by ``GET /api/v1/fuel/stations/{station_id}/history`` (AUT-2374 +
-    AUT-2381). The UI shows one row per source so the user can see which
-    upstream the day's price came from.
-    """
-
-    fuel_type: str
-    source: str | None = None
-    price: float
-    effective_at: datetime
-    best_source: str | None = None
-    source_score: float | None = None
-    flag_reason: str | None = None
+    # Per-station projection of the vehicle's own fuel stats (AUT-2053). Null
+    # when the request omits ?vehicle_id or the vehicle has no stats yet.
+    cost_per_km: float | None = None  # $/km at this station's price
+    avg_fill_cost: float | None = None  # $ for one avg fill at this station
 
     model_config = {"from_attributes": True}
 
