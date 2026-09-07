@@ -280,12 +280,30 @@ jobs:
               printf '%s\n' "$added"   > "$tmpdir/added.txt"
               printf '%s\n' "$removed" > "$tmpdir/removed.txt"
               pairs="$(python3 - "$tmpdir/added.txt" "$tmpdir/removed.txt" <<'PY'
-          import difflib, sys
+          import difflib, re, sys
           added   = [l.rstrip() for l in open(sys.argv[1]) if l.strip()]
           removed = [l.rstrip() for l in open(sys.argv[2]) if l.strip()]
+          # AUT-2598: ignore fuzzy matches inside known-family patterns (e.g.
+          # FUEL_SA_API_KEY vs FUEL_QLD_API_KEY — same family, different region,
+          # NOT a rename). The 1-edit detector stays on as a backstop for true
+          # AUTOBRIAN<->AUTOBRAIN typos.
+          FAMILY_PATTERNS = [
+              re.compile(r'^FUEL_[A-Z]{2,3}_API_KEY$'),
+              re.compile(r'^FUEL_[A-Z]{2,3}_API_SECRET$'),
+              re.compile(r'^FUEL_[A-Z]{2,3}_ENABLED$'),
+              re.compile(r'^FUEL_[A-Z]{2,3}_URL$'),
+              re.compile(r'^FUEL_[A-Z]{2,3}_GEO_REGION_ID$'),
+          ]
+          def in_known_family(a, r):
+              for p in FAMILY_PATTERNS:
+                  if p.match(a) and p.match(r):
+                      return True
+              return False
           for a in added:
               for r in removed:
                   if a == r: continue
+                  if in_known_family(a, r):
+                      continue
                   if len(a) == len(r) and sum(x!=y for x,y in zip(a,r)) <= 2:
                       print(f"RENAME? {r} -> {a}  (1-edit)")
                   if abs(len(a)-len(r)) <= 2:
