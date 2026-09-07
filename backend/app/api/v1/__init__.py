@@ -13,10 +13,12 @@ from app.api.v1 import (
     devices,
     diagnostics,
     dongle_firmware,
+    electricity,
     fuel,
     fuel_prices,
     fuel_servo,
     ha,
+    ev_spy,
     issues,
     logbook,
     mods,
@@ -35,6 +37,7 @@ from app.api.v1 import (
 api_router = APIRouter()
 api_router.include_router(auth.router)
 api_router.include_router(ha.router)
+api_router.include_router(ev_spy.router)
 api_router.include_router(billing.router)
 api_router.include_router(admin.router)
 api_router.include_router(admin.admin_ops)
@@ -43,6 +46,7 @@ api_router.include_router(vehicles.router)
 api_router.include_router(shares.router)
 api_router.include_router(services.router)
 api_router.include_router(fuel.router)
+api_router.include_router(electricity.router)
 api_router.include_router(fuel_servo.router)
 api_router.include_router(fuel_prices.router)
 api_router.include_router(diagnostics.router)

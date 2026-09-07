@@ -7,6 +7,7 @@ from app.models.vehicle import Vehicle, VehicleEvent
 from app.models.logbook import LogEntry
 from app.models.obd import ObdCode
 from app.models.service import ServiceRecord, ServiceItem
+from app.models.electricity import ElectricityLog
 from app.models.fuel import FuelLog
 from app.models.diagnostic import Diagnostic
 from app.models.mod import Modification
@@ -17,6 +18,7 @@ from app.models.market_listing import MarketListingCache
 from app.models.sca_parts import SCAPartsCache
 from app.models.fuel_station import FuelStation, FuelPrice
 from app.models.fuel_price import FuelPricePollState, FuelPriceSnapshot, FuelPriceWatchlist
+from app.models.ev_station import ChargingStation, ChargingConnector
 from app.models.notification import NotificationPreference, NotificationDelivery
 from app.models.share import VehicleShare
 from app.models.refresh_token import RevokedRefreshToken
@@ -43,6 +45,7 @@ __all__ = [
     "ServiceRecord",
     "ServiceItem",
     "FuelLog",
+    "ElectricityLog",
     "Diagnostic",
     "Modification",
     "Part",
