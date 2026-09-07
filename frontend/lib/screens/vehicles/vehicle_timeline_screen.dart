@@ -30,7 +30,7 @@ class _VehicleTimelineScreenState extends State<VehicleTimelineScreen> {
   Future<void> _load() async {
     final api = context.read<AuthState>().api;
     final path = '/vehicles/${widget.vehicleId}/timeline';
-    final q = <String, String>? null;
+    final q = <String, String>{};
     final cached = await api.getCachedDecoded(path, q);
     if (cached != null) {
       _events = (cached as List)

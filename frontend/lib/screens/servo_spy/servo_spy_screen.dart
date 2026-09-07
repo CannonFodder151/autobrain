@@ -181,9 +181,8 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
   List<_MapStation> _stations = const [];
   List<String> _fuelTypes = List<String>.from(defaultFuelTypes);
   String? _selectedFuelType;
-  String? _vehicleId;
-  double _maxDistanceKm = 25;
   String? _vehicleId; // AUT-2053: for $/km + avg fill cost projection
+  double _maxDistanceKm = 25;
   final MapController _mapController = MapController();
   LatLng? _mapCenter;
 
@@ -826,10 +825,9 @@ class _ServoSpyListState extends State<_ServoSpyList> {
   List<ServoStationRow> _stations = const [];
   List<String> _fuelTypes = List<String>.from(defaultFuelTypes);
   String? _selectedFuelType;
-  String? _vehicleId;
+  String? _vehicleId; // AUT-2053
   double _maxDistanceKm = 25;
   ServoSortMetric _sortMetric = ServoSortMetric.price;
-  String? _vehicleId; // AUT-2053
   late final ApiClient _api;
   Map<String, double>? _pos;
 
