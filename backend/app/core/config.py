@@ -120,6 +120,11 @@ class Settings(BaseSettings):
     FUEL_NSW_URL: str = "https://api.transport.nsw.gov.au/v1/fuel"
     FUEL_VIC_URL: str = "https://api.servosaver.com.au/v1/prices"
     FUEL_INGEST_USER_AGENT: str = "AutoBrain Servo Spy (+https://autobrainservice.app)"
+    # 7-Eleven free feed (projectzerothree.info). Free, no auth, deterministic
+    # JSON snapshot refreshed daily. Cached at the edge; pulled on every ingest
+    # cycle and folded into fuel_stations/fuel_prices like the gov feeds.
+    FUEL_7ELEVEN_ENABLED: bool = True
+    FUEL_7ELEVEN_STATES: tuple[str, ...] = ("VIC", "NSW", "QLD", "WA")
 
     # Bootstrap admin account (created on first boot if missing)
     ADMIN_EMAIL: str = ""
