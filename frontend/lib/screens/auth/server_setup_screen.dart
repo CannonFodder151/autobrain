@@ -102,8 +102,12 @@ class _ServerSetupScreenState extends State<ServerSetupScreen> {
                           shape: BoxShape.circle,
                         ),
                         child: ClipOval(
-                          child: Image.asset('assets/logo.png',
-                              width: 72, height: 72, fit: BoxFit.cover),
+                          child: Image.asset(
+                            'assets/logo.png',
+                            width: 72,
+                            height: 72,
+                            fit: BoxFit.cover,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 20),
@@ -149,21 +153,26 @@ class _ServerSetupScreenState extends State<ServerSetupScreen> {
                               'hosted.autobrainservice.app',
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                  fontSize: 12,
-                                  color: scheme.onSurfaceVariant),
+                                fontSize: 12,
+                                color: scheme.onSurfaceVariant,
+                              ),
                             ),
                             const SizedBox(height: 20),
                             Row(
                               children: [
                                 const Expanded(child: Divider()),
                                 Padding(
-                                  padding:
-                                      const EdgeInsets.symmetric(horizontal: 12),
-                                  child: Text('OR',
-                                      style: TextStyle(
-                                          color: scheme.onSurfaceVariant,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600)),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                  ),
+                                  child: Text(
+                                    'OR',
+                                    style: TextStyle(
+                                      color: scheme.onSurfaceVariant,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
                                 ),
                                 const Expanded(child: Divider()),
                               ],
@@ -199,13 +208,15 @@ class _ServerSetupScreenState extends State<ServerSetupScreen> {
                                   child: SegmentedButton<bool>(
                                     segments: const [
                                       ButtonSegment(
-                                          value: false,
-                                          icon: Icon(Icons.lock_open),
-                                          label: Text('http')),
+                                        value: false,
+                                        icon: Icon(Icons.lock_open),
+                                        label: Text('http'),
+                                      ),
                                       ButtonSegment(
-                                          value: true,
-                                          icon: Icon(Icons.lock),
-                                          label: Text('https')),
+                                        value: true,
+                                        icon: Icon(Icons.lock),
+                                        label: Text('https'),
+                                      ),
                                     ],
                                     selected: {_secure},
                                     onSelectionChanged: (s) =>
@@ -221,9 +232,11 @@ class _ServerSetupScreenState extends State<ServerSetupScreen> {
                             ),
                             if (_error != null) ...[
                               const SizedBox(height: 12),
-                              Text(_error!,
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(color: Colors.red.shade600)),
+                              Text(
+                                _error!,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Colors.red.shade600),
+                              ),
                             ],
                           ],
                         ),
