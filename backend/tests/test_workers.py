@@ -1,6 +1,6 @@
 """Worker task regression tests (mocked DB/manager, no live services)."""
 
-import pytest  # noqa: F401
+import pytest
 
 from app.workers import tasks
 
@@ -77,6 +77,102 @@ def test_receipt_push_targets_vehicle_owner(monkeypatch) -> None:
     assert user_id == "user-9", f"push sent to {user_id!r}, expected vehicle owner user-9"
     assert event == "receipt.processed"
     assert payload["receipt_id"] == "receipt-1"
+
+
+@pytest.mark.asyncio
+async def test_receipt_ocr_sync_marks_done_when_extraction_succeeds(monkeypatch) -> None:
+    """AUT-2881: upload_receipt runs OCR synchronously so the receipt is
+    'done' (not 'pending') by the time the API returns to the app."""
+    import app.api.v1.receipts as receipts_mod
+
+    class FakeFile:
+        filename = "receipt.jpg"
+        content_type = "image/jpeg"
+
+        async def read(self):
+            return b"\xff\xd8\xff\xe0fakejpeg"
+
+    async def _async_upload(key, data, content_type):
+        return None
+
+    captured: dict = {}
+
+    async def fake_extract(payload):
+        captured["payload"] = payload
+        return {
+            "vendor": "Supercheap Auto",
+            "total": 150.0,
+            "tax": 15.0,
+            "currency": "AUD",
+            "invoice_date": "2026-01-15",
+            "items": [
+                {"kind": "part", "name": "Oil Filter", "quantity": 1, "unit_cost": 25.0, "warranty_months": 12},
+            ],
+        }
+
+    added: list = []
+
+    class FakeReceiptCls:
+        __tablename__ = "receipts"
+
+        def __init__(self, **kw):
+            for k, v in kw.items():
+                setattr(self, k, v)
+            self.id = kw.get("id", "r-1")
+            self.ocr_status = "processing"
+
+    class FakeExtractedItem:
+        __tablename__ = "extracted_items"
+
+        def __init__(self, **kw):
+            for k, v in kw.items():
+                setattr(self, k, v)
+
+    class FakeDB:
+        async def get(self, model, pk):
+            return None
+
+        async def commit(self):
+            pass
+
+        async def refresh(self, obj):
+            pass
+
+        def add(self, obj):
+            added.append(obj)
+
+    monkeypatch.setattr(receipts_mod, "extract_receipt", fake_extract)
+    monkeypatch.setattr(receipts_mod, "upload_object", _async_upload)
+    monkeypatch.setattr(receipts_mod, "detect_mime", lambda n, ct, d: ct)
+
+    async def fake_ensure_bucket(*a, **kw):
+        return None
+
+    monkeypatch.setattr(receipts_mod, "ensure_bucket", fake_ensure_bucket)
+    monkeypatch.setattr(receipts_mod, "_rand", lambda: "abcd1234")
+    monkeypatch.setattr(receipts_mod, "queue_embedding", lambda *a, **kw: None)
+
+    async def fake_access(db, vid, user):
+        return None
+
+    monkeypatch.setattr(receipts_mod, "get_accessible_vehicle", fake_access)
+    monkeypatch.setattr(receipts_mod, "Receipt", FakeReceiptCls)
+    monkeypatch.setattr(receipts_mod, "ExtractedItem", FakeExtractedItem)
+
+    fake_db = FakeDB()
+    result = await receipts_mod.upload_receipt(
+        vehicle_id="v-1",
+        file=FakeFile(),
+        db=fake_db,
+        user=None,
+    )
+
+    assert result.ocr_status == "done", f"expected done, got {result.ocr_status}"
+    assert result.vendor == "Supercheap Auto"
+    assert result.total == 150.0
+    assert "content_base64" in captured["payload"]
+    extracted = [a for a in added if not isinstance(a, FakeReceiptCls)]
+    assert len(extracted) == 1, f"expected 1 ExtractedItem row, got {len(extracted)}"
 
 
 class FakeBucket:
