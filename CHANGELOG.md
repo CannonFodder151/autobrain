@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-2656)
+- fix(frontend): replace reverted `withValues(alpha:)` with `withOpacity(alpha:)` in car_check_screen.dart to restore dart2js arm64 build.
+
 ## [0.3.249] - 2026-09-07
 
 ### Fixed (AUT-2656)
