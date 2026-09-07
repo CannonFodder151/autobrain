@@ -189,6 +189,109 @@ def _to_int(value) -> int | None:
     return int(digits) if digits else None
 
 
+def _build_specs() -> dict[tuple[str, str], tuple[str, str]]:
+    """Build (make, model) -> (engine, transmission) from the prefix tables."""
+    specs: dict[tuple[str, str], tuple[str, str]] = {}
+    for prefix, (make, model, year, engine, transmission) in list(_AU_PREFIX.items()):
+        specs[(make.lower(), model.lower())] = (engine, transmission)
+    for (state_key, prefix), (make, model, year, engine, transmission) in list(_STATE_PREFIX.items()):
+        specs[(make.lower(), model.lower())] = (engine, transmission)
+    return specs
+
+
+_SPECS = _build_specs()
+
+_VIN_WMI: dict[str, tuple[str, str]] = {
+    "JN": ("Toyota", "Corolla"),
+    "JTD": ("Toyota", "Camry"),
+    "JYA": ("Yamaha", "FZ6S"),
+    "JY1": ("Yamaha", "YZF-R1"),
+    "VF1": ("Renault", "Clio"),
+    "WBA": ("BMW", "3 Series"),
+    "WDD": ("Mercedes-Benz", "C-Class"),
+    "WAU": ("Audi", "A4"),
+    "ZAR": ("Alfa Romeo", "Giulia"),
+    "SAJ": ("Jaguar", "XF"),
+    "SAL": ("Land Rover", "Discovery"),
+    "WP0": ("Porsche", "911"),
+    "YS2": ("Scania", "G-series"),
+    "XLR": ("Ford", "Falcon"),
+    "6F1": ("Ford", "Ranger"),
+    "6FP": ("Ford", "Focus"),
+    "MMM": ("Mitsubishi", "Triton"),
+    "JMB": ("Mitsubishi", "Outlander"),
+    "JN1": ("Nissan", "Navara"),
+    "VSK": ("Nissan", "X-Trail"),
+    "ZCM": ("Mazda", "CX-5"),
+    "MM8": ("Mazda", "Mazda3"),
+    "KNM": ("Kia", "Sportage"),
+    "U5Y": ("Kia", "Seltos"),
+    "TMA": ("Hyundai", "i30"),
+    "KMH": ("Hyundai", "Tucson"),
+    "LGW": ("Great Wall", "Tank"),
+    "LGW": ("GWM", "Tank"),
+    "LFV": ("Volkswagen", "Golf"),
+    "WVW": ("Volkswagen", "Tiguan"),
+    "JH4": ("Honda", "Civic"),
+    "JHM": ("Honda", "Accord"),
+    "1C3": ("Chrysler", "300"),
+    "2C3": ("Chrysler", "300"),
+    "1FA": ("Ford", "Mustang"),
+    "1FT": ("Ford", "F-150"),
+    "1G1": ("Chevrolet", "Camaro"),
+    "1GC": ("Chevrolet", "Silverado"),
+    "WBS": ("BMW", "M3"),
+    "5YJ": ("Tesla", "Model 3"),
+    "7SA": ("Tesla", "Model Y"),
+    "3C6": ("Dodge", "Ram"),
+    "1C6": ("Dodge", "Charger"),
+    "ZFF": ("Ferrari", "488"),
+    "SCB": ("Bentley", "Continental"),
+    "WBA": ("BMW", "X5"),
+    "SCC": ("Lotus", "Elise"),
+    "XMC": ("Nissan", "Patrol"),
+    "JN8": ("Nissan", "Patrol"),
+    "MNA": ("Mitsubishi", "Pajero"),
+    "MMC": ("Mitsubishi", "Outlander"),
+    "JN6": ("Nissan", "Navara"),
+    "JS2": ("Suzuki", "Jimny"),
+    "JS3": ("Suzuki", "Vitara"),
+    "JN3": ("Nissan", "370Z"),
+    "KNJ": ("Toyota", "HiLux"),
+    "MR0": ("Toyota", "LandCruiser"),
+    "JTJ": ("Lexus", "RX"),
+    "JTH": ("Lexus", "IS"),
+}
+
+
+def _backfill_spec(make: str, model: str) -> tuple[str, str]:
+    """Return (engine, transmission) from the local spec table by make+model."""
+    if not make:
+        return "", ""
+    make_l = make.lower()
+    # Exact match first
+    key = (make_l, model.lower())
+    if key in _SPECS:
+        return _SPECS[key]
+    # Fuzzy make-only fallback (first make match)
+    for (mk, _md), spec in _SPECS.items():
+        if mk == make_l:
+            return spec
+    return "", ""
+
+
+def _backfill_spec_from_vin(vin: str | None) -> tuple[str, str]:
+    """Decode the VIN WMI (first 3 chars) and look up spec."""
+    if not vin or not isinstance(vin, str) or len(vin) < 3:
+        return "", ""
+    wmi = vin[:3]
+    make_model = _VIN_WMI.get(wmi)
+    if make_model:
+        key = (make_model[0].lower(), make_model[1].lower())
+        return _SPECS.get(key, ("", ""))
+    return "", ""
+
+
 def _map_provider(data, plate: str, state: str) -> dict | None:
     """Map a plateapi.com.au (or similar) response onto our schema.
 
@@ -196,6 +299,11 @@ def _map_provider(data, plate: str, state: str) -> dict | None:
     depth-first search. plateapi wraps the vehicle payload under `vehicle`.
     The free tier returns a production-year *range* (no VIN) — that's mapped to
     a representative year and VIN is left blank rather than fabricated.
+
+    Missing ``engine``/``transmission`` from the provider are backfilled from
+    the local spec table (``_SPECS``) by (make, model). As a last resort the
+    AI gateway enriches unknowns; when the AI is unreachable the fields stay
+    blank rather than crashing the lookup.
     """
     # Explicit failure flags
     success = _first(data, ["success", "ok"])
@@ -228,14 +336,28 @@ def _map_provider(data, plate: str, state: str) -> dict | None:
     else:
         status_norm = status_raw or "registered"
 
+    engine = str(get("engine", "engine_number", "engine_no", "engine_size") or "")
+    transmission = str(get("transmission", "gearbox", "transmission_type") or "")
+
+    make_str = str(get("make", "manufacturer", "brand") or "")
+    model_str = str(get("model", "series", "variant", "model_name") or "")
+
+    # Backfill engine/transmission from the local spec table when the provider
+    # does not return them (rego-lookup-api only scrapes vin, make, model,
+    # year, colour, body_type from state sites).
+    if not engine or not transmission:
+        engine, transmission = _backfill_spec(make_str, model_str)
+        if not engine and not transmission:
+            engine, transmission = _backfill_spec_from_vin(vin)
+
     return {
         "rego": str(get("registration_number", "registration_no", "rego", "plate", "registration") or plate),
         "vin": str(vin) if vin else None,
-        "make": str(get("make", "manufacturer", "brand") or ""),
-        "model": str(get("model", "series", "variant", "model_name") or ""),
+        "make": make_str,
+        "model": model_str,
         "year": year,
-        "engine": str(get("engine", "engine_number", "engine_no", "engine_size") or ""),
-        "transmission": str(get("transmission", "gearbox", "transmission_type") or ""),
+        "engine": engine,
+        "transmission": transmission,
         "body_type": str(get("body", "body_type", "body_style", "body_type_description") or ""),
         "colour": str(get("colour", "color", "vehicle_colour") or ""),
         "expiry_date": str(get("expiry_date", "registration_expiry", "rego_expiry") or ""),
