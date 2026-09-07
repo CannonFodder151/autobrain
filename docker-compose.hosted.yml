@@ -486,6 +486,35 @@ services:
     ports:
       - "0.0.0.0:20128:20128"
 
+  # AUT-2367: autobrain-backup — web GUI for backup management, restore, and retention.
+  autobrain-backup:
+    # Pinned to a digest to harden against supply-chain drift (AUT-1533 pattern).
+    # The :hosted tag carries a multi-arch manifest (amd64 + arm64) so this
+    # stack file works on every Portainer endpoint without re-tagging.
+    # Bind mounts live under /data (snap dockerd masks /opt + /srv as RO
+    # core24 squashfs; see AUT-1853).
+    image: ghcr.io/cannonfodder151/autobrain-backup:hosted@sha256:4dcdf610a4c3a9ad16947358c42ed5fd986f73176a468627e090ee15b7bed76f
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - /data/autobrain-backup/config:/config
+      - /data/autobrain-backup/data:/backups
+
+  # AUT-2367: backup-agent — hourly poller, pulls DB snapshots from hosted backend.
+  backup-agent:
+    image: ghcr.io/cannonfodder151/autobrain-backup-agent:hosted@sha256:59f26bf04d48874754ed99cd8b133cd8eb433bde149d5d7babc27e8e9a849092
+    restart: unless-stopped
+    environment:
+      AUTOBRAIN_URL: "http://backend:8000"
+      AUTOBRAIN_API_KEY: "${ADMIN_API_KEY}"
+      BACKUP_ENDPOINT: "/api/v1/admin-api/backup"
+      OUT_DIR: "/backups"
+      KEEP: "30"
+      TARGET_URL: "http://autobrain-backup:8080/ingest"
+    volumes:
+      - /data/autobrain-backup/agent-data:/backups
+
 volumes:
    postgres-data:
    redis-data:
