@@ -50,15 +50,23 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   @override
   Widget build(BuildContext context) {
     final a = _analytics;
+    if (a == null && _loading) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Analytics')),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (a == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Analytics')),
+        body: const Center(child: Text('No data yet')),
+      );
+    }
     return Scaffold(
       appBar: AppBar(title: const Text('Analytics')),
       body: RefreshIndicator(
         onRefresh: _load,
-        child: _loading && _analytics == null
-            ? const Center(child: CircularProgressIndicator())
-            : a == null && _stale
-                ? const Center(child: Text('No data yet'))
-                : ListView(
+        child: ListView(
                     padding: const EdgeInsets.all(16),
                     children: [
                       StaleHint(
