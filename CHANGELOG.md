@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-2042)
+- fix(backend): add error handling to vehicles list endpoint. `GET /vehicles` now wraps `list_user_vehicles` in try/except and returns a clean 500 ("Could not load vehicles") instead of leaking raw DB errors to the client. PR #383.
+
 ## [0.3.254] - 2026-09-08
 ### Added (AUT-2386)
 - feat(backend): source-arbitration rule for multi-feed overlap. ``FuelPrice`` now carries ``source_id`` + ``arbitration_score``; new ``fuel_price_arbitrations`` table stores the daily winning source per (station, fuel_type, day). PR #473.
