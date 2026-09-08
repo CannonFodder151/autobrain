@@ -79,8 +79,8 @@ class _ServerSetupScreenState extends State<ServerSetupScreen> {
             end: Alignment.bottomRight,
             colors: [
               scheme.primary,
-              scheme.primary.withValues(alpha: 0.75),
-              scheme.secondary.withValues(alpha: 0.6),
+              scheme.primary.withOpacity(0.75),
+              scheme.secondary.withOpacity(0.6),
             ],
           ),
         ),
@@ -129,7 +129,7 @@ class _ServerSetupScreenState extends State<ServerSetupScreen> {
                           borderRadius: BorderRadius.circular(24),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.18),
+                              color: Colors.black.withOpacity(0.18),
                               blurRadius: 32,
                               offset: const Offset(0, 12),
                             ),

@@ -3,6 +3,7 @@
 from datetime import date, datetime
 
 from pydantic import BaseModel, Field, field_serializer
+from app.models.vehicle import PowertrainType
 
 
 class RegoLookupRequest(BaseModel):

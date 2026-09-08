@@ -1,0 +1,165 @@
+name: libexpat fix-detect (nginx frontend, AUT-2126)
+
+# Time-boxed guard for .trivyignore entries CVE-2026-66046 / CVE-2026-76641
+# (libexpat 2.8.3-r0 in nginxinc/nginx-unprivileged:stable-alpine). Once
+# nginxinc ships a new stable-alpine digest with libexpat >= 2.8.4-r0, this
+# workflow files a Paperclip issue with a PR-ready patch so the entries can be
+# dropped and the image digest bumped.
+#
+# Manual run: ok. Daily schedule: 07:30 UTC (off-hours to avoid contention
+# with the weekly 07:00 Mon scan in trivy-image-scan.yml).
+#
+# Acceptance: AUT-2126, AUT-2161.
+
+on:
+  schedule:
+    - cron: '30 7 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: libexpat-fix-detect
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  THRESHOLD: '2.8.4-r0'
+  IMAGE_TAG: 'nginxinc/nginx-unprivileged:stable-alpine'
+  PINNED_DIGEST: 'sha256:45ce1e2e699234253d1def7baa96218a5d00b498d1ba0cbb1a17b6bdf73d1351'
+  DISCORD_REPORT_WEBHOOK: ${{ secrets.DISCORD_REPORT_WEBHOOK }}
+
+jobs:
+  check:
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install regctl (Docker registry client)
+        run: |
+          set -euo pipefail
+          ARCH="$(uname -m)"
+          case "$ARCH" in
+            x86_64) REGCTL_ARCH=amd64 ;;
+            aarch64|arm64) REGCTL_ARCH=arm64 ;;
+            *) echo "unsupported arch: $ARCH"; exit 1 ;;
+          esac
+          curl -fsSL "https://github.com/regclient/regclient/releases/latest/download/regctl-linux-${REGCTL_ARCH}" \
+            -o /usr/local/bin/regctl
+          chmod +x /usr/local/bin/regctl
+          regctl version
+
+      - name: Resolve current stable-alpine digest
+        id: digest
+        run: |
+          set -euo pipefail
+          DIGEST="$(regctl image digest --platform linux/amd64 "${{ env.IMAGE_TAG }}")"
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "current stable-alpine digest: $DIGEST"
+          if [ "$DIGEST" = "${{ env.PINNED_DIGEST }}" ]; then
+            echo "unchanged=true" >> "$GITHUB_OUTPUT"
+            echo "digest matches pinned value — nothing to do"
+          else
+            echo "unchanged=false" >> "$GITHUB_OUTPUT"
+            echo "digest moved off pinned value"
+          fi
+
+      - name: Read libexpat version from new digest
+        id: version
+        if: steps.digest.outputs.unchanged == 'false'
+        run: |
+          set -euo pipefail
+          REF="${{ env.IMAGE_TAG }}@${{ steps.digest.outputs.digest }}"
+          # Pull the bare image to read its apk database.
+          docker pull --quiet "$REF" >/dev/null
+          # `apk info -v libexpat` prints the installed version.
+          VERSION="$(docker run --rm --entrypoint apk "$REF" info -v libexpat 2>/dev/null | awk '{print $1}' | sed 's/^libexpat-//')"
+          if [ -z "$VERSION" ]; then
+            echo "::error::could not read libexpat version from $REF"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "libexpat version observed: $VERSION"
+
+      - name: Compare version against threshold
+        id: gate
+        if: steps.digest.outputs.unchanged == 'false'
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import sys
+          def parse(v):
+              # strip -r<N>
+              main, _, rev = v.partition('-r')
+              return tuple(int(x) for x in main.split('.')), int(rev or 0)
+          installed = "${{ steps.version.outputs.version }}"
+          threshold = "${{ env.THRESHOLD }}"
+          ok = parse(installed) >= parse(threshold)
+          print(f"installed={installed}")
+          print(f"threshold={threshold}")
+          print(f"fixed={'true' if ok else 'false'}")
+          PY
+
+      - name: File Paperclip issue with PR-ready patch
+        if: steps.digest.outputs.unchanged == 'false' && steps.gate.outputs.fixed == 'true'
+        env:
+          PAPERCLIP_API_URL: ${{ secrets.PAPERCLIP_API_URL }}
+          PAPERCLIP_API_KEY: ${{ secrets.PAPERCLIP_API_KEY }}
+          PAPERCLIP_COMPANY_ID: ${{ secrets.PAPERCLIP_COMPANY_ID }}
+          PAPERCLIP_PARENT_ISSUE: 'ac7e8231-2abf-4690-8ff4-47a0f4e0ab65'
+          NEW_DIGEST: ${{ steps.digest.outputs.digest }}
+          LIBEXPAT_VERSION: ${{ steps.version.outputs.version }}
+          IMAGE_TAG: ${{ env.IMAGE_TAG }}
+        run: |
+          set -euo pipefail
+          BODY=$(cat <<JSON
+          {
+            "title": "libexpat ${LIBEXPAT_VERSION} in nginx:stable-alpine — drop .trivyignore entries + bump digest (AUT-2126/AUT-2161)",
+            "description": "Parent: AUT-2126.\\n\\nlibexpat-version-check.yml detected a new nginxinc/nginx-unprivileged:stable-alpine digest with libexpat **${LIBEXPAT_VERSION}** (>= 2.8.4-r0). The two time-boxed .trivyignore entries (CVE-2026-66046, CVE-2026-76641) are now redundant and must be dropped.\\n\\n## Patch\\n\\n1. **docker/frontend/Dockerfile**\\n   - Replace `FROM ${IMAGE_TAG}@${PINNED_DIGEST_SHORT}` with `FROM ${IMAGE_TAG}@${NEW_DIGEST}`.\\n2. **.github/workflows/trivy-image-scan.yml**\\n   - Update `NGINX_FRONTEND_IMAGE` env to the new digest.\\n3. **.trivyignore**\\n   - Delete the two `CVE-2026-66046` / `CVE-2026-76641` lines under the `nginx:stable-alpine libexpat CVEs (time-boxed)` block.\\n4. **CHANGELOG.md**\\n   - Add an entry under `[Unreleased]`.\\n5. Re-run `.github/workflows/trivy-image-scan.yml` and confirm the nginx step is green without the ignores.\\n\\n## Detected values\\n\\n- New digest: `${NEW_DIGEST}`\\n- libexpat: `${LIBEXPAT_VERSION}` (threshold 2.8.4-r0)\\n- Image: `${IMAGE_TAG}`\\n\\n## Acceptance\\n\\n- Re-run trivy image scan: nginx step green, no .trivyignore entries for the two CVEs.\\n- Deploy per the deploy-instances.yml path.\\n\\nThis issue is created automatically by the libexpat-version-check workflow (AUT-2161). Merge the fix PR, close this issue, and close AUT-2126 done.",
+            "status": "todo",
+            "priority": "high",
+            "parentId": "${PAPERCLIP_PARENT_ISSUE}"
+          }
+          JSON
+          )
+          HTTP_CODE=$(curl -s -o /tmp/issue.json -w '%{http_code}' \
+            -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/issues" \
+            -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$BODY")
+          if [ "$HTTP_CODE" != "201" ]; then
+            echo "::error::Paperclip API returned $HTTP_CODE"
+            cat /tmp/issue.json
+            exit 1
+          fi
+          IDENT=$(python3 -c 'import json,sys;print(json.load(open("/tmp/issue.json")).get("identifier","?"))')
+          echo "filed Paperclip issue $IDENT"
+          echo "PAPERCLIP_ISSUE=$IDENT" >> "$GITHUB_OUTPUT"
+
+      - name: Report status to Discord
+        if: always()
+        env:
+          UNCHANGED: ${{ steps.digest.outputs.unchanged }}
+          VERSION: ${{ steps.version.outputs.version }}
+          NEW_DIGEST: ${{ steps.digest.outputs.digest }}
+          FIXED: ${{ steps.gate.outputs.fixed }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          if [ "$UNCHANGED" = "true" ]; then
+            TITLE="libexpat fix-detect: pinned digest unchanged (libexpat 2.8.3-r0 still vulnerable)"
+            COLOR="0x95A5A6"
+            DESC="No new nginxinc/nginx-unprivileged:stable-alpine digest since 2026-09-02. Waiting on upstream alpine 3.24.1 libexpat >= 2.8.4-r0 rebuild."
+          elif [ "$FIXED" = "true" ]; then
+            TITLE="libexpat fix-detect: NEW digest ships libexpat ${VERSION} — Paperclip issue filed"
+            COLOR="0x57F287"
+            DESC="A new stable-alpine digest is available. Paperclip issue auto-filed with PR-ready patch; drop the two .trivyignore entries and bump the digest."
+          else
+            TITLE="libexpat fix-detect: digest moved but libexpat ${VERSION} still below 2.8.4-r0"
+            COLOR="0xFEE75C"
+            DESC="New digest but libexpat not yet at the fix threshold. Will retry tomorrow."
+          fi
+          curl -s -X POST "$DISCORD_REPORT_WEBHOOK" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -nc --arg c ops --arg t "$TITLE" --arg col "$COLOR" --arg u "$RUN_URL" --arg d "$DESC" \
+              '{channel:$c,title:$t,description:$d,color:$col,author:"libexpat fix-detect",fields:[{name:"Run",value:$u,inline:true},{name:"Threshold",value:"2.8.4-r0",inline:true}]}')"

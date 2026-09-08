@@ -218,6 +218,25 @@ public:
         http.end();
         return code >= 200 && code < 300;
     }
+
+    // AUT-2706: persist classified vehicle type from the dongle.
+    bool uploadVehicleType(const WifiCfg& cfg, const char* body) {
+        if (WiFi.status() != WL_CONNECTED) return false;
+        if (!autobrain::https_url_ok(cfg.api_url)) return false;
+        char url[192];
+        snprintf(url, sizeof url, "%s/devices/%s/vehicle-type", cfg.api_url, cfg.device_id);
+        WiFiClientSecure tls;
+        tls.setCACert(ROOT_CA_GTS_R4);
+        tls.setTimeout(15000);
+        HTTPClient http;
+        http.setTimeout(15000);
+        http.begin(tls, url);
+        http.addHeader("Content-Type", "application/json");
+        http.addHeader("X-Device-API-Key", cfg.api_key);
+        int code = http.POST(body);
+        http.end();
+        return code >= 200 && code < 300;
+    }
 };
 
 }  // namespace autobrain

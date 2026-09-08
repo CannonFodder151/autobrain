@@ -8,7 +8,10 @@ energy densities) the per-litre and per-km constants move out of the helper into
 ``app.core.fuel_units`` and this module just composes them.
 """
 
+from app.models.fuel_station import FuelPrice, FuelStation  # noqa: F401  (input types for annotate_station)
 from app.schemas.fuel import FuelStats
+from app.schemas.fuel_servo import FuelPriceOut, FuelStationOut
+from app.services.fuel_feeds import BRAND_LOGOS
 
 
 def annotate_price(
@@ -67,3 +70,50 @@ def annotate_prices(
         )
         for p in price_cpls
     ]
+
+
+def annotate_station(
+    station: FuelStation,
+    prices: list[FuelPrice],
+    dist: float | None,
+    stats: FuelStats | None = None,
+) -> FuelStationOut:
+    """Build a ``FuelStationOut`` with per-price cost annotations.
+
+    AUT-2319: lifted out of ``app.api.v1.fuel_servo._station_out`` so unit
+    tests can exercise the helper without pulling in the FastAPI router
+    (which transitively imports unrelated modules with their own pre-existing
+    schema bugs). Pure: no DB, no AI.
+    """
+    out_prices: list[FuelPriceOut] = []
+    for p in prices:
+        cost_per_km, avg_fill_cost = annotate_price(
+            p.price,
+            avg_l_per_100km=stats.avg_l_per_100km if stats else None,
+            avg_litres_per_fill=stats.avg_litres_per_fill if stats else None,
+        )
+        out_prices.append(
+            FuelPriceOut(
+                fuel_type=p.fuel_type,
+                price=p.price,
+                effective_at=p.effective_at,
+                cost_per_km=cost_per_km,
+                avg_fill_cost=avg_fill_cost,
+                source=p.source,
+                best_source=p.best_source,
+                source_score=p.source_score,
+                flag_reason=p.flag_reason,
+            )
+        )
+    return FuelStationOut(
+        id=station.id,
+        source=station.source,
+        brand=station.brand,
+        name=station.name,
+        address=station.address,
+        lat=station.lat,
+        lon=station.lon,
+        logo=BRAND_LOGOS.get((station.brand or "").lower()),
+        distance_km=round(dist, 2) if dist is not None else None,
+        prices=out_prices,
+    )

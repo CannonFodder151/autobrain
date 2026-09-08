@@ -148,7 +148,7 @@ services:
       retries: 10
 
   backend:
-    image: ghcr.io/cannonfodder151/autobrain-backend:hosted-arm64@sha256:fefe57e1518614190f3c250ca1a8552b9bfa861715143843aebd13c4a20ec032
+    image: ghcr.io/cannonfodder151/autobrain-backend:hosted-arm64@sha256:80053f3d6d4642c3f199fc3755b0d34c68f458faaa804195f6373cf3a68dd638
     restart: unless-stopped
     command: sh -c "export AI_ROUTER_API_KEY=$(cat /run/secrets/ai_router_api_key) && python -m app.db.bootstrap && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
@@ -176,6 +176,10 @@ services:
       # the secrets anchor below mounts ${SECRETS_DIR} read-only, so the file
       # resolves when seed-secrets.sh provisions fuel_qld_api_key.
       FUEL_QLD_API_KEY_FILE: /run/secrets/fuel_qld_api_key
+      # AUT-2610: SA SAFPIS ingester (AUT-2406). Same Informed Sources subscriber
+      # token as QLD; secret file provisioned via seed-secrets.sh.
+      FUEL_SA_API_KEY_FILE: /run/secrets/fuel_sa_api_key
+      FUEL_SA_ENABLED: "true"
       AI_GATEWAY_API_KEY_FILE: /run/secrets/ai_gateway_api_key
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@autobrain.io}
       ADMIN_DISPLAY_NAME: AutoBrain Admin
@@ -298,6 +302,8 @@ services:
       # AUT-2218: QLD fuel — same wiring as the backend so the celery beat task
       # in this worker can poll the QLD feed alongside NSW/VIC.
       FUEL_QLD_API_KEY_FILE: /run/secrets/fuel_qld_api_key
+      # AUT-2610: SA SAFPIS ingester — same wiring as backend.
+      FUEL_SA_API_KEY_FILE: /run/secrets/fuel_sa_api_key
     <<: *secrets
     depends_on:
       postgres:

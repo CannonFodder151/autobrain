@@ -1,7 +1,12 @@
 """Per-station cost annotations on /fuel/stations (AUT-2201).
 
-Pure unit: tests ``_station_out`` directly with stubbed ``FuelStation``/
+Pure unit: tests ``annotate_station`` directly with stubbed ``FuelStation``/
 ``FuelPrice`` and ``FuelStats`` objects. No DB, no FastAPI. Deterministic.
+
+AUT-2319: previously imported ``app.api.v1.fuel_servo._station_out`` which
+transitively pulls in ``app.models`` and double-defines ``fuel_prices``.
+Tested via ``app.services.fuel_servo.annotate_station`` instead so collection
+runs alongside the AUT-2203 tests.
 """
 
 import os
@@ -19,8 +24,8 @@ os.environ["ENVIRONMENT"] = "development"
 from datetime import datetime, timezone  # noqa: E402
 from types import SimpleNamespace  # noqa: E402
 
-from app.api.v1.fuel_servo import _station_out  # noqa: E402
 from app.schemas.fuel import FuelStats  # noqa: E402
+from app.services.fuel_servo import annotate_station  # noqa: E402
 
 
 def _station(station_id="s1", lat=-37.81, lon=144.96, brand="BP") -> SimpleNamespace:
@@ -34,11 +39,12 @@ def _price(price=189.9, fuel_type="91") -> SimpleNamespace:
     return SimpleNamespace(
         fuel_type=fuel_type, price=price,
         effective_at=datetime(2026, 9, 1, tzinfo=timezone.utc),
+        source="AUT-1813", best_source=None, source_score=None, flag_reason=None,
     )
 
 
 def test_station_out_without_stats_does_not_annotate() -> None:
-    out = _station_out(_station(), [_price(189.9)], 5.0)
+    out = annotate_station(_station(), [_price(189.9)], 5.0)
     assert len(out.prices) == 1
     assert out.prices[0].cost_per_km is None
     assert out.prices[0].avg_fill_cost is None
@@ -54,7 +60,7 @@ def test_station_out_with_stats_annotates_cost_per_km_and_fill() -> None:
         avg_litres_per_fill=45.0,
         last_log=None, series=[],
     )
-    out = _station_out(_station(), [_price(190.0)], 5.0, stats)
+    out = annotate_station(_station(), [_price(190.0)], 5.0, stats)
     p = out.prices[0]
     assert p.cost_per_km == 0.152
     assert p.avg_fill_cost == 85.5
@@ -68,7 +74,7 @@ def test_station_out_annotates_each_price_independently() -> None:
         last_log=None, series=[],
     )
     prices = [_price(180.0, "91"), _price(200.0, "95"), _price(220.0, "98")]
-    out = _station_out(_station(), prices, 1.0, stats)
+    out = annotate_station(_station(), prices, 1.0, stats)
     assert [p.cost_per_km for p in out.prices] == [0.18, 0.2, 0.22]
     assert [p.avg_fill_cost for p in out.prices] == [90.0, 100.0, 110.0]
 
@@ -81,7 +87,7 @@ def test_station_out_partial_stats_only_cost_per_km() -> None:
         avg_litres_per_fill=None,
         last_log=None, series=[],
     )
-    out = _station_out(_station(), [_price(200.0)], None, stats)
+    out = annotate_station(_station(), [_price(200.0)], None, stats)
     p = out.prices[0]
     assert p.cost_per_km == 0.15
     assert p.avg_fill_cost is None

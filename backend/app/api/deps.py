@@ -1,6 +1,7 @@
 """Shared FastAPI dependencies."""
 
 import hmac
+from datetime import datetime, timezone
 
 from fastapi import Depends, HTTPException, Request, WebSocket, status
 from fastapi.security import OAuth2PasswordBearer
@@ -215,3 +216,47 @@ async def get_device_from_key(
             headers={"WWW-Authenticate": "DeviceKey"},
         )
     return device
+
+
+async def get_ha_user(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """Home Assistant token auth via X-HA-API-Key (AUT-2541).
+
+    The token maps to an `ha_integrations` row by its prefix index, then the
+    full key is verified against the stored sha256 digest in constant time.
+    Returns the owning User; updates last_used_at on every valid call.
+    """
+    from app.models.ha import HaIntegration
+    from app.services.ha_keys import key_prefix, verify_key
+
+    supplied = request.headers.get("X-HA-API-Key", "")
+    if not supplied:
+        raise HTTPException(
+            status_code=401,
+            detail="Missing X-HA-API-Key header",
+            headers={"WWW-Authenticate": "HAKey"},
+        )
+    candidates = list(
+        (
+            await db.scalars(
+                select(HaIntegration).where(HaIntegration.api_key_prefix == key_prefix(supplied))
+            )
+        ).all()
+    )
+    integration = next(
+        (i for i in candidates if verify_key(supplied, i.api_key_hash)), None
+    )
+    if integration is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired HA API key",
+            headers={"WWW-Authenticate": "HAKey"},
+        )
+    integration.last_used_at = datetime.now(timezone.utc)
+    await db.commit()
+    user = await db.get(User, integration.user_id)
+    if not user or not user.is_active:
+        raise HTTPException(status_code=401, detail="Invalid or expired HA API key")
+    return user

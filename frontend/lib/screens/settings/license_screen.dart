@@ -342,7 +342,7 @@ class _LicenseScreenState extends State<LicenseScreen> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: scheme.primary.withValues(alpha: 0.1),
+        color: scheme.primary.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: scheme.primary),
       ),
@@ -368,7 +368,7 @@ class _LicenseScreenState extends State<LicenseScreen> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: scheme.primary.withValues(alpha: 0.1),
+        color: scheme.primary.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: scheme.primary),
       ),
@@ -482,7 +482,7 @@ class _LicenseScreenState extends State<LicenseScreen> {
                     label: const Text('Most popular'),
                     labelStyle: TextStyle(color: scheme.primary, fontSize: 12),
                     side: BorderSide(color: scheme.primary),
-                    backgroundColor: scheme.primary.withValues(alpha: 0.1),
+                    backgroundColor: scheme.primary.withOpacity(0.1),
                   ),
               ],
             ),
@@ -506,7 +506,7 @@ class _LicenseScreenState extends State<LicenseScreen> {
                     labelStyle: TextStyle(color: Colors.green.shade800),
                     visualDensity: VisualDensity.compact,
                     side: BorderSide(color: Colors.green.shade400),
-                    backgroundColor: Colors.green.withValues(alpha: 0.08),
+                    backgroundColor: Colors.green.withOpacity(0.08),
                   ),
                 ],
                 if (_saleActive && saleMonthly != null && !_yearly) ...[
@@ -522,7 +522,7 @@ class _LicenseScreenState extends State<LicenseScreen> {
                     labelStyle: TextStyle(color: Colors.green.shade800),
                     visualDensity: VisualDensity.compact,
                     side: BorderSide(color: Colors.green.shade400),
-                    backgroundColor: Colors.green.withValues(alpha: 0.08),
+                    backgroundColor: Colors.green.withOpacity(0.08),
                   ),
                 ],
               ],
