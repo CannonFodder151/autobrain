@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+
+## [0.3.254] - 2026-09-08
 ### Added (AUT-2386)
 - feat(backend): source-arbitration rule for multi-feed overlap. ``FuelPrice`` now carries ``source_id`` + ``arbitration_score``; new ``fuel_price_arbitrations`` table stores the daily winning source per (station, fuel_type, day). PR #473.
 
@@ -208,7 +210,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed (AUT-2383)
 - fix(frontend): CARTO basemap tile URL now uses `?key=` instead of `?api_key=`. The legacy `?api_key=` parameter is silently ignored by CARTO raster basemaps, leaving the "API key required" watermark on Servo Spy's map even with `CARTO_API_KEY` injected. `?key=` is CARTO's required parameter name; `flutter_map`'s `BuiltInMapCachingProvider` handles disk tile caching to keep request volume low. Regression test in `frontend/test/servo_spy_carto_key_test.dart`.
-
 
 ## [0.3.234] - 2026-09-04
 
