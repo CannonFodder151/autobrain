@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.258] - 2026-09-08
+
 ### Fixed (AUT-2656)
 - fix(ci): pin flutter frontend Dockerfile to `ghcr.io/cirruslabs/flutter:3.27.3`
   to restore arm64 dart2js compile in build-hosted.yml. The `3.27.7` tag used
