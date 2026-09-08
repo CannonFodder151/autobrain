@@ -149,23 +149,28 @@ jobs:
     runs-on: [self-hosted, linux, x64, vm2]
     steps:
       - uses: actions/checkout@v4
-      - name: Install pip-audit
+      - name: Install virtualenv + pip-audit
         run: |
           python3 -m pip --version 2>/dev/null || \
             curl -sS https://bootstrap.pypa.io/get-pip.py | PIP_BREAK_SYSTEM_PACKAGES=1 python3 -
-          PIP_BREAK_SYSTEM_PACKAGES=1 python3 -m pip install --quiet pip-audit
+          PIP_BREAK_SYSTEM_PACKAGES=1 python3 -m pip install --quiet virtualenv pip-audit
       - name: Resolved-tree pass — fail on transitive CVE drift (AUT-1189)
         run: |
           set -euo pipefail
           # Each service resolves its own tree (backend/ai vs market-data pin
-          # different fastapi major versions and cannot share a venv). `pip-audit
-          # -r` resolves the full transitive tree in-process and audits it — no
-          # throwaway venv needed (the vm2 runner has no python3-venv, so a
-          # `python3 -m venv` step here hard-fails the gate; see the CI run on
-          # 0aea260c). Same approach as security-scan.yml's weekly pass.
+          # different fastapi major versions and cannot share a venv).
+          # virtualenv bundles pip so it works without ensurepip / python3-venv
+          # on the vm2 runner (AUT-2947). Install deps into a per-service venv,
+          # then run pip-audit --local against the installed set — no internal
+          # venv creation, no ensurepip needed.
           for req in backend/requirements.txt ai/requirements.txt market-data/requirements.txt; do
-            echo "==> auditing $req (resolved tree)"
-            python3 -m pip_audit -r "$req"
+            svc="$(echo "$req" | cut -d/ -f1)"
+            echo "==> creating venv and installing $svc deps"
+            python3 -m virtualenv "/tmp/audit-${svc}"
+            "/tmp/audit-${svc}/bin/pip" install --quiet -r "$req"
+            echo "==> auditing $svc (resolved tree)"
+            "/tmp/audit-${svc}/bin/pip-audit" --local
+            rm -rf "/tmp/audit-${svc}"
           done
 
   # (5) Flutter/Dart dependency vulnerability scan (AUT-2066).
