@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed (AUT-2983)
+- ci(ios, AUT-2983): lock the iOS build strategy — **min iOS 15.0**, **universal iPhone+iPad binary**, **CI path = GitHub-hosted `macos-latest`** in `.github/workflows/release-ios.yml` (self-hosted macOS VM blocked on AUT-2725). `frontend/ios/Runner/Info.plist` now drops `LSRequiresIPhoneOS` and adds `UIDeviceFamily` = `[1,2]` + `UIRequiresFullScreen=false`; `project.pbxproj` pins `IPHONEOS_DEPLOYMENT_TARGET = 15.0` and `TARGETED_DEVICE_FAMILY = "1,2"`. The workflow now patches the generated project on every run so the lock survives `flutter pub get` regenerations.
+
 ## [0.3.240] - 2026-09-06
 ### Added (AUT-2703)
 - feat(firmware,backend,frontend): extend trip CSV row schema with EV/PHEV fields (`soc_pct,pack_v,pack_a,pack_temp_c,odo_km,ev_mode`) for AUT-2437. `format_trip_row` in `obd_pids.h` now emits 13-field rows (old 7-field rows still accepted via default args). CSV header updated to `epoch,rpm,speed,coolant,throttle,lat,lon,soc_pct,pack_v,pack_a,pack_temp_c,odo_km,ev_mode`. `csv_to_gps_json` (upload_payload.h), backend `parse_board_csv` (trip_gps.py), and frontend `tripCsvToJson` (dongle_relay.dart) all tolerate both old and new row lengths via fixed-position reads. Dart tests expanded with backward-compat + EV-field cases. C++ self_check expanded with EV-field assertions + old-format CSV tolerance.
