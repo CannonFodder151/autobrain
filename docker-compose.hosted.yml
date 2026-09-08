@@ -295,7 +295,7 @@ services:
       test: ["CMD-SHELL", "for d in /proc/[0-9]*; do [ -r \"$d/comm\" ] || continue; cat \"$d/comm\" 2>/dev/null | grep -q \"^celery$\" || continue; tr \"\\0\" \" \" < \"$d/cmdline\" 2>/dev/null | grep -q \"celery.*worker\" && exit 0; done; exit 1"]
       interval: 30s
       timeout: 15s
-      start-period: 30s
+      start_period: 30s
       retries: 3
     environment:
       <<: [*db-env, *core-env, *router-env]
