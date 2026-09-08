@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Added (AUT-2386)
+- feat(backend): source-arbitration rule for multi-feed overlap. ``FuelPrice`` now carries ``source_id`` + ``arbitration_score``; new ``fuel_price_arbitrations`` table stores the daily winning source per (station, fuel_type, day). PR #473.
 
 ## [0.3.253] - 2026-09-07
 ### Fixed (AUT-2656)
