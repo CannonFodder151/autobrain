@@ -24,9 +24,6 @@ x-backend-base: &backend-base
     AI_ROUTER_URL: ${AI_ROUTER_URL:?AI_ROUTER_URL must be set in .env}
     SOCIAL_FEDERATION_HUB_URL: ${SOCIAL_FEDERATION_HUB_URL:-https://hub.autobrainservice.app}
     SOCIAL_FEDERATION_HOSTED: ${SOCIAL_FEDERATION_HOSTED:-false}
-    # EXPOSE_LAN_HOST controls the host IP for port bindings (default 127.0.0.1).
-    # When EXPOSE_LAN=1 is set in .env, this becomes 0.0.0.0 for LAN access.
-    EXPOSE_LAN_HOST: ${EXPOSE_LAN:+0.0.0.0}
   depends_on:
     postgres:
       condition: service_healthy
@@ -102,7 +99,7 @@ services:
   backend:
     <<: *backend-base
     ports:
-      - "${EXPOSE_LAN_HOST:-127.0.0.1}:8000:8000"
+      - "${EXPOSE_LAN:+0.0.0.0:-127.0.0.1}:8000:8000"
     command: ["sh", "-c", "alembic upgrade head && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"]
     volumes:
       - ./backend:/app
@@ -119,10 +116,8 @@ services:
       AI_ROUTER_URL: ${AI_ROUTER_URL:?AI_ROUTER_URL must be set in .env}
       # AB-INFRA-006: gateway auth stays on in dev; backend sends the shared key.
       AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:?AI_GATEWAY_API_KEY must be set in .env}
-      # EXPOSE_LAN_HOST: when EXPOSE_LAN=1, binds the AI gateway to 0.0.0.0 for LAN access.
-      EXPOSE_LAN_HOST: ${EXPOSE_LAN:+0.0.0.0}
     ports:
-      - "${EXPOSE_LAN_HOST:-127.0.0.1}:8001:8001"
+      - "${EXPOSE_LAN:+0.0.0.0:-127.0.0.1}:8001:8001"
     command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
     volumes:
       - ./ai:/app
@@ -138,7 +133,7 @@ services:
         CARTO_API_KEY: ${CARTO_API_KEY:-}
     restart: unless-stopped
     ports:
-      - "${EXPOSE_LAN_HOST:-127.0.0.1}:8080:80"
+      - "${EXPOSE_LAN:+0.0.0.0:-127.0.0.1}:8080:80"
     # AUT-2389: probe the backend upstream (not just nginx) so Portainer flips
     # the frontend unhealthy when the backend is unreachable/5xx. nginx-only
     # probes hid AUT-1964 — nginx stays up while the upstream is dead.
