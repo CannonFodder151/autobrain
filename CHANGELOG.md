@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-2131)
+- fix(infra): replace stale celerybeat-schedule mtime healthcheck with deterministic /proc scan. The old `find celerybeat-schedule -mmin -30` check false-negatives on idle workers (PersistentScheduler only writes the schedule file on shutdown/checkpoint, not on every tick), causing EP5 `autobrain-hosted-worker-1` to show unhealthy with a 209-failing-streak while all celery workers and the embedded `-B` beat scheduler were alive. New healthcheck scans `/proc` for a process with `comm=celery` and `cmdline` containing `celery.*worker`. Applied to the worker service (hosted) and the backend service (prod/dev) which embeds worker+beat. PR #594.
+
 ## [0.3.254] - 2026-09-08
 ### Added (AUT-2386)
 - feat(backend): source-arbitration rule for multi-feed overlap. ``FuelPrice`` now carries ``source_id`` + ``arbitration_score``; new ``fuel_price_arbitrations`` table stores the daily winning source per (station, fuel_type, day). PR #473.
