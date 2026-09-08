@@ -11,6 +11,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-2656)
+- fix(ci): pin flutter frontend Dockerfile to `ghcr.io/cirruslabs/flutter:3.27.3`
+  to restore arm64 dart2js compile in build-hosted.yml. The `3.27.7` tag used
+  in PR #579 does not exist on GHCR; `:stable` had drifted past 3.27.x and
+  introduced breaking Flutter API changes (MaterialBanner.actions required,
+  withClampedTextScaling maxTextScale removed, Connectivity.instance removed).
+  Also cherry-picked the dart2js code fixes from 887c213 for 3.27.x compat.
+
 ## [0.3.257] - 2026-09-08
 
 ### Security
