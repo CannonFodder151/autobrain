@@ -168,6 +168,9 @@ jobs:
             echo "==> creating venv and installing $svc deps"
             python3 -m virtualenv "/tmp/audit-${svc}"
             "/tmp/audit-${svc}/bin/pip" install --quiet -r "$req"
+            # pip-audit isn't installed inside the venv by default — install it
+            # per-service so /tmp/audit-${svc}/bin/pip-audit resolves (AUT-2947).
+            "/tmp/audit-${svc}/bin/pip" install --quiet pip-audit
             echo "==> auditing $svc (resolved tree)"
             "/tmp/audit-${svc}/bin/pip-audit" --local
             rm -rf "/tmp/audit-${svc}"
