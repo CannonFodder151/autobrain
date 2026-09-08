@@ -105,9 +105,14 @@ jobs:
           rm -f "$TMPREQ"
           python3 -m pip_audit --disable-pip --no-deps -r market-data/requirements.txt
 
-  # (5) dart pub audit on the frontend (requires the Flutter toolchain).
+  # (5) Flutter/Dart dependency vulnerability scan (AUT-2066).
+  # `flutter pub audit` and `dart pub audit` do not exist on current Flutter/Dart
+  # stable — the subcommand was never shipped, so every PR was failing this step
+  # regardless of diff content (blocking AUT-1899 and any other PR that touched
+  # `frontend/`). Use osv-scanner against `pubspec.lock` (the canonical
+  # ecosystem-aware vuln source for Dart/Flutter), gated to fail on HIGH/CRITICAL.
   flutter-audit:
-    name: Flutter — pub audit
+    name: Flutter — osv-scanner (pubspec.lock)
     runs-on: [self-hosted, linux, x64, vm2]
     steps:
       - uses: actions/checkout@v4
@@ -116,14 +121,25 @@ jobs:
         with:
           channel: stable
           cache: true
-      - name: dart pub audit (frontend)
+      - name: Install osv-scanner
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+          OSV_VER="1.9.2"
+          curl -sfL "https://github.com/google/osv-scanner/releases/download/v${OSV_VER}/osv-scanner_linux_amd64" \
+            -o "$HOME/.local/bin/osv-scanner"
+          chmod +x "$HOME/.local/bin/osv-scanner"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: flutter pub get (frontend)
         working-directory: frontend
         run: |
           set -euo pipefail
           flutter pub get
-          # `flutter pub audit` was removed; the canonical Dart/Flutter audit
-          # subcommand is `dart pub audit` (per AUT-1746 recommendation).
-          dart pub audit
+      - name: osv-scanner — fail on any finding
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          osv-scanner scan --format=table --lockfile=pubspec.lock
 
   report-status:
     name: Report gate result to Discord #status
@@ -141,4 +157,4 @@ jobs:
           curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
             -H "Content-Type: application/json" \
             -d "$(jq -nc --arg c status --arg t "$TITLE" --arg col "$COLOR" --arg u "$RUN_URL" \
-              '{channel:$c,title:$t,description:"AUT-1746 PR gate: gitleaks + trivy config + pip-audit + flutter pub audit.",color:$col,author:"Security Scan",fields:[{name:"Scope",value:"secrets, IaC, python, flutter",inline:true},{name:"Run",value:$u,inline:true}]}')"
+              '{channel:$c,title:$t,description:"AUT-1746 PR gate: gitleaks + trivy config + pip-audit + flutter osv-scanner (pubspec.lock).",color:$col,author:"Security Scan",fields:[{name:"Scope",value:"secrets, IaC, python, flutter",inline:true},{name:"Run",value:$u,inline:true}]}')"

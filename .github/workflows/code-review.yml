@@ -74,13 +74,15 @@ jobs:
 
       - name: Auto-approve PR on OCR stall (AUT-1814)
         # AUT-1814: when the advisory OCR (Open Code Review) gate stalls or fails,
-        # do NOT leave the PR parked waiting on Nathan's manual approval — submit an
-        # approving review automatically. The OCR gate is advisory (AUT-1807) and
+        # do NOT leave the PR parked waiting on Nathan's manual approval — submit a
+        # comment automatically. The OCR gate is advisory (AUT-1807) and
         # carries no merge-blocking code signal, so a stall must never require a human
         # gate. Real merge gating stays with the other checks + owning-dept QA/Security
         # sign-off; this only removes the OCR-stall human-approval wait. We check the
         # raw step result (outcome, pre-continue-on-error) so a soft-exited stall still
-        # triggers the auto-approve.
+        # triggers the auto-approve. continue-on-error protects against transient
+        # API/network failures in the review-listing curl (AUT-1814).
+        continue-on-error: true
         if: steps.review.outcome != 'success'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -88,7 +90,7 @@ jobs:
           PR_NUM: ${{ github.event.pull_request.number }}
         run: |
           actor="github-actions[bot]"
-          # Skip if we already auto-approved this PR in a prior run.
+# Skip if we already auto-approved this PR in a prior run.
           approved=$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/$REPO/pulls/$PR_NUM/reviews" \
             | jq -r --arg a "$actor" '.[] | select(.user.login == $a) | .state')
@@ -97,9 +99,9 @@ jobs:
           else
             curl -fsS -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
               -H "Content-Type: application/json" \
-              -d '{"event":"APPROVE","body":"Auto-approved: OCR (Open Code Review) gate stalled/failed (AUT-1814). OCR review is advisory, not merge-blocking, so the stall no longer waits on manual approval."}' \
+              -d '{"event":"COMMENT","body":"OCR (Open Code Review) gate stalled/failed (AUT-1814). OCR review is advisory, not merge-blocking, so no manual approval is needed."}' \
               "https://api.github.com/repos/$REPO/pulls/$PR_NUM/reviews"
-            echo "Auto-approved PR #$PR_NUM after OCR stall (AUT-1814)."
+            echo "Posted comment on PR #$PR_NUM after OCR stall (AUT-1814)."
           fi
 
       - name: Report to Discord #updates
