@@ -158,48 +158,43 @@ jobs:
         run: |
           set -euo pipefail
           # Each service resolves its own tree (backend/ai vs market-data pin
-          # different fastapi major versions and cannot share a venv). Run each
-          # in its own throwaway venv so the resolution is identical to what
-          # `pip install -r` produces at image build time, but never pollutes
-          # the runner env.
+          # different fastapi major versions and cannot share a venv). `pip-audit
+          # -r` resolves the full transitive tree in-process and audits it — no
+          # throwaway venv needed (the vm2 runner has no python3-venv, so a
+          # `python3 -m venv` step here hard-fails the gate; see the CI run on
+          # 0aea260c). Same approach as security-scan.yml's weekly pass.
           for req in backend/requirements.txt ai/requirements.txt market-data/requirements.txt; do
-            VENV="$(mktemp -d)/venv"
-            python3 -m venv "$VENV"
-            # shellcheck disable=SC1091
-            source "$VENV/bin/activate"
-            # Quiet install (audit happens after) but show resolution errors so a
-            # bad pin never silently downgrades a transitive under the floor.
-            pip install --quiet -r "$req"
-            # `pip-audit` without --no-deps audits the resolved env (transitives
-            # included). Exit code 1 on any known CVE.
-            pip-audit
-            rc=$?
-            deactivate || true
-            if [ "$rc" -ne 0 ]; then
-              echo "::error::resolved-tree pip-audit failed for $req (AUT-1189 transitive CVE gate)" >&2
-              exit "$rc"
-            fi
+            echo "==> auditing $req (resolved tree)"
+            python3 -m pip_audit -r "$req"
           done
 
-  # (5) dart pub audit on the frontend (requires the Flutter toolchain).
+  # (5) Flutter/Dart dependency vulnerability scan (AUT-2066).
+  # `flutter pub audit` and `dart pub audit` do not exist on current Flutter/Dart
+  # stable — the subcommand was never shipped, so every PR was failing this step
+  # regardless of diff content (blocking AUT-1899 and any other PR that touched
+  # `frontend/`). Use osv-scanner against `pubspec.lock` (the canonical
+  # ecosystem-aware vuln source for Dart/Flutter). No Flutter toolchain needed.
   flutter-audit:
-    name: Flutter — pub audit
-    runs-on: [self-hosted, linux, x64, vm2]
+    name: Flutter — osv-scanner (pubspec.lock)
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-      - name: dart pub audit (frontend)
+      - name: Install osv-scanner
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+          OSV_VER="1.9.2"
+          curl -sfL "https://github.com/google/osv-scanner/releases/download/v${OSV_VER}/osv-scanner_linux_amd64" \
+            -o "$HOME/.local/bin/osv-scanner"
+          chmod +x "$HOME/.local/bin/osv-scanner"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: osv-scanner — fail on any finding
         working-directory: frontend
         run: |
           set -euo pipefail
-          flutter pub get
-          # `flutter pub audit` was removed; the canonical Dart/Flutter audit
-          # subcommand is `dart pub audit` (per AUT-1746 recommendation).
-          dart pub audit
+          # v1.x CLI: `osv-scanner scan` is the v1 entrypoint; v1.x exits
+          # non-zero automatically on any finding (no --exit-code flag in v1).
+          osv-scanner scan --format=table --lockfile=pubspec.lock
 
   # (6) AUT-1881 pin-guard — fail any compose `image:` reference that is not
   # pinned by `@sha256` digest. Complements the postgres/nginx/python pin
