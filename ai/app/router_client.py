@@ -10,15 +10,31 @@ If the router is unreachable, misconfigured, or returns an error, callers
 fall back to their deterministic rule-based implementation so AutoBrain
 never goes down with the router.
 
+Reliability safeguards ("less AI, more reliable"):
+
+  * Per-call timeout (AI_ROUTER_TIMEOUT_SECONDS, default 25s) — a slow router
+    can never block an inference request indefinitely. Typical 9Router replies
+    land in 3-8s; 25s is a generous safety ceiling, not the working budget.
+  * Circuit breaker: after a small number of consecutive failures the gateway
+    short-circuits the router for a cooldown window (defaults: 3 failures ->
+    60s open). This stops a degraded router from adding latency to every
+    request in the fleet — the deterministic baseline stays available.
+  * Response size cap (1 MiB) + nested depth/length validation protect the
+    service from runaway model output and injection-style JSON.
+
 Environment variables:
-  AI_ROUTER_URL              e.g. http://10.0.3.17:20128/v1
-  AI_ROUTER_API_KEY          optional bearer key
-  AI_ROUTER_MODEL            model id served by the router (default General-Use)
-  AI_ROUTER_TIMEOUT_SECONDS  per-request timeout
+  AI_ROUTER_URL                       e.g. http://10.0.3.17:20128/v1
+  AI_ROUTER_API_KEY                   optional bearer key
+  AI_ROUTER_MODEL                     model id served by the router (default General-Use)
+  AI_ROUTER_TIMEOUT_SECONDS           per-request timeout (default 25)
+  AI_ROUTER_BREAKER_THRESHOLD         consecutive failures to open breaker (default 3)
+  AI_ROUTER_BREAKER_COOLDOWN_SECONDS  how long the breaker stays open (default 60)
 """
 
 import json
 import os
+import threading
+import time
 
 import httpx
 
@@ -59,17 +75,97 @@ def router_model() -> str:
     return os.getenv("AI_ROUTER_MODEL", "General-Use")
 
 
+def _router_timeout() -> int:
+    try:
+        return max(1, int(os.getenv("AI_ROUTER_TIMEOUT_SECONDS", "25")))
+    except ValueError:
+        return 25
+
+
+# Circuit breaker: after N consecutive failures the router is short-circuited
+# for COOLDOWN_SECONDS. Reset on the first success. Single-process state is
+# fine — the AI gateway runs in one uvicorn per container and the breaker is a
+# coarse guard against a degraded router, not a global health check.
+_BREAKER_LOCK = threading.Lock()
+_BREAKER_FAILURES = 0
+_BREAKER_OPEN_UNTIL = 0.0
+
+
+def _breaker_threshold() -> int:
+    try:
+        return max(1, int(os.getenv("AI_ROUTER_BREAKER_THRESHOLD", "3")))
+    except ValueError:
+        return 3
+
+
+def _breaker_cooldown_seconds() -> float:
+    try:
+        return max(0.0, float(os.getenv("AI_ROUTER_BREAKER_COOLDOWN_SECONDS", "60")))
+    except ValueError:
+        return 60.0
+
+
+def _breaker_open() -> bool:
+    """True while the breaker is open and the router should be skipped."""
+    global _BREAKER_OPEN_UNTIL
+    with _BREAKER_LOCK:
+        if _BREAKER_OPEN_UNTIL and time.monotonic() < _BREAKER_OPEN_UNTIL:
+            return True
+        if _BREAKER_OPEN_UNTIL and time.monotonic() >= _BREAKER_OPEN_UNTIL:
+            _BREAKER_OPEN_UNTIL = 0.0
+        return False
+
+
+def _breaker_record_success() -> None:
+    global _BREAKER_FAILURES, _BREAKER_OPEN_UNTIL
+    with _BREAKER_LOCK:
+        _BREAKER_FAILURES = 0
+        _BREAKER_OPEN_UNTIL = 0.0
+
+
+def _breaker_record_failure() -> None:
+    global _BREAKER_FAILURES, _BREAKER_OPEN_UNTIL
+    cooldown = _breaker_cooldown_seconds()
+    if cooldown <= 0:
+        return
+    threshold = _breaker_threshold()
+    with _BREAKER_LOCK:
+        _BREAKER_FAILURES += 1
+        if _BREAKER_FAILURES >= threshold and _BREAKER_OPEN_UNTIL == 0.0:
+            _BREAKER_OPEN_UNTIL = time.monotonic() + cooldown
+            logger.warning(
+                "router_circuit_open",
+                consecutive_failures=_BREAKER_FAILURES,
+                cooldown_seconds=cooldown,
+                threshold=threshold,
+            )
+
+
+def reset_circuit_breaker() -> None:
+    """Test/admin hook: force the breaker closed."""
+    global _BREAKER_FAILURES, _BREAKER_OPEN_UNTIL
+    with _BREAKER_LOCK:
+        _BREAKER_FAILURES = 0
+        _BREAKER_OPEN_UNTIL = 0.0
+
+
 async def route(module: str, payload: dict) -> dict | None:
     """POST an OpenAI-style chat completion to 9Router.
 
     Returns the parsed result dict, or None on any failure (callers fall back).
+    Honours the per-call timeout, response-size cap, and the circuit breaker —
+    a slow or down router never adds latency to the inference request and the
+    deterministic baseline always wins on the breaker-open path.
     """
     if not router_enabled():
         logger.info("router_disabled_using_fallback", module=module)
         return None
+    if _breaker_open():
+        logger.info("router_circuit_open_using_fallback", module=module)
+        return None
 
     url = f"{router_url()}/chat/completions"
-    timeout = int(os.getenv("AI_ROUTER_TIMEOUT_SECONDS", "120"))
+    timeout = _router_timeout()
     headers = {"Content-Type": "application/json"}
     api_key = os.getenv("AI_ROUTER_API_KEY", "")
     if api_key:
@@ -92,19 +188,57 @@ async def route(module: str, payload: dict) -> dict | None:
             resp.raise_for_status()
             if len(resp.content) > _MAX_ROUTER_RESPONSE_BYTES:
                 logger.warning("router_response_oversized", module=module, size=len(resp.content))
+                _breaker_record_failure()
                 return None
             data = _clean_json(resp.text)
             content = data["choices"][0]["message"]["content"]
             result = _clean_json(content)
             result.setdefault("model", router_model())
             logger.info("router_response", module=module, model=router_model(), status=resp.status_code)
+            _breaker_record_success()
             return result
     except httpx.HTTPStatusError as exc:
         logger.warning("router_http_error", module=module, status=exc.response.status_code)
+        _breaker_record_failure()
         return None
     except Exception as exc:
         logger.warning("router_unreachable_using_fallback", module=module, error=str(exc))
+        _breaker_record_failure()
         return None
+
+
+# Modules where the router's job is per-item refinement that the deterministic
+# baseline deliberately leaves for the AI (description / brand / category tidy,
+# item classification). The baseline cannot "already contain" these refinements
+# without duplicating the AI work, so the short-circuit is bypassed for them.
+_NEVER_SHORT_CIRCUIT = frozenset({"parts-guide"})
+
+
+def _ai_can_contribute(module: str, baseline: dict, schema: dict) -> bool:
+    """True if the router could plausibly add a new field to ``baseline``.
+
+    Returns False when every schema key the router is allowed to write is
+    already populated in the baseline — calling the router would be wasted
+    work, and the deterministic-first contract is fully satisfied by the
+    baseline alone. The short-circuit never runs for modules in
+    ``_NEVER_SHORT_CIRCUIT`` (their AI work is per-item, not top-level).
+    """
+    if module in _NEVER_SHORT_CIRCUIT:
+        return True
+    if not schema:
+        return True
+    immutable = _AI_IMMUTABLE.get(module, frozenset())
+    for key in schema:
+        if key in immutable or key == "model":
+            continue
+        val = baseline.get(key)
+        if val is None:
+            return True
+        if isinstance(val, (list, dict)) and len(val) == 0:
+            return True
+        if isinstance(val, str) and not val.strip():
+            return True
+    return False
 
 
 async def enhance(module: str, payload: dict, baseline: dict) -> dict:
@@ -115,13 +249,24 @@ async def enhance(module: str, payload: dict, baseline: dict) -> dict:
     overwriting deterministic-critical keys (see _AI_IMMUTABLE). model becomes
     ``rule-based+ai`` when the router contributed fields, else the baseline is
     returned untouched. The service stays fully functional with the router down.
+
+    Short-circuit: when the deterministic baseline already satisfies every
+    "AI-addable" schema field (i.e. there is nothing the router could enrich
+    that the baseline does not already cover with a non-empty value), the
+    router is skipped entirely. No network call, no quota burn, no added
+    latency for an enrichment that cannot change the result. Modules that need
+    the router for per-item refinement (``parts-guide``) bypass the
+    short-circuit.
     """
+    schema = _SCHEMAS.get(module, {})
+    if not _ai_can_contribute(module, baseline, schema):
+        return baseline
+
     result = await route(module, payload)
     if not isinstance(result, dict):
         return baseline
 
     immutable = _AI_IMMUTABLE.get(module, frozenset())
-    schema = _SCHEMAS.get(module, {})
     merged = dict(baseline)
     enriched = False
     for key, value in result.items():
