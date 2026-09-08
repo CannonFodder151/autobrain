@@ -148,23 +148,12 @@ class _AutoBrainAppState extends State<AutoBrainApp> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 elevation: 1,
                 backgroundColor: Theme.of(context).colorScheme.errorContainer,
-                actions: [
-                  TextButton(
-                    onPressed: () => ConnectivityService.instance.check(),
-                    child: const Text('Retry'),
-                  ),
-                ],
+                actions: const <Widget>[],
               );
         final body = banner == null
             ? content
             : Column(children: [banner, Expanded(child: content)]);
-        final wrapped = MediaQuery(
-          data: MediaQuery.of(context).copyWith(
-            maxTextScaleFactor: 1.5,
-            minTextScaleFactor: 1.0,
-          ),
-          child: body,
-        );
+                final wrapped = body;
         if (!(kDebugMode || kProfileMode)) {
           return wrapped;
         }
