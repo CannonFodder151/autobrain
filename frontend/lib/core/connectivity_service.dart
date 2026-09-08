@@ -25,7 +25,7 @@ class ConnectivityService {
 
   Future<void> init() async {
     await _check();
-    Connectivity.instance.onConnectivityChanged.listen((_) => _check());
+    Connectivity().onConnectivityChange.listen((_) => _check());
   }
 
   Future<void> _check() async {
