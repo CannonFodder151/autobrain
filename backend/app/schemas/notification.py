@@ -16,6 +16,7 @@ class NotificationPreferenceIn(BaseModel):
     service_due_days: int | None = Field(default=None, ge=0, le=365)
     service_due_km: int | None = Field(default=None, ge=0, le=100000)
     fuel_gap_km: int | None = Field(default=None, ge=0, le=100000)
+    rego_expiry_days: int | None = Field(default=None, ge=0, le=365)
     discord_webhook_url: str | None = Field(default=None, max_length=500)
     fcm_token: str | None = Field(default=None, max_length=500)
 
@@ -39,6 +40,7 @@ class NotificationPreferenceOut(BaseModel):
     service_due_days: int
     service_due_km: int
     fuel_gap_km: int
+    rego_expiry_days: int = 0
     discord_webhook_url: str | None
     fcm_token: str | None
     created_at: datetime | None = None

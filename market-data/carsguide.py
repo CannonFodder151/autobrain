@@ -128,7 +128,7 @@ def _filter_year(listings: list[dict], year: int | None) -> list[dict]:
     exact = [l for l in listings if l["year"] == year]
     if len(exact) >= 3:
         return exact
-    nearby = [l for l in listings if l["year"] and abs(l["year"] - year) <= 2]
+    nearby = [l for l in listings if l["year"] and abs(l["year"] - year) <= 1]
     if len(nearby) >= 3:
         return nearby
     return listings

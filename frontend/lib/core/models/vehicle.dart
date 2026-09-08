@@ -12,6 +12,11 @@ class Vehicle {
   final String? fuelType;
   final bool isShared;
   final String? sharedBy;
+  /// AUT-2415 — populated nightly by the AUT-2414 Celery beat job. Null until
+  /// the backend has run a rego lookup for this vehicle.
+  final String? regoStatus;
+  /// ISO date string (YYYY-MM-DD) of rego expiry; null if unknown.
+  final String? regoExpiryDate;
 
   const Vehicle({
     required this.id,
@@ -35,6 +40,8 @@ class Vehicle {
     this.fuelType,
     this.isShared = false,
     this.sharedBy,
+    this.regoStatus,
+    this.regoExpiryDate,
   });
 
   String get displayName => '$nickname'
@@ -45,6 +52,27 @@ class Vehicle {
   String get dropdownLabel => isShared
       ? '$displayName (Invited by ${sharedBy ?? 'Unknown'})'
       : displayName;
+
+  /// True when [regoStatus] and [regoExpiryDate] are both present. UI hides the
+  /// rego badge / expiry line unless this returns true (forward-compatible with
+  /// AUT-2414's nightly job: vehicles with no rego lookup yet simply show nothing).
+  bool get hasRegoData =>
+      regoStatus != null && regoStatus!.isNotEmpty &&
+      regoExpiryDate != null && regoExpiryDate!.isNotEmpty;
+
+  /// Human-readable expiry (e.g. "12 Mar 2027"). Returns null when unknown.
+  String? get formattedRegoExpiry {
+    final raw = regoExpiryDate;
+    if (raw == null || raw.isEmpty) return null;
+    final parsed = DateTime.tryParse(raw);
+    if (parsed == null) return raw;
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    final m = months[parsed.month - 1];
+    return '$parsed.day $m ${parsed.year}';
+  }
 
   @override
   bool operator ==(Object other) => other is Vehicle && other.id == id;
@@ -98,5 +126,7 @@ class Vehicle {
         fuelType: (j['fuel_type'] as String?),
         isShared: (j['is_shared'] as bool?) ?? false,
         sharedBy: j['shared_by'] as String?,
+        regoStatus: j['rego_status'] as String?,
+        regoExpiryDate: j['rego_expiry_date'] as String?,
       );
 }

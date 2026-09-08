@@ -7,7 +7,7 @@ os.environ.setdefault("AI_ROUTER_URL", "http://your-9router-instance:port")
 import pytest  # noqa: E402
 from unittest.mock import AsyncMock, patch  # noqa: E402
 
-from app.router_client import _matches_type, _validate_nested, enhance  # noqa: E402
+from app.router_client import _cap_payload, _matches_type, _validate_nested, enhance  # noqa: E402
 
 
 def test_matches_type() -> None:
@@ -100,3 +100,36 @@ async def test_enhance_immutable_never_overridden() -> None:
         out = await enhance("resale", {}, baseline)
     assert out["estimated_value"] == 30000.0  # immutable survives
     assert out["rrp"] == 60000.0              # valid enrichment merged
+
+
+def test_cap_payload_truncates_known_field() -> None:
+    """AUT-1602: symptoms > 2000 chars must be truncated (per-field cap)."""
+    long = "A" * 5000
+    out = _cap_payload({"symptoms": long, "make": "Toyota"})
+    assert len(out["symptoms"]) == 2000
+    assert out["make"] == "Toyota"
+
+
+def test_cap_payload_truncates_unknown_field_to_default() -> None:
+    """Unknown string fields get the 5000-char default cap."""
+    out = _cap_payload({"junk": "B" * 8000})
+    assert len(out["junk"]) == 5000
+
+
+def test_cap_payload_enforces_total_budget() -> None:
+    """Many mid-size fields trigger total-budget halving pass."""
+    big = "X" * 2000
+    payload = {f"k{i}": big for i in range(60)}  # ~120k chars raw
+    out = _cap_payload(payload)
+    import json as _json
+    assert len(_json.dumps(out)) <= 100_000
+    for v in out.values():
+        assert isinstance(v, str)
+        assert len(v) <= 2000  # symptom cap was applied first
+        assert len(v) <= 1000  # halved at most once
+
+
+def test_cap_payload_passes_through_short_input() -> None:
+    """No truncation when everything is within caps."""
+    payload = {"symptoms": "engine misfire", "make": "Toyota"}
+    assert _cap_payload(payload) == payload

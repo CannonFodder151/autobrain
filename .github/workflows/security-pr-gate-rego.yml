@@ -1,0 +1,58 @@
+# AUT-1189: PR-time dependency audit gate for rego-lookup-api (direct pins
+# only). Weekly full-resolution scan (security-scan.yml) already runs inside
+# the deployed container; this lightweight gate catches a known-vulnerable
+# pinned dependency before merge.
+name: Security — rego-lookup-api PR dependency gate
+
+on:
+  pull_request:
+    paths:
+      - 'rego-lookup-api/requirements.txt'
+      - 'rego-lookup-api/.github/workflows/security-pr-gate-rego.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'rego-lookup-api/requirements.txt'
+      - 'rego-lookup-api/.github/workflows/security-pr-gate-rego.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-pr-gate-rego-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pip-audit:
+    name: pip-audit — rego-lookup-api
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pip-audit
+        run: |
+          python3 -m pip --version 2>/dev/null || \
+            curl -sS https://bootstrap.pypa.io/get-pip.py | PIP_BREAK_SYSTEM_PACKAGES=1 python3 -
+          PIP_BREAK_SYSTEM_PACKAGES=1 python3 -m pip install --quiet pip-audit
+      - name: Fail on known-vuln pinned deps
+        run: |
+          set -euo pipefail
+          python3 -m pip_audit --disable-pip --no-deps -r rego-lookup-api/requirements.txt
+
+  report-status:
+    name: Report gate result to Discord #status
+    if: always()
+    needs: [pip-audit]
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - name: Report to Discord #status
+        env:
+          RESULT: ${{ needs.pip-audit.result == 'success' && 'clean' || 'findings' }}
+          COLOR: ${{ needs.pip-audit.result == 'success' && '0x57F287' || '0xED4245' }}
+          TITLE: ${{ needs.pip-audit.result == 'success' && 'PR security gate clean' || 'PR security gate found issues' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
+            -H "Content-Type: application/json" \
+            -d "$(jq -nc --arg c status --arg t "$TITLE" --arg col "$COLOR" --arg u "$RUN_URL" \
+              '{channel:$c,title:$t,description:"AUT-1189 PR gate: pip-audit of rego-lookup-api direct pins.",color:$col,author:"Security Scan",fields:[{name:"Scope",value:"rego-lookup-api",inline:true},{name:"Run",value:$u,inline:true}]}')"

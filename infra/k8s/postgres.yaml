@@ -46,6 +46,13 @@ spec:
             exec:
               command: ["pg_isready", "-U", "autobrain"]
             initialDelaySeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
       volumes:
         - name: data
           persistentVolumeClaim:

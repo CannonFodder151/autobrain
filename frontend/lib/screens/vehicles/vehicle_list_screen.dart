@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/api_client.dart';
 import '../../core/auth_state.dart';
+import '../../core/connectivity_service.dart';
 import '../../core/models.dart';
+import '../../widgets/rego_status_badge.dart';
+import '../../widgets/responsive.dart';
+import '../../widgets/stale_hint.dart';
 import 'add_vehicle_screen.dart';
 import 'edit_vehicle_screen.dart';
 import 'share_vehicle_screen.dart';
@@ -18,6 +23,7 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
   List<Vehicle> _vehicles = const [];
   List<Map<String, dynamic>> _invites = const [];
   bool _loading = true;
+  bool _stale = false;
   String? _busyInvite;
 
   @override
@@ -28,18 +34,33 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
 
   Future<void> _load() async {
     final api = context.read<AuthState>().api;
-    setState(() => _loading = true);
+    // Cache-first: render immediately from cache.
+    final cached = await api.getCachedDecoded('/vehicles', null);
+    if (cached != null) {
+      _vehicles = (cached as List)
+          .map((e) => Vehicle.fromJson(e as Map<String, dynamic>))
+          .toList();
+      _stale = true;
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
+    if (!mounted) return;
+    // Background refresh if online.
+    if (!ConnectivityService.instance.isOnline) return;
     try {
       final data = await api.get('/vehicles') as List;
       _vehicles = data
           .map((e) => Vehicle.fromJson(e as Map<String, dynamic>))
           .toList();
-    } catch (_) {}
+      _stale = false;
+    } catch (_) {
+      if (_vehicles.isEmpty) _stale = true;
+    }
     try {
       final invites = await api.get('/vehicle-shares') as List;
       _invites = invites.map((e) => e as Map<String, dynamic>).toList();
     } catch (_) {}
-    if (mounted) setState(() => _loading = false);
+    if (mounted) setState(() {});
   }
 
   Future<void> _delete(Vehicle v) async {
@@ -118,7 +139,10 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDemo = context.watch<AuthState>().isDemo;
+    final auth = context.watch<AuthState>();
+    final isDemo = auth.isDemo;
+    final isPremium = auth.premium;
+    final isDesktop = context.isDesktop;
     final pending = _invites.where((i) => i['status'] == 'pending').toList();
     return Scaffold(
       appBar: AppBar(title: const Text('Vehicles')),
@@ -139,70 +163,121 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView(
-                padding: const EdgeInsets.all(16),
+                padding: EdgeInsets.all(isDesktop ? 12 : 16),
                 children: [
-                  if (pending.isNotEmpty) ...[
-                    Text('Vehicle invites',
-                        style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: 8),
-                    for (final i in pending) _InviteCard(
-                      invite: i,
-                      busy: _busyInvite == i['id'],
-                      onAccept: () => _respond(i['id'] as String, 'accept'),
-                      onDeny: () => _respond(i['id'] as String, 'deny'),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                  for (final v in _vehicles)
-                    Card(
-                      child: ListTile(
-                        leading: Icon(
-                          v.isShared
-                              ? Icons.group
-                              : Icons.directions_car,
-                        ),
-                        title: Text(v.dropdownLabel),
-                        subtitle: Text(
-                          '${v.make ?? ''} ${v.model ?? ''} ${v.year ?? ''}'
-                          '${v.bodyType != null ? ' · ${v.bodyType}' : ''}'
-                          '${v.colour != null ? ' · ${v.colour}' : ''}'
-                          '${v.rego != null ? ' · ${v.rego}' : ''}'.trim(),
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (v.isPrimary)
-                              const Icon(Icons.star, color: Colors.amber),
-                            PopupMenuButton<String>(
-                              onSelected: (action) {
-                                if (action == 'edit') _edit(v);
-                                if (action == 'share') _share(v);
-                                if (action == 'delete') _delete(v);
-                                if (action == 'remove') _removeShared(v);
-                              },
-                              itemBuilder: (_) => v.isShared
-                                  ? const [
-                                      PopupMenuItem(
-                                          value: 'remove',
-                                          child: Text('Remove access')),
-                                    ]
-                                  : const [
-                                      PopupMenuItem(
-                                          value: 'edit',
-                                          child: Text('Edit details')),
-                                      PopupMenuItem(
-                                          value: 'share',
-                                          child: Text('Share')),
-                                      PopupMenuItem(
-                                          value: 'delete',
-                                          child: Text('Delete')),
-                                    ],
+                  StaleHint(
+                    isStale: _stale,
+                    isOffline: !ConnectivityService.instance.isOnline,
+                  ),
+                  Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 700),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (pending.isNotEmpty) ...[
+                            Text('Vehicle invites',
+                                style: Theme.of(context).textTheme.titleMedium),
+                            const SizedBox(height: 6),
+                            for (final i in pending) _InviteCard(
+                              invite: i,
+                              busy: _busyInvite == i['id'],
+                              onAccept: () => _respond(i['id'] as String, 'accept'),
+                              onDeny: () => _respond(i['id'] as String, 'deny'),
                             ),
+                            SizedBox(height: isDesktop ? 12 : 16),
                           ],
-                        ),
-                        onTap: v.isShared ? null : () => _edit(v),
+                          for (final v in _vehicles)
+                            Card(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 8),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    InkWell(
+                                      onTap: v.isShared ? null : () => _edit(v),
+                                      child: Row(
+                                        children: [
+                                          Icon(v.isShared
+                                              ? Icons.group
+                                              : Icons.directions_car,
+                                              size: isDesktop ? 20 : null),
+                                          SizedBox(width: isDesktop ? 8 : 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(v.dropdownLabel,
+                                                    style: Theme.of(context)
+                                                        .textTheme
+                                                        .titleMedium
+                                                        ?.copyWith(fontSize: isDesktop ? 14 : null)),
+                                                Text(
+                                                  '${v.make ?? ''} ${v.model ?? ''} ${v.year ?? ''}'
+                                                  '${v.bodyType != null ? ' · ${v.bodyType}' : ''}'
+                                                  '${v.colour != null ? ' · ${v.colour}' : ''}'
+                                                  '${v.rego != null ? ' · ${v.rego}' : ''}'
+                                                      .trim(),
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .bodySmall
+                                                      ?.copyWith(fontSize: isDesktop ? 12 : null),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          if (v.isPrimary)
+                                            const Padding(
+                                              padding: EdgeInsets.only(right: 4),
+                                              child: Icon(Icons.star,
+                                                  color: Colors.amber),
+                                            ),
+                                          PopupMenuButton<String>(
+                                            onSelected: (action) {
+                                              if (action == 'edit') _edit(v);
+                                              if (action == 'share') _share(v);
+                                              if (action == 'delete') _delete(v);
+                                              if (action == 'remove') _removeShared(v);
+                                            },
+                                            itemBuilder: (_) => v.isShared
+                                                ? const [
+                                                    PopupMenuItem(
+                                                        value: 'remove',
+                                                        child: Text('Remove access')),
+                                                  ]
+                                                : const [
+                                                    PopupMenuItem(
+                                                        value: 'edit',
+                                                        child: Text('Edit details')),
+                                                    PopupMenuItem(
+                                                        value: 'share',
+                                                        child: Text('Share')),
+                                                    PopupMenuItem(
+                                                        value: 'delete',
+                                                        child: Text('Delete')),
+                                                  ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    if (v.hasRegoData)
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                            left: 36, top: 4, bottom: 4),
+                                        child: RegoStatusBadge(
+                                          vehicle: v,
+                                          premium: isPremium,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
+                  ),
                 ],
               ),
             ),

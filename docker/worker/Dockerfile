@@ -28,20 +28,16 @@ USER autobrain
 
 # AUT-601 / AUT-1286 / AUT-1878 / AUT-2056: this image runs BOTH the worker and
 # the beat scheduler. `celery inspect ping` is unreliable (fails under load,
-# false-negatives on the control bus). The check is command-aware:
-# - When PID 1 embeds beat (`worker -B` or separate `beat`), it validates that
-#   the PersistentScheduler keeps writing `celerybeat-schedule` (stale file =
-#   wedged scheduler loop, e.g. the 100% CPU busy-loop from AUT-601).
-# - Worker-only: scan /proc for the celery worker process (deterministic;
-#   no AMQP round-trip, no pgrep dependency, no nested `$()` that breaks
-#   busybox/dash). AUT-1878: `inspect ping` exits 1 on a healthy worker in the
-#   hosted stack — process check is more reliable.
-#
-# AUT-2056: use `bash -c` (present in python:3.13-slim Debian base) to avoid
-# `sh` parsing bugs with `$()` inside `[ ... ]`. Command uses `grep -q` on
-# /proc/*/comm and cmdline — pure POSIX, no nested substitutions in tests.
+# false-negatives on the control bus). The check is deterministic: scan /proc
+# for a process whose `comm` is `celery` and whose `cmdline` contains `worker`.
+# This covers both `celery worker` and `celery worker -B` cases — no AMQP
+# round-trip, no nested `$()`, no busybox/dash compatibility issues.
+# AUT-1878 root cause: the earlier beat branch relied on `find -mmin -30`
+# against `celerybeat-schedule`, but PersistentScheduler only writes that file
+# on shutdown/checkpoint — not on every tick — so it false-negatives a
+# perfectly alive worker+beat process. Unify to the PID scan for both modes.
 HEALTHCHECK --interval=30s --timeout=15s --start-period=30s --retries=3 \
-    CMD bash -c 'c=$(tr "\0" " " </proc/1/cmdline); case "$c" in *-B*|*beat*) [ -f celerybeat-schedule ] && find celerybeat-schedule -mmin -30 2>/dev/null | grep -q . || exit 1 ;; *) for d in /proc/[0-9]*; do [ -r "$d/comm" ] || continue; cat "$d/comm" 2>/dev/null | grep -q "^celery$" || continue; tr "\0" " " < "$d/cmdline" 2>/dev/null | grep -q "celery.*worker" && exit 0; done; exit 1 ;; esac'
+    CMD bash -c 'for d in /proc/[0-9]*; do [ -r "$d/comm" ] || continue; cat "$d/comm" 2>/dev/null | grep -q "^celery$" || continue; tr "\0" " " < "$d/cmdline" 2>/dev/null | grep -q "celery.*worker" && exit 0; done; exit 1'
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 

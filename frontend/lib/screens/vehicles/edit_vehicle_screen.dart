@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/auth_state.dart';
 import '../../core/fuel_types.dart';
 import '../../core/models.dart';
+import '../../widgets/responsive.dart';
 import 'share_vehicle_screen.dart';
 
 class EditVehicleScreen extends StatefulWidget {
@@ -183,12 +184,15 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextFormField(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 640),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextFormField(
                 controller: _nickname,
                 decoration: const InputDecoration(labelText: 'Nickname'),
                 validator: (v) => v == null || v.isEmpty ? 'Required' : null,
@@ -366,6 +370,7 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
                 child: const Text('Save changes'),
               ),
             ],
+            ),
           ),
         ),
       ),

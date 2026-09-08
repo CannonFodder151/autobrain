@@ -1,6 +1,6 @@
 # AutoBrain production stack.
 # Builds from source, tags images as ${DOCKERHUB_USERNAME}/autobrain-*.
-# Runs: postgres, redis, minio, backend (API + Celery worker+beat), ai, frontend.
+# Runs: postgres, redis, minio, backend (API + AI gateway + Celery worker+beat), frontend.
 # Nginx frontend container serves Flutter web + proxies /api, /ws, /ai.
 # No ports exposed except frontend :80. All internal services exposed only via Compose network.
 #
@@ -18,7 +18,9 @@ x-core-env: &core-env
   # AUT-1786: explicit passthrough for init-minio.sh and runtime uploads.
   MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-}
   MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-}
-  AI_LOCAL_BASE_URL: http://ai:8001
+  # AUT-2000: AI gateway runs inside the backend container on :8001,
+  # so localhost routing is correct (no separate `ai` service).
+  AI_LOCAL_BASE_URL: http://localhost:8001
   AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:?AI_GATEWAY_API_KEY must be set (prod fails closed)}
 
 x-backend-base: &backend-base
@@ -46,7 +48,15 @@ x-backend-base: &backend-base
     # Enable with FUEL_VIC_ENABLED=true once key/secret are provisioned.
     FUEL_VIC_API_KEY: ${FUEL_VIC_API_KEY:-}
     FUEL_VIC_API_SECRET: ${FUEL_VIC_API_SECRET:-}
-    FUEL_VIC_ENABLED: "false"
+    FUEL_VIC_ENABLED: "true"
+    # AUT-2218: QLD DirectAPI subscription token (AUT-1813 phase). Read by
+    # backend/app/core/config.py:110 as settings.FUEL_QLD_API_KEY. Empty key
+    # disables the feed (mirrors the NSW no-key pattern).
+    FUEL_QLD_API_KEY: ${FUEL_QLD_API_KEY:-}
+    # AUT-2610: SA SAFPIS ingester (AUT-2406). Same Informed Sources subscriber
+    # token as QLD; empty key disables the feed (mirrors the NSW no-key pattern).
+    FUEL_SA_API_KEY: ${FUEL_SA_API_KEY:-}
+    FUEL_SA_ENABLED: "true"
   depends_on:
     postgres:
       condition: service_healthy
@@ -128,6 +138,11 @@ services:
       retries: 10
 
   # ── App services ───────────────────────────────────────────
+  # AUT-2000: backend image is the unified backend+ai image. The AI gateway
+  # (FastAPI app at /app/ai_app) runs as a co-process on :8001, alongside
+  # the backend API (:8000) and the Celery worker+beat. This collapses three
+  # compose services (backend, ai, worker) into one container, matching the
+  # dev compose and the backend Dockerfile's default CMD.
   backend:
     <<: *backend-base
     read_only: true
@@ -136,26 +151,12 @@ services:
     tmpfs:
       - /tmp
       - /app/tmp
-
-  ai:
-    build:
-      context: .
-      dockerfile: docker/ai/Dockerfile
-    image: ${DOCKERHUB_USERNAME:-autobrain}/autobrain-ai:${IMAGE_TAG:-latest}
-    restart: unless-stopped
-    read_only: true
-    cap_drop:
-      - ALL
-    # AUT-1739: adequate /dev/shm for Chromium (market-data scraper).
-    shm_size: "256m"
-    tmpfs:
-      - /tmp
-      - /ms-playwright
-    env_file: .env
-    environment:
-      AI_ROUTER_URL: ${AI_ROUTER_URL}
-      AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:?AI_GATEWAY_API_KEY must be set (prod fails closed)}
-      API_KEY: ${MARKET_DATA_API_KEY:-}
+    command: >-
+      sh -c "/init-minio.sh
+      && alembic upgrade head
+      && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &)
+      && (uvicorn ai_app.main:app --host 0.0.0.0 --port 8001 &)
+      && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
     expose:
       - "8000"
       - "8001"
@@ -167,6 +168,8 @@ services:
       args:
         API_BASE_URL: ${API_BASE_URL:-http://localhost:8000/api/v1}
         WS_BASE_URL: ${WS_BASE_URL:-ws://localhost:8000/ws}
+        # AUT-2220: CARTO basemap key. Public-by-design; empty -> public basemap.
+        CARTO_API_KEY: ${CARTO_API_KEY:-}
     image: ${DOCKERHUB_USERNAME:-autobrain}/autobrain-frontend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     read_only: true
@@ -179,9 +182,19 @@ services:
     # Host :80 preserved; container runs nginx-unprivileged on :8080 (non-root).
     ports:
       - "80:8080"
+    # AUT-2389: probe the backend upstream (not just nginx) so Portainer flips
+    # the frontend unhealthy when the backend is unreachable/5xx. nginx-only
+    # probes hid AUT-1964 — nginx stays up while the upstream is dead.
+    environment:
+      BACKEND_URL: ${BACKEND_URL:-http://backend:8000}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- \"${BACKEND_URL:-http://backend:8000}/health\" | grep -q '\"status\":\"ok\"'"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     depends_on:
       - backend
-      - ai
 
 # ── Persistent volumes ──────────────────────────────────────
 volumes:

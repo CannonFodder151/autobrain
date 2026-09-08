@@ -8,7 +8,7 @@ import uuid
 from io import BytesIO
 
 from pillow_heif import register_heif_opener
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 from app.core.storage import ensure_bucket, presigned_url, upload_object
 
@@ -39,17 +39,25 @@ def compress_to_webp(data: bytes, content_type: str | None = None) -> bytes:
     Raises MediaError for anything Pillow cannot decode (including
     DecompressionBombError). Images larger than 2048px on their longest side
     are downscaled to fit. RGBA is preserved (webp supports alpha); other
-    modes are flattened to RGB.
+    modes are flattened to RGB. EXIF orientation (typical iPhone portrait
+    shots) is normalized before re-encoding so the stored webp is right-way
+    up regardless of source orientation.
     """
     try:
         img = Image.open(BytesIO(data))
         img.load()
+        img = ImageOps.exif_transpose(img)
     except Image.DecompressionBombError as exc:
         raise MediaError("Image exceeds the maximum allowed pixel dimensions") from exc
     except (UnidentifiedImageError, OSError) as exc:
         raise MediaError(
             "That photo can't be processed. Use JPEG, PNG, WebP or HEIC."
         ) from exc
+    # Bake EXIF orientation into pixels (AUT-1946). Phone cameras (esp. iPhone)
+    # mark portrait shots with Orientation=6/8 and leave the raw pixels rotated
+    # the other way; the encoded webp would otherwise display sideways. Doing
+    # this server-side is deterministic — every viewer sees the same orientation.
+    img = ImageOps.exif_transpose(img) or img
     if max(img.size) > MAX_IMAGE_DIMENSION:
         img.thumbnail((MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION), Image.LANCZOS)
     if img.mode not in ("RGB", "RGBA"):

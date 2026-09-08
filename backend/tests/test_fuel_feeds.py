@@ -99,3 +99,71 @@ def test_ingest_all_is_tolerant_to_feed_failure() -> None:
         assert res["wa"]["error"] == "upstream down"
     finally:
         feeds.ingest_wa_fuelwatch = real_wa  # type: ignore[assignment]
+
+
+# QLD DirectAPI v1.5 sample shapes (mirrors page 8 of the FuelPricesQLDDirectAPI
+# v1.5 PDF — see comment in app/services/fuel_feeds.py for the contract).
+QLD_DIRECT_BRANDS = [
+    {"BrandId": 1, "Name": "BP"},
+    {"BrandId": 2, "Name": "Caltex"},
+]
+QLD_DIRECT_FUELS = [
+    {"FuelId": 1, "Name": "Unleaded 91"},
+    {"FuelId": 2, "Name": "Premium Unleaded 95"},
+    {"FuelId": 4, "Name": "Diesel"},
+]
+QLD_DIRECT_REGIONS = [
+    {"GeoRegionLevel": 1, "GeoRegionId": 10, "Name": "Australia", "Abbrev": "AU"},
+    {"GeoRegionLevel": 3, "GeoRegionId": 33, "Name": "Queensland", "Abbrev": "QLD"},
+]
+QLD_DIRECT_SITES = {"S": [
+    {"S": 12345, "A": "123 Queen St", "N": "BP Brisbane CBD", "B": 1,
+     "P": "4000", "G1": "AU", "G2": "QLD", "G3": "Brisbane",
+     "Lat": -27.4698, "Lng": 153.0251, "LastModified": "2024-01-01T00:00:00"},
+]}
+QLD_DIRECT_PRICES = {"S": [
+    {"S": 12345, "P1": 16500, "P2": 17500, "P4": 18000,
+     "LastUpdated": "2024-01-01T00:00:00"},
+]}
+
+
+def test_parse_qld_direct_brands_and_fuels() -> None:
+    assert feeds._parse_qld_brands(QLD_DIRECT_BRANDS) == {1: "BP", 2: "Caltex"}
+    assert feeds._parse_qld_fuel_types(QLD_DIRECT_FUELS) == {1: "Unleaded 91", 2: "Premium Unleaded 95", 4: "Diesel"}
+    assert feeds._parse_qld_geo_regions(QLD_DIRECT_REGIONS, level=3) == 33
+    assert feeds._parse_qld_geo_regions(QLD_DIRECT_REGIONS, level=1) == 10
+    assert feeds._parse_qld_geo_regions(QLD_DIRECT_REGIONS, level=99) is None
+
+
+def test_parse_qld_direct_sites_resolves_brand() -> None:
+    sites = feeds._parse_qld_direct_sites(QLD_DIRECT_SITES, {1: "BP", 2: "Caltex"})
+    assert sites == [{
+        "source": "qld", "source_id": "12345", "brand": "BP",
+        "name": "BP Brisbane CBD", "address": "123 Queen St",
+        "lat": -27.4698, "lon": 153.0251,
+    }]
+
+
+def test_parse_qld_direct_prices_normalises_cents_to_dollars() -> None:
+    prices = feeds._parse_qld_direct_prices(
+        QLD_DIRECT_PRICES,
+        {1: "Unleaded 91", 2: "Premium Unleaded 95", 4: "Diesel"},
+    )
+    pairs = {(ft, price) for (ft, price, _) in prices["12345"]}
+    assert pairs == {("91", 165.0), ("95", 175.0), ("Diesel", 180.0)}
+    for _, _, ts in prices["12345"]:
+        assert ts.tzinfo is not None
+
+
+def test_parse_qld_direct_prices_handles_unknown_fuel_keys() -> None:
+    # Unknown fuel id / non-numeric key should be silently ignored.
+    raw = {"S": [{"S": 1, "P1": 15000, "P999": 20000, "PX": 100, "LastUpdated": "2024-01-01T00:00:00"}]}
+    prices = feeds._parse_qld_direct_prices(raw, {1: "Unleaded 91"})
+    assert {(ft, price) for (ft, price, _) in prices["1"]} == {("91", 150.0)}
+
+
+def test_ingest_qld_skips_when_no_key() -> None:
+    feeds.settings.FUEL_QLD_API_KEY = ""
+    res = asyncio.run(feeds.ingest_qld_fuel_prices(db=None))  # type: ignore[arg-type]
+    assert res["skipped"] == "no_api_key"
+    assert res["stations"] == 0

@@ -19,6 +19,15 @@ class AuthState extends ChangeNotifier {
     _restore();
   }
 
+  AuthState.test({
+    required ApiClient api,
+  })  : _client = api,
+        _token = 'test-token',
+        _role = 'user',
+        _freeAccount = false {
+    notifyListeners();
+  }
+
   String? _token;
   String? _refreshToken;
   String? _role;

@@ -45,6 +45,7 @@ class DeviceOut(BaseModel):
     id: str
     name: str
     vehicle_id: str | None
+    vehicle_type: str | None = None
     api_key_prefix: str
     last_seen_at: datetime | None
     created_at: datetime
@@ -106,3 +107,9 @@ class DeviceCodesIn(BaseModel):
     """
 
     codes: list[DeviceCodeIn] = Field(max_length=64)
+
+
+class DeviceVehicleTypeIn(BaseModel):
+    """Vehicle type classified by the dongle from the first trip."""
+
+    vehicle_type: int = Field(ge=0, le=4)

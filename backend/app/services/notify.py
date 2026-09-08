@@ -174,7 +174,9 @@ async def _check_pref(db, pref: NotificationPreference, vehicle: Vehicle) -> Non
     sent_kinds = set((await db.scalars(
         select(NotificationDelivery.kind).where(
             NotificationDelivery.vehicle_id == vehicle.id,
-            NotificationDelivery.kind.in_(["service_due_days", "service_due_km", "fuel_gap"]),
+            NotificationDelivery.kind.in_([
+                "service_due_days", "service_due_km", "fuel_gap", "rego_expiry",
+            ]),
         )
     )).all())
 
@@ -244,14 +246,151 @@ async def _check_pref(db, pref: NotificationPreference, vehicle: Vehicle) -> Non
                 await db.commit()
                 logger.info("fuel_gap_notified", vehicle_id=vehicle.id)
 
+    # --- rego expiry (AUT-2416, premium) ---
+    if ("rego_expiry" not in sent_kinds
+            and pref.rego_expiry_days and pref.rego_expiry_days > 0
+            and vehicle.rego_expiry_date):
+        try:
+            expiry = date.fromisoformat(vehicle.rego_expiry_date.isoformat())
+        except (ValueError, AttributeError, TypeError):
+            return
+        days_left = (expiry - today).days
+        if days_left <= pref.rego_expiry_days:
+            await deliver_rego_expiry(db, pref, vehicle, days_left, [])
+
+
+# --- Rego expiry delivery (AUT-2416) ----------------------------------------
+
+async def deliver_rego_expiry(
+    db, pref: NotificationPreference, vehicle: Vehicle,
+    days_left: int, channels_sent: list[str],
+) -> None:
+    """Send a rego-expiry alert on the channels the user enabled (once per kind).
+
+    Premium-only feature; gating happens at the call site (free-account prefs
+    have rego_expiry_days=0 by default, so the check at the top of the
+    evaluation block is the de-facto gate).
+    """
+    if not vehicle.rego_expiry_date:
+        return
+    title = f"{vehicle.nickname or vehicle.model or 'Vehicle'} rego expiring soon"
+    description = (
+        f"Registration **{vehicle.rego or 'plate'}** expires on "
+        f"**{vehicle.rego_expiry_date.isoformat()}** — in {days_left} day"
+        f"{'s' if days_left != 1 else ''}.\n"
+        f"State: {vehicle.rego_state or '—'}"
+    )
+
+    channels: list[str] = []
+    if pref.email_enabled:
+        user = await db.get(User, pref.user_id)
+        if user:
+            subject = title
+            safe_name = html.escape(user.display_name)
+            text = f"Hi {user.display_name},\n\n{description}"
+            html_body = mail._branding(
+                f'<p style="color:#F5F7FA">Hi <b>{safe_name}</b>,</p>'
+                f'<p style="color:#E5ECF5">{description.replace("**", "")}</p>'
+            )
+            if await _send_email(user.email, user.display_name, subject, html_body, text):
+                channels.append("email")
+    if pref.discord_enabled and pref.discord_webhook_url:
+        if await _send_discord(pref.discord_webhook_url, title, description):
+            channels.append("discord")
+    if pref.push_enabled and pref.fcm_token:
+        if await _send_push(pref.fcm_token, title, description.replace("**", "")):
+            channels.append("push")
+
+    if channels:
+        db.add(NotificationDelivery(vehicle_id=vehicle.id, kind="rego_expiry",
+                                    channels=",".join(channels)))
+        await db.commit()
+        logger.info("rego_expiry_notified", vehicle_id=vehicle.id,
+                    days_left=days_left, channels=channels)
+
 
 # --- Scheduled + ad-hoc entry points (called from Celery / routers) ---------
 
 def run_due_checks() -> None:
     """Called by Celery beat (daily) to re-evaluate all vehicles."""
-    async def _run():
+    async def _coro():
         async with SessionLocal() as db:
             vehicle_ids = list((await db.scalars(select(Vehicle.id))).all())
             for vid in vehicle_ids:
                 await check_vehicle_notifications(db, vid)
-    _run(_run())
+    _run(_coro())
+
+
+# --- Servo-spy fuel price alerts (AUT-1859) ----------------------------------
+
+async def _resolve_user_pref(db, user_id: str) -> NotificationPreference:
+    """Find a user's notification preference for channel reuse.
+
+    Preference order: the user-global row (vehicle_id IS NULL, used by servo
+    spy), then any per-vehicle row, then an in-memory default (email + push).
+    The alert reuses the same channels the user already configured in the
+    notification menu rather than inventing its own settings.
+    """
+    pref = await db.scalar(
+        select(NotificationPreference).where(
+            NotificationPreference.user_id == user_id,
+            NotificationPreference.vehicle_id.is_(None),
+        )
+    )
+    if pref is None:
+        pref = await db.scalar(
+            select(NotificationPreference).where(NotificationPreference.user_id == user_id)
+        )
+    if pref is None:
+        pref = NotificationPreference(user_id=user_id)  # defaults: email+push on, discord off
+    return pref
+
+
+async def deliver_fuel_price_alert(
+    db, user_id: str, kind: str, title: str, description: str
+) -> None:
+    """Send a servo-spy price alert on the user's configured channels (once/day).
+
+    Deduplicated per (user_id, kind) so a price that stays past threshold only
+    fires once per calendar day. Reuses the user's existing notification
+    channels (email / Discord / push) and tokens from their preferences.
+    """
+    existing = await db.scalar(
+        select(NotificationDelivery).where(
+            NotificationDelivery.user_id == user_id,
+            NotificationDelivery.kind == kind,
+            NotificationDelivery.vehicle_id.is_(None),
+        )
+    )
+    if existing:
+        return
+
+    pref = await _resolve_user_pref(db, user_id)
+    channels: list[str] = []
+    user = await db.get(User, user_id)
+
+    if pref.email_enabled and user:
+        subject = title
+        safe_name = html.escape(user.display_name)
+        text = f"Hi {user.display_name},\n\n{description}"
+        html_body = mail._branding(
+            f'<p style="color:#F5F7FA">Hi <b>{safe_name}</b>,</p>'
+            f'<p style="color:#E5ECF5">{description.replace("**", "")}</p>'
+        )
+        if await _send_email(user.email, user.display_name, subject, html_body, text):
+            channels.append("email")
+    if pref.discord_enabled and pref.discord_webhook_url:
+        if await _send_discord(pref.discord_webhook_url, title, description):
+            channels.append("discord")
+    if pref.push_enabled and pref.fcm_token:
+        if await _send_push(pref.fcm_token, title, description.replace("**", "")):
+            channels.append("push")
+
+    if channels:
+        db.add(
+            NotificationDelivery(
+                user_id=user_id, vehicle_id=None, kind=kind, channels=",".join(channels)
+            )
+        )
+        await db.commit()
+        logger.info("fuel_price_alert_sent", user_id=user_id, kind=kind, channels=channels)

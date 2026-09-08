@@ -27,6 +27,26 @@ void main() {
         samples[0], {'t': 1767200401, 'lat': -33.8687241, 'lon': 151.2109053});
   });
 
+  test('tolerates old 7-field rows (AUT-2703 backward-compat)', () {
+    final obj = tripCsvToJson(
+      '20260801_090000.csv',
+      'epoch,rpm,speed,coolant,throttle,lat,lon\n'
+      '1767200401,830,76,44,51,-338687241,1512109053\n',
+    );
+    expect(obj, isNotNull);
+    expect((obj!['gps_samples'] as List).length, 1);
+  });
+
+  test('accepts new 13-field EV rows (AUT-2703)', () {
+    final obj = tripCsvToJson(
+      '20260801_090000.csv',
+      'epoch,rpm,speed,coolant,throttle,lat,lon,soc_pct,pack_v,pack_a,pack_temp_c,odo_km,ev_mode\n'
+      '1767200402,840,78,45,52,-338687250,1512109060,85,400,-50,28,45000,1\n',
+    );
+    expect(obj, isNotNull);
+    expect((obj!['gps_samples'] as List).length, 1);
+  });
+
   test('returns null for CSVs without usable epoch rows', () {
     expect(tripCsvToJson('20260801_090000.csv', 'epoch,rpm,speed\n'), isNull);
     expect(tripCsvToJson('index.txt', csv), isNull); // non-trip file

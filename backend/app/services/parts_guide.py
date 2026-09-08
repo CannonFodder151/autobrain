@@ -12,7 +12,7 @@ import json
 from datetime import datetime, timedelta, timezone
 
 import httpx
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -216,3 +216,26 @@ async def clear_sca_cache(db: AsyncSession, make: str, model: str, year: int | N
     await db.execute(delete(SCAPartsCache).where(
         SCAPartsCache.cache_key == _cache_key(make, model, year)))
     await db.commit()
+
+
+async def list_vehicle_signatures(db: AsyncSession) -> list[dict]:
+    """Return distinct (make, model, year) tuples from the vehicles table.
+
+    Used by the nightly prewarm task — empty fields are dropped so we only
+    request meaningful SCA lookups. Capped at 1000 to keep the daily run
+    bounded (the fleet is in the low hundreds today).
+    """
+    from app.models.vehicle import Vehicle
+
+    rows = (await db.execute(
+        select(
+            Vehicle.make, Vehicle.model, Vehicle.year, func.count(Vehicle.id)
+        )
+        .where(Vehicle.make.isnot(None), Vehicle.model.isnot(None))
+        .group_by(Vehicle.make, Vehicle.model, Vehicle.year)
+        .limit(1000)
+    )).all()
+    return [
+        {"make": m, "model": md, "year": y, "vehicle_count": int(c)}
+        for m, md, y, c in rows
+    ]

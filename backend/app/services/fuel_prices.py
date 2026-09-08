@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """7-Eleven fuel prices (projectzerothree.info) — deterministic, no AI.
 
 The upstream is a public, keyless, server-side *cached* JSON snapshot of every
@@ -42,6 +44,24 @@ _fetch_lock = None  # lazily created inside async funcs to avoid import-time loo
 
 def _now_ts() -> float:
     return datetime.now(timezone.utc).timestamp()
+
+
+def compute_price_change(
+    price: float | None, previous: float | None
+) -> tuple[float | None, str | None]:
+    """Day-over-day % move + up/down direction (AUT-1859).
+
+    Returns (None, None) until both prices are present and previous is
+    non-zero (no division by zero, no direction on the first poll). Zero
+    delta returns (0.0, None) so callers can distinguish 'no move yet' from
+    'no history'. Deterministic — no AI.
+    """
+    if price is None or previous in (None, 0):
+        return (None, None)
+    pct = round((price - previous) / previous * 100, 2)
+    if pct == 0:
+        return (0.0, None)
+    return (pct, "up" if pct > 0 else "down")
 
 
 def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
@@ -171,3 +191,180 @@ async def nearest_7eleven(
             scored.append(_quote(p, distance_km=d))
     scored.sort(key=lambda q: q["distance_km"])
     return scored[:max_results]
+
+
+# --- NSW petrol/fuel price feed (Transport for NSW Fuel API) — AUT-1813 ---
+
+"""
+Primary path: poll the official NSW Fuel API (Basic-auth key/secret) once per
+day per instance and cache the results in ``fuel_prices``. Deterministic
+offline fallback serves the last cached snapshot (or empty) so the price map
+never hard-fails and the daily poll never blows the API quota.
+
+Deterministic-first design (AUT-1c): no AI here — every path is a pure mapping
+of the upstream payload, so the feature behaves the same on every run.
+"""
+
+import base64
+from datetime import datetime, timedelta, timezone
+
+import httpx
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import settings
+from app.core.logging import get_logger
+from app.models.fuel_price import FuelPricePollState, FuelPriceSnapshot
+
+logger = get_logger(__name__)
+
+DEFAULT_API_URL = "https://api.transport.nsw.gov.au/v2/fuel/prices"
+# A cached snapshot older than this is treated as stale (fallback still serves it).
+CACHE_MAX_AGE_HOURS = 48
+STATES = {"NSW", "VIC", "QLD", "WA", "SA", "TAS", "NT", "ACT"}
+
+
+def enabled() -> bool:
+    """True only when the feature is switched on AND credentials are present.
+
+    Keeps self-hosted instances from polling an external feed they haven't
+    configured; the hosted stack scopes the key to a secret file.
+    """
+    return bool(
+        settings.FUEL_NSW_ENABLED
+        and settings.FUEL_NSW_API_KEY
+        and settings.FUEL_NSW_API_SECRET
+    )
+
+
+def _basic_auth_header() -> str:
+    token = f"{settings.FUEL_NSW_API_KEY}:{settings.FUEL_NSW_API_SECRET}".encode()
+    return "Basic " + base64.b64encode(token).decode()
+
+
+def _normalise_nsw(payload: dict) -> list[dict]:
+    """Map the NSW feed JSON to flat petrol-price records (pure, no side effects)."""
+    stations = {s.get("code"): s for s in payload.get("stations", [])}
+    out: list[dict] = []
+    for p in payload.get("prices", []):
+        st = stations.get(p.get("stationcode"))
+        if not st:
+            continue
+        loc = st.get("location") or {}
+        out.append(
+            {
+                "station_code": p.get("stationcode"),
+                "station_name": st.get("name"),
+                "brand": st.get("brand"),
+                "address": st.get("address"),
+                "latitude": loc.get("latitude"),
+                "longitude": loc.get("longitude"),
+                "fuel_type": p.get("fueltype"),
+                "price": p.get("price"),
+                "currency": "AUD",
+                "updated_at": p.get("lastupdated"),
+            }
+        )
+    return out
+
+
+async def fetch_nsw_prices() -> list[dict]:
+    """Fetch + normalise the live NSW price feed. Raises on transport/HTTP error."""
+    url = settings.FUEL_NSW_API_URL or DEFAULT_API_URL
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.get(
+            url,
+            headers={"Authorization": _basic_auth_header(), "Accept": "application/json"},
+        )
+        resp.raise_for_status()
+        return _normalise_nsw(resp.json())
+
+
+def poll_due(last_poll_at: datetime | None, *, hours: int) -> bool:
+    """Pure guard: True when no poll has happened or the last was >= hours ago.
+
+    Nathan's constraint: poll at most once per `hours` (default 24) per instance.
+    """
+    if last_poll_at is None:
+        return True
+    return (datetime.now(timezone.utc) - last_poll_at) >= timedelta(hours=hours)
+
+
+async def should_poll(db: AsyncSession, instance_id: str, state: str = "NSW") -> bool:
+    """Enforce at most one successful poll per instance per FUEL_NSW_POLL_HOURS.
+
+    Nathan's constraint: poll once per day per instance to stay inside quota.
+    """
+    row = await db.scalar(
+        select(FuelPricePollState).where(
+            FuelPricePollState.instance_id == instance_id,
+            FuelPricePollState.state == state,
+        )
+    )
+    return poll_due(row.last_poll_at if row else None, hours=settings.FUEL_NSW_POLL_HOURS)
+
+
+async def store_nsw_prices(db: AsyncSession, records: list[dict], state: str = "NSW") -> int:
+    """Upsert one row per (state, station_code, fuel_type). Returns row count."""
+    fetched_at = datetime.now(timezone.utc)
+    for r in records:
+        fuel_type = r.get("fuel_type")
+        station_code = r.get("station_code")
+        if not fuel_type or not station_code:
+            continue
+        existing = await db.scalar(
+            select(FuelPriceSnapshot).where(
+                FuelPriceSnapshot.state == state,
+                FuelPriceSnapshot.station_code == station_code,
+                FuelPriceSnapshot.fuel_type == fuel_type,
+            )
+        )
+        if existing:
+            existing.station_name = r.get("station_name")
+            existing.brand = r.get("brand")
+            existing.address = r.get("address")
+            existing.latitude = r.get("latitude")
+            existing.longitude = r.get("longitude")
+            existing.price = r.get("price")
+            existing.currency = r.get("currency", "AUD")
+            existing.updated_at = r.get("updated_at")
+            existing.fetched_at = fetched_at
+        else:
+            db.add(
+                FuelPriceSnapshot(
+                    state=state,
+                    station_code=station_code,
+                    station_name=r.get("station_name"),
+                    brand=r.get("brand"),
+                    address=r.get("address"),
+                    latitude=r.get("latitude"),
+                    longitude=r.get("longitude"),
+                    fuel_type=fuel_type,
+                    price=r.get("price"),
+                    currency=r.get("currency", "AUD"),
+                    updated_at=r.get("updated_at"),
+                )
+            )
+    await db.commit()
+    return len(records)
+
+
+async def mark_polled(db: AsyncSession, instance_id: str, state: str = "NSW") -> None:
+    row = await db.scalar(
+        select(FuelPricePollState).where(
+            FuelPricePollState.instance_id == instance_id,
+            FuelPricePollState.state == state,
+        )
+    )
+    if not row:
+        row = FuelPricePollState(instance_id=instance_id, state=state)
+        db.add(row)
+    row.last_poll_at = datetime.now(timezone.utc)
+    await db.commit()
+
+
+async def get_cached_prices(db: AsyncSession, state: str, max_age_hours: int = CACHE_MAX_AGE_HOURS) -> list[FuelPriceSnapshot]:
+    """Return the latest cached snapshot for a state (offline-safe read path)."""
+    return list(
+        (await db.scalars(select(FuelPriceSnapshot).where(FuelPriceSnapshot.state == state))).all()
+    )
