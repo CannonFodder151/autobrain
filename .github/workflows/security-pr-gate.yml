@@ -254,7 +254,11 @@ jobs:
             pr_render="$tmpdir/$(basename "$f").pr"; main_render="$tmpdir/$(basename "$f").main"
             if ! render "$f" "$pr_render"; then
               echo "::error file=$f::docker compose config failed on PR version (see render.err)" >&2
-              sed 's/^/  /' render.err >&2 || true
+              # Dump the captured compose error where the runner actually
+              # records it. Do NOT pipe through `sed` in a subshell — the
+              # pipe's stderr was dropped by the CI runner, so only the
+              # generic ::error pointer ever showed up (AUT-3030).
+              cat render.err >&2 || true
               fail=1
               continue
             fi
