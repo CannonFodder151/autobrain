@@ -110,22 +110,16 @@ jobs:
       - name: Direct-deps pass — fail on known-vuln pinned deps
         run: |
           set -euo pipefail
-          # Concat backend + ai + market-data. Filter the AUT-1189 floor pins
-          # (idna/pycryptodome/pygments use `>=` so they can roll forward; they
-          # cannot be audited by the `--no-deps` pass which requires exact pins
-          # — those are covered by the resolved-tree pass below). Dedupe by
-          # package name (keep highest version: stricter cap on a direct
-          # dep means tighter audit) so backend/ai (pydantic 2.10.4) and
-          # market-data (pydantic 2.13.4) don't trip the duplicate-line reject.
-          # Non-exact pins (e.g. `~=`, `>=`) are skipped here and audited in
-          # the resolved-tree pass.
+          # Concat backend + ai + market-data. Dedupe by package name (keep
+          # highest version: stricter cap on a direct dep means tighter audit)
+          # so backend/ai (pydantic 2.10.4) and market-data (pydantic 2.13.4)
+          # don't trip the duplicate-line reject.
           TMPREQ="$(mktemp)"
           python3 - > "$TMPREQ" <<'PY'
           import re
           from packaging.version import Version  # transitive dep of pip-audit
           pkgs = {}
           float_re = re.compile(r'^([A-Za-z0-9_.+\-]+)\s*(>=|<=|==|!=|~=|>|<)\s*([^\s#]+)(?:\s*#\s*(.*))?$')
-          skip = {'idna', 'pycryptodome', 'pygments'}
           for f in ('backend/requirements.txt', 'ai/requirements.txt', 'market-data/requirements.txt'):
               for line in open(f):
                   line = line.strip()
@@ -135,7 +129,7 @@ jobs:
                   if not m:
                       continue
                   name, op, ver, comment = m.group(1), m.group(2), m.group(3), m.group(4)
-                  if name.lower() in skip or op != '==':
+                  if op != '==':
                       continue
                   cur = pkgs.get(name)
                   if cur is None or Version(ver) > Version(cur[0]):
