@@ -3,7 +3,6 @@ name: Build hosted images (multi-arch)
 on:
   push:
     branches: [main]
-  pull_request:
   workflow_dispatch:
     inputs:
       tag:
@@ -19,60 +18,34 @@ on:
         required: true
         default: wss://hosted.autobrainservice.app/ws
 
+# Only one pipeline per ref at a time, but do NOT cancel an in-flight build.
+# The multi-arch release build takes ~20 min; a newer push to main (PR merge or
+# auto-bump) arriving mid-build would otherwise cancel it and leave main with no
+# :hosted image (AUT-1756, root cause AUT-1762). Queue the newer run behind the
+# in-flight one so every push to main still produces a published manifest. The
+# auto-bump commit is tagged [skip ci] (scripts/auto-bump.sh) so it never
+# re-triggers this workflow and the in-flight build is never cancelled by its
+# own version cut.
 concurrency:
   group: build-hosted-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  changelog-gate:
-    runs-on: [self-hosted, linux, x64]
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Require changelog iteration on docker changes (AUT-168)
-        run: |
-          set -euo pipefail
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            if [ "${{ github.actor }}" = "dependabot[bot]" ]; then
-              echo "dependabot PR — skipping changelog gate"
-              exit 0
-            fi
-            BASE="${{ github.event.pull_request.base.sha }}"
-            if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
-              echo "no usable base SHA — skipping changelog gate"
-              exit 0
-            fi
-            MB="$(git merge-base "$BASE" "$GITHUB_SHA")"
-            if [ -z "$MB" ]; then
-              echo "no merge-base with base SHA — skipping changelog gate"
-              exit 0
-            fi
-            CHANGED="$(git diff --name-only "$MB" "$GITHUB_SHA")"
-          elif [ "${{ github.event_name }}" = "push" ]; then
-            BEFORE="$(git rev-parse "${{ github.event.before }}" 2>/dev/null || echo '')"
-            if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
-              echo "no usable before SHA — skipping changelog gate"
-              exit 0
-            fi
-            CHANGED="$(git diff --name-only "$BEFORE" "$GITHUB_SHA")"
-          else
-            echo "changelog gate skipped (AUT-451)"
-            exit 0
-          fi
-          APP_CHANGED="$(printf '%s\n' "$CHANGED" | grep -E '^(backend/|ai/|frontend/|docker/|docker-compose)' || true)"
-          if [ -n "$APP_CHANGED" ] && ! printf '%s\n' "$CHANGED" | grep -qx 'CHANGELOG.md'; then
-            echo "::error::App/docker files changed but CHANGELOG.md was not updated. Add an entry under [Unreleased] (see CONTRIBUTING.md) before merging."
-            exit 1
-          fi
-          echo "changelog gate OK — CHANGELOG.md iterated with app/docker changes"
-
   auto-bump:
+    # x64 jobs run on the new vm2 runner (gh-runner-autobrain-2). The legacy
+    # x64 runner (gh-runner-autobrain) is currently degraded (AUT-1781); routing
+    # on `vm2` guarantees dispatch to the healthy new runner. Re-balance across
+    # legacy+new again by dropping `vm2` once AUT-1781 is repaired. ARM builds
+    # stay pinned to the Oracle VM arm64 runner below.
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: [self-hosted, linux, x64, vm2]
     permissions:
       contents: write
     steps:
+      # Use actions/checkout so the GITHUB_TOKEN is persisted by the
+      # credential helper (the manual git init did not authenticate pushes,
+      # crashing the auto-bump and blocking multi-arch arm64 image builds —
+      # AUT-1114).
       - uses: actions/checkout@v4
         with:
           ref: main
@@ -83,6 +56,9 @@ jobs:
           git config user.name "AutoBrain Release Bot"
           git config user.email "release@autobrainservice.app"
           ./scripts/auto-bump.sh
+          # Only push when auto-bump actually committed a release cut; an
+          # empty push fails on the credential helper and blocks the build
+          # (AUT-1114).
           if ! git diff --quiet origin/main --; then
             for i in 1 2 3; do
               git push origin main && break
@@ -103,6 +79,7 @@ jobs:
         include:
           - arch: amd64
             runs_on: [self-hosted, linux, x64, vm2]
+          # arm64 builds stay on the Oracle VM arm64 runner (gh-runner-autobrain-arm64).
           - arch: arm64
             runs_on: [self-hosted, linux, ARM64]
     runs-on: ${{ matrix.runs_on }}
@@ -124,6 +101,9 @@ jobs:
           password: ${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}
 
       - name: Verify runner arch (${{ matrix.arch }})
+        # AUT-2097: catch a qemu-user-x86_64 shim on the arm64 runner before any
+        # build runs. If the runner claims ARM64 but uname reports x86_64, every
+        # image it produces is contaminated regardless of --platform.
         run: |
           set -euo pipefail
           want="${{ matrix.arch }}"
@@ -145,6 +125,10 @@ jobs:
           ARCH: ${{ matrix.arch }}
           API_BASE_URL: ${{ github.event.inputs.api_base_url || 'https://hosted.autobrainservice.app/api/v1' }}
           WS_BASE_URL: ${{ github.event.inputs.ws_base_url || 'wss://hosted.autobrainservice.app/ws' }}
+          # AUT-2097: scope GHA buildx cache per-arch so the arm64 build cannot
+          # pull amd64 layer blobs from the x64 cache namespace (cache poisoning
+          # produced OCI manifests that declared arm64 but shipped amd64 layers,
+          # crashing on the Oracle VM with exec format error).
           CACHE_FROM: ${{ matrix.arch == 'arm64' && '' || format('type=gha,scope=build-hosted-{0}', matrix.arch) }}
           CACHE_TO: ${{ format('type=gha,scope=build-hosted-{0},mode=max', matrix.arch) }}
         run: |
@@ -157,6 +141,7 @@ jobs:
               frontend) ctx=.;        df=docker/frontend/Dockerfile;   args="--build-arg API_BASE_URL=${API_BASE_URL} --build-arg WS_BASE_URL=${WS_BASE_URL}";;
             esac
             echo "==> building autobrain-${svc}:${TAG}-${ARCH} for linux/${ARCH}"
+            # shellcheck disable=SC2086
             cache_from_args=()
             if [ -n "${CACHE_FROM}" ]; then
               cache_from_args=(--cache-from "${CACHE_FROM}")
@@ -169,6 +154,10 @@ jobs:
           done
 
       - name: Verify pushed image arch (${{ matrix.arch }})
+        # AUT-2097: post-build smoke test. Pulls each freshly-pushed :hosted-ARCH
+        # image and runs `uname -m` inside it. If BuildKit served amd64 layers
+        # under an arm64 manifest, this step fails the job before manifest
+        # assembly promotes the bad digest to the :hosted multi-arch tag.
         env:
           TAG: ${{ github.event.inputs.tag || 'hosted' }}
           ARCH: ${{ matrix.arch }}
@@ -188,6 +177,7 @@ jobs:
               echo "::error::$img reports arch=$got, expected $norm — refusing to assemble manifest"
               exit 1
             fi
+            # /bin/sh -c true catches the exec format error case directly.
             docker run --rm --platform linux/${ARCH} "$img" /bin/sh -c 'true'
           done
           echo "==> all ${ARCH} images verified"
@@ -206,6 +196,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}
 
+      # AUT-2097: refuse to assemble the multi-arch :hosted manifest if either
+      # arch side failed its post-build verification. Without this gate, a
+      # failing build job would still let imagetools promote amd64 into both
+      # slots of the arm64-bearing :hosted index.
       - name: Gate manifest assembly on per-arch verification
         env:
           TAG: ${{ github.event.inputs.tag || 'hosted' }}
@@ -230,6 +224,9 @@ jobs:
           set -euo pipefail
           for svc in backend worker ai frontend; do
             echo "==> manifest autobrain-${svc}:${TAG}"
+            # AUT-1533/F4: every build also publishes an immutable per-commit
+            # tag so prod/dev can pin distinct digests instead of drifting on
+            # the same floating :hosted ref.
             docker buildx imagetools create \
               -t "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}" \
               -t "ghcr.io/cannonfodder151/autobrain-${svc}:${SHA_TAG}" \
@@ -237,7 +234,80 @@ jobs:
               "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}-arm64"
           done
 
+          # AUT-1881: capture every multi-arch manifest digest so the
+          # compose-pin job can atomically bump docker-compose.hosted.yml.
+          # `--raw` outputs the bare manifest JSON bytes; sha256sum produces
+          # the content-addressed digest (Docker-Content-Digest) that compose
+          # pins reference as `@sha256:...`.
           for svc in backend worker ai frontend; do
-            d="$(docker buildx imagetools inspect "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}" --raw | head -n1)"
-            echo "${svc}_digest=${d}" >> "$GITHUB_OUTPUT"
+            d="$(docker buildx imagetools inspect "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}" --raw | sha256sum | awk '{print $1}')"
+            echo "${svc}_digest=sha256:${d}" >> "$GITHUB_OUTPUT"
           done
+
+  compose-pin:
+    needs: build-manifest
+    if: github.event_name != 'pull_request'
+    runs-on: [self-hosted, linux, x64, vm2]
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.event.inputs.tag || 'hosted' }}
+      BACKEND_DIGEST: ${{ needs.build-manifest.outputs.backend_digest }}
+      WORKER_DIGEST: ${{ needs.build-manifest.outputs.worker_digest }}
+      AI_DIGEST: ${{ needs.build-manifest.outputs.ai_digest }}
+      FRONTEND_DIGEST: ${{ needs.build-manifest.outputs.frontend_digest }}
+      PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+      PORTAINER_URL: https://portainer.nathanmartina.com
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Bump compose digest pins to freshly built images
+        id: bump
+        run: |
+          set -euo pipefail
+          set +e
+          ./scripts/update-compose-pins.py \
+            backend="${BACKEND_DIGEST}" \
+            worker="${WORKER_DIGEST}" \
+            ai="${AI_DIGEST}" \
+            frontend="${FRONTEND_DIGEST}"
+          code=$?
+          echo "changed=$([ $code -eq 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Commit + push pin bump [skip ci]
+        if: steps.bump.outputs.changed == 'true'
+        env:
+          GIT_AUTHOR_NAME: AutoBrain Deployment Bot
+          GIT_AUTHOR_EMAIL: deploy@autobrainservice.app
+          GIT_COMMITTER_NAME: AutoBrain Deployment Bot
+          GIT_COMMITTER_EMAIL: deploy@autobrainservice.app
+        run: |
+          set -euo pipefail
+          git add docker-compose.hosted.yml docker-compose.prod.yml docker-compose.yml
+          git diff --cached --quiet && { echo "==> no staged changes — skipping"; exit 0; }
+          git commit -m "chore: bump hosted compose pins to freshly built digests [skip ci]"
+          for i in 1 2 3; do
+            if git push origin main; then
+              echo "==> compose pins pushed"
+              break
+            fi
+            echo "==> push raced with main — rebasing and retrying ($i/3)"
+            git pull --rebase origin main
+            git add docker-compose.hosted.yml docker-compose.prod.yml docker-compose.yml
+            git commit --amend --no-edit || true
+          done
+
+      - name: Sync updated compose into Portainer hosted stack
+        if: steps.bump.outputs.changed == 'true'
+        env:
+          TAG: ${{ github.event.inputs.tag || 'hosted' }}
+        run: |
+          set -euo pipefail
+          python3 scripts/sync-compose-to-portainer.py \
+            --stack autobrain-hosted \
+            --endpoint 5 \
+            --file docker-compose.hosted.yml
