@@ -121,9 +121,9 @@ jobs:
         run: |
           set -euo pipefail
           flutter pub get
-          # `flutter pub audit` was removed; the canonical Dart/Flutter audit
-          # subcommand is `dart pub audit` (per AUT-1746 recommendation).
-          dart pub audit
+          # `dart pub audit` lives in the Flutter-bundled Dart; the bare `dart`
+          # on PATH (system Dart) has no `audit` subcommand. Use $FLUTTER_ROOT.
+          "${FLUTTER_ROOT}/bin/dart" pub audit
 
   report-status:
     name: Report gate result to Discord #status
