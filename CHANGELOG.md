@@ -11,6 +11,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-2656)
+- fix(ci): restore arm64 flutter web compile in build-hosted.yml. Pin the
+  frontend Dockerfile to `ghcr.io/cirruslabs/flutter:3.38.2` (the `:stable`
+  tag had drifted past 3.27.x and introduced breaking Flutter API changes —
+  `MaterialBanner.actions` required, `MediaQuery.withClampedTextScaling`
+  `maxTextScale` removed, `Connectivity.instance` removed) and re-apply the
+  dart2js compat fixes from PR #579 (887c213): `Connectivity()`,
+  `Future<Database>? _opening`, indentation in login/signup/add_vehicle/edit_vehicle
+  screens, `MaterialBanner.actions` + `MediaQuery` clamp in app.dart.
+
 ## [0.3.254] - 2026-09-08
 ### Added (AUT-2386)
 - feat(backend): source-arbitration rule for multi-feed overlap. ``FuelPrice`` now carries ``source_id`` + ``arbitration_score``; new ``fuel_price_arbitrations`` table stores the daily winning source per (station, fuel_type, day). PR #473.
