@@ -120,10 +120,13 @@ jobs:
         working-directory: frontend
         run: |
           set -euo pipefail
+          flutter --version
           flutter pub get
-          # `dart pub audit` lives in the Flutter-bundled Dart; the bare `dart`
-          # on PATH (system Dart) has no `audit` subcommand. Use $FLUTTER_ROOT.
-          "${FLUTTER_ROOT}/bin/dart" pub audit
+          # `dart pub audit` is unavailable on this runner's bundled Dart
+          # (system `dart` and $FLUTTER_ROOT/bin/dart both lack the `audit`
+          # subcommand). `flutter pub audit` invokes the same pub through the
+          # Flutter toolchain and is the reliable path here.
+          flutter pub audit
 
   report-status:
     name: Report gate result to Discord #status
