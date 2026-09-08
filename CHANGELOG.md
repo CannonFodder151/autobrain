@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-3038)
+- fix(frontend): add missing `servo_spy_station_history_screen.dart` import to `servo_spy_screen.dart`. The file references `ServoSpyStationHistoryScreen` at lines 721 and 901 but never imported it, breaking the visual regression workflow on main and blocking PR #463. PR #464.
+
 ## [0.3.255] - 2026-09-08
 
 ### Fixed (AUT-2656)
