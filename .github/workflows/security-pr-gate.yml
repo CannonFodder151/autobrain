@@ -83,27 +83,99 @@ jobs:
 
   # (3) pip-audit on requirements.txt — extend the existing PR-time gate to cover
   # market-data too (the dockerhub-publish pip-audit-gate only covers backend+ai).
-  pip-audit:
-    name: pip-audit — python dependency CVEs
+  # Two passes per requirements file:
+  #   * direct-deps (`--no-deps`) — fast, only flags exact-pinned versions with
+  #     a published CVE. Catches "I pinned a vulnerable direct dep" in CI seconds.
+  #   * resolved-tree — installs into a throwaway venv then audits it. Catches
+  #     *transitive* CVE drift in transitively-resolved packages (AUT-1189:
+  #     idna / pycryptodome / pygments, unpinned at build time so any upstream
+  #     constraint shift can land a vulnerable transitive in the built image).
+  # market-data is a separate tree and is audited on its own.
+  #
+  # The resolved-tree pass dispatches to the vm2 runner because pip-audit
+  # needs `python3 -m venv` to build a throwaway venv for transitive
+  # resolution; the legacy x64 runner (where the rest of this PR gate runs)
+  # is not guaranteed to have python3-venv. The vm2 runner is already used by
+  # security-scan.yml for the same reason, so we know it works.
+  pip-audit-direct:
+    name: pip-audit — python dependency CVEs (direct deps)
     runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
-      - name: Install pip-audit
+      - name: Install pip-audit (+ packaging for PEP 440 version compare in the direct-deps dedup pass)
         run: |
           python3 -m pip --version 2>/dev/null || \
             curl -sS https://bootstrap.pypa.io/get-pip.py | PIP_BREAK_SYSTEM_PACKAGES=1 python3 -
           PIP_BREAK_SYSTEM_PACKAGES=1 python3 -m pip install --quiet pip-audit
-      - name: Fail on known-vuln pinned deps
+      - name: Direct-deps pass — fail on known-vuln pinned deps
         run: |
           set -euo pipefail
-          # backend/ and ai/ share pins (fastapi, pydantic, ...); dedupe so
-          # pip-audit scans each package once (avoid the duplicate-line reject).
-          # market-data is a separate tree and is audited on its own.
+          # Concat backend + ai + market-data. Dedupe by package name (keep
+          # highest version: stricter cap on a direct dep means tighter audit)
+          # so backend/ai (pydantic 2.10.4) and market-data (pydantic 2.13.4)
+          # don't trip the duplicate-line reject.
           TMPREQ="$(mktemp)"
-          cat backend/requirements.txt ai/requirements.txt | sort -u > "$TMPREQ"
+          python3 - > "$TMPREQ" <<'PY'
+          import re
+          from packaging.version import Version  # transitive dep of pip-audit
+          pkgs = {}
+          float_re = re.compile(r'^([A-Za-z0-9_.+\-]+)\s*(>=|<=|==|!=|~=|>|<)\s*([^\s#]+)(?:\s*#\s*(.*))?$')
+          for f in ('backend/requirements.txt', 'ai/requirements.txt', 'market-data/requirements.txt'):
+              for line in open(f):
+                  line = line.strip()
+                  if not line or line.startswith('#'):
+                      continue
+                  m = float_re.match(line)
+                  if not m:
+                      continue
+                  name, op, ver, comment = m.group(1), m.group(2), m.group(3), m.group(4)
+                  if op != '==':
+                      continue
+                  cur = pkgs.get(name)
+                  if cur is None or Version(ver) > Version(cur[0]):
+                      pkgs[name] = (ver, comment or '')
+          for name in sorted(pkgs):
+              ver, comment = pkgs[name]
+              out = f"{name}=={ver}"
+              if comment:
+                  out += f"  # {comment}"
+              print(out)
+          PY
           python3 -m pip_audit --disable-pip --no-deps -r "$TMPREQ"
           rm -f "$TMPREQ"
-          python3 -m pip_audit --disable-pip --no-deps -r market-data/requirements.txt
+
+  # (3b) resolved-tree pass — fail on transitive CVE drift (AUT-1189).
+  # Each service resolves its own tree (backend/ai vs market-data pin
+  # different fastapi major versions and cannot share a venv).
+  # virtualenv bundles pip so it works without ensurepip / python3-venv
+  # on the vm2 runner (AUT-2947). Install deps into a per-service venv,
+  # then run pip-audit --local against the installed set — no internal
+  # venv creation, no ensurepip needed.
+  pip-audit-resolved:
+    name: pip-audit — resolved tree (transitive CVE drift, AUT-1189)
+    runs-on: [self-hosted, linux, x64, vm2]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install virtualenv + pip-audit
+        run: |
+          python3 -m pip --version 2>/dev/null || \
+            curl -sS https://bootstrap.pypa.io/get-pip.py | PIP_BREAK_SYSTEM_PACKAGES=1 python3 -
+          PIP_BREAK_SYSTEM_PACKAGES=1 python3 -m pip install --quiet virtualenv pip-audit
+      - name: Resolved-tree pass — fail on transitive CVE drift (AUT-1189)
+        run: |
+          set -euo pipefail
+          for req in backend/requirements.txt ai/requirements.txt market-data/requirements.txt; do
+            svc="$(echo "$req" | cut -d/ -f1)"
+            echo "==> creating venv and installing $svc deps"
+            python3 -m virtualenv "/tmp/audit-${svc}"
+            "/tmp/audit-${svc}/bin/pip" install --quiet -r "$req"
+            # pip-audit isn't installed inside the venv by default — install it
+            # per-service so /tmp/audit-${svc}/bin/pip-audit resolves (AUT-2947).
+            "/tmp/audit-${svc}/bin/pip" install --quiet pip-audit
+            echo "==> auditing $svc (resolved tree)"
+            "/tmp/audit-${svc}/bin/pip-audit" --local
+            rm -rf "/tmp/audit-${svc}"
+          done
 
   # (5) Flutter/Dart dependency vulnerability scan (AUT-2066).
   # `flutter pub audit` and `dart pub audit` do not exist on current Flutter/Dart
@@ -121,6 +193,11 @@ jobs:
         with:
           channel: stable
           cache: true
+      - name: flutter pub get (frontend)
+        working-directory: frontend
+        run: |
+          set -euo pipefail
+          flutter pub get
       - name: Install osv-scanner
         run: |
           set -euo pipefail
@@ -133,11 +210,6 @@ jobs:
             -o "$HOME/.local/bin/osv-scanner"
           chmod +x "$HOME/.local/bin/osv-scanner"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-      - name: flutter pub get (frontend)
-        working-directory: frontend
-        run: |
-          set -euo pipefail
-          flutter pub get
       - name: osv-scanner — fail on any finding
         working-directory: frontend
         run: |
@@ -368,17 +440,17 @@ jobs:
   report-status:
     name: Report gate result to Discord #status
     if: always()
-    needs: [gitleaks, trivy-config, pip-audit, flutter-audit, compose-config-diff, pin-guard]
+    needs: [gitleaks, trivy-config, pip-audit-direct, pip-audit-resolved, flutter-audit, compose-config-diff, pin-guard]
     runs-on: [self-hosted, linux, x64]
     steps:
       - name: Report to Discord #status
         env:
-          RESULT: ${{ needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.flutter-audit.result == 'success' && needs.compose-config-diff.result == 'success' && needs.pin-guard.result == 'success' && 'clean' || 'findings' }}
-          COLOR: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.flutter-audit.result == 'success' && needs.compose-config-diff.result == 'success' && needs.pin-guard.result == 'success') && '0x57F287' || '0xED4245' }}
-          TITLE: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.flutter-audit.result == 'success' && needs.compose-config-diff.result == 'success' && needs.pin-guard.result == 'success') && 'PR security gate clean' || 'PR security gate found issues' }}
+          RESULT: ${{ needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit-direct.result == 'success' && needs.pip-audit-resolved.result == 'success' && needs.flutter-audit.result == 'success' && needs.compose-config-diff.result == 'success' && needs.pin-guard.result == 'success' && 'clean' || 'findings' }}
+          COLOR: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit-direct.result == 'success' && needs.pip-audit-resolved.result == 'success' && needs.flutter-audit.result == 'success' && needs.compose-config-diff.result == 'success' && needs.pin-guard.result == 'success') && '0x57F287' || '0xED4245' }}
+          TITLE: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit-direct.result == 'success' && needs.pip-audit-resolved.result == 'success' && needs.flutter-audit.result == 'success' && needs.compose-config-diff.result == 'success' && needs.pin-guard.result == 'success') && 'PR security gate clean' || 'PR security gate found issues' }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
             -H "Content-Type: application/json" \
             -d "$(jq -nc --arg c status --arg t "$TITLE" --arg col "$COLOR" --arg u "$RUN_URL" \
-              '{channel:$c,title:$t,description:"AUT-1746 PR gate: gitleaks + trivy config + pip-audit + flutter osv-scanner (pubspec.lock) + compose env-var diff (AUT-2390).",color:$col,author:"Security Scan",fields:[{name:"Scope",value:"secrets, IaC, python, flutter, compose-env",inline:true},{name:"Run",value:$u,inline:true}]}')"
+              '{channel:$c,title:$t,description:"AUT-1746 PR gate: gitleaks + trivy config + pip-audit (direct + resolved tree) + flutter osv-scanner (pubspec.lock) + compose env-var diff (AUT-2390).",color:$col,author:"Security Scan",fields:[{name:"Scope",value:"secrets, IaC, python (direct+transitive), flutter, compose-env",inline:true},{name:"Run",value:$u,inline:true}]}')"
