@@ -151,6 +151,15 @@ services:
     tmpfs:
       - /tmp
       - /app/tmp
+    # AUT-2131: healthcheck verifies the API endpoint AND the celery worker
+    # process. The image-level check (curl /health) only covers the API; the
+    # /proc scan catches a dead worker+beat while uvicorn is still responding.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health >/dev/null 2>&1 && for d in /proc/[0-9]*; do [ -r \"$d/comm\" ] || continue; cat \"$d/comm\" 2>/dev/null | grep -q \"^celery$\" || continue; tr \"\\0\" \" \" < \"$d/cmdline\" 2>/dev/null | grep -q \"celery.*worker\" && exit 0; done; exit 1"]
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
     command: >-
       sh -c "/init-minio.sh
       && alembic upgrade head

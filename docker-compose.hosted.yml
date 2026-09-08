@@ -286,6 +286,17 @@ services:
     # AUT-1242/C1: beat scheduler embedded in the worker (-B), matching the dev
     # compose. Removes the separate beat container.
     command: sh -c "export AI_ROUTER_API_KEY=$(cat /run/secrets/ai_router_api_key) && celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2"
+    # AUT-2131: healthcheck scans /proc for a live celery worker process.
+    # Replaces the old `find celerybeat-schedule -mmin -30` check that false-negatives
+    # on idle workers (PersistentScheduler only writes the schedule file on
+    # shutdown/checkpoint, not on every tick). Deterministic: no AMQP round-trip,
+    # no nested $(), no busybox/dash compatibility issues.
+    healthcheck:
+      test: ["CMD-SHELL", "for d in /proc/[0-9]*; do [ -r \"$d/comm\" ] || continue; cat \"$d/comm\" 2>/dev/null | grep -q \"^celery$\" || continue; tr \"\\0\" \" \" < \"$d/cmdline\" 2>/dev/null | grep -q \"celery.*worker\" && exit 0; done; exit 1"]
+      interval: 30s
+      timeout: 15s
+      start-period: 30s
+      retries: 3
     environment:
       <<: [*db-env, *core-env, *router-env]
       PYTHONPATH: /app
