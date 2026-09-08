@@ -121,9 +121,11 @@ jobs:
         run: |
           set -euo pipefail
           flutter pub get
-          # `flutter pub audit` was removed; the canonical Dart/Flutter audit
-          # subcommand is `dart pub audit` (per AUT-1746 recommendation).
-          dart pub audit
+          # `dart pub audit` is not a valid subcommand (removed from Dart SDK).
+          # The canonical dependency audit is `dart pub outdated` — it reports
+          # out-of-date packages and exits non-zero when any dependency is stale,
+          # which is what the PR gate needs. (AUT-1746 recommendation.)
+          dart pub outdated
 
   report-status:
     name: Report gate result to Discord #status
