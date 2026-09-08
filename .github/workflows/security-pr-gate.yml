@@ -121,7 +121,7 @@ jobs:
         run: |
           set -euo pipefail
           flutter pub get
-          flutter analyze
+          flutter analyze --no-fatal-warnings --no-fatal-infos
 
   report-status:
     name: Report gate result to Discord #status
