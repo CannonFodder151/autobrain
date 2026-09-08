@@ -56,9 +56,9 @@ Future<void> _pumpAtSize(WidgetTester tester, Widget child, Size size) async {
 }
 
 const _kSizes = {
-  '1280': Size(1280, 720),
-  '1440': Size(1440, 900),
-  '1920': Size(1920, 1080),
+  '1280': Size(1280, 1200),
+  '1440': Size(1440, 1200),
+  '1920': Size(1920, 1200),
 };
 
 void main() {
