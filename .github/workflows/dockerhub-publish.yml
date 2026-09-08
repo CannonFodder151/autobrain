@@ -109,8 +109,41 @@ jobs:
           # the x64 runner only passed because a stale cached pip-audit tolerated
           # it. Audit one deduplicated pin list so every package is still scanned
           # exactly once.
+          #
+          # AUT-3059: `sort -u` alone is NOT enough — when the same package is
+          # pinned identically in both files but with different inline comments
+          # (e.g. ruff==0.8.6 vs ruff==0.8.6# AutoBrain AI gateway…), sort -u
+          # keeps both lines and the comment-without-space variant is an
+          # invalid specifier that pip-audit rejects. Strip comments, dedupe by
+          # package name (keep highest version), then re-emit with the original
+          # comment so the audit set is identical to the resolved-tree pass.
           TMPREQ="$(mktemp)"
-          cat backend/requirements.txt ai/requirements.txt | sort -u > "$TMPREQ"
+          python3 - > "$TMPREQ" <<'PY'
+          import re
+          from packaging.version import Version  # transitive dep of pip-audit
+          float_re = re.compile(r'^([A-Za-z0-9_.+\-]+)\s*(>=|<=|==|!=|~=|>|<)\s*([^\s#]+)(?:\s*#\s*(.*))?$')
+          pkgs = {}
+          for f in ('backend/requirements.txt', 'ai/requirements.txt'):
+              for line in open(f):
+                  line = line.strip()
+                  if not line or line.startswith('#'):
+                      continue
+                  m = float_re.match(line)
+                  if not m:
+                      continue
+                  name, op, ver, comment = m.group(1), m.group(2), m.group(3), m.group(4)
+                  if op != '==':
+                      continue
+                  cur = pkgs.get(name)
+                  if cur is None or Version(ver) > Version(cur[0]):
+                      pkgs[name] = (ver, comment or '')
+          for name in sorted(pkgs):
+              ver, comment = pkgs[name]
+              out = f"{name}=={ver}"
+              if comment:
+                  out += f"  # {comment}"
+              print(out)
+          PY
           python3 -m pip_audit --disable-pip --no-deps -r "$TMPREQ"
           rm -f "$TMPREQ"
 
