@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.257] - 2026-09-08
+
 ### Security
 - pin transitive floor versions for three known-CVE packages
   (`idna>=3.15`, `pycryptodome>=3.19.1`, `pygments>=2.20`) across
