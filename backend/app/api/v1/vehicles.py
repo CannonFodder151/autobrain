@@ -45,11 +45,7 @@ router = APIRouter(prefix="/vehicles", tags=["vehicles"])
 async def list_vehicles(
     db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
 ) -> list[Vehicle]:
-    try:
-        return await list_user_vehicles(db, user)
-    except Exception as e:
-        logger.error("vehicles_list_failed", error=str(e), exc_info=True)
-        raise HTTPException(status_code=500, detail="Could not load vehicles") from e
+    return await list_user_vehicles(db, user)
 
 
 @router.post("", response_model=VehicleOut, status_code=201)

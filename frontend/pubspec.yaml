@@ -1,7 +1,7 @@
 name: autobrain
 description: AI-powered car enthusiast companion.
 publish_to: 'none'
-version: 0.3.258+257
+version: 0.3.254+253
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -34,6 +34,7 @@ dependencies:
   flutter_blue_plus: 1.32.8
   in_app_purchase: ^3.2.1
   connectivity_plus: ^6.0.3
+
 
 dev_dependencies:
   flutter_test:
