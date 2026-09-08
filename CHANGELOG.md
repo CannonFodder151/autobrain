@@ -30,6 +30,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   `Future<Database>? _opening`, indentation in login/signup/add_vehicle/edit_vehicle
   screens, `MaterialBanner.actions` + `MediaQuery` clamp in app.dart.
 
+### Added (AUT-2118)
+- backend(tests): add `backend/tests/health_demo.test.py` — dedicated health endpoint CI gate asserting /health returns 200, status=ok, service=autobrain-backend, version matches APP_VERSION, and marks demo/hosted/default env when DEMO_MODE=true. Promoted from test_api.py. Also ships `.github/workflows/ci-tests.yml` (AUT-2119): pytest job on PR + push to main; a failing health_demo.test blocks merge and posts to Discord #updates on failure, keeping hosted/default from drifting out of parity.
+
 ## [0.3.254] - 2026-09-08
 ### Added (AUT-2386)
 - feat(backend): source-arbitration rule for multi-feed overlap. ``FuelPrice`` now carries ``source_id`` + ``arbitration_score``; new ``fuel_price_arbitrations`` table stores the daily winning source per (station, fuel_type, day). PR #473.
