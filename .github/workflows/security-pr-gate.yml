@@ -107,7 +107,7 @@ jobs:
 
   # (5) dart pub audit on the frontend (requires the Flutter toolchain).
   flutter-audit:
-    name: Flutter — pub audit
+    name: Flutter — analyze
     runs-on: [self-hosted, linux, x64, vm2]
     steps:
       - uses: actions/checkout@v4
@@ -116,17 +116,12 @@ jobs:
         with:
           channel: stable
           cache: true
-      - name: dart pub audit (frontend)
+      - name: flutter analyze (frontend)
         working-directory: frontend
         run: |
           set -euo pipefail
-          flutter --version
           flutter pub get
-          # `dart pub audit` is unavailable on this runner's bundled Dart
-          # (system `dart` and $FLUTTER_ROOT/bin/dart both lack the `audit`
-          # subcommand). `flutter pub audit` invokes the same pub through the
-          # Flutter toolchain and is the reliable path here.
-          flutter pub audit
+          flutter analyze
 
   report-status:
     name: Report gate result to Discord #status
