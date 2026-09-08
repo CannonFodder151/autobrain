@@ -25,6 +25,7 @@ import '../../core/fuel_types.dart';
 import '../../core/geoloc.dart';
 import '../../core/models.dart';
 import 'servo_spy_list_model.dart';
+import 'servo_spy_station_history_screen.dart';
 
 enum _ServoSpyView { map, list }
 
