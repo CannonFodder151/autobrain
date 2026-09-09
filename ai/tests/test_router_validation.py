@@ -62,7 +62,7 @@ async def test_enhance_drops_nested_array_too_long(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_enhance_drops_junk_and_typed_keys() -> None:
-    baseline = {"confidence": 0.9, "model": "rule-based-fallback"}
+    baseline = {"confidence": 0.9, "next_due_date": "2025-06-01", "model": "rule-based-fallback"}
     # Malformed router response: junk fields, wrong-typed fields, valid fields.
     malicious = {
         "model": "General-Use",
@@ -71,13 +71,13 @@ async def test_enhance_drops_junk_and_typed_keys() -> None:
         "junk_field": {"x": 1},           # not in whitelist
         "__proto__": {"polluted": True},  # not in whitelist
         "reason": "mileage-based",        # valid
-        "next_due_date": "2026-01-01",    # valid
+        "next_due_date": "2026-01-01",    # immutable — router must not override baseline
     }
     with patch("app.router_client.route", new=AsyncMock(return_value=malicious)):
         out = await enhance("service-prediction", {}, baseline)
     assert out["confidence"] == 0.9           # baseline preserved
     assert out["reason"] == "mileage-based"   # valid key merged
-    assert out["next_due_date"] == "2026-01-01"
+    assert out["next_due_date"] == "2025-06-01"  # immutable baseline survives
     assert "interval_km" not in out
     assert "junk_field" not in out
     assert "__proto__" not in out
@@ -133,3 +133,70 @@ def test_cap_payload_passes_through_short_input() -> None:
     """No truncation when everything is within caps."""
     payload = {"symptoms": "engine misfire", "make": "Toyota"}
     assert _cap_payload(payload) == payload
+
+
+@pytest.mark.asyncio
+async def test_enhance_immutable_diagnostics() -> None:
+    """AUT-3150: diagnostics measured fields (severity, cost, items, parts) are immutable."""
+    baseline = {
+        "severity": "high",
+        "estimated_cost": 420.0,
+        "cost_range": [300.0, 600.0],
+        "items": [{"cause": "coil", "confidence": 0.8, "severity": "high"}],
+        "parts_needed": ["NGK BKR6EIX"],
+        "model": "rule-based-fallback",
+    }
+    malicious = {
+        "severity": "low",
+        "estimated_cost": 1.0,
+        "cost_range": [0.0, 0.0],
+        "items": [{"cause": "fake", "confidence": 0.1, "severity": "low"}],
+        "parts_needed": ["bogus"],
+        "recommended_actions": ["do nothing"],
+    }
+    with patch("app.router_client.route", new=AsyncMock(return_value=malicious)):
+        out = await enhance("diagnostics", {}, baseline)
+    assert out["severity"] == "high"
+    assert out["estimated_cost"] == 420.0
+    assert out["cost_range"] == [300.0, 600.0]
+    assert out["items"] == baseline["items"]
+    assert out["parts_needed"] == ["NGK BKR6EIX"]
+    assert out["recommended_actions"] == ["do nothing"]  # valid enrichment merged
+    assert out["model"] == "rule-based+ai"
+
+
+@pytest.mark.asyncio
+async def test_enhance_immutable_service_prediction() -> None:
+    """AUT-3150: service_prediction measured intervals and due dates are immutable."""
+    baseline = {
+        "service_type": "major",
+        "interval_km": 10000,
+        "interval_months": 6,
+        "due_in_km": 2000,
+        "due_in_days": 90,
+        "next_due_km": 12000,
+        "next_due_date": "2026-12-01",
+        "confidence": 0.9,
+        "model": "rule-based-fallback",
+    }
+    malicious = {
+        "service_type": "minor",
+        "interval_km": 999,
+        "interval_months": 1,
+        "due_in_km": 0,
+        "due_in_days": 0,
+        "next_due_km": 1,
+        "next_due_date": "2025-01-01",
+        "reason": "router override",
+    }
+    with patch("app.router_client.route", new=AsyncMock(return_value=malicious)):
+        out = await enhance("service-prediction", {}, baseline)
+    assert out["service_type"] == "major"
+    assert out["interval_km"] == 10000
+    assert out["interval_months"] == 6
+    assert out["due_in_km"] == 2000
+    assert out["due_in_days"] == 90
+    assert out["next_due_km"] == 12000
+    assert out["next_due_date"] == "2026-12-01"
+    assert out["reason"] == "router override"  # valid enrichment merged
+    assert out["model"] == "rule-based+ai"

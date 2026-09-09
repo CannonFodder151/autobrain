@@ -164,6 +164,8 @@ _TEMPERATURES: dict[str, float] = {}
 # currency). The router may enrich the baseline but never override these —
 # they are the ground truth and the whole point of deterministic-first.
 _AI_IMMUTABLE: dict[str, frozenset[str]] = {
+    "diagnostics": frozenset({"severity", "estimated_cost", "cost_range", "items", "parts_needed"}),
+    "service-prediction": frozenset({"interval_km", "interval_months", "due_in_km", "due_in_days", "next_due_km", "next_due_date", "service_type"}),
     "resale": frozenset({"estimated_value", "low", "high", "currency"}),
     "mod-impact": frozenset({"performance_score", "value_impact", "reliability_impact"}),
     "ocr": frozenset({"vendor", "invoice_date", "total", "tax", "currency", "items"}),

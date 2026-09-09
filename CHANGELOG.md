@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-3150)
+- fix(ai): populate `_AI_IMMUTABLE` for `diagnostics` (severity, estimated_cost, cost_range, items, parts_needed) and `service-prediction` (interval_km, interval_months, due_in_km, due_in_days, next_due_km, next_due_date, service_type) in `ai/app/router_utils.py`. These sets were empty, so 9Router could override measured cost ranges, service intervals and due dates. `enhance()` now refuses to overwrite them. New regression tests in `ai/tests/test_router_validation.py` assert the router cannot override them while still merging valid enrichment fields.
+
 ## [0.3.258] - 2026-09-09
 
 ### Fixed (AUT-2281)
