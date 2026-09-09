@@ -113,6 +113,9 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
     final outcome = await auth.login(_email.text, _password.text);
+    if (outcome == LoginOutcome.ok) {
+      await auth.ackReauth();
+    }
     if (!mounted) return;
     if (outcome == LoginOutcome.mfaSetupRequired) {
       _mfaToken = auth.mfaTokenHint;
@@ -219,12 +222,36 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                       ),
-                      ],
-                      ),
-                    ),
+],
                   ),
-                  const Text(
-                    'AutoBrain',
+                ),
+              ),
+              if (auth.needsReauth) ...[
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.amber.shade400),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.security, color: Colors.amber),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Security update — please re-authenticate',
+                          style: TextStyle(color: Colors.amber.shade900, fontSize: 14),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const Text(
+                'AutoBrain',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 30,

@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security (AUT-3105)
+- fix(frontend): force re-authentication when legacy plaintext JWTs detected in SharedPreferences. `TokenStore` now wipes plaintext tokens immediately, sets a one-time re-auth flag, and shows "Security update — please re-authenticate" on login until the user signs in again. `flutter_secure_storage` uses platform hardware-backed Keystore/Keychain with encrypted shared preferences. Mobile build must set `android:allowBackup="false"` in the AndroidManifest (to be applied in `autobrain-mobile`).
+
 ## [0.3.255] - 2026-09-08
 
 ### Fixed (AUT-2656)
