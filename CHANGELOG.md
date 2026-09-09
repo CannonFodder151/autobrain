@@ -11,51 +11,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-## [0.3.255] - 2026-09-08
+### Fixed (AUT-2457)
+- fix(backend,AUT-2457): remove duplicate `source` keyword argument in `fuel_ingest_summary` logger call. The loop `for source, res in summary.items(): logger.info('fuel_ingest_summary', source=source, **res)` crashed with `TypeError: got multiple values for keyword argument 'source'` because each per-source result dict already contains a `source` key. Removed the redundant `source=source` argument; `**res` carries it. Added unit test exercising the exact logging path.
 
-### Fixed (AUT-2656)
-- fix(ci): restore arm64 flutter web compile in build-hosted.yml. Pin the
-  frontend Dockerfile to `ghcr.io/cirruslabs/flutter:3.38.2` (the `:stable`
-  tag had drifted past 3.27.x and introduced breaking Flutter API changes —
-  `MaterialBanner.actions` required, `MediaQuery.withClampedTextScaling`
-  `maxTextScale` removed, `Connectivity.instance` removed) and re-apply the
-  dart2js compat fixes from PR #579 (887c213): `Connectivity()`,
-  `Future<Database>? _opening`, indentation in login/signup/add_vehicle/edit_vehicle
-  screens, `MaterialBanner.actions` + `MediaQuery` clamp in app.dart.
+## [0.3.247] - 2026-09-07
 
-## [0.3.254] - 2026-09-08
-### Added (AUT-2386)
-- feat(backend): source-arbitration rule for multi-feed overlap. ``FuelPrice`` now carries ``source_id`` + ``arbitration_score``; new ``fuel_price_arbitrations`` table stores the daily winning source per (station, fuel_type, day). PR #473.
+### Added (AUT-2400)
+- feat(frontend,AUT-2400): stale-while-revalidate + offline banner UX. New `ConnectivityService` singleton (connectivity_plus) exposes live online/offline state. `OfflineCache` gains 10s ultra-hot in-memory layer. `ApiClient.getCachedDecoded()` enables cache-first reads. All 10 list screens (vehicles, fuel, services, logbook, mods, parts, receipts, diagnostics, timeline, analytics, social feed) now render cached data immediately and refresh in background. `AutoBrainApp` is now `StatefulWidget` and surfaces a `MaterialBanner` when offline. `StaleHint` widget shows cache staleness on list screens. New dependency: `connectivity_plus: ^6.0.3`. `pubspec.lock` updated. No new DB tables. Closes AUT-2400.
 
-## [0.3.253] - 2026-09-07
-### Fixed (AUT-2656)
-- fix(frontend): restore flutter web compile on arm64 runner. PR #530 (AUT-2478) introduced a class name collision in `home_screen.dart` — the `_OwnershipAdvisorLaunchCard` class had its constructor renamed to `_ErrorView`, nesting it and breaking dart2js. Separated `_ErrorView` as its own top-level class and restored `_ErrorView.build` body. Also fixed `servo_spy_screen.dart` `_openHistory()` missing `BuildContext` argument (passed `context` to `Navigator.of(context)` but the method signature lacked the parameter, causing `context` to resolve to the enclosing `build` scope).
+## [0.3.245] - 2026-09-06
 
-## [0.3.252] - 2026-09-07
-### Fixed (AUT-2726)
-- fix(backend,frontend): apply missing rego columns to existing vehicles + clearer server error messages. `backend/app/db/bootstrap.py` now falls back from `alembic upgrade head` to `alembic upgrade heads` before `create_all`, so a database that predates the `m3rge05` merge migration (which adds `rego_status`, `rego_expiry_date`, `rego_checked_at`, `powertrain`, `rego_state` to `vehicles`) no longer silently skips column creation — `create_all` does not add columns to existing tables, leaving vehicles without rego state and the frontend showing a masked 500 ("Could not reach the server"). `frontend/lib/screens/home/home_screen.dart` now distinguishes `ApiException` (server error, surface the status code + message) from a genuine network timeout so users see the real failure instead of a misleading connection error. Immediate mitigation: missing columns applied directly to hosted, demo, and default databases; `alembic_version` stamped to `m3rge05` on all three.
+### Fixed (AUT-2216)
+- fix(backend,AUT-2216): resolve `ADMIN_INITIAL_PASSWORD_FILE` in Pydantic settings. The hosted compose mounts `ADMIN_INITIAL_PASSWORD_FILE=/run/secrets/admin_initial_password` and the secrets loader (`lib-load-secrets.sh`) exports `ADMIN_INITIAL_PASSWORD` from it, but the `_load_file_secrets` model_validator only handled `AI_ROUTER_API_KEY_FILE`. When the Pydantic settings were instantiated without the shell-sourced env (e.g. tests, direct config reads), `ADMIN_INITIAL_PASSWORD` stayed empty and `seed_admin()` silently skipped, leaving the hosted admin unseeded and returning 401. Added the `ADMIN_INITIAL_PASSWORD_FILE` field + resolver (env wins over file, missing file is silent). Added `backend/tests/test_admin_password_file.py` covering file load, env precedence, and missing-file fallback.
 
-### Fixed (AUT-2518)
-- fix(market-data): relax chrome-sandbox SUID guard to warn-and-continue. Playwright 1234+ (Chrome for Testing) removed `chrome-sandbox` from `/ms-playwright` — Chromium now uses user namespaces in headless mode. The previous `exit 1` on zero matches aborted the `build-hosted.yml` loop before the frontend image could be built. `market-data/Dockerfile` now matches both `chrome-sandbox` (hyphen) and `chrome_sandbox` (underscore) and warns to stderr when neither is present, letting the build continue. The `docker/ai/Dockerfile` already had this behaviour from the AUT-2582 fix. Both images fall back to `--no-sandbox` at runtime per `market-data/browser.py`, so the SUID helper is an optional hardening layer.
+### Fixed (AUT-1929)
+- fix(ci): replace the broken `dart pub audit` step in `.github/workflows/security-pr-gate.yml` with `osv-scanner --lockfile=pubspec.lock`. The `dart pub audit` subcommand is not recognized on the runner's Flutter stable-3.47.2, causing the Flutter dependency audit job to fail red on every PR/push to main regardless of diff content. The new step uses osv-scanner v1.9.2 against `pubspec.lock` and fails on HIGH/CRITICAL findings only. Repo-wide fix — unblocks merge of all open PRs.
 
-## [0.3.251] - 2026-09-07
-### Added (AUT-2706)
-- firmware+backend: per-row `ev_mode` flag and vehicle-type detection. The ESP32-DIY firmware now computes `ev_mode` per trip row (0=ICE / 1=EV / 2=HYBRID) from RPM-vs-pack_current hysteresis and classifies vehicle type from the dominant ev_mode over the first trip (1=EV, 2=HEV, 4=PHEV), persisting it to the backend via `POST /devices/{device_id}/vehicle-type`. Vehicle type is stored on the `Device` model (`vehicle_type` string column, new Alembic migration `aut2706_device_vehicle_type.py`) with a `DeviceVehicleTypeIn` schema. EV manufacturer PID tables keyed by VIN WMI are selected per AUT-2702, Mode 01 0x2F fuel level is reported for PHEVs, and the firmware self-check (`firmware/esp32-diy/test/self_check.cpp`) now covers the new EV profile and vehicle-type paths. Closes AUT-2706.
-
-## [0.3.250] - 2026-09-07
-
-### Fixed (AUT-2656)
-- fix(frontend): replace reverted `withValues(alpha:)` with `withOpacity(alpha:)` in car_check_screen.dart to restore dart2js arm64 build.
-
-## [0.3.249] - 2026-09-07
-
-### Fixed (AUT-2656)
-- fix(frontend): remove duplicate `_vehicleId` declarations in servo_spy_screen.dart (2 locations) and add `package:flutter/foundation.dart` import in connectivity_service.dart to resolve dart2js compile errors on arm64 runner. Restores dockerhub-publish + build-hosted arm64 image builds.
-
-## [0.3.248] - 2026-09-07
-### Fixed (AUT-2960)
-- fix(backend): PDF export table header text was black on dark background (unreadable). Header cells now use a cloned `BodyText` style with `textColor=colors.white` and `fontName=Helvetica-Bold` so the `TEXTCOLOR` table style (which only affects raw strings, not Paragraphs) is no longer relied upon. Applies to both service history and build sheet PDFs.
-- feat(backend,AUT-2960): vehicle rego now included in the PDF title on the front page. Service history: `Service History — {label} — {rego}`; build sheet: `Build Sheet — {label} — {rego}`. When rego is empty, title remains clean (no trailing separator). Updated API callers in `services.py` and `mods.py` to pass `vehicle.rego`. Added `test_pdf_export_rego_in_title` test.
+## [0.3.244] - 2026-09-06
+### Added (AUT-2384)
+- feat(frontend,AUT-2384): wire the existing-but-dead `OfflineCache` (sqflite) into `ApiClient` so GET requests cache successful responses and fall back to cache on network failure. Per-endpoint TTL table in `ApiClient._cacheTtls` (safe-list only: vehicles, auth/me, social/feed, fuel-prices; auth, exports, uploads, billing, admin, OBD excluded). Read-through on `SocketException`/`TimeoutException`/`HandshakeException`; HTTP 4xx/5xx surfaced as-is. Prefix-based invalidation via `api.invalidateCache(path)`. In-memory hot layer (LRU 64) over SQLite. Boot-time `clearExpired()` in `lib/main.dart`. No new dependencies. Closes AUT-2384 Layers 2+3.
 
 ## [0.3.243] - 2026-09-06
 ### Fixed (AUT-2656)
@@ -74,8 +48,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [0.3.240] - 2026-09-06
 ### Added (AUT-2703)
 - feat(firmware,backend,frontend): extend trip CSV row schema with EV/PHEV fields (`soc_pct,pack_v,pack_a,pack_temp_c,odo_km,ev_mode`) for AUT-2437. `format_trip_row` in `obd_pids.h` now emits 13-field rows (old 7-field rows still accepted via default args). CSV header updated to `epoch,rpm,speed,coolant,throttle,lat,lon,soc_pct,pack_v,pack_a,pack_temp_c,odo_km,ev_mode`. `csv_to_gps_json` (upload_payload.h), backend `parse_board_csv` (trip_gps.py), and frontend `tripCsvToJson` (dongle_relay.dart) all tolerate both old and new row lengths via fixed-position reads. Dart tests expanded with backward-compat + EV-field cases. C++ self_check expanded with EV-field assertions + old-format CSV tolerance.
+
 ### Fixed (AUT-2600)
-- fix(frontend): restore flutter web compile on arm64 runner. Three compile errors were tripping dart2js: `login_screen.dart:199` (under-indented children), `signup_screen.dart:85` (under-indented child), and `reset_password_web.dart` (dart:html import). Restores dockerhub-publish + build-hosted arm64 image builds.
+- fix(frontend): add missing `child:` label on the `ConstrainedBox` wrapping `ListView.builder` in `vehicle_timeline_screen.dart` (line 60). The widget was passed as a positional argument, misaligning the formal argument list and tripping dart2js on every `ConstrainedBox` inside the body (the compile error attached to login_screen.dart / home_screen.dart / signup_screen.dart were the downstream effect). Closes the second-half of AUT-2600 (unblocks `build-hosted.yml` amd64+arm64 `flutter build web` for the AUT-2446 Replace + AUT-2447 Upgrade release).
+
+### Fixed (AUT-2600)
+- fix(frontend): Servo Spy map `_StationSheet` 30-day history button was wired to a dead method (`_openHistory(BuildContext)` defined inside `_ServoSpyListState`, which has no `station` field) and the Dart `web` compile failed with `Error: The getter 'station' isn't defined for type '_ServoSpyListState'`, blocking the dockerhub-publish `publish-arm64` / `publish-amd64` jobs (publish #1445 aborted, no new image, containers stale). Moved the navigation into `_StationSheet` (which has `this.station`) and removed the broken overload. List-view history navigation is unchanged.
 
 ### Added (AUT-2053)
 - feat(fuel/servo): Servo Spy station prices now show `$ per km` and `avg fill cost` projections derived from the requesting user's current vehicle's fuel stats. Backend: `FuelStats` gains `avg_fill_litres` (mean of full-tank fills); `/fuel/stations` and `/fuel/station/{id}/prices` accept `?vehicle_id=` and return `cost_per_km` + `avg_fill_cost` on every `FuelPriceOut`. Silently omits projections when the vehicle is inaccessible or stats are missing. Frontend: `ServoFuelPrice`/`StationRow` rows surface the new fields in both list and map detail views. No AI in the hot path — deterministic arithmetic only. Tests: `backend/tests/test_servo_projection_aut2053.py` + `backend/tests/test_services_extraction.py` extended; frontend tests updated for the new fields. Closes AUT-2053.
@@ -117,18 +95,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added (AUT-2446)
 - backend(advisor): Ownership Advisor Replace module — deterministic used/new replacement cost + funding gap + monthly saving target. New `GET /api/v1/advisor/replace` route (per ADR 0001) anchors on the same cached `market_listing_cache` median the Value module uses — no 9Router, no AI. Used replacement cost = current private-sale mid; new replacement cost applies age-based new-vs-used premium curve (1.0× at 0y → 1.4× at 3y → 1.8× at 6y → 2.2× at 10y, clamped at 3.0×). Funding gap: `gap = replacement_cost - current_value - trade_in_mid`; `monthly_target = gap / horizon_months`. Negative gap = `surplus=true` with zero monthly. Free accounts get 403. New schemas `AdvisorReplaceData`, `FundingGapBand`. New helpers `compute_replace`, `age_years`, `new_used_premium`, `_clamp_horizon`. Tests: `backend/tests/test_advisor_replace.py`.
-
-### Added (AUT-2376)
-- feat(frontend): Servo Spy station detail — 30-day price history chart. Tapping
-  a station in the Servo Spy **list** view (or the **map** detail sheet) opens
-  a new screen that calls `GET /api/v1/fuel/stations/{id}/history` and renders
-  one `fl_chart` `LineChart` line per fuel type (E10, 91, 95, 98, Diesel, LPG)
-  for the last 30 days, with a legend, a `\$x.xx` Y axis, and tap-to-tooltip.
-  The client groups the flat `(fuel_type, price, effective_at)` response from
-  the AUT-2375 endpoint by fuel type. Cached in-memory per station so a
-  re-open is instant. Empty state ("No price history yet") and 404 fallback
-  handled. New unit tests `frontend/test/fuel_prices_api_test.dart` cover the
-  flat contract and empty/404 cases. Closes AUT-2376.
 
 ## [0.3.239] - 2026-09-05
 
@@ -231,9 +197,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed (AUT-2383)
 - fix(frontend,servo-spy): CARTO basemap tile URL query param was `?api_key=` but CARTO requires `?key=` — the watermark persisted because the API silently ignored the wrong parameter. Updated tile URL template in `frontend/lib/screens/servo_spy/servo_spy_screen.dart` to use `?key=$_cartoApiKey`; updated comment in `docker/frontend/Dockerfile`. Caching is already optimal: tiles are immutable `{z}/{x}/{y}` hashes so CDN/browser cache-hit rate is naturally high — no extra layer needed.
-
-### Fixed (AUT-2383)
-- fix(frontend): CARTO basemap tile URL now uses `?key=` instead of `?api_key=`. The legacy `?api_key=` parameter is silently ignored by CARTO raster basemaps, leaving the "API key required" watermark on Servo Spy's map even with `CARTO_API_KEY` injected. `?key=` is CARTO's required parameter name; `flutter_map`'s `BuiltInMapCachingProvider` handles disk tile caching to keep request volume low. Regression test in `frontend/test/servo_spy_carto_key_test.dart`.
 
 ## [0.3.234] - 2026-09-04
 
@@ -501,10 +464,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Added (AUT-2218)
 - chore(docker): wire `FUEL_QLD_API_KEY` into `docker-compose.prod.yml` backend block (mirrors NSW/VIC pattern; empty value disables the feed, see `backend/app/services/fuel_feeds.py:493`).
 - chore(docker): wire `FUEL_QLD_API_KEY_FILE: /run/secrets/fuel_qld_api_key` into `docker-compose.hosted.yml` backend + worker blocks. The existing `x-secrets` anchor (`<<: *secrets`) already bind-mounts `${SECRETS_DIR}` read-only, so no new volume entry is required; seed `fuel_qld_api_key` via `scripts/seed-secrets.sh` before redeploying the hosted stack.
-
-### Fixed (AUT-1946)
-- fix(backend): bake EXIF orientation into pixels on social photo uploads (`ImageOps.exif_transpose`) so phone portraits stored as webp no longer display sideways — webp has no EXIF, so the orientation must be baked at upload time.
-- fix(frontend): add a per-photo rotate (90° CW) button in the Edit Build screen so portrait shots that come in sideways can be rotated before saving. Existing-stored photos (URL only) skip rotate since the backend fix already corrects them at upload time.
 
 ## [0.3.214] - 2026-09-03
 
