@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.256] - 2026-09-09
+
 ### Security (AUT-2060)
 - security(ci,docker): bump python:3.13-slim to digest cc9dffa (libssl3t64 3.5.7-1~deb13u2, resolves CVE-2026-14456 OpenSSL QUIC DoS) and nginx frontend to digest ee1643ae (util-linux/alpine update). Remove resolved CVE-2026-14456 suppression from .trivyignore. Add libuuid/util-linux HIGH CVE suppressions (CVE-2026-53612/53613/53614/76642/78408/78409/78410; nginx frontend never invokes mount/nsenter). Fix trivy-image-scan.yml to use aquasecurity/trivy-action@v0.36.0 with `scanner: vuln` inputs (v0.37.0 does not exist). Drop separate ai service from docker-compose.prod.yml — AI gateway runs inside backend container (AUT-2000). Add libexpat version-check workflow (AUT-2126). Add FUEL_SA_API_KEY/FUEL_SA_ENABLED env vars for SA SAFPIS ingester (AUT-2610).
 
