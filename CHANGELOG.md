@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-2281)
+- fix(backend): `cost_per_km` divisor `/100` → `/10000` in `_project_price` (`app/api/v1/fuel_servo.py:399`) so the result is **$/km** not cents/km. The old code pre-divided `price` by 100 then divided again — double conversion. Also fixed `avg_litres_per_fill` → `avg_fill_litres` field-name mismatch in `_station_out` (`app/api/v1/fuel_servo.py:417`) and `annotate_station`/`annotate_prices` (`app/services/fuel_servo.py:69,93`); corrected an `IndentationError` in `_station_out`; updated frozen assertions in `tests/test_aut2201_station_annotations.py`. All 8 tests in `test_aut2201_station_annotations.py` + `test_servo_projection_aut2053.py` pass.
+
 ## [0.3.257] - 2026-09-09
 ### Added (AUT-2352)
 - test(frontend): add `frontend/test/app_config_validate_test.dart` — 6 hermetic reachability cases for `AppConfig.validate()` covering 2xx ok, 5xx fail, timeout, connection refused, malformed URL, and `healthz` origin stripping. Per-test isolation via `tearDown` resetting `apiBase` / `lastValidationOk` / `lastValidationError`. Closes AUT-2352.

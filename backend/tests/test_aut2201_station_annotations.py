@@ -51,13 +51,13 @@ def test_station_out_without_stats_does_not_annotate() -> None:
 
 
 def test_station_out_with_stats_annotates_cost_per_km_and_fill() -> None:
-    # avg_l_per_100km=8.0, avg_litres_per_fill=45.0; price=190 c/L ($1.90/L)
+    # avg_l_per_100km=8.0, avg_fill_litres=45.0; price=190 c/L ($1.90/L)
     # cost_per_km = 8.0 * 190 / 10000 = 0.152   ($/km)
     # avg_fill_cost = 190 * 45 / 100 = 85.5     ($)
     stats = FuelStats(
         total_litres=180.0, total_cost=342.0,
         avg_l_per_100km=8.0, avg_cost_per_km=0.19,
-        avg_litres_per_fill=45.0,
+        avg_fill_litres=45.0,
         last_log=None, series=[],
     )
     out = annotate_station(_station(), [_price(190.0)], 5.0, stats)
@@ -70,7 +70,7 @@ def test_station_out_annotates_each_price_independently() -> None:
     stats = FuelStats(
         total_litres=0, total_cost=0,
         avg_l_per_100km=10.0, avg_cost_per_km=None,
-        avg_litres_per_fill=50.0,
+        avg_fill_litres=50.0,
         last_log=None, series=[],
     )
     prices = [_price(180.0, "91"), _price(200.0, "95"), _price(220.0, "98")]
@@ -80,11 +80,11 @@ def test_station_out_annotates_each_price_independently() -> None:
 
 
 def test_station_out_partial_stats_only_cost_per_km() -> None:
-    # avg_l_per_100km present, avg_litres_per_fill missing -> only cost_per_km
+    # avg_l_per_100km present, avg_fill_litres missing -> only cost_per_km
     stats = FuelStats(
         total_litres=0, total_cost=0,
         avg_l_per_100km=7.5, avg_cost_per_km=None,
-        avg_litres_per_fill=None,
+        avg_fill_litres=None,
         last_log=None, series=[],
     )
     out = annotate_station(_station(), [_price(200.0)], None, stats)
