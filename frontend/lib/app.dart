@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -15,13 +16,26 @@ import 'screens/settings/license_screen.dart';
 class AutoBrainApp extends StatelessWidget {
   const AutoBrainApp({super.key});
 
+  /// Deep-link fragment captured at startup, before the Flutter web engine
+  /// normalizes the URL (clears `#/license` via `history.replaceState`
+  /// within ~2-4s of load). Without this, the logged-in rebuild reads an
+  /// already-cleared fragment and Home mounts instead of License. Set once
+  /// from `main()`; null falls back to the live `Uri.base.fragment`.
+  static String? initialFragment;
+
   /// True when the app was opened from a password-reset email link
-  /// (…/reset-password?token=…).
+  /// (…/reset-password#token=…) — fragment kept out of query logs/history.
   static String? resetTokenFromUrl() {
     final uri = Uri.base;
-    if (uri.pathSegments.isNotEmpty &&
-        uri.pathSegments.last == 'reset-password') {
-      return uri.queryParameters['token'];
+    if (uri.pathSegments.isEmpty || uri.pathSegments.last != 'reset-password') return null;
+    return _fragmentToken(uri.fragment) ?? uri.queryParameters['token'];
+  }
+
+  static String? _fragmentToken(String frag) {
+    if (frag.isEmpty) return null;
+    for (final part in frag.split('&')) {
+      final kv = part.split('=');
+      if (kv.length == 2 && kv[0] == 'token' && kv[1].isNotEmpty) return Uri.decodeComponent(kv[1]);
     }
     return null;
   }
@@ -54,7 +68,9 @@ class AutoBrainApp extends StatelessWidget {
   /// ({origin}/#/license) — routes a logged-in user to the License screen so
   /// purchases happen in the browser, not in the store-published app.
   static bool licenseRequested() {
-    return Uri.base.fragment.replaceAll('/', '').toLowerCase() == 'license';
+    final fragment =
+        (initialFragment ?? Uri.base.fragment).replaceAll('/', '').toLowerCase();
+    return fragment == 'license';
   }
 
   @override
@@ -85,6 +101,26 @@ class AutoBrainApp extends StatelessWidget {
       darkTheme: AppTheme.dark(),
       themeMode: auth.darkMode ? ThemeMode.dark : ThemeMode.light,
       home: home,
+      // AUT-2353: debug-only MaterialBanner surfacing the resolved API/WS
+      // base URLs and the boot-time validation result. Release builds render
+      // `null` here so there is zero overhead and no banner in production.
+      builder: kDebugMode ? _wrapWithDebugBanner : null,
     );
   }
+}
+
+/// Wraps [child] in a [Banner] that surfaces the resolved `apiBase`/`wsBase`
+/// (and the last `AppConfig.validate()` result) for QA/dev to confirm at
+/// app boot. Only used when `kDebugMode` is true (see `MaterialApp.builder`
+/// above); release builds render `null` from the builder slot.
+Widget _wrapWithDebugBanner(BuildContext context, Widget? child) {
+  final validation = AppConfig.lastValidationOk == null
+      ? 'not-run'
+      : (AppConfig.lastValidationOk! ? 'ok' : 'fail');
+  return Banner(
+    location: BannerLocation.topEnd,
+    message:
+        'API: ${AppConfig.apiBase}  WS: ${AppConfig.wsBase}  boot=$validation',
+    child: child ?? const SizedBox.shrink(),
+  );
 }

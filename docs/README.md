@@ -18,6 +18,7 @@ below are mirrors kept in-repo for offline reading and PR review.
 | [module-breakdown.md](module-breakdown.md) | AI gateway — per-module breakdown (deterministic-first) |
 | [ai-router-integration.md](ai-router-integration.md) | 9Router / AI_ROUTER_URL integration |
 | [module-boundaries.md](module-boundaries.md) | Backend + AI gateway module layout & ownership |
+| [ownership-advisor.md](ownership-advisor.md) | Ownership Advisor feature ADR 0001 — routes, state, caching, 9Router contract |
 | [obd-integration.md](obd-integration.md) | OBD-II port roadmap & next steps |
 | [container-architecture.md](container-architecture.md) | Container image layout, healthchecks, upgrade path |
 | [infrastructure-diagrams.md](infrastructure-diagrams.md) | Network / container diagrams |

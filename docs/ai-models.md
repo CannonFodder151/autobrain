@@ -17,6 +17,7 @@ rule-based engine that always produces a valid result, then optionally lets
 | Condition | `/v1/condition` | rule-based estimator from diagnostics (severity-weighted) + service history + odometer vs age (car vs motorcycle scales) | Narrative `summary` only — the label is never overridden |
 | Mod impact | `/v1/mod-impact` | per-category performance/value/reliability table | Advice prose |
 | Fuel receipt | `/v1/fuel-ocr` | line-scan for vendor, date, litres, price-per-litre, total | Fills only missing optional fields |
+| Parts guide | `/v1/parts-guide` | SCA category taxonomy normalisation + service-type inventory prefill | Tidy descriptions, brands, categories (never overrides SKU/service_group) |
 | Odometer | `/v1/odometer` | local Tesseract + regex digit scan on the dashboard photo | **None — deterministic-only** |
 | Social image | `/v1/social-image` | Pillow on-brand card renderer (title/hook/CTA, 1200x630) | Optional prompt → free Pollinations photo (falls back to deterministic card) |
 
@@ -47,7 +48,7 @@ The response includes a `model` field so callers know which path produced it:
 
 `ai/app/fallbacks/` implements the deterministic engines, one module per
 feature (`condition.py`, `diagnose.py`, `service_prediction.py`, `ocr.py`,
-`resale.py`, `mod_impact.py`, `fuel_ocr.py`, `odometer.py`).
+`resale.py`, `mod_impact.py`, `fuel_ocr.py`, `odometer.py`, `parts_guide.py`).
 
 - **Diagnostics:** keyword rules for symptoms (brakes, vibration, leaks,
   noises…) + OBD code table mapped to parts/costs.
@@ -61,6 +62,8 @@ feature (`condition.py`, `diagnose.py`, `service_prediction.py`, `ocr.py`,
   recency + odometer vs age (cars 15k km/yr, bikes 6k km/yr) → label
   (excellent/good/fair/poor) + confidence + evidence signals.
 - **Mod impact:** per-category performance/value/reliability table.
+- **Parts guide:** SCA category taxonomy normalisation + service-type
+  inventory prefill.
 - **Fuel OCR / Odometer:** line-scan and Tesseract+regex respectively.
 
 ## Contract
