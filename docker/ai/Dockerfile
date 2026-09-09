@@ -1,7 +1,9 @@
 # AutoBrain AI image: AI gateway (:8001) + market-data scraper (:8000)
 # AUT-1242-C3: market-data merged into this image to drop a container.
 # AUT-1735: bump off vulnerable python:3.12-slim; pin base by digest.
-FROM python:3.13-slim@sha256:cc9dffa47c8294ba9bb795a8dfaeb7b76f2b30acade2c52a461a2999d127eb00 AS base
+# AUT-2656: pin the multi-arch index (3.13.15-slim-trixie) — the prior digest
+# was amd64-only and broke the arm64 build with exec format error.
+FROM python:3.13.15-slim-trixie@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285 AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
