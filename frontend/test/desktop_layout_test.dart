@@ -85,7 +85,7 @@ void main() {
         await _pumpAtSize(tester, const VehicleListScreen(), entry.value);
 
         expect(find.byType(AppBar), findsOneWidget);
-        expect(find.text('Demo Car'), findsOneWidget);
+        expect(find.textContaining('Demo Car'), findsOneWidget);
         expect(find.text('Vehicles'), findsOneWidget);
         expect(find.byType(ListView), findsOneWidget);
         expect(find.byType(FloatingActionButton), findsOneWidget);

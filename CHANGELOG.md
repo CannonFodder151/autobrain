@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-2858)
+- fix(frontend): resolve nested single-quote syntax error in `vehicle_timeline_screen.dart`.
+
 ## [0.3.255] - 2026-09-08
 
 ### Fixed (AUT-2656)
