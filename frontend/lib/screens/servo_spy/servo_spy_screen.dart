@@ -25,24 +25,17 @@ import '../../core/fuel_types.dart';
 import '../../core/geoloc.dart';
 import '../../core/models.dart';
 import 'servo_spy_list_model.dart';
-import 'servo_spy_station_history_screen.dart';
 
 enum _ServoSpyView { map, list }
 
-// AUT-2220/2383: CARTO basemap API key, injected at build time via
-// --dart-define=CARTO_API_KEY=<key>. CARTO raster basemaps require ?key=.
-// flutter_map's BuiltInMapCachingProvider handles disk tile caching.
+// AUT-2220: CARTO basemap API key, injected at build time via
+// --dart-define=CARTO_API_KEY=<key>. CARTO keys are designed to be public
+// (embedded in tile URLs as ?api_key=...). Empty -> key-less public basemap.
+// File-private top-level so both State classes can share them; the param
+// string cannot be `const` because `isEmpty` is not a constant expression.
 const String _cartoApiKey = String.fromEnvironment('CARTO_API_KEY');
-
-/// Compose the CARTO basemap query string from a key.
-///
-/// Empty key -> empty string. Non-empty key -> `?key=<key>` (CARTO's
-/// required parameter name for raster basemaps; `api_key` is silently
-/// ignored, leaving the "API key required" watermark).
-@visibleForTesting
-String cartoKeyParam(String key) => key.isEmpty ? '' : '?key=$key';
-
-final String _cartoKeyParam = cartoKeyParam(_cartoApiKey);
+final String _cartoKeyParam =
+    _cartoApiKey.isEmpty ? '' : '?api_key=$_cartoApiKey';
 
 class ServoSpyScreen extends StatefulWidget {
   const ServoSpyScreen({super.key});
@@ -106,8 +99,8 @@ class _ServoSpyMap extends StatefulWidget {
 class _FuelPriceEntry {
   final String fuelType;
   final double? priceCents; // null = no price
-  final double? costPerKm; // AUT-2053
-  final double? avgFillCost; // AUT-2053
+  final double? costPerKm; // $/km (AUT-2201/2202, null without vehicle_id)
+  final double? avgFillCost; // $ per fill (AUT-2201/2202)
 
   const _FuelPriceEntry({
     required this.fuelType,
@@ -168,13 +161,6 @@ class _MapStation {
       orElse: () => const _FuelPriceEntry(fuelType: ''),
     );
     return p.priceCents;
-  }
-
-  _FuelPriceEntry entryFor(String fuelType) {
-    for (final p in prices) {
-      if (p.fuelType == fuelType) return p;
-    }
-    return const _FuelPriceEntry(fuelType: '');
   }
 }
 
@@ -240,7 +226,6 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
       final current = Vehicle.resolveSelection(vehicles, null);
       _vehicleId = current?.id;
       _selectedFuelType = current?.fuelType;
-      _vehicleId = current?.id; // AUT-2053
 
       _fuelTypes = await fetchFuelTypes(api);
       if (_selectedFuelType == null || !_fuelTypes.contains(_selectedFuelType)) {
@@ -420,7 +405,7 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
         if (_locationDenied)
           Container(
             width: double.infinity,
-            color: Colors.amber.withOpacity(0.15),
+            color: Colors.amber.withValues(alpha: 0.15),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: const Text(
               'Location off — showing stations in the selected region. '
@@ -509,7 +494,7 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
                       margin: const EdgeInsets.all(24),
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: scheme.surface.withOpacity(0.95),
+                        color: scheme.surface.withValues(alpha: 0.95),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Column(
@@ -573,7 +558,7 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
                 right: 0,
                 bottom: 0,
                 child: Container(
-                  color: scheme.scrim.withOpacity(0.6),
+                  color: scheme.scrim.withValues(alpha: 0.6),
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   child: const Text(
                     '© OpenStreetMap contributors © CARTO',
@@ -755,17 +740,13 @@ class _StationSheet extends StatelessWidget {
               contentPadding: EdgeInsets.zero,
               leading: Icon(Icons.local_gas_station, color: scheme.primary),
               title: Text(p.fuelType),
-              subtitle: p.costPerKm != null || p.avgFillCost != null
-                  ? Text(
-                      [
-                        if (p.costPerKm != null)
-                          '\$${p.costPerKm!.toStringAsFixed(3)}/km',
-                        if (p.avgFillCost != null)
-                          'avg fill \$${p.avgFillCost!.toStringAsFixed(2)}',
-                      ].join('  ·  '),
-                      style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
-                    )
-                  : null,
+              subtitle: Text(
+                p.costPerKm != null
+                    ? '\$${p.costPerKm!.toStringAsFixed(3)}/km'
+                        '${p.avgFillCost != null ? '  ·  fill \$${p.avgFillCost!.toStringAsFixed(2)}' : ''}'
+                    : '—',
+                style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+              ),
               trailing: Text(
                 p.priceCents == null
                     ? '—'
@@ -837,7 +818,6 @@ class _ServoSpyListState extends State<_ServoSpyList> {
       final current = Vehicle.resolveSelection(vehicles, null);
       _vehicleId = current?.id;
       _selectedFuelType = current?.fuelType;
-      _vehicleId = current?.id; // AUT-2053
 
       _fuelTypes = await fetchFuelTypes(_api);
       if (_selectedFuelType == null || !_fuelTypes.contains(_selectedFuelType)) {
@@ -892,19 +872,6 @@ class _ServoSpyListState extends State<_ServoSpyList> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
-  }
-
-  void _openHistory(ServoStationRow s) {
-    final stationId = s.id;
-    if (stationId == null || stationId.isEmpty) return;
-    Navigator.of(context, rootNavigator: true).push(
-      MaterialPageRoute(
-        builder: (_) => ServoSpyStationHistoryScreen(
-          stationId: stationId,
-          stationName: s.name,
-        ),
-      ),
-    );
   }
 
   void _openFilter() {
@@ -1078,12 +1045,12 @@ class _ServoSpyListState extends State<_ServoSpyList> {
                             final distLabel = s.distanceKm != null
                                 ? '${s.distanceKm!.toStringAsFixed(1)} km'
                                 : '';
-                            final extras = <String>[
-                              if (s.costPerKm != null)
-                                '\$${s.costPerKm!.toStringAsFixed(3)}/km',
-                              if (s.avgFillCost != null)
-                                'fill \$${s.avgFillCost!.toStringAsFixed(0)}',
-                            ];
+                            final ckmLabel = s.costPerKm != null
+                                ? '\$${s.costPerKm!.toStringAsFixed(3)}/km'
+                                : '—';
+                            final afcLabel = s.avgFillCost != null
+                                ? 'fill \$${s.avgFillCost!.toStringAsFixed(2)}'
+                                : '';
                             return ListTile(
                               leading: CircleAvatar(
                                 backgroundColor: scheme.surfaceContainerHighest,
@@ -1102,11 +1069,21 @@ class _ServoSpyListState extends State<_ServoSpyList> {
                                       ),
                               ),
                               title: Text(s.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-                              subtitle: Text(
-                                [
-                                  distLabel,
-                                  ...extras,
-                                ].where((e) => e.isNotEmpty).join('  ·  '),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(distLabel),
+                                  Text(
+                                    afcLabel.isEmpty
+                                        ? ckmLabel
+                                        : '$ckmLabel  ·  $afcLabel',
+                                    style: TextStyle(
+                                      color: scheme.onSurfaceVariant,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
                               ),
                               trailing: Text(
                                 priceLabel,
