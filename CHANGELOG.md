@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-2656)
+- fix(ci): arm64 build-hosted.yml no longer fails with `exec format error` at the first `RUN` step in `docker/backend/Dockerfile`. The previous `python:3.13-slim@sha256:cc9dffa…` pin was a **single-arch amd64** manifest (annotation `com.docker.official-images.bashbrew.arch: amd64`), so the arm64 runner pulled amd64 layers and every `RUN` died with exit 255 — the build never reached flutter/dart2js. Re-pin to the multi-arch index `python:3.13.15-slim-trixie@sha256:9d2e555…` (resolves to aarch64 on arm64) across backend/ai/worker/market-data Dockerfiles and the trivy scan env; add a pin-guard check that the python base index contains an arm64 manifest.
+
 ## [0.3.258] - 2026-09-09
 
 ### Fixed (AUT-2281)

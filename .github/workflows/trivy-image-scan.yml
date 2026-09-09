@@ -51,7 +51,7 @@ permissions:
 env:
   POSTGRES_IMAGE: 'pgvector/pgvector:pg17@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f'
   NGINX_FRONTEND_IMAGE: 'nginxinc/nginx-unprivileged:stable-alpine@sha256:ee1643aef6b99d1058aa79b74679ba3e63094a98a1144a4326def7bae77d293b'
-  PYTHON_BASE_IMAGE: 'python:3.13-slim@sha256:cc9dffa47c8294ba9bb795a8dfaeb7b76f2b30acade2c52a461a2999d127eb00'
+  PYTHON_BASE_IMAGE: 'python:3.13.15-slim-trixie@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285'
 
 jobs:
   image-scan:
@@ -95,6 +95,24 @@ jobs:
             exit 1
           fi
           echo "OK: python base images are digest-pinned across all Dockerfiles."
+
+      - name: Pin guard — python base must be multi-arch (not single-arch amd64) (AUT-2656)
+        run: |
+          set -euo pipefail
+          # AUT-2656: the old python:3.13-slim@sha256:cc9dffa… pin was a SINGLE-arch
+          # amd64 manifest (bashbrew.arch: amd64). On the arm64 self-hosted runner Docker
+          # pulled amd64 layers and every RUN died with `exec format error`, so the
+          # arm64 build-hosted job never reached dart2js. Reject any regression to that
+          # amd64-only digest; require the multi-arch 3.13.15-slim-trixie index.
+          BAD="$(grep -rn 'cc9dffa47c8294ba9bb795a8dfaeb7b76f2b30acade2c52a461a2999d127eb00' \
+              docker/backend/Dockerfile docker/ai/Dockerfile \
+              docker/worker/Dockerfile market-data/Dockerfile || true)"
+          if [ -n "$BAD" ]; then
+            echo "::error::python base pin is the known amd64-only manifest (cc9dffa…) — use the multi-arch 3.13.15-slim-trixie index (AUT-2656). Offending lines:"
+            printf '%s\n' "$BAD"
+            exit 1
+          fi
+          echo "OK: python base images are multi-arch indexes (no amd64-only digest)."
 
       - name: Scan pinned postgres image (HIGH/CRITICAL, unfixed ignored)
         uses: aquasecurity/trivy-action@v0.36.0

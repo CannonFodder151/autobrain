@@ -1,6 +1,12 @@
 # AutoBrain backend — unified production image (API + AI gateway + Celery worker).
 # AUT-1735: bump off vulnerable python:3.12-slim; pin base by digest.
-FROM python:3.13-slim@sha256:cc9dffa47c8294ba9bb795a8dfaeb7b76f2b30acade2c52a461a2999d127eb00 AS base
+# AUT-2656: the previous digest (cc9dffa…) was a SINGLE-arch amd64 manifest
+# (annotation bashbrew.arch: amd64). On the arm64 self-hosted runner, Docker
+# pulled amd64 layers and every RUN step died with
+# `exec /bin/sh: exec format error` (exit 255), so the arm64 build job never
+# reached flutter/dart2js. Pin the MULTI-ARCH index tag+digest instead:
+# 3.13.15-slim-trixie resolves to aarch64 on arm64 runners.
+FROM python:3.13.15-slim-trixie@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285 AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
