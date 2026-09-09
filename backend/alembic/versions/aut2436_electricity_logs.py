@@ -13,16 +13,10 @@ import sqlalchemy as sa
 from alembic import context, op
 
 revision: str = "aut2436_electricity_logs"
-# Merge revision: at the PR merge-base (b820a86) main exposes TWO heads —
-# a1b2c3d4e5f8 (rego_expiry_days) and aut2375_fuel_history_index — both
-# descending from aut1859_fuel_price_alerts. This down_revision list
-# re-unifies them so `alembic upgrade head` keeps a single resolution path
-# (AUT-702 single-head guard). aut2434_vehicle_powertrain is a non-head
-# ancestor of a1b2c3d4e5f8, so it must NOT be listed here (would fork).
-down_revision: Union[str, Sequence[str], None] = (
-    "a1b2c3d4e5f8",
-    "aut2375_fuel_history_index",
-)
+# Single-parent child of current main head m3rge06 (post-AUT-2677).
+# No merge needed: this migration only adds the electricity_logs table
+# (AUT-702 single-head guard).
+down_revision: Union[str, Sequence[str], None] = "m3rge06"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
