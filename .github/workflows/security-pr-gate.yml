@@ -286,6 +286,9 @@ jobs:
           done < .env.example
           echo "--- .env.ci keys ---"
           cut -d= -f1 .env.ci | sort
+          # docker-compose.prod.yml declares env_file: .env — mirror the stub
+          # so docker compose config can resolve both --env-file and env_file:.
+          cp .env.ci .env
       - name: Compose config diff vs main
         if: steps.detect.outputs.changed != ''
         env:
