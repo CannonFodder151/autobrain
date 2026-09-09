@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Added (AUT-2352)
+- test(frontend): add `frontend/test/app_config_validate_test.dart` — 6 hermetic reachability cases for `AppConfig.validate()` covering 2xx ok, 5xx fail, timeout, connection refused, malformed URL, and `healthz` origin stripping. Per-test isolation via `tearDown` resetting `apiBase` / `lastValidationOk` / `lastValidationError`. Closes AUT-2352.
 
 ## [0.3.256] - 2026-09-09
 
