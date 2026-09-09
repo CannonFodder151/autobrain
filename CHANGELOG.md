@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security (AUT-3104)
+- security(frontend): gate `AuthState.test()` behind a `kDebugMode` check. The constructor previously set `_token = "test-token"` (a known constant) with role `user` and `_freeAccount = false`, bypassing every auth check. It now throws `UnsupportedError` in release builds, is annotated `@visibleForTesting`, and generates a random token per instance. Added `frontend/test/auth_state_test.dart` regression test.
+
 ## [0.3.258] - 2026-09-09
 
 ### Fixed (AUT-2281)
