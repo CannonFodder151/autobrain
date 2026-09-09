@@ -12,7 +12,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Fixed (AUT-2808)
-- docker: merge the Celery worker+beat into the backend container in  (matching the dev compose) and drop the duplicate  block, removing one hosted container.
+- docker: merge the Celery worker+beat into the backend container in `docker-compose.hosted.yml` (matching the dev compose) and drop the duplicate `dongle-server` block, removing one hosted container.
 
 ## [0.3.259] - 2026-09-09
 
