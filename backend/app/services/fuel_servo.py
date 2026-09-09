@@ -66,7 +66,7 @@ def annotate_prices(
         annotate_price(
             p,
             avg_l_per_100km=stats.avg_l_per_100km,
-            avg_litres_per_fill=stats.avg_litres_per_fill,
+            avg_litres_per_fill=stats.avg_fill_litres,
         )
         for p in price_cpls
     ]
@@ -90,7 +90,7 @@ def annotate_station(
         cost_per_km, avg_fill_cost = annotate_price(
             p.price,
             avg_l_per_100km=stats.avg_l_per_100km if stats else None,
-            avg_litres_per_fill=stats.avg_litres_per_fill if stats else None,
+            avg_litres_per_fill=stats.avg_fill_litres if stats else None,
         )
         out_prices.append(
             FuelPriceOut(

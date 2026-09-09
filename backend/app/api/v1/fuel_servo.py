@@ -393,13 +393,12 @@ def _project_price(p: FuelPrice, stats) -> tuple[float | None, float | None]:
     """
     if stats is None:
         return None, None
-    price_per_l = p.price / 100.0  # cents → dollars
     cost_per_km: float | None = None
     avg_fill_cost: float | None = None
     if stats.avg_l_per_100km is not None and stats.avg_l_per_100km > 0:
-        cost_per_km = round(price_per_l * stats.avg_l_per_100km / 100.0, 4)
+        cost_per_km = round(stats.avg_l_per_100km * p.price / 10000, 4)
     if stats.avg_fill_litres is not None and stats.avg_fill_litres > 0:
-        avg_fill_cost = round(price_per_l * stats.avg_fill_litres, 2)
+        avg_fill_cost = round(p.price * stats.avg_fill_litres / 100, 2)
     return cost_per_km, avg_fill_cost
 
 
@@ -409,12 +408,12 @@ def _station_out(
     dist: float | None,
     stats=None,
 ) -> FuelStationOut:
-out_prices: list[FuelPriceOut] = []
+    out_prices: list[FuelPriceOut] = []
     for p in prices:
         cost_per_km, avg_fill_cost = annotate_price(
             p.price,
             avg_l_per_100km=stats.avg_l_per_100km if stats else None,
-            avg_litres_per_fill=stats.avg_litres_per_fill if stats else None,
+            avg_litres_per_fill=stats.avg_fill_litres if stats else None,
         )
         out_prices.append(
             FuelPriceOut(
