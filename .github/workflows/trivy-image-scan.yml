@@ -106,7 +106,7 @@ jobs:
           # amd64-only digest; require the multi-arch 3.13.15-slim-trixie index.
           BAD="$(grep -rn 'cc9dffa47c8294ba9bb795a8dfaeb7b76f2b30acade2c52a461a2999d127eb00' \
               docker/backend/Dockerfile docker/ai/Dockerfile \
-              docker/worker/Dockerfile market-data/Dockerfile .github/workflows/trivy-image-scan.yml || true)"
+              docker/worker/Dockerfile market-data/Dockerfile || true)"
           if [ -n "$BAD" ]; then
             echo "::error::python base pin is the known amd64-only manifest (cc9dffa…) — use the multi-arch 3.13.15-slim-trixie index (AUT-2656). Offending lines:"
             printf '%s\n' "$BAD"
