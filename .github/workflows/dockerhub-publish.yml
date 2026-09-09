@@ -110,7 +110,7 @@ jobs:
           # it. Audit one deduplicated pin list so every package is still scanned
           # exactly once.
           TMPREQ="$(mktemp)"
-          cat backend/requirements.txt ai/requirements.txt | sort -u > "$TMPREQ"
+          { sed -e 's/#.*//' backend/requirements.txt; sed -e 's/#.*//' ai/requirements.txt; } | grep -E '^[A-Za-z]' | sort -u > "$TMPREQ"
           python3 -m pip_audit --disable-pip --no-deps -r "$TMPREQ"
           rm -f "$TMPREQ"
 
