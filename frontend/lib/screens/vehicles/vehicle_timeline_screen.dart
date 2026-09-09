@@ -92,7 +92,7 @@ class _VehicleTimelineScreenState extends State<VehicleTimelineScreen> {
                               title: Text(e.title),
                               subtitle: Text(
                                 '${DateFormat.yMMMd().format(DateTime.parse(e.occurredOn))}'
-                                '${e.odometerKm != null ? ' · ${e.odometerKm} km' : ''}',
+                                "${e.odometerKm != null ? " · ${e.odometerKm} km" : ""}",
                               ),
                               trailing: e.amount != null
                                   ? Text(
