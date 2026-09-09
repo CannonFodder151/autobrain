@@ -183,60 +183,60 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   if (_maxVehicles != null)
-                Card(
-                  color: _atLimit
-                      ? Theme.of(context).colorScheme.errorContainer
-                      : Theme.of(context).colorScheme.surfaceContainerHighest,
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
-                      children: [
-                        Icon(
-                          _atLimit
-                              ? Icons.block
-                              : Icons.directions_car,
-                          color: _atLimit
-                              ? Theme.of(context).colorScheme.error
-                              : Theme.of(context).colorScheme.primary,
+                    Card(
+                      color: _atLimit
+                          ? Theme.of(context).colorScheme.errorContainer
+                          : Theme.of(context).colorScheme.surfaceContainerHighest,
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          children: [
+                            Icon(
+                              _atLimit
+                                  ? Icons.block
+                                  : Icons.directions_car,
+                              color: _atLimit
+                                  ? Theme.of(context).colorScheme.error
+                                  : Theme.of(context).colorScheme.primary,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                _atLimit
+                                    ? 'No vehicle slots left (limit $_maxVehicles). '
+                                        'Ask an administrator to raise your limit.'
+                                    : '$_remaining of $_maxVehicles vehicle '
+                                        'slot${_remaining == 1 ? '' : 's'} remaining',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    color: _atLimit
+                                        ? Theme.of(context).colorScheme.error
+                                        : null),
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            _atLimit
-                                ? 'No vehicle slots left (limit $_maxVehicles). '
-                                    'Ask an administrator to raise your limit.'
-                                : '$_remaining of $_maxVehicles vehicle '
-                                    'slot${_remaining == 1 ? '' : 's'} remaining',
-                            style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                color: _atLimit
-                                    ? Theme.of(context).colorScheme.error
-                                    : null),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
+                  const SizedBox(height: 12),
+                TextFormField(
+                  controller: _nickname,
+                  decoration: const InputDecoration(labelText: 'Nickname'),
+                  validator: (v) => v == null || v.isEmpty ? 'Required' : null,
                 ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _nickname,
-                decoration: const InputDecoration(labelText: 'Nickname'),
-                validator: (v) => v == null || v.isEmpty ? 'Required' : null,
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: _vehicleType,
-                decoration: const InputDecoration(labelText: 'Vehicle type'),
-                items: const [
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: _vehicleType,
+                  decoration: const InputDecoration(labelText: 'Vehicle type'),
+                  items: const [
                   DropdownMenuItem(value: 'car', child: Text('Car')),
                   DropdownMenuItem(value: 'motorcycle', child: Text('Motorcycle')),
-                ],
-                onChanged: (v) => setState(() => _vehicleType = v ?? 'car'),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
+                  ],
+                  onChanged: (v) => setState(() => _vehicleType = v ?? 'car'),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
                   Expanded(
                     child: TextFormField(
                       controller: _rego,
@@ -274,22 +274,22 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                         : const Icon(Icons.search),
                     label: const Text('Lookup'),
                   ),
-                ],
-              ),
-              if (_lookupInfo != null)
-                Padding(
+                  ],
+                ),
+                if (_lookupInfo != null)
+                  Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(_lookupInfo!, style: TextStyle(
                       color: Theme.of(context).colorScheme.primary)),
+                  ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _vin,
+                  decoration: const InputDecoration(labelText: 'VIN'),
                 ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _vin,
-                decoration: const InputDecoration(labelText: 'VIN'),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
+                const SizedBox(height: 12),
+                Row(
+                  children: [
                   Expanded(
                     child: TextFormField(
                       controller: _make,
@@ -303,11 +303,11 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                       decoration: const InputDecoration(labelText: 'Model'),
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
                   Expanded(
                     child: DropdownButtonFormField<int>(
                       value: _year,
@@ -331,64 +331,65 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                       keyboardType: TextInputType.number,
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _engine,
-                decoration: const InputDecoration(labelText: 'Engine'),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _transmission,
-                decoration: const InputDecoration(labelText: 'Transmission'),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _colour,
-                decoration: const InputDecoration(labelText: 'Colour'),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _bodyType,
-                decoration: const InputDecoration(labelText: 'Body type'),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                value: _fuelType != null && _fuelTypes.contains(_fuelType) ? _fuelType : null,
-                decoration: const InputDecoration(
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _engine,
+                  decoration: const InputDecoration(labelText: 'Engine'),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _transmission,
+                  decoration: const InputDecoration(labelText: 'Transmission'),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _colour,
+                  decoration: const InputDecoration(labelText: 'Colour'),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _bodyType,
+                  decoration: const InputDecoration(labelText: 'Body type'),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: _fuelType != null && _fuelTypes.contains(_fuelType) ? _fuelType : null,
+                  decoration: const InputDecoration(
                   labelText: 'Fuel type',
                   hintText: 'Used to pick the default price on map/list',
-                ),
-                items: [
+                  ),
+                  items: [
                   for (final t in _fuelTypes)
                     DropdownMenuItem(value: t, child: Text(t)),
-                ],
-                onChanged: (v) => setState(() => _fuelType = v),
-              ),
-              const SizedBox(height: 12),
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Set as primary vehicle'),
-                value: _isPrimary,
-                onChanged: (v) => setState(() => _isPrimary = v ?? false),
-              ),
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Club registration'),
-                subtitle: const Text(
+                  ],
+                  onChanged: (v) => setState(() => _fuelType = v),
+                ),
+                const SizedBox(height: 12),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Set as primary vehicle'),
+                  value: _isPrimary,
+                  onChanged: (v) => setState(() => _isPrimary = v ?? false),
+                ),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Club registration'),
+                  subtitle: const Text(
                     'Victoria requires a physical paper logbook for '
                     'club-registered vehicles, so the digital logbook is disabled.'),
-                value: _clubReg,
-                onChanged: (v) => setState(() => _clubReg = v ?? false),
-              ),
-              const SizedBox(height: 20),
-              FilledButton(
-                onPressed: _busy || _atLimit ? null : _submit,
-                child: const Text('Save vehicle'),
-              ),
-            ],
-          ),
+                  value: _clubReg,
+                  onChanged: (v) => setState(() => _clubReg = v ?? false),
+                ),
+                const SizedBox(height: 20),
+                FilledButton(
+                  onPressed: _busy || _atLimit ? null : _submit,
+                  child: const Text('Save vehicle'),
+                ),
+              ],
+            ),
+            ),
           ),
         ),
       ),
