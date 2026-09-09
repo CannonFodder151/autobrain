@@ -1,6 +1,7 @@
 /// Global auth + navigation state (ChangeNotifier via provider).
 library;
 
+import 'dart:math' show Random;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -19,12 +20,29 @@ class AuthState extends ChangeNotifier {
     _restore();
   }
 
+  /// Gate for the test-only constructor. Throws [UnsupportedError] whenever the
+  /// build is not a debug build, so a stray `AuthState.test()` instantiation
+  /// can never carry a hardcoded token into a release build.
+  static void _requireDebugMode() {
+    if (kDebugMode) return;
+    throw UnsupportedError(
+      'AuthState.test() is for tests only and must not be used in release '
+      'builds. Use a fake AuthState subclass or the real AuthState() instead.',
+    );
+  }
+
+  /// Test-only constructor. Throws [UnsupportedError] in release builds so a
+  /// stray instantiation can never carry a hardcoded token into production.
+  /// The token is randomised per instance (not a constant) so it cannot be
+  /// reused across test runs.
+  @visibleForTesting
   AuthState.test({
     required ApiClient api,
   })  : _client = api,
-        _token = 'test-token',
+        _token = _randomTestToken(),
         _role = 'user',
         _freeAccount = false {
+    _requireDebugMode();
     notifyListeners();
   }
 
@@ -245,6 +263,10 @@ class AuthState extends ChangeNotifier {
     }
     notifyListeners();
   }
+
+  /// Random per-instance test token — never a constant that could leak into a
+  /// release build or be reused across test runs.
+  static String _randomTestToken() => 'test-${Random().nextInt(0xffffffff).toRadixString(16).padLeft(8, "0")}';
 
   ApiClient _anonymous() => ApiClient(null);
 
