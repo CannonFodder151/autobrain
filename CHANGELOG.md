@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-3149)
+- fix(ai): clamp `odometer.run()` fallback results through `_clamp()`, enforcing 0..9,999,999 bounds, numeric coercion, and the `rule-based-fallback` model. Added regression coverage for bounds, coercion, and empty OCR output.
+
 ## [0.3.259] - 2026-09-09
 
 ### Fixed (AUT-2656)

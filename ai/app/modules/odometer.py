@@ -15,7 +15,7 @@ async def run(payload: dict) -> dict:
     text = ""
     if payload.get("content_base64") and payload.get("content_type") in _IMAGE_TYPES:
         text = _tesseract_text(payload["content_base64"])
-    return _odometer_fallback(text)
+    return _clamp(_odometer_fallback(text))
 
 
 def _clamp(result: dict) -> dict:

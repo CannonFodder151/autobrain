@@ -174,9 +174,20 @@ def test_odometer_fallback() -> None:
 
     out = _odometer_fallback("odometer 123456 km")
     assert out["odometer_km"] == 123456
-    clamped = _clamp({"odometer_km": "88000", "confidence": 0.9})
+    clamped = _clamp({"odometer_km": "88000", "confidence": "0.9"})
     assert clamped["odometer_km"] == 88000
     assert clamped["confidence"] == 0.9
+    assert clamped["model"] == "rule-based-fallback"
+    assert _clamp({"odometer_km": 10_000_000})["odometer_km"] == 9_999_999
+    assert _clamp({"odometer_km": -1})["odometer_km"] == 0
+
+
+@pytest.mark.asyncio
+async def test_odometer_run_clamps_fallback() -> None:
+    from app.modules import odometer
+
+    out = await odometer.run({})
+    assert out == {"odometer_km": None, "confidence": 0.0, "model": "rule-based-fallback"}
 
 
 def test_resale_validate_clamps() -> None:
