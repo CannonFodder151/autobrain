@@ -6,13 +6,18 @@ set -u
 
 # AUT-1242-C3: run AI gateway (:8001) and market-data scraper (:8000)
 # as two uvicorn processes in one container.
+# AUT-3174: pass "--reload" in dev so both processes auto-reload on changes.
+RELOAD=""
+if [ "${1:-}" = "--reload" ]; then
+  RELOAD="--reload"
+fi
 
 echo "[ai] starting market-data scraper on :8000"
-(cd /app/market-data && exec uvicorn main:app --host 0.0.0.0 --port 8000) &
+(cd /app/market-data && exec uvicorn main:app --host 0.0.0.0 --port 8000 $RELOAD) &
 MD_PID=$!
 
 echo "[ai] starting AI gateway on :8001"
-uvicorn app.main:app --host 0.0.0.0 --port 8001 &
+uvicorn app.main:app --host 0.0.0.0 --port 8001 $RELOAD &
 AI_PID=$!
 
 trap 'kill $MD_PID $AI_PID 2>/dev/null || true' INT TERM

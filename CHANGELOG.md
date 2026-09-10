@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed (AUT-3174)
+- infra(docker): dev `ai` service now runs the full `docker/ai/entrypoint.sh` with `--reload` on both the market-data scraper (:8000) and AI gateway (:8001), closing the dev parity gap with prod/hosted. Both ports are published and `market-data/` is bind-mounted for hot reload.
+
 ## [0.3.261] - 2026-09-10
 
 ### Fixed (AUT-3154)
