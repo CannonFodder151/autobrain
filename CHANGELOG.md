@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-3170)
+- fix(backend): `DiagnosticOut` (`backend/app/schemas/diagnostic.py`) now exposes `status: str` and `resolved_at: datetime | None`, matching the `Diagnostic` model fields. `GET /vehicles/{id}/diagnostics` returns open + resolved entries with their state, so AC6 ("Diagnostics: open + resolved entries present") is verifiable and the frontend can render resolved state.
+
 ### Fixed (AUT-3149)
 - fix(ai): clamp `odometer.run()` fallback results through `_clamp()`, enforcing 0..9,999,999 bounds, numeric coercion, and the `rule-based-fallback` model. Added regression coverage for bounds, coercion, and empty OCR output.
 
