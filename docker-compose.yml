@@ -115,10 +115,17 @@ services:
       # AB-INFRA-006: gateway auth stays on in dev; backend sends the shared key.
       AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:?AI_GATEWAY_API_KEY must be set in .env}
     ports:
+      - "127.0.0.1:8000:8000"
       - "127.0.0.1:8001:8001"
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+    # AUT-3174: dev runs the full entrypoint (market-data :8000 + gateway :8001)
+    # with --reload on both, matching prod/hosted parity. Previously the command
+    # overrode only the gateway, so the market-data scraper did not run in dev.
+    command: ["sh", "-c", "/entrypoint.sh --reload"]
     volumes:
       - ./ai:/app
+      # AUT-3174: dev bind-mount hides the image-copied market-data dir, so
+      # mount the repo's market-data/ live for hot reload parity.
+      - ./market-data:/app/market-data
 
   frontend:
     build:
