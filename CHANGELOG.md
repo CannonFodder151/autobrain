@@ -11,17 +11,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-3447)
+- feat(backend): WebAuthn passkey authentication — registration & authentication endpoints, DB schema, validation. Accepts credential creation options and verifies assertions. Endpoints: POST /api/v1/auth/passkey/register/begin, POST /api/v1/auth/passkey/register/complete, POST /api/v1/auth/passkey/authenticate/begin, POST /api/v1/auth/passkey/authenticate/complete, GET /api/v1/auth/passkey/list, DELETE /api/v1/auth/passkey/{credential_id}.
+
+### Changed (AUT-3172)
+- infra(ci): retire the standalone `autobrain-worker` image build (AUT-3153 follow-up). Removed the `worker` leg from every `for svc in backend worker ai frontend` loop in `.github/workflows/build-hosted.yml` (build, per-arch verify, manifest assembly, digest capture) and `.github/workflows/dockerhub-publish.yml` (amd64 build + manifest assembly), dropped the `WORKER_DIGEST` env + `worker=...` arg from the compose-pin step, and removed the `worker` pin from `scripts/update-compose-pins.py`. CI no longer publishes the unused multi-arch worker image. The `docker/worker/Dockerfile` stays on disk as a reference for the security-scan workflows; `infra/k8s/worker.yaml` already runs the Celery worker+beat from `autobrain-backend:latest` and is unchanged.
+
+### Fixed (AUT-3189)
+- infra(env): declare `FUEL_SA_API_KEY` and `FUEL_SA_ENABLED` in `.env.example` so hosted operators can provision the SA SAFPIS feed referenced by `docker-compose.hosted.yml`.
+
 ## [0.3.266] - 2026-09-11
 
-<<<<<<< HEAD
 ### Security (AUT-2060)
 - Bumped `python:3.13-slim` base image digest from `7ce4b6d...` to `cc9dffa...` (2026-08-31 Docker Hub latest) in `docker/backend/Dockerfile`, `docker/ai/Dockerfile`, `docker/worker/Dockerfile`, and `market-data/Dockerfile`. New digest ships `libssl3t64` 3.5.7-1~deb13u2, resolving CVE-2026-14456 (OpenSSL QUIC DoS) and related HIGH CVEs. Updated `PYTHON_BASE_IMAGE` env var in `.github/workflows/trivy-image-scan.yml`. Removed resolved CVE-2026-14456 suppression from `.trivyignore`.
 
-## [0.3.245] - 2026-09-06
-=======
 ### Added (AUT-3251)
 - feat(backend,frontend): add `powertrain` field (ICE/HEV/PHEV/EV) to vehicle schemas, models, and add/edit screens — fixes missing EV feature wiring.
->>>>>>> origin/main
 
 ## [0.3.265] - 2026-09-11
 
@@ -129,7 +134,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Security (AUT-2060)
 - Bumped `python:3.13-slim` base image digest from `7ce4b6d...` to `cc9dffa...` (2026-08-31 Docker Hub latest) in `docker/backend/Dockerfile`, `docker/ai/Dockerfile`, `docker/worker/Dockerfile`, and `market-data/Dockerfile`. New digest ships `libssl3t64` 3.5.7-1~deb13u2, resolving CVE-2026-14456 (OpenSSL QUIC DoS) and related HIGH CVEs. Updated `PYTHON_BASE_IMAGE` env var in `.github/workflows/trivy-image-scan.yml`. Removed resolved CVE-2026-14456 suppression from `.trivyignore`.
->>>>>>> a32d58f (security(AUT-2060): bump python:3.13-slim + nginx frontend digests, fix image-scan)
 
 ## [0.3.243] - 2026-09-06
 ### Fixed (AUT-2656)

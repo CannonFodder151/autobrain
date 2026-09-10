@@ -49,9 +49,11 @@ reads configuration exclusively from environment variables.
 - **ai** (`docker/ai/Dockerfile`): entrypoint runs two uvicorn processes —
   market-data scraper on :8000 and AI gateway on :8001 (AUT-1242/C3).
 - **worker** (`docker/worker/Dockerfile`): standalone production image from
-  `backend/app`; retained for k8s/legacy consumers, **not used by the hosted
-  stack** (AUT-3153). CMD `celery -A app.workers.celery_app:celery_app worker -B -l
-  info --concurrency=2`.
+  `backend/app`. Retained on disk only for k8s/legacy reference; CI no longer
+  builds or publishes it (AUT-3153 + AUT-3172). The hosted stack and k8s
+  `infra/k8s/worker.yaml` both run the Celery worker+beat from the
+  `autobrain-backend` image (`autobrain-backend:latest`), not the standalone
+  worker image.
 
 ## Healthchecks
 
