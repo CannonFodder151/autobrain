@@ -12,13 +12,13 @@ Plus an end-to-end test that the module is registered in
 auto-discovers it.
 """
 
-import os
+import pytest
 
-os.environ.setdefault("AI_ROUTER_URL", "http://your-9router-instance:port")
-os.environ.setdefault("AI_GATEWAY_API_KEY", "test-gateway-key")
-os.environ.setdefault("AI_GATEWAY_AUTH_DISABLED", "1")
 
-import pytest  # noqa: E402
+@pytest.fixture(autouse=True)
+def _ai_test_env(monkeypatch):
+    monkeypatch.setenv("AI_ROUTER_URL", "http://your-9router-instance:port")
+
 
 from app.fallbacks.advisor import (  # noqa: E402
     advisor_fallback,
