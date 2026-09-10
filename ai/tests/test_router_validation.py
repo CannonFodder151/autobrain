@@ -1,10 +1,16 @@
 """Tests for per-module router response schema validation (AUT-141, AUT-1185)."""
 
-import os
+import pytest
 
-os.environ.setdefault("AI_ROUTER_URL", "http://your-9router-instance:port")
 
-import pytest  # noqa: E402
+@pytest.fixture(autouse=True)
+def _ai_test_env(monkeypatch):
+    # AUT-3152: pin the router to the placeholder so router_enabled() is False
+    # and every module path uses its deterministic fallback. Per-test isolation
+    # via monkeypatch prevents env leaks across the pytest process.
+    monkeypatch.setenv("AI_ROUTER_URL", "http://your-9router-instance:port")
+
+
 from unittest.mock import AsyncMock, patch  # noqa: E402
 
 from app.router_client import _cap_payload, _matches_type, _validate_nested, enhance  # noqa: E402

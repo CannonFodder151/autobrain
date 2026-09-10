@@ -11,7 +11,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-## [0.3.258] - 2026-09-09
+### Fixed (AUT-3154)
+- fix(docs): repair vector-store doc drift — all 5 embedding entity tables (`diagnostics`, `service_records`, `modifications`, `receipts`, `social_issue_posts`) now referenced consistently across `docs/Engineering/ai/vector.md`, `docs/Engineering/database-schema.md`, `docs/Engineering/container-architecture.md`, and `docs/Engineering/architecture.md`. Cross-references that pointed at the non-existent `docs/ai/vector.md` / `docs/README.md` / `postgres-pg17-upgrade.md` now resolve to the canonical `docs/Engineering/ai/vector.md`, `docs/index.md`, and `docs/Deployment-and-Infrastructure/server-migration.md`. Migration comments in `g7h8i9j0k1l2` / `h1i2j3k4l5m6` corrected (pg16 → pg17 image; IVFFlat-claim → HNSW-claim) and `vector.md`'s migration reference table now lists all three vector migrations (`g7h8i9j0k1l2`, `h1i2j3k4l5m6`, `u1v2w3x4y5z6`) with the verified single-head chain (`m3rge06`).
+
+### Fixed (AUT-3152)
+- fix(ai/tests): isolate test env globals. `ai/tests/test_car_check.py`, `test_advisor.py`, `test_fallbacks.py`, `test_parts_guide.py`, `test_router_validation.py`, `test_gateway_security.py`, and `test_social_image.py` previously set `AI_ROUTER_URL` / `AI_GATEWAY_API_KEY` via module-level `os.environ.setdefault`, leaking `AI_GATEWAY_AUTH_DISABLED=1` across the pytest process and producing 2 false 401s in `test_gateway_security.py` during combined runs. All module-level env mutation is now done through per-test `monkeypatch.setenv`/`delenv` autouse fixtures; `test_gateway_security.py` additionally clears `AI_GATEWAY_AUTH_DISABLED` so its 401 assertions hold regardless of run order. Verified: `pytest ai/tests` passes 109/109 both clean (`-u` env) and combined.
+
+## [0.3.260] - 2026-09-10
 
 ### Fixed (AUT-2281)
 - fix(backend): `cost_per_km` divisor `/100` → `/10000` in `_project_price` (`app/api/v1/fuel_servo.py:399`) so the result is **$/km** not cents/km. The old code pre-divided `price` by 100 then divided again — double conversion. Also fixed `avg_litres_per_fill` → `avg_fill_litres` field-name mismatch in `_station_out` (`app/api/v1/fuel_servo.py:417`) and `annotate_station`/`annotate_prices` (`app/services/fuel_servo.py:69,93`); corrected an `IndentationError` in `_station_out`; updated frozen assertions in `tests/test_aut2201_station_annotations.py`. All 8 tests in `test_aut2201_station_annotations.py` + `test_servo_projection_aut2053.py` pass.

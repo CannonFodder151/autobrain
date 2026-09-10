@@ -1,8 +1,12 @@
 """Tests for the social-image module (deterministic branded card path)."""
 
-import os
+import pytest
 
-os.environ.setdefault("AI_ROUTER_URL", "http://your-9router-instance:port")
+
+@pytest.fixture(autouse=True)
+def _ai_test_env(monkeypatch):
+    monkeypatch.setenv("AI_ROUTER_URL", "http://your-9router-instance:port")
+
 
 import base64  # noqa: E402
 from unittest.mock import AsyncMock, patch  # noqa: E402
