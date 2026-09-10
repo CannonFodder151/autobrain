@@ -10,7 +10,7 @@
 # (the backend image already runs Celery worker+beat — see docker/backend/Dockerfile
 # CMD and docker-compose.prod.yml). The hosted stack drops from 9 to 8 containers.
 # The separate autobrain-worker image is no longer referenced here; its build is
-# retired in a follow-up (see the container-consolidation migration checklist).
+# retired from CI (AUT-3172).
 # The fuel-poll tasks that used to live in the worker now run in the backend
 # container, so FUEL_*_FILE secrets moved from the worker block to backend env.
 
@@ -289,8 +289,8 @@ services:
   # AUT-3153: the standalone `worker` service has been merged into `backend`
   # (see the backend command above — Celery worker+beat now run as a
   # background process in the same container, matching docker-compose.prod.yml).
-  # The dedicated autobrain-worker image is retained for k8s/legacy consumers
-  # but is no longer referenced by this hosted stack.
+  # The dedicated autobrain-worker image is no longer built by CI (AUT-3172);
+  # docker/worker/Dockerfile is retained on disk only for reference.
 
   # AUT-1673: firmware release + distribution service for OBD ESP32 dongles.
   # Owns firmware manifests, MinIO signed blob URLs, the serial-number

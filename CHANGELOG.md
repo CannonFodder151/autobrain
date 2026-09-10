@@ -11,6 +11,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed (AUT-3172)
+- infra(ci): retire the standalone `autobrain-worker` image build (AUT-3153 follow-up). Removed the `worker` leg from every `for svc in backend worker ai frontend` loop in `.github/workflows/build-hosted.yml` (build, per-arch verify, manifest assembly, digest capture) and `.github/workflows/dockerhub-publish.yml` (amd64 build + manifest assembly), dropped the `WORKER_DIGEST` env + `worker=...` arg from the compose-pin step, and removed the `worker` pin from `scripts/update-compose-pins.py`. CI no longer publishes the unused multi-arch worker image. The `docker/worker/Dockerfile` stays on disk as a reference for the security-scan workflows; `infra/k8s/worker.yaml` already runs the Celery worker+beat from `autobrain-backend:latest` and is unchanged.
+
+### Fixed (AUT-3189)
+- infra(env): declare `FUEL_SA_API_KEY` and `FUEL_SA_ENABLED` in `.env.example` so hosted operators can provision the SA SAFPIS feed referenced by `docker-compose.hosted.yml`.
+
 ## [0.3.261] - 2026-09-10
 
 ### Fixed (AUT-3154)

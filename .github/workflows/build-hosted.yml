@@ -133,10 +133,9 @@ jobs:
           CACHE_TO: ${{ format('type=gha,scope=build-hosted-{0},mode=max', matrix.arch) }}
         run: |
           set -euo pipefail
-          for svc in backend worker ai frontend; do
+          for svc in backend ai frontend; do
             case "$svc" in
               backend)  ctx=.;        df=docker/backend/Dockerfile;   args="";;
-              worker)   ctx=.;        df=docker/worker/Dockerfile;     args="";;
               ai)       ctx=.;        df=docker/ai/Dockerfile;         args="";;
               frontend) ctx=.;        df=docker/frontend/Dockerfile;   args="--build-arg API_BASE_URL=${API_BASE_URL} --build-arg WS_BASE_URL=${WS_BASE_URL}";;
             esac
@@ -169,7 +168,7 @@ jobs:
             arm64) norm="aarch64";;
             *) echo "::error::unknown arch $ARCH"; exit 2;;
           esac
-          for svc in backend worker ai frontend; do
+          for svc in backend ai frontend; do
             img="ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}-${ARCH}"
             echo "==> verifying $img"
             got="$(docker run --rm --platform linux/${ARCH} "$img" uname -m)"
@@ -205,7 +204,7 @@ jobs:
           TAG: ${{ github.event.inputs.tag || 'hosted' }}
         run: |
           set -euo pipefail
-          for svc in backend worker ai frontend; do
+          for svc in backend ai frontend; do
             for arch in amd64 arm64; do
               img="ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}-${arch}"
               if ! docker buildx imagetools inspect "$img" >/dev/null 2>&1; then
@@ -222,7 +221,7 @@ jobs:
           SHA_TAG: hosted-sha-${{ github.sha }}
         run: |
           set -euo pipefail
-          for svc in backend worker ai frontend; do
+          for svc in backend ai frontend; do
             echo "==> manifest autobrain-${svc}:${TAG}"
             # AUT-1533/F4: every build also publishes an immutable per-commit
             # tag so prod/dev can pin distinct digests instead of drifting on
@@ -239,7 +238,7 @@ jobs:
           # `--raw` outputs the bare manifest JSON bytes; sha256sum produces
           # the content-addressed digest (Docker-Content-Digest) that compose
           # pins reference as `@sha256:...`.
-          for svc in backend worker ai frontend; do
+          for svc in backend ai frontend; do
             d="$(docker buildx imagetools inspect "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}" --raw | sha256sum | awk '{print $1}')"
             echo "${svc}_digest=sha256:${d}" >> "$GITHUB_OUTPUT"
           done
@@ -253,7 +252,6 @@ jobs:
     env:
       TAG: ${{ github.event.inputs.tag || 'hosted' }}
       BACKEND_DIGEST: ${{ needs.build-manifest.outputs.backend_digest }}
-      WORKER_DIGEST: ${{ needs.build-manifest.outputs.worker_digest }}
       AI_DIGEST: ${{ needs.build-manifest.outputs.ai_digest }}
       FRONTEND_DIGEST: ${{ needs.build-manifest.outputs.frontend_digest }}
       PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
@@ -271,7 +269,6 @@ jobs:
           set +e
           ./scripts/update-compose-pins.py \
             backend="${BACKEND_DIGEST}" \
-            worker="${WORKER_DIGEST}" \
             ai="${AI_DIGEST}" \
             frontend="${FRONTEND_DIGEST}"
           code=$?

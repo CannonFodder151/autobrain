@@ -81,7 +81,12 @@ If the merged backend fails health or task execution:
 - **Retire the standalone `autobrain-worker` image build** from
   `.github/workflows/build-hosted.yml` and `.github/workflows/dockerhub-publish.yml`
   (the hosted stack no longer references it; k8s already uses
-  `autobrain-backend:latest`).
+  `autobrain-backend:latest`). **Done (AUT-3172):** the `worker` leg was
+  removed from every `for svc in backend worker ai frontend` loop in both
+  workflows (build, verify, manifest assembly, digest capture, and the
+  compose-pin env), and `scripts/update-compose-pins.py` no longer carries a
+  `worker` pin. The `docker/worker/Dockerfile` remains on disk solely as a
+  reference for the security-scan workflows.
 - **Consolidate MinIO init into the `minio` entrypoint for `docker-compose.prod.yml`
   and `docker-compose.yml`** (they still run the one-shot `/init-minio.sh` from
   the backend command).
