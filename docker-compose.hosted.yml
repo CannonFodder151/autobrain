@@ -188,16 +188,6 @@ services:
       FUEL_QLD_API_KEY_FILE: /run/secrets/fuel_qld_api_key
       # AUT-2610: SA SAFPIS ingester (AUT-2406). Same Informed Sources subscriber
       # token as QLD; secret file provisioned via seed-secrets.sh.
-      # AUT-1858: petrol price polls (AUT-1813/AUT-1932/AUT-2218/AUT-2610) now run
-      # as Celery tasks inside the backend container (worker merged in by AUT-3153),
-      # so the keys live here, not on a separate worker service.
-      FUEL_NSW_API_KEY_FILE: /run/secrets/fuel_nsw_api_key
-      FUEL_NSW_API_SECRET_FILE: /run/secrets/fuel_nsw_api_secret
-      FUEL_NSW_ENABLED: "true"
-      FUEL_VIC_API_KEY_FILE: /run/secrets/fuel_vic_api_key
-      FUEL_VIC_API_SECRET_FILE: /run/secrets/fuel_vic_api_secret
-      FUEL_VIC_ENABLED: "true"
-      FUEL_QLD_API_KEY_FILE: /run/secrets/fuel_qld_api_key
       FUEL_SA_API_KEY_FILE: /run/secrets/fuel_sa_api_key
       FUEL_SA_ENABLED: "true"
       AI_GATEWAY_API_KEY_FILE: /run/secrets/ai_gateway_api_key
