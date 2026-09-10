@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-3162)
+- demo seed now populates `fuel_stations` + `fuel_prices` (+ `FuelPriceArbitration` rows) so Servo Spy (`/fuel/stations`, `/fuel/stations/{id}/history`, `/fuel/types`, `/fuel/brands`) is no longer empty on the demo instance. 10 deterministic Aussie stations near (-37.8, 145.0) with 91/95/98/E10/Diesel/LPG prices within the last 24h; seeded RNG `Random(3162)`, no 9Router/AI in the seed path. `reset_demo` wipes demo stations + prices + arbitration before re-seed (idempotent per reset cycle). Regression test `tests/test_demo_fuel_seed.py`.
+
 ## [0.3.259] - 2026-09-09
 
 ### Fixed (AUT-2656)
