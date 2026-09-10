@@ -14,6 +14,7 @@ from app.core.storage import ensure_bucket, upload_object
 from app.db.session import SessionLocal
 from app.models.diagnostic import Diagnostic
 from app.models.fuel import FuelLog
+from app.models.fuel_station import FuelPrice, FuelPriceArbitration, FuelStation
 from app.models.logbook import LogEntry
 from app.models.mod import Modification
 from app.models.notification import NotificationDelivery, NotificationPreference
@@ -193,6 +194,24 @@ async def reset_demo() -> None:
                 await db.execute(delete(SocialIssueFlag).where(SocialIssueFlag.post_id.in_(demo_post_ids)))
                 await db.execute(delete(SocialIssueComment).where(SocialIssueComment.post_id.in_(demo_post_ids)))
                 await db.execute(delete(SocialIssuePost).where(SocialIssuePost.id.in_(demo_post_ids)))
+            # Demo fuel stations + their prices + per-day arbitration rows
+            # (AUT-3162): the Servo Spy seed is demo-scoped (source='demo'),
+            # so it must be wiped on every reset_demo cycle and re-seeded fresh.
+            from sqlalchemy import delete as _delete  # noqa: F811
+
+            demo_stations = list((await db.scalars(
+                select(FuelStation.id).where(FuelStation.source == "demo")
+            )).all())
+            if demo_stations:
+                await db.execute(_delete(FuelPriceArbitration).where(
+                    FuelPriceArbitration.station_id.in_(demo_stations)
+                ))
+                await db.execute(_delete(FuelPrice).where(
+                    FuelPrice.station_id.in_(demo_stations)
+                ))
+                await db.execute(_delete(FuelStation).where(
+                    FuelStation.id.in_(demo_stations)
+                ))
             await db.execute(delete(User).where(User.id == user.id))
             await db.commit()
             logger.info("demo_reset_deleted", user=user.id)
@@ -471,6 +490,7 @@ async def _seed_demo_data(db, user_id: str) -> None:
 
     await _seed_demo_social(db, user_id)
     await _seed_demo_issues(db, user_id)
+    await _seed_demo_fuel_stations(db)
 
 
 async def _seed_demo_issues(db, user_id: str) -> None:
@@ -718,4 +738,69 @@ async def _seed_demo_social(db, user_id: str) -> None:
                 file_key=key,
                 width=640,
                 height=420,
+            ))
+
+
+async def _seed_demo_fuel_stations(db) -> None:
+    """Seed deterministic demo fuel stations + prices (AUT-3162)."""
+
+    import random
+
+    rng = random.Random(3162)
+    now = datetime.now(timezone.utc)
+    stations = [
+        ("Ampol", "Ampol - Melbourne CBD", "123 Swanston St, Melbourne VIC 3000", -37.8102, 144.9631),
+        ("BP", "BP - Carlton", "456 Lygon St, Carlton VIC 3053", -37.7989, 144.9675),
+        ("Caltex", "Caltex - Southbank", "789 St Kilda Rd, Southbank VIC 3006", -37.8267, 144.9743),
+        ("Woolworths", "Woolworths - Docklands", "101 Harbour Esplanade, Docklands VIC 3008", -37.8142, 144.9423),
+        ("11-Seven", "11-Seven - Richmond", "222 Bridge Rd, Richmond VIC 3121", -37.8183, 144.9952),
+        ("Shell", "Shell - Fitzroy", "333 Gertrude St, Fitzroy VIC 3065", -37.8054, 144.9841),
+        ("Coles Express", "Coles Express - North Melbourne", "444 Victoria St, North Melbourne VIC 3051", -37.7967, 144.9529),
+        ("Ampol", "Ampol - Prahran", "555 Chapel St, Prahran VIC 3181", -37.8501, 145.0021),
+        ("BP", "BP - Brunswick", "666 Sydney Rd, Brunswick VIC 3056", -37.7634, 144.9603),
+        ("Caltex", "Caltex - Footscray", "777 Irving St, Footscray VIC 3011", -37.7994, 144.9017),
+    ]
+
+    base_prices = {
+        "91": (1.79, 0.08),
+        "95": (1.94, 0.08),
+        "98": (2.12, 0.08),
+        "E10": (1.72, 0.08),
+        "Diesel": (1.88, 0.08),
+        "LPG": (0.92, 0.04),
+    }
+
+    for idx, (brand, name, address, lat, lon) in enumerate(stations, start=1):
+        station = FuelStation(
+            source="demo",
+            source_id=f"demo-{idx:03d}",
+            brand=brand,
+            name=name,
+            address=address,
+            lat=lat,
+            lon=lon,
+            updated_at=now,
+        )
+        db.add(station)
+        await db.flush()
+
+        for fuel_type, (base, spread) in base_prices.items():
+            price = round(base + rng.uniform(-spread, spread), 3)
+            effective_at = now - timedelta(minutes=rng.randint(5, 1435))
+            db.add(FuelPrice(
+                station_id=station.id,
+                fuel_type=fuel_type,
+                price=price,
+                effective_at=effective_at,
+                source_id="demo",
+                arbitration_score=1.0,
+            ))
+            db.add(FuelPriceArbitration(
+                station_id=station.id,
+                fuel_type=fuel_type,
+                day=now.date(),
+                source_id="demo",
+                price=price,
+                arbitration_score=1.0,
+                candidate_count=1,
             ))
