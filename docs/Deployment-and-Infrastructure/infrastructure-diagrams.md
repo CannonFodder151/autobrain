@@ -26,7 +26,7 @@ graph TD
     Backend --> PostgresH[(PostgreSQL)]
     Backend --> RedisH[(Redis)]
     Backend --> MinIOH[(MinIO)]
-    Worker[worker :celery] -->|broker| RedisH
+    Backend -->|Celery worker + beat in-container (AUT-3153)| RedisH
     AI --> Router[9Router]
 ```
 

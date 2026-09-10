@@ -21,6 +21,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Added (AUT-3162)
 - feat(backend): seed deterministic demo fuel stations + prices into demo data for Servo Spy (/fuel/stations, /fuel/stations/{id}/history, /fuel/types, /fuel/brands). Adds 10 Melbourne-area stations across Ampol, BP, Caltex, Woolworths, 11-Seven, Shell, Coles Express with 91/95/98/E10/Diesel/LPG prices, source='demo' + arbitration rows, idempotent per reset_demo cycle.
 
+### Changed (AUT-3153)
+- infra(docker): merge the standalone Celery `worker` service into `backend` in `docker-compose.hosted.yml` (Phase 1 pillar a). The backend image already carries the worker dependencies and its default CMD runs API + Celery worker+beat in one container, matching `docker-compose.prod.yml`; the hosted stack drops from 9 to 8 long-running containers. The worker's fuel-poll env (`FUEL_NSW/VIC/QLD/SA_*_FILE`) moved to the backend service. Added `scripts/check-compose-config.py` fuel/dongle secret-file coverage and `scripts/seed-secrets.sh` mappings. Added `docs/Deployment-and-Infrastructure/container-consolidation-migration.md` migration checklist and refreshed the hosted topology/stack tables in `docs/Engineering/container-architecture.md` and `docs/Deployment-and-Infrastructure/deployment-guide.md`.
+
 ## [0.3.259] - 2026-09-09
 
 ### Fixed (AUT-2656)
