@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-3154)
+- fix(docs): repair vector-store doc drift — all 5 embedding entity tables (`diagnostics`, `service_records`, `modifications`, `receipts`, `social_issue_posts`) now referenced consistently across `docs/Engineering/ai/vector.md`, `docs/Engineering/database-schema.md`, `docs/Engineering/container-architecture.md`, and `docs/Engineering/architecture.md`. Cross-references that pointed at the non-existent `docs/ai/vector.md` / `docs/README.md` / `postgres-pg17-upgrade.md` now resolve to the canonical `docs/Engineering/ai/vector.md`, `docs/index.md`, and `docs/Deployment-and-Infrastructure/server-migration.md`. Migration comments in `g7h8i9j0k1l2` / `h1i2j3k4l5m6` corrected (pg16 → pg17 image; IVFFlat-claim → HNSW-claim) and `vector.md`'s migration reference table now lists all three vector migrations (`g7h8i9j0k1l2`, `h1i2j3k4l5m6`, `u1v2w3x4y5z6`) with the verified single-head chain (`m3rge06`).
+
 ## [0.3.260] - 2026-09-10
 
 ### Added (AUT-3162)

@@ -61,11 +61,13 @@ reads configuration exclusively from environment variables.
 ## Vectorisation (pgvector)
 
 Semantic search uses pgvector columns, installed by migrations
-(`alembic: g7h8i9j0k1l2`, `h1i2j3k4l5m6`). See `docs/ai/vector.md` for full schema and embedding pipeline.
+(`alembic: g7h8i9j0k1l2`, `h1i2j3k4l5m6`, `u1v2w3x4y5z6`). See
+`docs/Engineering/ai/vector.md` for full schema and embedding pipeline.
 
 - **Extension/columns:** `CREATE EXTENSION vector`; `embedding vector(1536)`
-  columns on `diagnostics`, `service_records`, `modifications`, `receipts`
-  (dimension from `EMBEDDING_DIMENSION`, matching `text-embedding-3-small`).
+  columns on `diagnostics`, `service_records`, `modifications`, `receipts`,
+  and `social_issue_posts` (dimension from `EMBEDDING_DIMENSION`, matching
+  `text-embedding-3-small`).
 - **Index:** `USING hnsw (embedding vector_cosine_ops)` — HNSW chosen over
   IVFFlat because it needs no list tuning/training on small per-user tables.
 - **Embed-on-create:** API routes enqueue `queue_embedding` (Celery →
