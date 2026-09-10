@@ -10,6 +10,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Fixed (AUT-2858)
+- fix(frontend): resolve nested single-quote syntax error in `vehicle_timeline_screen.dart`. Inner string literal switched from single quotes to double quotes so the Dart parser no longer fails during Docker build.
+
+
 
 ## [0.3.260] - 2026-09-10
 
