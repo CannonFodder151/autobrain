@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-2152)
+- infra(docker): refresh the stale `autobrain-backend:hosted-arm64` digest in `docker-compose.hosted.yml` to `sha256:23757a0c736755a0b2a758f96cb8cec125c1402ccfc1575c2b17f6cff6712292` so the repo matches the running Hosted stack.
+
 ## [0.3.261] - 2026-09-10
 
 ### Fixed (AUT-3154)
