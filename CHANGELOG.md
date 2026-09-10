@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-3021)
+- fix(deploy): `scripts/sync-compose-to-portainer.py` `pullImage` now defaults to `false` so a CI compose-sync no longer triggers an immediate Hosted redeploy (use `--pull-image` for the nightly upgrade path).
+
 ## [0.3.261] - 2026-09-10
 
 ### Fixed (AUT-3154)
