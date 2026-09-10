@@ -34,8 +34,8 @@ Runs on every push to `main`, every pull request, and manual dispatch:
    platform on the matching self-hosted runner and pushes a per-arch tag
    (`autobrain-<svc>:<tag>-<arch>`). **publish-manifest** then runs
    `docker buildx imagetools create` to assemble the multi-arch manifest lists
-   for `autobrain-backend`, `autobrain-worker`, `autobrain-ai`,
-   `autobrain-frontend`, `autobrain-market-data` for both `latest` and `hosted`
+    for `autobrain-backend`, `autobrain-ai`,
+    `autobrain-frontend`, `autobrain-market-data` for both `latest` and `hosted`
    tags (plus the `default`-tier frontend). The frontend build
    is baked with `API_BASE_URL=https://hosted.autobrainservice.app/api/v1` and
    `WS_BASE_URL=wss://hosted.autobrainservice.app/ws`.

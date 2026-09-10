@@ -7,7 +7,7 @@ matches the freshly published digests. Exits 0 if anything changed, 1 if no
 change needed.
 
 Usage: python3 scripts/update-compose-pins.py \
-        backend=sha256:... worker=sha256:... ai=sha256:... frontend=sha256:... \
+        backend=sha256:... ai=sha256:... frontend=sha256:... \
         [--file docker-compose.hosted.yml]
 """
 import argparse
@@ -18,7 +18,6 @@ from pathlib import Path
 # service -> repo prefix as pinned in docker-compose.hosted.yml
 PIN_MAP = {
     "backend":  "ghcr.io/cannonfodder151/autobrain-backend",
-    "worker":   "ghcr.io/cannonfodder151/autobrain-worker",
     "ai":       "ghcr.io/cannonfodder151/autobrain-ai",
     "frontend": "ghcr.io/cannonfodder151/autobrain-frontend",
 }
