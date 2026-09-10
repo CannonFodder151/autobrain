@@ -12,9 +12,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added (AUT-3162)
-- feat(backend): deterministic demo fuel-station seed now populates fuel_stations, fuel_prices and fuel_price_arbitrations with 10 Melbourne-area stations across Ampol, BP, Caltex, Woolworths, 11-Seven, Shell and Coles Express, each carrying 91/95/98/E10/Diesel/LPG prices within the last 24h. reset_demo wipes demo-scoped fuel data before re-seeding (idempotent). Adds backend/tests/test_demo_fuel_seed.py regression coverage (3 tests).
+- feat(backend): seed deterministic demo fuel stations + prices into demo data for Servo Spy (/fuel/stations, /fuel/stations/{id}/history, /fuel/types, /fuel/brands). Adds 10 Melbourne-area stations across Ampol, BP, Caltex, Woolworths, 11-Seven, Shell, Coles Express with 91/95/98/E10/Diesel/LPG prices, source='demo' + arbitration rows, idempotent per reset_demo cycle.
 
-## [0.3.259] - 2026-09-09 - 2026-09-09
+## [0.3.259] - 2026-09-09
 
 ### Fixed (AUT-2656)
 - fix(ci): arm64 build-hosted.yml no longer fails with `exec format error` at the first `RUN` step in `docker/backend/Dockerfile`. The previous `python:3.13-slim@sha256:cc9dffa…` pin was a **single-arch amd64** manifest (annotation `com.docker.official-images.bashbrew.arch: amd64`), so the arm64 runner pulled amd64 layers and every `RUN` died with exit 255 — the build never reached flutter/dart2js. Re-pin to the multi-arch index `python:3.13.15-slim-trixie@sha256:9d2e555…` (resolves to aarch64 on arm64) across backend/ai/worker/market-data Dockerfiles and the trivy scan env; add a pin-guard check that the python base index contains an arm64 manifest.
