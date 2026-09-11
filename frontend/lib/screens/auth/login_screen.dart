@@ -219,11 +219,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                       ),
-                      ],
-                      ),
-                    ),
-                  ),
-                  const Text(
+                      const SizedBox(height: 20),
+                      const Text(
                     'AutoBrain',
                     style: TextStyle(
                       color: Colors.white,
@@ -410,6 +407,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 child: const Text('New here? Create a free account'),
                               ),
                             ],
+                           ],
                           ],
                         ),
                       ),
@@ -432,13 +430,17 @@ class _LoginScreenState extends State<LoginScreen> {
                     'Free tier available · Self-hosted accounts are admin-managed',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.white60, fontSize: 12),
+                   ),
+                    ],
                   ),
-             ),
-           ),
-         ),
-       ),
-     );
-   }
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   static Uint8List _dataUriBytes(String dataUri) {
     final comma = dataUri.indexOf(',');
