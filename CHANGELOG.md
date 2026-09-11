@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-3228)
+- fix(tests): prevent `pumpAndSettle` timeout in desktop layout golden tests by adding `ConnectivityService.testMode` flag and `setOnline()` setter; tests now disable the connectivity-plus stream listener and force online state, allowing all 6 golden tests (1280/1440/1920 × HomeScreen + VehicleListScreen) to settle.
+
 ## [0.3.263] - 2026-09-11
 
 ### Fixed (AUT-3225)
