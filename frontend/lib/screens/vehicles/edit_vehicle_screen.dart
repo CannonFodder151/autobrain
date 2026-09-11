@@ -374,6 +374,7 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
           ),
         ),
       ),
+      ),
     );
   }
 }
