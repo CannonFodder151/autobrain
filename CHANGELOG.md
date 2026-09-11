@@ -14,7 +14,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [0.3.265] - 2026-09-11
 
 ### Fixed (AUT-2683)
-- fix(frontend): replace `MediaQuery.withClampedTextScaling` with `MediaQuery` + `TextScaler.linear` for Flutter 3.38.2 compatibility, and remove extra closing bracket in `login_screen.dart` introduced by AUT-3219.
+- fix(frontend): fix login_screen.dart widget tree — remove premature Column close after logo Container, add missing inner Column children close, and fix closing bracket nesting (introduced by AUT-3219).
 
 ## [0.3.264] - 2026-09-11
 
