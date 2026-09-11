@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.265] - 2026-09-11
+
 ### Fixed (AUT-2683)
 - fix(frontend): replace `MediaQuery.withClampedTextScaling` with `MediaQuery` + `TextScaler.linear` for Flutter 3.38.2 compatibility, and remove extra closing bracket in `login_screen.dart` introduced by AUT-3219.
 
