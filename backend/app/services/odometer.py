@@ -16,9 +16,12 @@ from datetime import date, datetime
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.logging import get_logger
 from app.models.logbook import LogEntry
 from app.models.service import ServiceRecord
 from app.models.vehicle import Vehicle
+
+logger = get_logger(__name__)
 
 _VALID_SERVICE_TYPES = frozenset({
     "scheduled", "tyre_rotation", "air_filter", "brake_fluid", "coolant",
@@ -129,7 +132,11 @@ async def _ensure_next_service(db: AsyncSession, vehicle: Vehicle) -> None:
             for s in history
         ],
     }
-    result = await predict_service(payload)
+    try:
+        result = await predict_service(payload)
+    except Exception:
+        logger.warning("_ensure_next_service: predict_service call failed", exc_info=True)
+        result = None
     if not result:
         return
     svc_type = str(result.get("service_type") or "scheduled")
