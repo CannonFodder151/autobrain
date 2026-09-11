@@ -434,14 +434,12 @@ class _LoginScreenState extends State<LoginScreen> {
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.white60, fontSize: 12),
                   ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    ));
-  }
+             ),
+           ),
+         ),
+       ),
+     );
+   }
 
   static Uint8List _dataUriBytes(String dataUri) {
     final comma = dataUri.indexOf(',');

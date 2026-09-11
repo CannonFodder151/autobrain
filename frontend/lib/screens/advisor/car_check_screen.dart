@@ -260,7 +260,6 @@ class _CarCheckScreenState extends State<CarCheckScreen> {
                   if (deltaAmt != null) _Chip(label: 'Delta: \$${deltaAmt!.abs().toInt()} ${deltaAmt! < 0 ? "(under)" : "(over)"}'),
                 ],
                 _Chip(label: 'Sample: ${d.sampleSize}'),
-                _Chip(label: d.model ?? 'rule-based'),
               ],
             ),
             const SizedBox(height: 16),

@@ -158,11 +158,9 @@ class _AutoBrainAppState extends State<AutoBrainApp> {
         final body = banner == null
             ? content
             : Column(children: [banner, Expanded(child: content)]);
-        final wrapped = MediaQuery(
-          data: MediaQuery.of(context).copyWith(
-            maxTextScaleFactor: 1.5,
-            minTextScaleFactor: 1.0,
-          ),
+        final wrapped = MediaQuery.withClampedTextScaling(
+          maxScale: 1.5,
+          minScale: 1.0,
           child: body,
         );
         if (!(kDebugMode || kProfileMode)) {
