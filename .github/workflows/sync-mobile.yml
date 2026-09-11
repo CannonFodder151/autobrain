@@ -173,32 +173,35 @@ jobs:
           # consistency); dispatch then 422s "No ref found". Poll with
           # linear backoff (5–60s per retry, up to 12 retries) before giving
           # up so the pinned tag is released (AUT-451, AUT-1652).
-          for attempt in $(seq 1 12); do
-            http_code=$(curl -s -o /tmp/dispatch_resp.txt -w '%{http_code}' -X POST \
-              -H "Authorization: token $GH_TOKEN" \
-              -H "Accept: application/vnd.github.v3+json" \
-              https://api.github.com/repos/CannonFodder151/autobrain-mobile/actions/workflows/release-mobile.yml/dispatches \
-              -d "{\"ref\":\"$tag\",\"inputs\":{\"version\":\"$tag\"}}" 2>&1)
-            out=$(cat /tmp/dispatch_resp.txt 2>/dev/null || echo "")
-            if [ "$http_code" = "204" ]; then
-              echo "dispatched mobile release $tag"
-              exit 0
-            fi
-            echo "dispatch attempt $attempt/12 failed (HTTP $http_code): $out"
-            # Rate limit (403) — wait for window to reset then retry
-            if echo "$out" | grep -qi 'rate limit'; then
-              echo "::warning::rate limit hit during dispatch — waiting for reset (attempt $attempt/12)"
-              sleep $(( attempt * 5 ))
-              continue
-            fi
-            # 422 "No ref found" — tag not yet visible (eventual consistency)
-            if echo "$out" | grep -qi 'No ref found'; then
-              sleep 5
-              continue
-            fi
-            # Any other error is unexpected — fail fast
-            echo "::error::$out"
-            exit 1
-          done
-          echo "::error::could not dispatch mobile release $tag — retries exhausted"
-          exit 1
+          dispatch_workflow() {
+            local workflow="$1"
+            for attempt in $(seq 1 12); do
+              http_code=$(curl -s -o /tmp/dispatch_resp.txt -w '%{http_code}' -X POST \
+                -H "Authorization: token $GH_TOKEN" \
+                -H "Accept: application/vnd.github.v3+json" \
+                "https://api.github.com/repos/CannonFodder151/autobrain-mobile/actions/workflows/${workflow}/dispatches" \
+                -d "{\"ref\":\"$tag\",\"inputs\":{\"version\":\"$tag\"}}" 2>&1)
+              out=$(cat /tmp/dispatch_resp.txt 2>/dev/null || echo "")
+              if [ "$http_code" = "204" ]; then
+                echo "dispatched $workflow $tag"
+                return 0
+              fi
+              echo "dispatch $workflow attempt $attempt/12 failed (HTTP $http_code): $out"
+              if echo "$out" | grep -qi 'rate limit'; then
+                echo "::warning::rate limit hit during $workflow dispatch — waiting for reset (attempt $attempt/12)"
+                sleep $(( attempt * 5 ))
+                continue
+              fi
+              if echo "$out" | grep -qi 'No ref found'; then
+                sleep 5
+                continue
+              fi
+              echo "::error::$out"
+              return 1
+            done
+            echo "::error::could not dispatch $workflow $tag — retries exhausted"
+            return 1
+          }
+
+          dispatch_workflow "release-mobile.yml"
+          dispatch_workflow "release-ios.yml"
