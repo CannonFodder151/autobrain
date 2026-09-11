@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-3225)
+- fix(tests): add `sqflite_common_ffi` init to desktop layout tests — resolves `databaseFactory not initialized` error when running `flutter test` on desktop/CI environments.
+
 ## [0.3.262] - 2026-09-11
 
 ### Fixed (AUT-2683)
