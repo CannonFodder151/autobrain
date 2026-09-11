@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-2683)
+- fix(frontend): replace `onReorderItem` with `onReorder` in `edit_build_screen.dart`. `ReorderableListView.builder` does not expose `onReorderItem` in Flutter 3.38.2, causing the amd64 Docker build to fail and blocking the Docker Hub `:latest` multi-arch publish.
+
 ## [0.3.261] - 2026-09-10
 
 ### Fixed (AUT-3154)
