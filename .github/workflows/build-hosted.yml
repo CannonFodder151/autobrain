@@ -149,6 +149,7 @@ jobs:
             docker buildx build --platform linux/${ARCH} --push \
               "${cache_from_args[@]}" \
               --cache-to   "${CACHE_TO}" \
+              --pull \
               -t "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}-${ARCH}" \
               ${args} -f "${df}" "${ctx}"
           done
@@ -172,6 +173,12 @@ jobs:
           for svc in backend worker ai frontend; do
             img="ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}-${ARCH}"
             echo "==> verifying $img"
+            # Force-pull from the registry so the verify step always tests
+            # the freshly-pushed image, not a stale local copy that the
+            # self-hosted runner may have cached from a previous (possibly
+            # tainted) build.
+            docker rmi "$img" 2>/dev/null || true
+            docker pull --platform linux/${ARCH} "$img"
             got="$(docker run --rm --platform linux/${ARCH} "$img" uname -m)"
             if [ "$got" != "$norm" ]; then
               echo "::error::$img reports arch=$got, expected $norm — refusing to assemble manifest"
