@@ -43,6 +43,7 @@ dev_dependencies:
   flutter_launcher_icons: ^0.14.1
   flutter_secure_storage_platform_interface: ^2.0.3
   geolocator_platform_interface: ^4.2.8
+  sqflite_common_ffi: ^2.3.3
 
 flutter:
   uses-material-design: true
