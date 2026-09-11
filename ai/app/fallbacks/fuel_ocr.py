@@ -14,7 +14,7 @@ def _num(s) -> float | None:
 
 def _fuel_receipt_fallback(text: str) -> dict:
     litres = price_pl = total = None
-    m = re.search(r"(\d{1,3}(?:[.,]\d{2})?)\s*(?:L|LT|Litres?|Litros)\b", text, re.IGNORECASE)
+    m = re.search(r"(\d{1,3}(?:[.,]\d{0,2})?)\s*(?:L|LT|Litres?|Litros)\b", text, re.IGNORECASE)
     if m:
         litres = _num(m.group(1))
     m = re.search(r"(\d+[.,]\d{1,3})\s*(?:/L|c/L|per\s*litre)", text, re.IGNORECASE)
