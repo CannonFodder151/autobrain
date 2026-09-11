@@ -119,6 +119,18 @@ jobs:
           fi
           echo "==> runner arch OK: $got ($want)"
 
+      - name: Clear buildx builder cache (arm64 only)
+        if: matrix.arch == 'arm64'
+        # AUT-2656: the self-hosted arm64 runner retains stale amd64 layer blobs
+        # from prior builds. Even with --pull (AUT-2998) and per-arch GHA cache
+        # scoping (AUT-2097), buildx can resolve base images from the local
+        # builder cache instead of the registry, producing arm64 manifests that
+        # ship amd64 binaries (exec format error on the Oracle VM). Prune the
+        # full local builder cache before each arm64 build to prevent this.
+        run: |
+          echo "==> clearing local buildx builder cache (arm64)"
+          docker buildx prune -a -f || true
+
       - name: Build and push images (linux/${{ matrix.arch }})
         env:
           TAG: ${{ github.event.inputs.tag || 'hosted' }}
