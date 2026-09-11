@@ -13,6 +13,30 @@ if TYPE_CHECKING:
 _IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/tiff"}
 
 
+def _compute_otsu_threshold(img: "Image.Image") -> int:
+    """Compute the Otsu threshold from the image histogram.
+
+    Uses numpy for a single-pass implementation. Falls back to 128 if
+    the histogram is empty or uniform (e.g. a blank image).
+    """
+    import numpy as np
+
+    hist = np.array(img.histogram(), dtype=np.float64)
+    total = hist.sum()
+    if total == 0:
+        return 128
+    prob = hist / total
+    cumsum = np.cumsum(prob)
+    cummean = np.cumsum(prob * np.arange(256))
+    global_mean = cummean[-1]
+    variance = np.zeros(256)
+    mask = (cumsum > 0) & (cumsum < 1)
+    variance[mask] = (global_mean * cumsum[mask] - cummean[mask]) ** 2 / (
+        cumsum[mask] * (1 - cumsum[mask])
+    )
+    return int(np.argmax(variance))
+
+
 def _preprocess_for_ocr(raw: bytes) -> Image.Image:
     """Cheap, deterministic pre-processing that makes tesseract read phone
     photos of receipts (low-contrast, skew, small text) far more reliably.
@@ -25,8 +49,8 @@ def _preprocess_for_ocr(raw: bytes) -> Image.Image:
     img = Image.open(io.BytesIO(raw)).convert("L")
     img = ImageOps.autocontrast(img)
     img = img.resize((img.width * 2, img.height * 2), Image.Resampling.LANCZOS)
-    # Otsu threshold to a clean black/white image.
-    img = img.point(lambda p: 0 if p < 128 else 255)
+    threshold = _compute_otsu_threshold(img)
+    img = img.point(lambda p, t=threshold: 0 if p < t else 255)
     return img
 
 
