@@ -61,7 +61,10 @@ async def sync_odometer(
     target = max(prev, candidate)
     vehicle.odometer_km = target
     if target > prev and vehicle.auto_suggest_service:
-        await suggest_due_service(db, vehicle)
+        try:
+            await suggest_due_service(db, vehicle)
+        except Exception:
+            pass  # best-effort: never block the fuel save for a service suggestion
     return target > prev
 
 
