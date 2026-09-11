@@ -11,12 +11,19 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 
 /// Process-wide singleton. Widgets listen via [isOnline] or [addListener].
-class ConnectivityService {
+class ConnectivityService {static bool testMode = false;
   ConnectivityService._();
   static final instance = ConnectivityService._();
 
   bool _online = true;
   bool get isOnline => _online;
+
+  /// Allow tests to force a specific connectivity state.
+  void setOnline(bool value) {
+    if (_online == value) return;
+    _online = value;
+    for (final cb in Set.of(_listeners)) cb();
+  }
 
   final Set<VoidCallback> _listeners = {};
 
@@ -24,6 +31,7 @@ class ConnectivityService {
   void removeListener(VoidCallback cb) => _listeners.remove(cb);
 
   Future<void> init() async {
+    if (testMode) return;
     await _check();
     Connectivity().onConnectivityChange.listen((_) => _check());
   }
