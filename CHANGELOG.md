@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-3251)
+- feat(backend,frontend): add `powertrain` field (ICE/HEV/PHEV/EV) to vehicle schemas, models, and add/edit screens — fixes missing EV feature wiring.
+
 ## [0.3.265] - 2026-09-11
 
 ### Fixed (AUT-2683)
