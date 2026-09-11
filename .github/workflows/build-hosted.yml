@@ -119,6 +119,17 @@ jobs:
           fi
           echo "==> runner arch OK: $got ($want)"
 
+      - name: Clear buildx cache (arm64 only)
+        if: matrix.arch == 'arm64'
+        # AUT-2656: the self-hosted arm64 runner retains stale amd64 layer blobs
+        # from prior builds. Even with per-arch GHA cache scoping (AUT-2097),
+        # buildx can resolve base images from local layer cache instead of the
+        # registry, producing arm64 manifests with amd64 nginx binaries. Clear
+        # the local builder cache before each arm64 build to prevent this.
+        run: |
+          echo "==> clearing local buildx builder cache"
+          docker buildx prune -a -f || true
+
       - name: Build and push images (linux/${{ matrix.arch }})
         env:
           TAG: ${{ github.event.inputs.tag || 'hosted' }}
@@ -146,7 +157,7 @@ jobs:
             if [ -n "${CACHE_FROM}" ]; then
               cache_from_args=(--cache-from "${CACHE_FROM}")
             fi
-            docker buildx build --platform linux/${ARCH} --push \
+            docker buildx build --platform linux/${ARCH} --push --pull \
               "${cache_from_args[@]}" \
               --cache-to   "${CACHE_TO}" \
               -t "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}-${ARCH}" \
