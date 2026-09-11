@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.264] - 2026-09-11
+
 ### Fixed (AUT-3219)
 - fix(frontend): migrate `connectivity_plus` to 6.x API (`Connectivity()` constructor, `result != ConnectivityResult.none`), replace deprecated `MediaQuery.withClampedTextScaling` with `MediaQuery.textScalerOf`, and fix Dart parse errors (unbalanced parentheses) in `signup_screen.dart`, `login_screen.dart`, `add_vehicle_screen.dart`, and `edit_vehicle_screen.dart`.
 
