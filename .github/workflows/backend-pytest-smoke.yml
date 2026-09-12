@@ -20,7 +20,7 @@ concurrency:
 jobs:
   pytest-smoke:
     name: pytest — model metadata + alembic heads
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: backend
