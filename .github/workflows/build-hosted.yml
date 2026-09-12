@@ -203,6 +203,11 @@ jobs:
 
   build-manifest:
     needs: build
+    outputs:
+      backend_digest: ${{ steps.digest.outputs.backend_digest }}
+      worker_digest: ${{ steps.digest.outputs.worker_digest }}
+      ai_digest: ${{ steps.digest.outputs.ai_digest }}
+      frontend_digest: ${{ steps.digest.outputs.frontend_digest }}
     if: github.event_name != 'pull_request'
     runs-on: [self-hosted, linux, x64, vm2]
     permissions:
