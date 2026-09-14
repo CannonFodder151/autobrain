@@ -64,10 +64,11 @@ def clean_samples(samples: list | None) -> list[_Sample] | None:
 def parse_board_csv(text: str) -> list[dict]:
     """Parse a board CSV dump into GPS samples.
 
-    Accepted schema: `epoch,...,lat,lon` — first field is the epoch seconds,
-    the last two fields are raw NEO-8M lat/lon as degrees x10^7 integers.
-    `...` is any number of intermediate columns (voltage, RPM, etc.) which are
-    ignored. Rows with a `0,0` fix and non-numeric/garbage rows are skipped.
+    Accepted schema: `epoch,rpm,speed,coolant,throttle,odo_km,ev_mode,lat,lon` or
+    `epoch,...,lat,lon` — first field is the epoch seconds, the last two fields
+    are raw NEO-8M lat/lon as degrees x10^7 integers. Intermediate EV columns
+    (soc_pct, pack_v, pack_a, pack_temp_c, odo_km, ev_mode) are ignored.
+    Rows with a `0,0` fix and non-numeric/garbage rows are skipped.
 
     Returns samples ready to store: `[{"t": int, "lat": float, "lon": float}]`.
     """

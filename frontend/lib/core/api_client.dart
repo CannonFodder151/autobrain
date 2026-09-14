@@ -3,6 +3,7 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show SocketException, TlsException, HandshakeException, HttpException;
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -217,16 +218,7 @@ class ApiClient {
     } on TimeoutException catch (_) {
       if (shouldCache) return _fallbackToCache(path, query);
       rethrow;
-    } on SocketException catch (_) {
-      if (shouldCache) return _fallbackToCache(path, query);
-      rethrow;
-    } on TlsException catch (_) {
-      if (shouldCache) return _fallbackToCache(path, query);
-      rethrow;
-    } on HandshakeException catch (_) {
-      if (shouldCache) return _fallbackToCache(path, query);
-      rethrow;
-    } on HttpException catch (_) {
+    } on Exception catch (_) {
       if (shouldCache) return _fallbackToCache(path, query);
       rethrow;
     } catch (e) {

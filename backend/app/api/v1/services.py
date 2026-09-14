@@ -102,7 +102,7 @@ async def export(
             headers={"Content-Disposition": f'attachment; filename="service-history-{vehicle.id}.csv"'},
         )
     if fmt == "pdf":
-        pdf = export_service_history_pdf(records, label)
+        pdf = export_service_history_pdf(records, label, vehicle.rego or "")
         return Response(
             content=pdf,
             media_type="application/pdf",

@@ -6,3 +6,10 @@ pydantic==2.13.4
 httpx==0.28.1
 playwright==1.62.0
 playwright-stealth==2.0.3
+
+# AUT-1189: transitive floor pins for known-CVE packages. Without these,
+# image builds can resolve to older vulnerable versions if an upstream
+# constraint drifts. Mirrors the pins in backend/requirements.txt.
+idna>=3.15            # PYSEC-2026-215 / GHSA-65pc-fj4g-8rjx (CVE 3.x<3.15)
+pycryptodome>=3.19.1  # PYSEC-2026-1811 / GHSA-j225-cvw7-qrx7 (CVE 3.x<3.19.1)
+pygments>=2.20        # PYSEC-2023-117 + PYSEC-2026-2987 (CVEs 2.x<2.20)

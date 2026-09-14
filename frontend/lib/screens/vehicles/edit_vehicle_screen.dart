@@ -38,6 +38,7 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
   bool _lookingUp = false;
   String? _lookupInfo;
   String? _fuelType;
+  String _powertrain = 'ICE';
   List<String> _fuelTypes = defaultFuelTypes;
 
   @override
@@ -61,6 +62,7 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
     _clubReg = v.clubReg;
     _autoSuggest = v.autoSuggestService;
     _fuelType = v.fuelType;
+    _powertrain = v.powertrain;
     _loadFuelTypes();
   }
 
@@ -147,6 +149,7 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
         'club_reg': _clubReg,
         'auto_suggest_service': _autoSuggest,
         'fuel_type': _fuelType,
+        'powertrain': _powertrain,
       });
       if (mounted) Navigator.pop(context);
     } catch (e) {
@@ -192,12 +195,12 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-              TextFormField(
-                controller: _nickname,
-                decoration: const InputDecoration(labelText: 'Nickname'),
-                validator: (v) => v == null || v.isEmpty ? 'Required' : null,
-              ),
-              const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _nickname,
+                    decoration: const InputDecoration(labelText: 'Nickname'),
+                    validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 value: _vehicleType,
                 decoration: const InputDecoration(labelText: 'Vehicle type'),
@@ -327,6 +330,18 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
+                value: _powertrain,
+                decoration: const InputDecoration(labelText: 'Powertrain'),
+                items: const [
+                  DropdownMenuItem(value: 'ICE', child: Text('ICE (Petrol/Diesel)')),
+                  DropdownMenuItem(value: 'HEV', child: Text('HEV (Hybrid)')),
+                  DropdownMenuItem(value: 'PHEV', child: Text('PHEV (Plug-in Hybrid)')),
+                  DropdownMenuItem(value: 'EV', child: Text('EV (Electric)')),
+                ],
+                onChanged: (v) => setState(() => _powertrain = v ?? 'ICE'),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
                 value: _fuelType != null && _fuelTypes.contains(_fuelType) ? _fuelType : null,
                 decoration: const InputDecoration(
                   labelText: 'Fuel type',
@@ -374,6 +389,7 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 }

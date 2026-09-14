@@ -28,7 +28,7 @@ class OfflineCache {
   static final OfflineCache instance = OfflineCache._();
 
   Database? _db;
-  Future<void>? _opening;
+  Future<Database>? _opening;
 
   /// In-memory mirror of the most recent reads. Bounded to keep memory
   /// pressure off — the SQLite table is the source of truth; this is just
@@ -49,9 +49,9 @@ class OfflineCache {
       _db = d;
       _opening = null;
       return d;
-    }).catchError((_) {
+    }).catchError((e) {
       _opening = null;
-      rethrow;
+      throw e;
     });
     try {
       return await _opening!;

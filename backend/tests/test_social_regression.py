@@ -24,6 +24,7 @@ import pytest_asyncio
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from PIL import Image
+from PIL import ImageOps
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
@@ -207,6 +208,34 @@ def test_upload_accepts_heic_photos():
     img = Image.open(io.BytesIO(webp))
     assert img.format == "WEBP"
     assert img.size == (1600, 900)
+
+
+def test_upload_bakes_exif_orientation_aut1946():
+    """Phone photos carry an EXIF Orientation tag (e.g. iPhone portrait = 6)
+    while the raw pixels stay rotated the other way. Browsers and Flutter
+    // Image.network respect EXIF when present, but webp has no EXIF
+    // metadata, so without baking the orientation in the stored photo
+    // displays sideways (AUT-1946)."""
+    import io
+    import struct
+
+    # Build a JPEG whose raw pixels are 1600x900, then prepend an APP1 EXIF
+    # segment declaring Orientation=6 (rotate 90 CW). Pillow's exif_transpose
+    # then rotates the image 90 degrees; the webp stored on disk has the
+    # rotated pixels and no EXIF, so every viewer displays it correctly.
+    src = Image.new("RGB", (1600, 900), (10, 20, 30))
+    exif = src.getexif()
+    exif[0x0112] = 6
+    exif_bytes = exif.tobytes()
+    buf = io.BytesIO()
+    src.save(buf, format="JPEG", quality=80)
+    jpeg = buf.getvalue()
+    app1 = b"\xFF\xE1" + struct.pack(">H", len(exif_bytes) + 2) + exif_bytes
+    jpeg_with_orientation = jpeg[:2] + app1 + jpeg[2:]
+
+    webp = media_mod.compress_to_webp(jpeg_with_orientation, "image/jpeg")
+    out = Image.open(io.BytesIO(webp))
+    assert out.size == (900, 1600), f"orientation not baked; got {out.size}"
 
 
 def test_upload_rejects_decompression_bomb():

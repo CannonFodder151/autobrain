@@ -65,9 +65,23 @@ def export_service_history_csv(records: list, label: str) -> bytes:
     return b"\xef\xbb\xbf" + buf.getvalue().encode("utf-8")
 
 
-def export_service_history_pdf(records: list, label: str) -> bytes:
+WHITE_STYLE = None
+
+
+def _get_white_style():
+    global WHITE_STYLE
+    if WHITE_STYLE is None:
+        base = getSampleStyleSheet()["BodyText"]
+        WHITE_STYLE = base.clone("WhiteHeader")
+        WHITE_STYLE.textColor = colors.white
+        WHITE_STYLE.fontName = "Helvetica-Bold"
+    return WHITE_STYLE
+
+
+def export_service_history_pdf(records: list, label: str, rego: str = "") -> bytes:
+    title = f"Service History — {label} — {rego}" if rego else f"Service History — {label}"
     return _pdf_table(
-        title=f"Service History — {label}",
+        title=title,
         header=["Date", "Odometer (km)", "Type", "Workshop", "Cost", "Items"],
         rows=[
             [str(r.service_date), str(r.odometer_km), r.service_type,
@@ -89,9 +103,10 @@ def export_build_sheet_csv(mods: list, label: str) -> bytes:
     return b"\xef\xbb\xbf" + buf.getvalue().encode("utf-8")
 
 
-def export_build_sheet_pdf(mods: list, label: str) -> bytes:
+def export_build_sheet_pdf(mods: list, label: str, rego: str = "") -> bytes:
+    title = f"Build Sheet — {label} — {rego}" if rego else f"Build Sheet — {label}"
     return _pdf_table(
-        title=f"Build Sheet — {label}",
+        title=title,
         header=["Date", "Name", "Category", "Brand", "Cost"],
         rows=[
             [str(m.install_date or ""), m.name, m.category, m.brand or "", f"{m.cost:,.2f}"]
@@ -106,12 +121,12 @@ def _pdf_table(title: str, header: list[str], rows: list[list]) -> bytes:
     styles = getSampleStyleSheet()
     story = [Paragraph(title, styles["Title"]), Spacer(1, 12)]
 
-    def cell(text: str) -> Paragraph:
-        # Paragraphs wrap text and stay within the page; escape XML specials.
+    def cell(text: str, *, bold: bool = False) -> Paragraph:
         safe = str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        return Paragraph(safe, styles["BodyText"])
+        style = _get_white_style() if bold else styles["BodyText"]
+        return Paragraph(safe, style)
 
-    data = [[cell(h) for h in header]] + [[cell(c) for c in row] for row in rows]
+    data = [[cell(h, bold=True) for h in header]] + [[cell(c) for c in row] for row in rows]
     table = Table(data, repeatRows=1, colWidths=None)
     table.setStyle(
         TableStyle(

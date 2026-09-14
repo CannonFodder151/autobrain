@@ -142,6 +142,7 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
     final auth = context.watch<AuthState>();
     final isDemo = auth.isDemo;
     final isPremium = auth.premium;
+    final isDesktop = context.isDesktop;
     final pending = _invites.where((i) => i['status'] == 'pending').toList();
     return Scaffold(
       appBar: AppBar(title: const Text('Vehicles')),
@@ -162,7 +163,7 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView(
-                padding: const EdgeInsets.all(16),
+                padding: EdgeInsets.all(isDesktop ? 12 : 16),
                 children: [
                   StaleHint(
                     isStale: _stale,
@@ -177,14 +178,14 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
                           if (pending.isNotEmpty) ...[
                             Text('Vehicle invites',
                                 style: Theme.of(context).textTheme.titleMedium),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 6),
                             for (final i in pending) _InviteCard(
                               invite: i,
                               busy: _busyInvite == i['id'],
                               onAccept: () => _respond(i['id'] as String, 'accept'),
                               onDeny: () => _respond(i['id'] as String, 'deny'),
                             ),
-                            const SizedBox(height: 16),
+                            SizedBox(height: isDesktop ? 12 : 16),
                           ],
                           for (final v in _vehicles)
                             Card(
@@ -200,8 +201,9 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
                                         children: [
                                           Icon(v.isShared
                                               ? Icons.group
-                                              : Icons.directions_car),
-                                          const SizedBox(width: 12),
+                                              : Icons.directions_car,
+                                              size: isDesktop ? 20 : null),
+                                          SizedBox(width: isDesktop ? 8 : 12),
                                           Expanded(
                                             child: Column(
                                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -209,7 +211,8 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
                                                 Text(v.dropdownLabel,
                                                     style: Theme.of(context)
                                                         .textTheme
-                                                        .titleMedium),
+                                                        .titleMedium
+                                                        ?.copyWith(fontSize: isDesktop ? 14 : null)),
                                                 Text(
                                                   '${v.make ?? ''} ${v.model ?? ''} ${v.year ?? ''}'
                                                   '${v.bodyType != null ? ' · ${v.bodyType}' : ''}'
@@ -218,7 +221,8 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
                                                       .trim(),
                                                   style: Theme.of(context)
                                                       .textTheme
-                                                      .bodySmall,
+                                                      .bodySmall
+                                                      ?.copyWith(fontSize: isDesktop ? 12 : null),
                                                 ),
                                               ],
                                             ),

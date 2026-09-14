@@ -64,7 +64,7 @@ curl http://localhost:8001/health        # AI gateway
 
 ## Documentation
 
-Full docs are maintained in the Outline wiki (AutoBrain collection) and mirrored in [`docs/`](docs/README.md).
+Full docs are maintained in the Outline wiki (AutoBrain collection) and mirrored in [`docs/`](docs/index.md).
 
 ## Repository layout
 

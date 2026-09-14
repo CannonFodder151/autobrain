@@ -197,30 +197,30 @@ class _LoginScreenState extends State<LoginScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.15),
-                          blurRadius: 24,
-                          offset: const Offset(0, 8),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.15),
+                              blurRadius: 24,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                    child: ClipOval(
-                      child: Image.asset(
-                        'assets/logo.png',
-                        width: 72,
-                        height: 72,
-                        fit: BoxFit.cover,
+                        child: ClipOval(
+                          child: Image.asset(
+                            'assets/logo.png',
+                            width: 72,
+                            height: 72,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
+                      const SizedBox(height: 20),
+                      const Text(
                     'AutoBrain',
                     style: TextStyle(
                       color: Colors.white,
@@ -407,7 +407,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 child: const Text('New here? Create a free account'),
                               ),
                             ],
-                          ],
+                           ],
                           ],
                         ),
                       ),
@@ -430,8 +430,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     'Free tier available · Self-hosted accounts are admin-managed',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.white60, fontSize: 12),
+                   ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),

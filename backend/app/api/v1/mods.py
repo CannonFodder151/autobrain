@@ -138,7 +138,7 @@ async def export_build_sheet(
             headers={"Content-Disposition": f'attachment; filename="build-sheet-{vehicle.id}.csv"'},
         )
     if fmt == "pdf":
-        pdf = export_build_sheet_pdf(mods, label)
+        pdf = export_build_sheet_pdf(mods, label, vehicle.rego or "")
         return Response(
             content=pdf, media_type="application/pdf",
             headers={"Content-Disposition": f'attachment; filename="build-sheet-{vehicle.id}.pdf"'},

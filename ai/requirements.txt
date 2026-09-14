@@ -15,13 +15,14 @@ pytesseract==0.3.13
 pillow==12.3.0
 pypdf==6.16.1
 
-# AUT-1189: pin transitives flagged by osv-scanner so the PR-time pip-audit
-# gate (security-pr-gate.yml, `--no-deps` mode) catches a known-vulnerable
-# resolved version — the gate audits direct pins only, so an unpinned
-# transitive inherits any build-time resolution. httpx pulls idna; jinja2
-# (transitive via fastapi templates / reportlab fallback) pulls pygments.
-idna==3.18
-pygments==2.20
+# AUT-1189: exact transitive pins for known-CVE packages. The resolved-tree
+# pip-audit pass (security-pr-gate.yml) audits the *resolved* environment, so
+# these must be exact `==` pins (a `>=` floor lets pip resolve to the latest,
+# which the gate cannot pin and which can drift past the fix). httpx pulls
+# idna; jinja2 (transitive via fastapi templates / reportlab fallback) pulls
+# pygments. Mirrors the pins in backend/requirements.txt.
+idna==3.18            # PYSEC-2026-215 / GHSA-65pc-fj4g-8rjx (CVE 3.x<3.15)
+pygments==2.20        # PYSEC-2023-117 + PYSEC-2026-2987 (CVEs 2.x<2.20)
 
 # Test/dev
 pytest==9.1.1

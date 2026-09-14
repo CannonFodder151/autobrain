@@ -93,13 +93,13 @@ jobs:
             "https://api.github.com/repos/$REPO/pulls/$PR_NUM/reviews" \
             | jq -r --arg a "$actor" '.[] | select(.user.login == $a) | .state')
           if printf '%s\n' "$approved" | grep -qx "APPROVED"; then
-            echo "PR #$PR_NUM already auto-approved by $actor; skipping."
+            echo "PR #$PR_NUM already has comment from $actor; skipping."
           else
             curl -fsS -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
               -H "Content-Type: application/json" \
-              -d '{"event":"APPROVE","body":"Auto-approved: OCR (Open Code Review) gate stalled/failed (AUT-1814). OCR review is advisory, not merge-blocking, so the stall no longer waits on manual approval."}' \
+              -d '{"event":"COMMENT","body":"OCR (Open Code Review) gate stalled/failed (AUT-1814). OCR review is advisory, not merge-blocking, so no manual approval is needed."}' \
               "https://api.github.com/repos/$REPO/pulls/$PR_NUM/reviews"
-            echo "Auto-approved PR #$PR_NUM after OCR stall (AUT-1814)."
+            echo "Posted comment on PR #$PR_NUM after OCR stall (AUT-1814)."
           fi
 
       - name: Report to Discord #updates

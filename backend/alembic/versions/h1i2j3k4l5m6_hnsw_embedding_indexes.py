@@ -1,11 +1,10 @@
 """Convert embedding indexes to HNSW (pgvector >= 0.5).
 
-The original pgvector migration (g7h8i9j0k1l2) built IVFFlat indexes, which
-need training data and lists tuned to row count; on small per-user tables a
-seq scan or HNSW is better. This migration is idempotent: on databases that
-already applied the IVFFlat version it drops those indexes and rebuilds them
-as HNSW; on fresh databases (where g7h8i9j0k1l2 already creates HNSW) the
-drop is a no-op and the index is simply rebuilt.
+The original pgvector migration (g7h8i9j0k1l2) built HNSW indexes directly,
+which need no training data or list tuning. This migration is idempotent: on
+databases that already applied g7h8i9j0k1l2 the drop is a no-op and the index
+is simply rebuilt as HNSW; on databases that previously had IVFFlat indexes
+it drops those and rebuilds them as HNSW.
 """
 
 import sqlalchemy as sa

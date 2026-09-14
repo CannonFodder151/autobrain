@@ -34,23 +34,25 @@ async def _seed_demo() -> None:
 def bootstrap() -> None:
     base = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     migrated = False
-    try:
-        result = subprocess.run(
-            ["alembic", "upgrade", "head"],
-            cwd=base,
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode == 0:
-            logger.info("alembic_migrations_applied")
-            migrated = True
-        else:
+    for target in ("head", "heads"):
+        try:
+            result = subprocess.run(
+                ["alembic", "upgrade", target],
+                cwd=base,
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode == 0:
+                logger.info("alembic_migrations_applied", target=target)
+                migrated = True
+                break
             logger.warning(
-                "alembic_failed_falling_back_to_create_all",
+                "alembic_failed_trying_next",
+                target=target,
                 stderr=result.stderr[-500:],
             )
-    except FileNotFoundError:
-        pass
+        except FileNotFoundError:
+            break
 
     async def _run() -> None:
         if not migrated:

@@ -119,6 +119,18 @@ jobs:
           fi
           echo "==> runner arch OK: $got ($want)"
 
+      - name: Clear buildx builder cache (arm64 only)
+        if: matrix.arch == 'arm64'
+        # AUT-2656: the self-hosted arm64 runner retains stale amd64 layer blobs
+        # from prior builds. Even with --pull (AUT-2998) and per-arch GHA cache
+        # scoping (AUT-2097), buildx can resolve base images from the local
+        # builder cache instead of the registry, producing arm64 manifests that
+        # ship amd64 binaries (exec format error on the Oracle VM). Prune the
+        # full local builder cache before each arm64 build to prevent this.
+        run: |
+          echo "==> clearing local buildx builder cache (arm64)"
+          docker buildx prune -a -f || true
+
       - name: Build and push images (linux/${{ matrix.arch }})
         env:
           TAG: ${{ github.event.inputs.tag || 'hosted' }}
@@ -149,6 +161,7 @@ jobs:
             docker buildx build --platform linux/${ARCH} --push \
               "${cache_from_args[@]}" \
               --cache-to   "${CACHE_TO}" \
+              --pull \
               -t "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}-${ARCH}" \
               ${args} -f "${df}" "${ctx}"
           done
@@ -172,6 +185,12 @@ jobs:
           for svc in backend worker ai frontend; do
             img="ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}-${ARCH}"
             echo "==> verifying $img"
+            # Force-pull from the registry so the verify step always tests
+            # the freshly-pushed image, not a stale local copy that the
+            # self-hosted runner may have cached from a previous (possibly
+            # tainted) build.
+            docker rmi "$img" 2>/dev/null || true
+            docker pull --platform linux/${ARCH} "$img"
             got="$(docker run --rm --platform linux/${ARCH} "$img" uname -m)"
             if [ "$got" != "$norm" ]; then
               echo "::error::$img reports arch=$got, expected $norm — refusing to assemble manifest"
@@ -184,6 +203,11 @@ jobs:
 
   build-manifest:
     needs: build
+    outputs:
+      backend_digest: ${{ steps.digest.outputs.backend_digest }}
+      worker_digest: ${{ steps.digest.outputs.worker_digest }}
+      ai_digest: ${{ steps.digest.outputs.ai_digest }}
+      frontend_digest: ${{ steps.digest.outputs.frontend_digest }}
     if: github.event_name != 'pull_request'
     runs-on: [self-hosted, linux, x64, vm2]
     permissions:
@@ -234,12 +258,80 @@ jobs:
               "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}-arm64"
           done
 
-          # AUT-1881: capture every multi-arch manifest digest so downstream
-          # compose-pin updates and the PR-time pin-guard have a stable ref.
-          # The digest below is the content-addressed digest of the
-          # :TAG multi-arch manifest list (Docker-Content-Digest). Pinned compose
-          # references use <image>:<tag>@<digest> — see docker-compose.hosted.yml.
+          # AUT-1881: capture every multi-arch manifest digest so the
+          # compose-pin job can atomically bump docker-compose.hosted.yml.
+          # `--raw` outputs the bare manifest JSON bytes; sha256sum produces
+          # the content-addressed digest (Docker-Content-Digest) that compose
+          # pins reference as `@sha256:...`.
           for svc in backend worker ai frontend; do
-            d="$(docker buildx imagetools inspect "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}" --raw | head -n1)"
-            echo "${svc}_digest=${d}" >> "$GITHUB_OUTPUT"
+            d="$(docker buildx imagetools inspect "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}" --raw | sha256sum | awk '{print $1}')"
+            echo "${svc}_digest=sha256:${d}" >> "$GITHUB_OUTPUT"
           done
+
+  compose-pin:
+    needs: build-manifest
+    if: github.event_name != 'pull_request'
+    runs-on: [self-hosted, linux, x64, vm2]
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.event.inputs.tag || 'hosted' }}
+      BACKEND_DIGEST: ${{ needs.build-manifest.outputs.backend_digest }}
+      WORKER_DIGEST: ${{ needs.build-manifest.outputs.worker_digest }}
+      AI_DIGEST: ${{ needs.build-manifest.outputs.ai_digest }}
+      FRONTEND_DIGEST: ${{ needs.build-manifest.outputs.frontend_digest }}
+      PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+      PORTAINER_URL: https://portainer.nathanmartina.com
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Bump compose digest pins to freshly built images
+        id: bump
+        run: |
+          set -euo pipefail
+          set +e
+          ./scripts/update-compose-pins.py \
+            backend="${BACKEND_DIGEST}" \
+            worker="${WORKER_DIGEST}" \
+            ai="${AI_DIGEST}" \
+            frontend="${FRONTEND_DIGEST}"
+          code=$?
+          echo "changed=$([ $code -eq 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Commit + push pin bump [skip ci]
+        if: steps.bump.outputs.changed == 'true'
+        env:
+          GIT_AUTHOR_NAME: AutoBrain Deployment Bot
+          GIT_AUTHOR_EMAIL: deploy@autobrainservice.app
+          GIT_COMMITTER_NAME: AutoBrain Deployment Bot
+          GIT_COMMITTER_EMAIL: deploy@autobrainservice.app
+        run: |
+          set -euo pipefail
+          git add docker-compose.hosted.yml docker-compose.prod.yml docker-compose.yml
+          git diff --cached --quiet && { echo "==> no staged changes — skipping"; exit 0; }
+          git commit -m "chore: bump hosted compose pins to freshly built digests [skip ci]"
+          for i in 1 2 3; do
+            if git push origin main; then
+              echo "==> compose pins pushed"
+              break
+            fi
+            echo "==> push raced with main — rebasing and retrying ($i/3)"
+            git pull --rebase origin main
+            git add docker-compose.hosted.yml docker-compose.prod.yml docker-compose.yml
+            git commit --amend --no-edit || true
+          done
+
+      - name: Sync updated compose into Portainer hosted stack
+        if: steps.bump.outputs.changed == 'true'
+        env:
+          TAG: ${{ github.event.inputs.tag || 'hosted' }}
+        run: |
+          set -euo pipefail
+          python3 scripts/sync-compose-to-portainer.py \
+            --stack autobrain-hosted \
+            --endpoint 5 \
+            --file docker-compose.hosted.yml

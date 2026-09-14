@@ -2,28 +2,31 @@
 
 Managed by SQLAlchemy models (`backend/app/models/`) and Alembic migrations (`backend/alembic/`).
 
-> **Migration heads:** the chain is currently **forked** at `e6f7a8b9c0d1` —
-> there are **two heads**, `e1f2a3b4c5d6` (vehicle shares) and `b2c3d4e5f6a8`
-> (vehicle type). A merge revision is pending; until then `alembic upgrade head`
-> can fail with "multiple head revisions".
+> **Migration heads:** the chain has a **single head** at `m3rge06`
+> (verified by `backend/tests/test_alembic_heads.py`). No merge migration is
+> pending; `alembic upgrade head` applies cleanly.
 
 ## Vector search (pgvector)
 
 PostgreSQL runs the `pgvector/pgvector:pg17` image (pgvector extension pre-installed; pinned by digest, AUT-1749).
-For the pg16 → pg17 major-bump migration procedure, see `postgres-pg17-upgrade.md`.
+For the pg16 → pg17 major-bump migration procedure, see `docs/Deployment-and-Infrastructure/server-migration.md`.
 Embeddings are generated via 9Router's OpenAI-compatible `/v1/embeddings` endpoint (model: `text-embedding-3-small`, 1536-dim).
-The following tables carry an `embedding vector(1536)` column (created by the `g7h8i9j0k1l2` migration) with HNSW cosine-similarity indexes:
+The following tables carry an `embedding vector(1536)` column (created by the
+`g7h8i9j0k1l2` migration, HNSW index rebuilt by `h1i2j3k4l5m6`, and the fifth
+table `social_issue_posts` added by `u1v2w3x4y5z6`) with HNSW
+cosine-similarity indexes:
 
 - **diagnostics** — symptoms + AI response summary
 - **service_records** — description + notes + steps
 - **modifications** — name + notes + category
 - **receipts** — vendor + extracted line-item names
+- **social_issue_posts** — title + body + tags (Issues Blog, AUT-627)
 
 The `embedding` columns exist at the **database layer only** (raw SQL in the
 migration) — the SQLAlchemy models do not map them, so writes go through raw
 SQL (`backfill_entity_embedding` in `backend/app/services/search.py`).
 
-See `docs/ai/vector.md` for full schema, embedding pipeline, and hybrid search implementation.
+See `docs/Engineering/ai/vector.md` for full schema, embedding pipeline, and hybrid search implementation.
 
 Search is hybrid: keyword ILIKE runs always; vector cosine similarity layers on
 top when the embedding router is reachable. Both paths return ranked results via

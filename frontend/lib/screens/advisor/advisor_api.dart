@@ -41,7 +41,7 @@ class AdvisorApi {
     if (cached != null) {
       try {
         cachedResp = AdvisorResponse.fromJson(
-            jsonDecode(cached) as Map<String, dynamic>);
+            jsonDecode(cached.body) as Map<String, dynamic>);
       } catch (e) {
         if (kDebugMode) debugPrint('Advisor cache decode failed: $e');
       }

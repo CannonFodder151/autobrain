@@ -1,5 +1,7 @@
 # AUT-1735: bump off vulnerable python:3.12-slim; pin base by digest.
-FROM python:3.13-slim@sha256:cc9dffa47c8294ba9bb795a8dfaeb7b76f2b30acade2c52a461a2999d127eb00
+# AUT-2656: pin the multi-arch index (3.13.15-slim-trixie) — the prior digest
+# was amd64-only and broke the arm64 build with exec format error.
+FROM python:3.13.15-slim-trixie@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285
 
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
@@ -15,26 +17,29 @@ RUN pip install --no-cache-dir -r requirements.txt \
 # sandbox helper to root + setuid so Chromium can sandbox untrusted content
 # as the non-root user; browser.py falls back to --no-sandbox only if a host
 # can't initialise the sandbox. Run as a SEPARATE final RUN so the chown
-# cannot be masked by any later layer, AND so the build fails loudly if
-# Playwright ever drops or renames chrome-sandbox. AUT-2258 root-cause: the
-# previous chained RUN could be invalidated by any upstream layer change,
-# leaving chrome-sandbox appuser:appuser 0755 at runtime (CTO verification
-# 2026-09-03). This RUN runs as root (USER switched back to root) so chown
-# root:root succeeds regardless of build-host uid.
+# cannot be masked by any later layer. AUT-2258 root-cause: the previous
+# chained RUN could be invalidated by any upstream layer change, leaving
+# chrome-sandbox appuser:appuser 0755 at runtime (CTO verification 2026-09-03).
+# This RUN runs as root (USER switched back to root) so chown root:root
+# succeeds regardless of build-host uid.
+# AUT-2518: Playwright 1234+ (Chrome for Testing) ships no chrome-sandbox —
+# Chromium uses user namespaces in headless mode. Relax to warn-and-continue
+# when zero matches so the build does not abort on the new layout. Match both
+# chrome-sandbox (hyphen) and chrome_sandbox (underscore) for older Playwright.
 USER root
 RUN set -eux; \
     sb_count=0; \
-    for sb in $(find /ms-playwright -type f -name chrome-sandbox); do \
+    for sb in $(find /ms-playwright -type f \( -name chrome-sandbox -o -name chrome_sandbox \)); do \
         chown root:root "$sb"; \
         chmod 4755 "$sb"; \
         sb_count=$((sb_count+1)); \
     done; \
-    if [ "$sb_count" -lt 1 ]; then \
-        echo "FATAL: no chrome-sandbox found under /ms-playwright — Playwright layout changed?" >&2; \
+    if [ "$sb_count" -gt 0 ]; then \
+        echo "AUT-1739: re-SUID $sb_count chrome-sandbox binary(ies) under /ms-playwright"; \
+    else \
+        echo "AUT-1739/AUT-2518: no chrome-sandbox found under /ms-playwright (Playwright 1234+ kernel sandbox)" >&2; \
         ls -la /ms-playwright >&2; \
-        exit 1; \
-    fi; \
-    echo "AUT-1739: re-SUID $sb_count chrome-sandbox binary(ies) under /ms-playwright"
+    fi
 USER appuser
 
 COPY main.py carsguide.py bikesguide.py sca.py browser.py ./

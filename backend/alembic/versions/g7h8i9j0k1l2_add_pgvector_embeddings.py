@@ -17,7 +17,7 @@ _DIM = settings.EMBEDDING_DIMENSION
 
 def upgrade() -> None:
     # Install pgvector extension (PostgreSQL must have vector extension available,
-    # use pgvector/pgvector:pg16 Docker image).
+    # use pgvector/pgvector:pg17 Docker image).
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
 
     # Add embedding columns (dimension from config, matches the embedding model).
