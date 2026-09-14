@@ -257,13 +257,17 @@ jobs:
             printf '%s\n' "${CHANGED[@]}"
             printf 'EOF\n'
           } >> "$GITHUB_OUTPUT"
-      - name: Install docker compose
-        if: steps.detect.outputs.changed != ''
-        run: |
-          set -euo pipefail
-          # Self-hosted x64 runner already has the compose plugin on the
-          # PATH; make sure `docker compose config` resolves either way.
-          docker compose version
+- name: Install docker compose
+          if: steps.detect.outputs.changed != ''
+          run: |
+            set -euo pipefail
+            # Ensure docker compose plugin exists; install to user plugin dir if missing.
+            if ! docker compose version >/dev/null 2>&1; then
+              mkdir -p "$HOME/.docker/cli-plugins"
+              curl -fL https://github.com/docker/compose/releases/download/v2.27.1/docker-compose-linux-x86_64 -o "$HOME/.docker/cli-plugins/docker-compose"
+              chmod +x "$HOME/.docker/cli-plugins/docker-compose"
+            fi
+            docker compose version
       - name: Build a stub .env for compose interpolation
         if: steps.detect.outputs.changed != ''
         run: |
