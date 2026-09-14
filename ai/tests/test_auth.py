@@ -1,8 +1,8 @@
-"""Regression tests for fail-closed gateway auth (AUT-199).
+"""Regression tests for fail-closed gateway auth (AUT-199, AUT-3076).
 
 Before: require_gateway_key returned early (open gateway, 200) whenever
-AI_GATEWAY_API_KEY was unset. After: /v1/* rejects with 401 unless an explicit
-development opt-out (AI_ENV=development or AI_GATEWAY_AUTH_DISABLED=1) is set.
+AI_GATEWAY_AUTH_DISABLED=1 was set. After: that env var is ignored; the only
+development bypass is ENVIRONMENT=development.
 """
 
 import pytest
@@ -20,6 +20,7 @@ def _env(monkeypatch):
     monkeypatch.setenv("AI_ROUTER_URL", BOGUS_ROUTER)
     monkeypatch.delenv("AI_GATEWAY_API_KEY", raising=False)
     monkeypatch.delenv("AI_GATEWAY_AUTH_DISABLED", raising=False)
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
     monkeypatch.delenv("AI_ENV", raising=False)
 
 
@@ -59,17 +60,23 @@ def test_modules_endpoint_requires_auth():
     assert client.get("/v1/modules").status_code == 401
 
 
-@pytest.mark.parametrize("optout", [("AI_GATEWAY_AUTH_DISABLED", "1")])
-def test_dev_optout_opens_gateway(monkeypatch, optout):
-    monkeypatch.setenv(optout[0], optout[1])
+def test_auth_disabled_flag_no_longer_bypasses(monkeypatch):
+    """AUT-3076: AI_GATEWAY_AUTH_DISABLED=1 must NOT open the gateway."""
+    monkeypatch.setenv("AI_GATEWAY_AUTH_DISABLED", "1")
+    resp = client.post("/v1/diagnostics", json={"payload": {"symptoms": "squealing brakes"}})
+    assert resp.status_code == 401
+
+
+def test_environment_development_bypasses_auth(monkeypatch):
+    """ENVIRONMENT=development is the only allowed dev bypass."""
+    monkeypatch.setenv("ENVIRONMENT", "development")
     resp = client.post("/v1/diagnostics", json={"payload": {"symptoms": "squealing brakes"}})
     assert resp.status_code == 200
 
 
-def test_ai_env_development_no_longer_bypasses_auth(monkeypatch):
-    """AUT-1185 FINDING-05: AI_ENV=development is not an auth opt-out."""
+def test_ai_env_development_does_not_bypass(monkeypatch):
+    """AI_ENV=development is not an auth opt-out."""
     monkeypatch.setenv("AI_ENV", "development")
-    monkeypatch.delenv("AI_GATEWAY_AUTH_DISABLED", raising=False)
     resp = client.post("/v1/diagnostics", json={"payload": {"symptoms": "squealing brakes"}})
     assert resp.status_code == 401
 

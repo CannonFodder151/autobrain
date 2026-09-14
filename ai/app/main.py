@@ -6,8 +6,8 @@ is tried first and a rule-based fallback keeps the service available offline.
 Security: /v1/* requires the shared gateway key (AI_GATEWAY_API_KEY, the same
 value the backend sends as a Bearer token) and bodies are capped at
 AI_GATEWAY_MAX_BODY_BYTES. Auth FAILS CLOSED: when the key is unset the
-gateway rejects /v1 calls with 401 unless the explicit development opt-out is
-set (AI_GATEWAY_AUTH_DISABLED=1).
+gateway rejects /v1 calls with 401. Development bypass is gated on
+ENVIRONMENT=development so it can never leak into prod.
 
 Cost control: an in-memory fixed-window limiter (per client IP + global)
 rejects with 429 when authenticated traffic exceeds
@@ -54,7 +54,7 @@ def _gateway_key() -> str:
 
 
 def _auth_disabled() -> bool:
-    return os.environ.get("AI_GATEWAY_AUTH_DISABLED") == "1"
+    return os.getenv("ENVIRONMENT") == "development"
 
 
 @asynccontextmanager
