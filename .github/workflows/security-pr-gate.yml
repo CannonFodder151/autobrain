@@ -192,7 +192,9 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          cache: true
+          # AUT-2985: disable pub-cache to avoid stale tar restore creating
+          # doubled .pub-cache/hosted/hosted/ paths that break flutter pub get.
+          cache: false
       - name: flutter pub get (frontend)
         working-directory: frontend
         run: |
