@@ -1,9 +1,16 @@
-# AUT-1746: x64 jobs (gitleaks, trivy config, pip-audit) dispatch to the bare
-# x64 self-hosted runner; the flutter osv-scanner job uses the vm2 x64 runner
-# (AUT-1798/AUT-1802). This is the missing PR/push-time security gate called for
-# in AUT-1746: a pre-merge gate that blocks on findings so the CVEs /
-# misconfigurations from the review cannot recur silently.
-name: Security — PR gate (secrets, IaC, deps, flutter)
+# AUT-1746: x64 jobs (gitleaks, trivy config, pip-audit, pin-guard) dispatch to
+# the bare x64 self-hosted runner. This is the missing PR/push-time security
+# gate called for in AUT-1746: a pre-merge gate that blocks on findings so the
+# CVEs / misconfigurations from the review cannot recur silently.
+#
+# AUT-2052: the legacy `flutter pub audit` job was dropped from this gate. The
+# upstream `flutter pub audit` / `dart pub audit` commands were both removed
+# from stable Flutter (see in-file note at AUT-1746 history); the in-tree
+# fallback was a `flutter pub outdated` regex that flagged ANY outdated pub
+# package as a finding, which is not a CVE gate and was blocking unrelated PRs
+# (e.g. PR #341 round 1). Replaced with no-op until a real Flutter CVE scanner
+# (osv-scanner / dart pub deps --json) lands — tracked in AUT-2053.
+name: Security — PR gate (secrets, IaC, deps)
 
 on:
   pull_request:
@@ -144,6 +151,7 @@ jobs:
           python3 -m pip_audit --disable-pip --no-deps -r "$TMPREQ"
           rm -f "$TMPREQ"
 
+<<<<<<< HEAD
   # (3b) resolved-tree pass — fail on transitive CVE drift (AUT-1189).
   # Each service resolves its own tree (backend/ai vs market-data pin
   # different fastapi major versions and cannot share a venv).
@@ -401,6 +409,17 @@ jobs:
           echo "OK: no env-var renames or undeclared keys detected (AUT-2390)."
 
   # (6b) AUT-1881 pin-guard — fail any compose `image:` reference that is not
+=======
+  # AUT-2052: the Flutter pub-audit job was removed. The previous fallback
+  # was a `flutter pub outdated` regex that flagged any outdated pub package
+  # as a finding — not a real CVE gate. A real Flutter CVE scanner
+  # (osv-scanner against `dart pub deps --json`, or dart-lang/dart-pub-canaudit)
+  # is tracked separately (AUT-2053). Until then, the gate covers secrets,
+  # IaC misconfig, and Python deps only; Flutter deps are covered indirectly
+  # by the weekly security-scan.yml full-resolution run.
+
+  # (5) AUT-1881 pin-guard — fail any compose `image:` reference that is not
+>>>>>>> ce1b580 (ci(AUT-2052): drop fake flutter pub audit job from security-pr-gate)
   # pinned by `@sha256` digest. Complements the postgres/nginx/python pin
   # guards in trivy-image-scan.yml and ensures the floating `:hosted` /
   # `:latest` tags cannot re-appear in compose without a digest pin.
@@ -443,17 +462,31 @@ jobs:
   report-status:
     name: Report gate result to Discord #status
     if: always()
+<<<<<<< HEAD
     needs: [gitleaks, trivy-config, pip-audit-direct, pip-audit-resolved, flutter-audit, compose-config-diff, pin-guard]
+=======
+    needs: [gitleaks, trivy-config, pip-audit, pin-guard]
+>>>>>>> ce1b580 (ci(AUT-2052): drop fake flutter pub audit job from security-pr-gate)
     runs-on: [self-hosted, linux, x64]
     steps:
       - name: Report to Discord #status
         env:
+<<<<<<< HEAD
           RESULT: ${{ needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit-direct.result == 'success' && needs.pip-audit-resolved.result == 'success' && needs.flutter-audit.result == 'success' && needs.compose-config-diff.result == 'success' && needs.pin-guard.result == 'success' && 'clean' || 'findings' }}
           COLOR: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit-direct.result == 'success' && needs.pip-audit-resolved.result == 'success' && needs.flutter-audit.result == 'success' && needs.compose-config-diff.result == 'success' && needs.pin-guard.result == 'success') && '0x57F287' || '0xED4245' }}
           TITLE: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit-direct.result == 'success' && needs.pip-audit-resolved.result == 'success' && needs.flutter-audit.result == 'success' && needs.compose-config-diff.result == 'success' && needs.pin-guard.result == 'success') && 'PR security gate clean' || 'PR security gate found issues' }}
+=======
+          RESULT: ${{ needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.pin-guard.result == 'success' && 'clean' || 'findings' }}
+          COLOR: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.pin-guard.result == 'success') && '0x57F287' || '0xED4245' }}
+          TITLE: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit.result == 'success' && needs.pin-guard.result == 'success') && 'PR security gate clean' || 'PR security gate found issues' }}
+>>>>>>> ce1b580 (ci(AUT-2052): drop fake flutter pub audit job from security-pr-gate)
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
             -H "Content-Type: application/json" \
             -d "$(jq -nc --arg c status --arg t "$TITLE" --arg col "$COLOR" --arg u "$RUN_URL" \
+<<<<<<< HEAD
               '{channel:$c,title:$t,description:"AUT-1746 PR gate: gitleaks + trivy config + pip-audit (direct + resolved tree) + flutter osv-scanner (pubspec.lock) + compose env-var diff (AUT-2390).",color:$col,author:"Security Scan",fields:[{name:"Scope",value:"secrets, IaC, python (direct+transitive), flutter, compose-env",inline:true},{name:"Run",value:$u,inline:true}]}')"
+=======
+              '{channel:$c,title:$t,description:"AUT-1746 PR gate: gitleaks + trivy config + pip-audit + pin-guard (flutter CVE gate deferred — AUT-2053).",color:$col,author:"Security Scan",fields:[{name:"Scope",value:"secrets, IaC, python, pins",inline:true},{name:"Run",value:$u,inline:true}]}')"
+>>>>>>> ce1b580 (ci(AUT-2052): drop fake flutter pub audit job from security-pr-gate)

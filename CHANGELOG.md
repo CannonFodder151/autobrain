@@ -11,6 +11,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+<<<<<<< HEAD
 ## [0.3.266] - 2026-09-11
 
 ### Added (AUT-3251)
@@ -545,6 +546,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Security (AUT-1608)
 - k8s: add `resources.requests`/`limits` to autobrain-backend, autobrain-frontend, autobrain-ai, autobrain-worker, autobrain-beat, autobrain-postgres (D8). Prevents a single pod from exhausting node resources.
 - frontend: add `Strict-Transport-Security: max-age=31536000; includeSubDomains` to every response (D12).
+=======
+### CI / Security (AUT-2052)
+
+- Drop the legacy `flutter pub audit` job from `.github/workflows/security-pr-gate.yml`. Upstream `flutter pub audit` and `dart pub audit` were both removed from stable Flutter; the in-tree fallback was a `flutter pub outdated` regex that flagged any outdated pub package as a finding, which is not a CVE gate and was blocking unrelated PRs (PR #341 round 1). The gate now covers gitleaks + trivy config + pip-audit + pin-guard. A real Flutter CVE scanner (osv-scanner against `dart pub deps --json`) is tracked in AUT-2053.
+>>>>>>> ce1b580 (ci(AUT-2052): drop fake flutter pub audit job from security-pr-gate)
 
 ## [0.3.207] - 2026-09-02
 
