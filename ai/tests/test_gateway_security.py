@@ -16,6 +16,14 @@ def test_health_open() -> None:
     assert client.get("/health").status_code == 200
 
 
+def test_health_no_router_url_leak() -> None:
+    """Regression: /health must never expose router_url or router_enabled (AUT-3078)."""
+    body = client.get("/health").json()
+    assert "router_url" not in body
+    assert "router_enabled" not in body
+    assert set(body.keys()) == {"status", "service", "version"}
+
+
 def test_infer_requires_key() -> None:
     resp = client.post("/v1/diagnostics", json={"payload": {"symptoms": "squealing brakes"}})
     assert resp.status_code == 401

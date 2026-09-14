@@ -130,12 +130,11 @@ def enforce_gateway_rate_limit(request: Request) -> None:
 
 @app.get("/health")
 async def health() -> dict:
+    logger.info("health_check", status="ok", service="autobrain-ai", version=os.environ.get("APP_VERSION", "0.3.266"))
     return {
         "status": "ok",
         "service": "autobrain-ai",
         "version": os.environ.get("APP_VERSION", "0.3.266"),
-        "router_url": router_url(),
-        "router_enabled": router_enabled(),
     }
 
 
