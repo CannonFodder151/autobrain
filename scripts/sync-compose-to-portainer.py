@@ -25,7 +25,7 @@ def main():
     ap.add_argument("--portainer-url", default=os.environ.get(
         "PORTAINER_URL", "https://portainer.nathanmartina.com"))
     ap.add_argument("--api-key", default=os.environ.get("PORTAINER_API_KEY"))
-    ap.add_argument("--pull-image", action="store_true", default=True,
+    ap.add_argument("--pull-image", action="store_true", default=False,
                     help="force a pull so the new digest is fetched (default: true)")
     args = ap.parse_args()
 
