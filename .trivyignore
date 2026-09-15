@@ -125,6 +125,38 @@ CVE-2026-80256  # nginx placeholder; trivy 0.70 false-positive on missing metada
 CVE-2026-86145  # pcre2 OOB write: not exposed via public API regex input
 CVE-2026-89161  # pcre2 JIT memory corruption: same exposure surface as above
 
+# --- AUT-2918: python:3.13.15-slim-trixie base image CVEs (unused at runtime) --------
+# python:3.13.15-slim-trixie@sha256:9d2e555... (debian 13.6) carries 10 HIGH/CRITICAL
+# CVEs across gzip, libsqlite3-0, and perl-base. All three packages are present in
+# the base image but never exercised at runtime:
+#   * gzip: build-time tool only (decompress wheels); no runtime process invokes gzip
+#     on untrusted input. CVE-2026-41992 (LZH decompression info leak) requires a
+#     crafted .gz/.lz archive — not used at runtime.
+#   * libsqlite3-0: AutoBrain uses PostgreSQL, not SQLite. No runtime service imports
+#     sqlite3 or executes SQL against a SQLite database. CVE-2026-11822/11824 (FTS5
+#     heap overflow, arbitrary code execution via crafted FTS5) are unreachable.
+#   * perl-base: build-time dependency only (Module::Build, XS compile). No runtime
+#     service invokes perl. CVE-2026-13221 (CRITICAL, regex DoS), CVE-2026-8376
+#     (CRITICAL, heap overflow on 32-bit), CVE-2026-42496/42497 (CRITICAL/HIGH,
+#     archive-tar path traversal/hardlink), CVE-2026-48962 (IO-Compress arbitrary
+#     code), CVE-2026-57432 (pack/unpack info leak), CVE-2026-57433 (Storable DoS)
+#     are all unreachable.
+# python:3.13.15-slim-trixie is the CURRENT latest (Docker Hub confirmed 2026-09-15);
+# no newer digest carries patched packages. Suppress per policy ("tolerate when no
+# fixed image exists") until a respin ships patched gzip/libsqlite3/perl-base.
+# Time-boxed: re-check 2026-12-15; drop entries + bump PYTHON_BASE_IMAGE digest.
+# Security Officer sign-off: PENDING (AUT-2918).
+CVE-2026-41992  # gzip LZH info leak: build-time only; no runtime gzip on untrusted input
+CVE-2026-11822  # libsqlite3 FTS5 arbitrary code exec: AutoBrain uses PostgreSQL, not SQLite
+CVE-2026-11824  # libsqlite3 heap overflow: same — no SQLite at runtime
+CVE-2026-13221  # perl regex DoS: build-time only; no runtime perl invocation
+CVE-2026-8376   # perl heap overflow (32-bit): build-time only; 64-bit containers unaffected
+CVE-2026-42496  # perl-archive-tar path traversal via symlinks: build-time only
+CVE-2026-42497  # perl-archive-tar hardlink arbitrary write: build-time only
+CVE-2026-48962  # perl-IO-Compress arbitrary code via glob: build-time only
+CVE-2026-57432  # perl pack/unpack info leak: build-time only
+CVE-2026-57433  # perl Storable DoS: build-time only; no Storable in runtime
+
 # --- AUT-1600-PR: nginx libuuid/util-linux HIGH CVEs (pending upstream rebuild) -----
 # Source: libuuid (util-linux 2.42.1-r0) in nginxinc/nginx-unprivileged:stable-alpine.
 # CVE-2026-53612/53613/53614: TOCTOU/SUID mount bypasses require filesystem
