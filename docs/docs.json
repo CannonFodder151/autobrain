@@ -1,0 +1,140 @@
+{
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Company",
+        "groups": [
+          {
+            "group": "Company",
+            "pages": [
+              "Company/index",
+              "Company/department-ownership-map",
+              "Company/documentation-policy"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Engineering",
+        "groups": [
+          {
+            "group": "Engineering",
+            "pages": [
+              "Engineering/index",
+              "Engineering/architecture",
+              "Engineering/container-architecture",
+              "Engineering/database-schema",
+              "Engineering/api-spec",
+              "Engineering/ai-models",
+              "Engineering/ai-router-integration",
+              "Engineering/developer-onboarding",
+              "Engineering/integrating-autobrain",
+              "Engineering/change-validation-gate"
+            ]
+          },
+          {
+            "group": "AI",
+            "pages": [
+              "Engineering/ai/vector"
+            ]
+          },
+          {
+            "group": "OBD2 Dongle",
+            "pages": [
+              "Engineering/obd2-dongle/README",
+              "Engineering/obd2-dongle/nodemcu32s-build-guide"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Deployment & Infrastructure",
+        "groups": [
+          {
+            "group": "Deployment & Infrastructure",
+            "pages": [
+              "Deployment-and-Infrastructure/index",
+              "Deployment-and-Infrastructure/deployment-guide",
+              "Deployment-and-Infrastructure/infrastructure-diagrams",
+              "Deployment-and-Infrastructure/container-architecture",
+              "Deployment-and-Infrastructure/container-consolidation-migration",
+              "Deployment-and-Infrastructure/backup-strategy",
+              "Deployment-and-Infrastructure/monitoring",
+              "Deployment-and-Infrastructure/ci-cd",
+              "Deployment-and-Infrastructure/server-migration",
+              "Deployment-and-Infrastructure/autobrain-deploy-trigger"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Security",
+        "groups": [
+          {
+            "group": "Security",
+            "pages": [
+              "Security/index",
+              "Security/security"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Testing & QA",
+        "groups": [
+          {
+            "group": "Testing",
+            "pages": [
+              "Testing-and-QA/index",
+              "Testing-and-QA/test-strategy",
+              "Testing-and-QA/qa-run-logs",
+              "Testing-and-QA/user-testing-results"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Marketing & Website",
+        "groups": [
+          {
+            "group": "Marketing & Website",
+            "pages": [
+              "Marketing-and-Website/index",
+              "Marketing-and-Website/social",
+              "Marketing-and-Website/social-image-generation",
+              "Marketing-and-Website/community-garage"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Finance",
+        "groups": [
+          {
+            "group": "Finance",
+            "pages": [
+              "Finance/index",
+              "Finance/market-data",
+              "Finance/payments",
+              "Finance/fuel-pricing",
+              "Finance/fuel-servo-spy"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Business Reviews",
+        "groups": [
+          {
+            "group": "Business Reviews",
+            "pages": [
+              "Business-Reviews/index",
+              "Business-Reviews/product-rules",
+              "Business-Reviews/changelog"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

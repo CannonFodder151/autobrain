@@ -1,0 +1,354 @@
+{
+  "name": "docs-sync-to-outline",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "autobrain-docs-sync",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "autobrain-docs-sync"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "verify-ref",
+              "leftValue": "={{ $json.body.ref }}",
+              "rightValue": "refs/heads/main",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-main",
+      "name": "Is Main Branch",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"status\": \"ignored\", \"reason\": \"not main branch\" } }}",
+        "options": {}
+      },
+      "id": "respond-ignored",
+      "name": "Respond Ignored",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [680, 420]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-docs-changed",
+              "leftValue": "={{ JSON.stringify($json.body.head_commit?.modified || []).includes('docs') || JSON.stringify($json.body.head_commit?.added || []).includes('docs') }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-docs-changed",
+      "name": "Docs Changed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"status\": \"ignored\", \"reason\": \"no docs changes\" } }}",
+        "options": {}
+      },
+      "id": "respond-no-docs",
+      "name": "Respond No Docs",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 320]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.github.com/repos/CannonFodder151/autobrain/git/trees/main?recursive=1",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "fetch-tree",
+      "name": "Fetch File Tree",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 80],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "github-auth",
+          "name": "GitHub PAT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const tree = $input.first().json.tree || [];\nconst mdFiles = tree\n  .filter(f => f.path.startsWith('docs/') && f.path.endsWith('.md') && f.type === 'blob')\n  .map(f => f.path);\nreturn mdFiles.map(path => ({ json: { path } }));"
+      },
+      "id": "filter-docs",
+      "name": "Filter Docs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 80]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.github.com/repos/CannonFodder151/autobrain/contents/{{ $json.path }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "fetch-file",
+      "name": "Fetch File Content",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 80],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "github-auth",
+          "name": "GitHub PAT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const content = Buffer.from($input.first().json.content, 'base64').toString('utf8');\nconst frontmatterEnd = content.indexOf('---', 3);\nlet body = content;\nif (frontmatterEnd > 0) {\n  body = content.slice(content.indexOf('\\n', frontmatterEnd + 3) + 1);\n}\nconst headingMatch = body.match(/^#\\s+(.+)$/m);\nconst baseName = $input.first().json.path\n  .replace('docs/', '')\n  .replace(/\\.md$/, '')\n  .split('/').pop()\n  .replace(/-/g, ' ')\n  .replace(/\\b\\w/g, c => c.toUpperCase());\nconst title = headingMatch ? headingMatch[1].trim() : baseName;\nreturn [{ json: { title, body: body.trim(), filePath: $input.first().json.path } }];"
+      },
+      "id": "parse-content",
+      "name": "Parse Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.OUTLINE_API_URL || 'https://outline.nathanmartina.com' }}/api/collections.list",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": []
+        },
+        "options": {}
+      },
+      "id": "list-collections",
+      "name": "List Collections",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [240, 520],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "outline-auth",
+          "name": "Outline API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const collections = $input.first().json.data || [];\nconst target = collections.find(c => c.name === 'AutoBrain')\n  || collections.find(c => c.name.toLowerCase().includes('autobrain'))\n  || collections[0];\nif (!target) throw new Error('No Outline collection found');\nreturn [{ json: { collectionId: target.id, collectionName: target.name } }];"
+      },
+      "id": "find-collection",
+      "name": "Find AutoBrain Collection",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 520]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.OUTLINE_API_URL || 'https://outline.nathanmartina.com' }}/api/documents.list",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"collectionId\": \"{{ $json.collectionId }}\", \"limit\": 100}",
+        "options": {}
+      },
+      "id": "list-existing",
+      "name": "List Existing Docs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 520],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "outline-auth",
+          "name": "Outline API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const docs = $input.first().json.data || [];\nconst titleMap = {};\nfor (const d of docs) {\n  if (!titleMap[d.title]) titleMap[d.title] = d.id;\n}\nreturn [{ json: { titleMap, collectionId: $('Find AutoBrain Collection').first().json.collectionId } }];"
+      },
+      "id": "build-title-map",
+      "name": "Build Title Map",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 520]
+    },
+    {
+      "parameters": {
+        "jsCode": "const titleMap = $input.first().json.titleMap;\nconst collectionId = $input.first().json.collectionId;\nconst items = $('Parse Content').all();\nconst results = [];\nfor (const item of items) {\n  const { title, body } = item.json;\n  const docId = titleMap[title];\n  results.push({ json: { title, body, collectionId, docId, isUpdate: !!docId } });\n}\nreturn results;"
+      },
+      "id": "prepare-upserts",
+      "name": "Prepare Upserts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 520]
+    },
+    {
+      "parameters": {
+        "method": "={{ $json.isUpdate ? 'POST' : 'POST' }}",
+        "url": "={{ $env.OUTLINE_API_URL || 'https://outline.nathanmartina.com' }}/api/{{ $json.isUpdate ? 'documents.update' : 'documents.create' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.isUpdate ? { id: $json.docId, title: $json.title, text: $json.body, collectionId: $json.collectionId } : { title: $json.title, text: $json.body, collectionId: $json.collectionId }) }}",
+        "options": {}
+      },
+      "id": "upsert-doc",
+      "name": "Upsert Document",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 520],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "outline-auth",
+          "name": "Outline API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"status\": \"synced\", \"count\": $('Parse Content').all().length } }}",
+        "options": {}
+      },
+      "id": "respond-success",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1560, 520]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [{ "node": "Is Main Branch", "type": "main", "index": 0 }]
+      ]
+    },
+    "Is Main Branch": {
+      "main": [
+        [{ "node": "Docs Changed?", "type": "main", "index": 0 }],
+        [{ "node": "Respond Ignored", "type": "main", "index": 0 }]
+      ]
+    },
+    "Docs Changed?": {
+      "main": [
+        [{ "node": "Fetch File Tree", "type": "main", "index": 0 }],
+        [{ "node": "Respond No Docs", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch File Tree": {
+      "main": [
+        [{ "node": "Filter Docs", "type": "main", "index": 0 }]
+      ]
+    },
+    "Filter Docs": {
+      "main": [
+        [{ "node": "Fetch File Content", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch File Content": {
+      "main": [
+        [{ "node": "Parse Content", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Content": {
+      "main": [
+        [
+          { "node": "List Collections", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "List Collections": {
+      "main": [
+        [{ "node": "Find AutoBrain Collection", "type": "main", "index": 0 }]
+      ]
+    },
+    "Find AutoBrain Collection": {
+      "main": [
+        [{ "node": "List Existing Docs", "type": "main", "index": 0 }]
+      ]
+    },
+    "List Existing Docs": {
+      "main": [
+        [{ "node": "Build Title Map", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Title Map": {
+      "main": [
+        [{ "node": "Prepare Upserts", "type": "main", "index": 0 }]
+      ]
+    },
+    "Prepare Upserts": {
+      "main": [
+        [{ "node": "Upsert Document", "type": "main", "index": 0 }]
+      ]
+    },
+    "Upsert Document": {
+      "main": [
+        [{ "node": "Respond Success", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    { "name": "autobrain" },
+    { "name": "docs-sync" }
+  ],
+  "triggerCount": 1
+}

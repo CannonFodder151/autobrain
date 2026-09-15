@@ -1,0 +1,40 @@
+name: Docs Sync — Merge Gate
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-sync-health:
+    name: Check docs-sync consecutive failures
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read failure counter
+        id: failures
+        run: |
+          FAILURES_FILE=".github/docs-sync-failures.txt"
+          if [ -f "$FAILURES_FILE" ]; then
+            COUNT=$(cat "$FAILURES_FILE")
+          else
+            COUNT=0
+          fi
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+      - name: Fail if 3+ consecutive sync failures
+        if: ${{ steps.failures.outputs.count >= 3 }}
+        run: |
+          echo "::error::Docs sync has failed 3+ consecutive runs (count: ${{ steps.failures.outputs.count }})."
+          echo "Merge blocked per AUT-2083. Fix the sync or run 'Sync docs to Outline' manually."
+          exit 1
+      - name: Warn if 1-2 consecutive failures
+        if: ${{ steps.failures.outputs.count >= 1 && steps.failures.outputs.count < 3 }}
+        run: |
+          echo "::warning::Docs sync has ${{ steps.failures.outputs.count }} consecutive failure(s)."
+          echo "If this reaches 3, merges will be blocked. Run the sync workflow to reset."

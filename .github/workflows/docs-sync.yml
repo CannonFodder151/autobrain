@@ -28,3 +28,31 @@ jobs:
         env:
           OUTLINE_API_TOKEN: ${{ secrets.OUTLINE_API_TOKEN }}
           OUTLINE_API_URL: ${{ secrets.OUTLINE_API_URL || 'https://outline.nathanmartina.com' }}
+      - name: Track sync failures
+        run: |
+          set -euo pipefail
+          FAILURES_FILE=".github/docs-sync-failures.txt"
+          SYNC_SUCCESS=$?
+          
+          if [ $SYNC_SUCCESS -eq 0 ]; then
+            # Sync succeeded — reset failure counter
+            echo "0" > "$FAILURES_FILE"
+            echo "Sync succeeded, failure counter reset to 0"
+          else
+            # Sync failed — increment failure counter
+            if [ -f "$FAILURES_FILE" ]; then
+              CURRENT=$(cat "$FAILURES_FILE")
+              NEW=$((CURRENT + 1))
+              echo "$NEW" > "$FAILURES_FILE"
+              echo "Sync failed, failure counter: $NEW"
+              if [ "$NEW" -ge 3 ]; then
+                echo "::error::3 consecutive sync failures — blocking merge (AUT-2083)"
+                exit 1
+              fi
+            else
+              echo "1" > "$FAILURES_FILE"
+              echo "Sync failed, first failure recorded: 1"
+              exit 1
+            fi
+          fi
+        continue-on-error: false
