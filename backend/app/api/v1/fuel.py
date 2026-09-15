@@ -70,7 +70,10 @@ async def add_fuel(
     db.add(log)
     await db.flush()
     await fuel_svc.recompute_efficiency(db, vehicle_id)
-    await sync_odometer(db, vehicle, payload.odometer_km, fuel_svc.ref_time(log))
+    try:
+        await sync_odometer(db, vehicle, payload.odometer_km, fuel_svc.ref_time(log))
+    except Exception:
+        logger.exception("sync_odometer_failed", vehicle_id=vehicle_id)
     await add_event(
         db,
         vehicle_id,
