@@ -1,0 +1,77 @@
+{
+  "name": "AutoBrain Docs → Outline Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "autobrain-docs-sync",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "GitHub Push Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "autobrain-docs-sync"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"status\": \"ok\", \"message\": \"Sync triggered\" } }}"
+      },
+      "id": "respond-accepted",
+      "name": "Respond Accepted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://n8n.nathanmartina.com/webhook/autobrain-docs-sync/run",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"trigger\": \"github_push\", \"branch\": $json.body.ref, \"repo\": $json.body.repository.full_name, \"timestamp\": $now.toISOString() } }}",
+        "options": {}
+      },
+      "id": "trigger-run",
+      "name": "Trigger Sync Run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [650, 300]
+    }
+  ],
+  "connections": {
+    "GitHub Push Webhook": {
+      "main": [
+        [
+          {
+            "node": "Respond Accepted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond Accepted": {
+      "main": [
+        [
+          {
+            "node": "Trigger Sync Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "autobrain"
+    }
+  ]
+}

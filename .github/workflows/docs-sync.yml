@@ -12,34 +12,39 @@ permissions:
   contents: write
 
 jobs:
+  ci-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const { data: { workflow_runs } } = await github.rest.actions.listWorkflowRuns({
+              owner, repo,
+              workflow_id: 'docs-sync.yml',
+              branch: 'main',
+              per_page: 5,
+              status: 'completed',
+            });
+            const recent = workflow_runs.filter(r => r.event === 'push' || r.event === 'workflow_dispatch').slice(0, 3);
+            const failures = recent.filter(r => r.conclusion === 'failure');
+            if (failures.length >= 3) {
+              core.setFailed(`Docs sync has failed ${failures.length} consecutive times (${failures.map(f => f.id).join(', ')}). Manual intervention required.`);
+              return;
+            }
+            core.info(`Recent runs: ${recent.length} total, ${failures.length} failures. Proceeding.`);
+
   sync-docs:
+    needs: ci-gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile=false
-
-      - name: Read failure count
-        id: failure_count
-        run: |
-          if [ -f .github/docs-sync-failures.txt ]; then
-            count=$(cat .github/docs-sync-failures.txt)
-          else
-            count=0
-          fi
-          echo "count=$count" >> $GITHUB_OUTPUT
-
-      - name: Sync docs to Outline
-        id: sync
-        run: node scripts/sync-docs-outline.mjs
+      - run: node scripts/sync-docs-outline.mjs
         env:
           OUTLINE_API_TOKEN: ${{ secrets.OUTLINE_API_TOKEN }}
           OUTLINE_API_URL: ${{ secrets.OUTLINE_API_URL || 'https://outline.nathanmartina.com' }}
@@ -56,7 +61,11 @@ jobs:
       - name: Increment failure count on failure
         if: failure()
         run: |
-          new_count=$((${{ steps.failure_count.outputs.count }} + 1))
+          if [ -f .github/docs-sync-failures.txt ]; then
+            new_count=$(($(cat .github/docs-sync-failures.txt) + 1))
+          else
+            new_count=1
+          fi
           echo "$new_count" > .github/docs-sync-failures.txt
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -67,9 +76,5 @@ jobs:
         if: always()
         run: |
           if ! git diff --quiet origin/main --; then
-            for i in 1 2 3; do
-              git push origin main && break
-              echo "push raced — rebasing and retrying ($i/3)"
-              git pull --rebase origin main
-            done
+            git push origin main
           fi
