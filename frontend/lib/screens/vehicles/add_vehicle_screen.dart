@@ -33,6 +33,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
   bool _lookingUp = false;
   String? _lookupInfo;
   String? _fuelType;
+  String _powertrain = 'ICE';
   List<String> _fuelTypes = defaultFuelTypes;
   int? _maxVehicles;
   int? _vehicleCount;
@@ -156,6 +157,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
         'is_primary': _isPrimary,
         'club_reg': _clubReg,
         'fuel_type': _fuelType,
+        'powertrain': _powertrain,
       });
       if (mounted) Navigator.pop(context);
     } catch (e) {
@@ -352,6 +354,18 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
               TextFormField(
                 controller: _bodyType,
                 decoration: const InputDecoration(labelText: 'Body type'),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: _powertrain,
+                decoration: const InputDecoration(labelText: 'Powertrain'),
+                items: const [
+                  DropdownMenuItem(value: 'ICE', child: Text('ICE (Petrol/Diesel)')),
+                  DropdownMenuItem(value: 'HEV', child: Text('HEV (Hybrid)')),
+                  DropdownMenuItem(value: 'PHEV', child: Text('PHEV (Plug-in Hybrid)')),
+                  DropdownMenuItem(value: 'EV', child: Text('EV (Electric)')),
+                ],
+                onChanged: (v) => setState(() => _powertrain = v ?? 'ICE'),
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(

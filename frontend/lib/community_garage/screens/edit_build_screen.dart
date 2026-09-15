@@ -247,8 +247,9 @@ class _EditBuildScreenState extends State<EditBuildScreen> {
               scrollDirection: Axis.horizontal,
               buildDefaultDragHandles: false,
               itemCount: _photos.length + (_photos.length < _maxPhotos ? 1 : 0),
-              onReorderItem: (oldIndex, newIndex) {
+              onReorder: (oldIndex, newIndex) {
                 setState(() {
+                  if (oldIndex < newIndex) newIndex -= 1;
                   final item = _photos.removeAt(oldIndex);
                   _photos.insert(newIndex, item);
                 });

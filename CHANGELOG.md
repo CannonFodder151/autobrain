@@ -11,6 +11,38 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.266] - 2026-09-11
+
+<<<<<<< HEAD
+### Security (AUT-2060)
+- Bumped `python:3.13-slim` base image digest from `7ce4b6d...` to `cc9dffa...` (2026-08-31 Docker Hub latest) in `docker/backend/Dockerfile`, `docker/ai/Dockerfile`, `docker/worker/Dockerfile`, and `market-data/Dockerfile`. New digest ships `libssl3t64` 3.5.7-1~deb13u2, resolving CVE-2026-14456 (OpenSSL QUIC DoS) and related HIGH CVEs. Updated `PYTHON_BASE_IMAGE` env var in `.github/workflows/trivy-image-scan.yml`. Removed resolved CVE-2026-14456 suppression from `.trivyignore`.
+
+## [0.3.245] - 2026-09-06
+=======
+### Added (AUT-3251)
+- feat(backend,frontend): add `powertrain` field (ICE/HEV/PHEV/EV) to vehicle schemas, models, and add/edit screens — fixes missing EV feature wiring.
+>>>>>>> origin/main
+
+## [0.3.265] - 2026-09-11
+
+### Fixed (AUT-2683)
+- fix(frontend): fix login_screen.dart widget tree — remove premature Column close after logo Container, add missing inner Column children close, and fix closing bracket nesting (introduced by AUT-3219).
+
+## [0.3.264] - 2026-09-11
+
+### Fixed (AUT-3219)
+- fix(frontend): migrate `connectivity_plus` to 6.x API (`Connectivity()` constructor, `result != ConnectivityResult.none`), replace deprecated `MediaQuery.withClampedTextScaling` with `MediaQuery.textScalerOf`, and fix Dart parse errors (unbalanced parentheses) in `signup_screen.dart`, `login_screen.dart`, `add_vehicle_screen.dart`, and `edit_vehicle_screen.dart`.
+
+## [0.3.263] - 2026-09-11
+
+### Fixed (AUT-3225)
+- fix(tests): add `sqflite_common_ffi` init to desktop layout tests — resolves `databaseFactory not initialized` error when running `flutter test` on desktop/CI environments.
+
+## [0.3.262] - 2026-09-11
+
+### Fixed (AUT-2683)
+- fix(frontend): replace `onReorderItem` with `onReorder` in `edit_build_screen.dart`. `ReorderableListView.builder` does not expose `onReorderItem` in Flutter 3.38.2, causing the amd64 Docker build to fail and blocking the Docker Hub `:latest` multi-arch publish.
+
 ## [0.3.261] - 2026-09-10
 
 ### Fixed (AUT-3154)
@@ -94,6 +126,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed (AUT-2481)
 - frontend(servo-spy): dart2js compile error on `_cartoApiKey`/`_cartoKeyParam`. The two were declared as instance fields on `_ServoSpyScreenState` but referenced from `_ServoSpyMapState.build()` (different class, so name-resolution failed at compile time). Promoted both to file-private top-level `const` so both widget trees see them; removed the `const` from `_cartoKeyParam` (the runtime `isEmpty` check is not a constant expression).
+
+### Security (AUT-2060)
+- Bumped `python:3.13-slim` base image digest from `7ce4b6d...` to `cc9dffa...` (2026-08-31 Docker Hub latest) in `docker/backend/Dockerfile`, `docker/ai/Dockerfile`, `docker/worker/Dockerfile`, and `market-data/Dockerfile`. New digest ships `libssl3t64` 3.5.7-1~deb13u2, resolving CVE-2026-14456 (OpenSSL QUIC DoS) and related HIGH CVEs. Updated `PYTHON_BASE_IMAGE` env var in `.github/workflows/trivy-image-scan.yml`. Removed resolved CVE-2026-14456 suppression from `.trivyignore`.
+>>>>>>> a32d58f (security(AUT-2060): bump python:3.13-slim + nginx frontend digests, fix image-scan)
 
 ## [0.3.243] - 2026-09-06
 ### Fixed (AUT-2656)

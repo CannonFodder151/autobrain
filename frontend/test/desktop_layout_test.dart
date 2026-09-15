@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:autobrain/core/theme.dart';
 import 'package:autobrain/core/api_client.dart';
@@ -62,6 +63,9 @@ const _kSizes = {
 };
 
 void main() {
+  sqfliteFfiInit();
+  databaseFactory = databaseFactoryFfi;
+
   group('HomeScreen desktop layout assertions', () {
     for (final entry in _kSizes.entries) {
       final width = entry.key;
