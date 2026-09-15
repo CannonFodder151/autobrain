@@ -258,156 +258,158 @@ class _LoginScreenState extends State<LoginScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                          if (_mfaSetupStep) ...[
-                            if (_mfaQr != null)
-                              Center(
-                                child: Image.memory(
-                                  _dataUriBytes(_mfaQr!),
-                                  width: 200,
-                                  height: 200,
-                                  gaplessPlayback: true,
-                                  fit: BoxFit.contain,
+                            if (_mfaSetupStep) ...[
+                              if (_mfaQr != null)
+                                Center(
+                                  child: Image.memory(
+                                    _dataUriBytes(_mfaQr!),
+                                    width: 200,
+                                    height: 200,
+                                    gaplessPlayback: true,
+                                    fit: BoxFit.contain,
+                                  ),
                                 ),
-                              ),
-                            const SizedBox(height: 12),
-                            Text(
-                              'Scan with Google Authenticator, Authy or 1Password, then enter the 6-digit code.',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                            if (_mfaSecret != null) ...[
-                              const SizedBox(height: 6),
-                              SelectableText(
-                                'Secret: $_mfaSecret',
+                              const SizedBox(height: 12),
+                              Text(
+                                'Scan with Google Authenticator, Authy or 1Password, then enter the 6-digit code.',
                                 style: TextStyle(
-                                  fontSize: 12,
+                                  fontSize: 13,
                                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                                 ),
                               ),
-                            ],
-                            const SizedBox(height: 14),
-                            TextFormField(
-                              controller: _code,
-                              focusNode: _codeNode,
-                              decoration: const InputDecoration(
-                                labelText: '6-digit code',
-                                prefixIcon: Icon(Icons.verified_user_outlined),
-                              ),
-                              keyboardType: TextInputType.number,
-                              maxLength: 6,
-                              autofocus: true,
-                              autofillHints: const [AutofillHints.oneTimeCode],
-                              onFieldSubmitted: (_) => _submit(),
-                              validator: (v) =>
-                                  v == null || v.trim().length < 6
-                                      ? 'Enter your 6-digit code'
-                                      : null,
-                            ),
-                          ] else if (_mfaStep) ...[
-                            TextFormField(
-                              controller: _code,
-                              focusNode: _codeNode,
-                              decoration: const InputDecoration(
-                                labelText: '6-digit code',
-                                prefixIcon: Icon(Icons.verified_user_outlined),
-                              ),
-                              keyboardType: TextInputType.number,
-                              maxLength: 6,
-                              autofocus: true,
-                              autofillHints: const [AutofillHints.oneTimeCode],
-                              onFieldSubmitted: (_) => _submit(),
-                              validator: (v) =>
-                                  v == null || v.trim().length < 6
-                                      ? 'Enter your 6-digit code'
-                                      : null,
-                            ),
-                          ] else ...[
-                            TextFormField(
-                              controller: _email,
-                              focusNode: _emailNode,
-                              decoration: const InputDecoration(
-                                labelText: 'Email',
-                                prefixIcon: Icon(Icons.mail_outline),
-                              ),
-                              keyboardType: TextInputType.emailAddress,
-                              autofillHints: const [AutofillHints.username],
-                              textInputAction: TextInputAction.done,
-                              onFieldSubmitted: (_) => _submit(),
-                              validator: (v) => v == null || !v.contains('@')
-                                  ? 'Valid email required'
-                                  : null,
-                            ),
-                            const SizedBox(height: 14),
-                            TextFormField(
-                              controller: _password,
-                              decoration: const InputDecoration(
-                                labelText: 'Password',
-                                prefixIcon: Icon(Icons.lock_outline),
-                              ),
-                              obscureText: true,
-                              autocorrect: false,
-                              enableSuggestions: false,
-                              autofillHints: const [AutofillHints.password],
-                              textInputAction: TextInputAction.done,
-                              onFieldSubmitted: (_) => _submit(),
-                              validator: (v) =>
-                                  v == null || v.isEmpty ? 'Password required' : null,
-                            ),
-                          ],
-                          if (_error != null) ...[
-                            const SizedBox(height: 12),
-                            Text(_error!,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(color: Colors.red.shade600)),
-                            if (_serverOffline) ...[
-                              const SizedBox(height: 8),
-                              OutlinedButton.icon(
-                                onPressed: _openSupport,
-                                icon: const Icon(Icons.support_agent, size: 18),
-                                label: const Text('Contact support'),
-                              ),
-                            ],
-                          ],
-                          const SizedBox(height: 20),
-                          FilledButton(
-                            onPressed: _busy ? null : _submit,
-                            child: _busy
-                                ? const SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2, color: Colors.white),
-                                  )
-                                : Text(_mfaSetupStep
-                                    ? 'Enable MFA & sign in'
-                                    : _mfaStep
-                                        ? 'Verify & sign in'
-                                        : 'Sign in'),
-                          ),
-                          if (!_mfaStep && !_mfaSetupStep) ...[
-                            const SizedBox(height: 8),
-                            TextButton(
-                              onPressed: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const ForgotPasswordScreen(),
+                              if (_mfaSecret != null) ...[
+                                const SizedBox(height: 6),
+                                SelectableText(
+                                  'Secret: $_mfaSecret',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                  ),
                                 ),
+                              ],
+                              const SizedBox(height: 14),
+                              TextFormField(
+                                controller: _code,
+                                focusNode: _codeNode,
+                                decoration: const InputDecoration(
+                                  labelText: '6-digit code',
+                                  prefixIcon: Icon(Icons.verified_user_outlined),
+                                ),
+                                keyboardType: TextInputType.number,
+                                maxLength: 6,
+                                autofocus: true,
+                                autofillHints: const [AutofillHints.oneTimeCode],
+                                onFieldSubmitted: (_) => _submit(),
+                                validator: (v) =>
+                                    v == null || v.trim().length < 6
+                                        ? 'Enter your 6-digit code'
+                                        : null,
                               ),
-                              child: const Text('Forgot password?'),
+                            ],
+                            if (_mfaStep) ...[
+                              TextFormField(
+                                controller: _code,
+                                focusNode: _codeNode,
+                                decoration: const InputDecoration(
+                                  labelText: '6-digit code',
+                                  prefixIcon: Icon(Icons.verified_user_outlined),
+                                ),
+                                keyboardType: TextInputType.number,
+                                maxLength: 6,
+                                autofocus: true,
+                                autofillHints: const [AutofillHints.oneTimeCode],
+                                onFieldSubmitted: (_) => _submit(),
+                                validator: (v) =>
+                                    v == null || v.trim().length < 6
+                                        ? 'Enter your 6-digit code'
+                                        : null,
+                              ),
+                            ],
+                            if (!_mfaStep && !_mfaSetupStep) ...[
+                              TextFormField(
+                                controller: _email,
+                                focusNode: _emailNode,
+                                decoration: const InputDecoration(
+                                  labelText: 'Email',
+                                  prefixIcon: Icon(Icons.mail_outline),
+                                ),
+                                keyboardType: TextInputType.emailAddress,
+                                autofillHints: const [AutofillHints.username],
+                                textInputAction: TextInputAction.done,
+                                onFieldSubmitted: (_) => _submit(),
+                                validator: (v) => v == null || !v.contains('@')
+                                    ? 'Valid email required'
+                                    : null,
+                              ),
+                              const SizedBox(height: 14),
+                              TextFormField(
+                                controller: _password,
+                                decoration: const InputDecoration(
+                                  labelText: 'Password',
+                                  prefixIcon: Icon(Icons.lock_outline),
+                                ),
+                                obscureText: true,
+                                autocorrect: false,
+                                enableSuggestions: false,
+                                autofillHints: const [AutofillHints.password],
+                                textInputAction: TextInputAction.done,
+                                onFieldSubmitted: (_) => _submit(),
+                                validator: (v) =>
+                                    v == null || v.isEmpty ? 'Password required' : null,
+                              ),
+                            ],
+                            if (_error != null) ...[
+                              const SizedBox(height: 12),
+                              Text(_error!,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(color: Colors.red.shade600)),
+                              if (_serverOffline) ...[
+                                const SizedBox(height: 8),
+                                OutlinedButton.icon(
+                                  onPressed: _openSupport,
+                                  icon: const Icon(Icons.support_agent, size: 18),
+                                  label: const Text('Contact support'),
+                                ),
+                              ],
+                            ],
+                            const SizedBox(height: 20),
+                            FilledButton(
+                              onPressed: _busy ? null : _submit,
+                              child: _busy
+                                  ? const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2, color: Colors.white),
+                                    )
+                                  : Text(_mfaSetupStep
+                                      ? 'Enable MFA & sign in'
+                                      : _mfaStep
+                                          ? 'Verify & sign in'
+                                          : 'Sign in'),
                             ),
-                            if (auth.signupEnabled) ...[
-                              const SizedBox(height: 4),
+                            if (!_mfaStep && !_mfaSetupStep) ...[
+                              const SizedBox(height: 8),
                               TextButton(
                                 onPressed: () => Navigator.of(context).push(
                                   MaterialPageRoute(
-                                    builder: (_) => const SignupScreen(),
+                                    builder: (_) => const ForgotPasswordScreen(),
                                   ),
                                 ),
-                                child: const Text('New here? Create a free account'),
+                                child: const Text('Forgot password?'),
                               ),
+                              if (auth.signupEnabled) ...[
+                                const SizedBox(height: 4),
+                                TextButton(
+                                  onPressed: () => Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => const SignupScreen(),
+                                    ),
+                                  ),
+                                  child: const Text('New here? Create a free account'),
+                                ),
+                              ],
                             ],
-                           ],
                           ],
                         ),
                       ),
