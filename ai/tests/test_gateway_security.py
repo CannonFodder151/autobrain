@@ -16,6 +16,14 @@ def test_health_open() -> None:
     assert client.get("/health").status_code == 200
 
 
+def test_health_no_router_url_leak() -> None:
+    resp = client.get("/health")
+    body = resp.json()
+    assert resp.status_code == 200
+    assert "router_url" not in body
+    assert "router_enabled" not in body
+
+
 def test_infer_requires_key() -> None:
     resp = client.post("/v1/diagnostics", json={"payload": {"symptoms": "squealing brakes"}})
     assert resp.status_code == 401
