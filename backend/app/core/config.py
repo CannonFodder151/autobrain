@@ -188,6 +188,15 @@ class Settings(BaseSettings):
     # allow_credentials=True — browsers reject that combo.
     CORS_ALLOWED_ORIGINS: list[str] = []
 
+    @model_validator(mode="after")
+    def _validate_cors_no_wildcard_credentials(self) -> "Settings":
+        if "*" in self.CORS_ALLOWED_ORIGINS:
+            raise ValueError(
+                "CORS_ALLOWED_ORIGINS must not contain '*' when allow_credentials=True. "
+                "Set explicit origins instead."
+            )
+        return self
+
     # CI Triage webhook (AUT-1669): receives GitHub Actions CI pings and relays
     # to the CI Triage Agent via Paperclip issue creation.
     CI_TRIAGE_WEBHOOK_SECRET: str = ""  # bearer auth secret for the webhook
