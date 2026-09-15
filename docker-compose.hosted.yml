@@ -480,7 +480,7 @@ services:
     # stack file works on every Portainer endpoint without re-tagging.
     # Bind mounts live under /data (snap dockerd masks /opt + /srv as RO
     # core24 squashfs; see AUT-1853).
-    image: ghcr.io/cannonfodder151/autobrain-backup:hosted@sha256:4dcdf610a4c3a9ad16947358c42ed5fd986f73176a468627e090ee15b7bed76f
+    image: ghcr.io/cannonfodder151/autobrain-backup:hosted@sha256:077d789054d99d7f7b48d9b50d13975516042c68c8632cce602248144a2524fc
     restart: unless-stopped
     ports:
       - "127.0.0.1:8080:8080"
