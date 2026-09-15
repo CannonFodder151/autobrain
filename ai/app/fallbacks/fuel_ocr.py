@@ -14,17 +14,20 @@ def _num(s) -> float | None:
 
 def _fuel_receipt_fallback(text: str) -> dict:
     litres = price_pl = total = None
-    m = re.search(r"(\d{1,3}(?:[.,]\d{2})?)\s*(?:L|LT|Litres?|Litros)\b", text, re.IGNORECASE)
+    m = re.search(r"(\d{1,3}(?:[.,]\d{1,2})?)\s*(?:L|LT|Litres?|Litros)\b", text, re.IGNORECASE)
     if m:
         litres = _num(m.group(1))
-    m = re.search(r"(\d+[.,]\d{1,3})\s*(?:/L|c/L|per\s*litre)", text, re.IGNORECASE)
-    if m:
-        price_pl = _num(m.group(1).replace(",", "."))
-    if price_pl is None:
-        # Fuel receipts often format the unit price as "@ 2.09" or "$2.09".
-        m = re.search(r"[@]\s*\$?\s*(\d+[.,]\d{1,3})", text)
+    # Price per litre: "2.09/L", "209.9 c/L", "per litre 2.099", "@ $2.09"
+    for pat in [
+        r"(\d+[.,]\d{1,3})\s*(?:/L|c/L)",
+        r"per\s*litre\s*[:\$]?\s*(\d+[.,]\d{1,3})",
+        r"(\d+[.,]\d{1,3})\s*per\s*litre",
+        r"[@]\s*\$?\s*(\d+[.,]\d{1,3})",
+    ]:
+        m = re.search(pat, text, re.IGNORECASE)
         if m:
             price_pl = _num(m.group(1).replace(",", "."))
+            break
     m = re.search(r"total\s*[:\$]?\s*(\d+(?:[.,]\d{2})?)", text.lower())
     if m:
         total = _num(m.group(1).replace(",", "."))
