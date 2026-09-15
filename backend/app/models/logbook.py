@@ -57,6 +57,14 @@ class LogEntry(Base):
     status: Mapped[str] = mapped_column(String(20), default="in_progress")  # in_progress/completed
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
+    # EV/PHEV telemetry (AUT-2705): per-trip powertrain breakdown.
+    # vehicle_type reflects the powertrain mode detected for this trip:
+    # ice, ev, hev, phev (matches PowertrainType enum values, lowercase).
+    vehicle_type: Mapped[str | None] = mapped_column(String(8), default="ice")
+    ev_distance_km: Mapped[float | None] = mapped_column(Float)
+    ice_distance_km: Mapped[float | None] = mapped_column(Float)
+    charge_added_kwh: Mapped[float | None] = mapped_column(Float)
+
     __table_args__ = (
         # Postgres unique indexes allow multiple NULLs, so manual/phone rows
         # (device_id NULL) are unaffected while dongle rows dedupe strictly.

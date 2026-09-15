@@ -33,6 +33,12 @@ class LogEntryCreate(BaseModel):
         return clean_samples(v)
     source: str = Field(default="manual", pattern="^(manual|obd_auto|car_auto|diy_dongle)$")
 
+    # EV/PHEV telemetry (AUT-2705)
+    vehicle_type: str | None = Field(default=None, pattern="^(ice|ev|hev|phev)$")
+    ev_distance_km: float | None = None
+    ice_distance_km: float | None = None
+    charge_added_kwh: float | None = None
+
 
 class LogEntryUpdate(BaseModel):
     started_at: datetime | None = None
@@ -57,6 +63,12 @@ class LogEntryUpdate(BaseModel):
     def _clean(cls, v: list[GpsSample] | None) -> list[GpsSample] | None:
         return clean_samples(v)
 
+    # EV/PHEV telemetry (AUT-2705)
+    vehicle_type: str | None = Field(default=None, pattern="^(ice|ev|hev|phev)$")
+    ev_distance_km: float | None = None
+    ice_distance_km: float | None = None
+    charge_added_kwh: float | None = None
+
 
 class LogEntryOut(BaseModel):
     id: str
@@ -77,6 +89,12 @@ class LogEntryOut(BaseModel):
     end_lng: float | None
     status: str
     created_at: datetime
+
+    # EV/PHEV telemetry (AUT-2705)
+    vehicle_type: str | None
+    ev_distance_km: float | None
+    ice_distance_km: float | None
+    charge_added_kwh: float | None
 
     model_config = {"from_attributes": True}
 
@@ -100,3 +118,16 @@ class LogbookStats(BaseModel):
     work_trips: int
     work_distance_km: float
     work_percentage: float
+
+
+class EvTripStats(BaseModel):
+    """Per-vehicle EV/PHEV statistics (AUT-2705)."""
+
+    total_trips: int
+    total_distance_km: float
+    ev_distance_km: float
+    ice_distance_km: float
+    ev_ratio: float
+    total_charge_kwh: float
+    avg_efficiency_wh_per_km: float | None
+    trips: list[dict]
