@@ -21,8 +21,8 @@ spec:
           type: RuntimeDefault
       containers:
         - name: worker
-          image: autobrain-backend:latest
-          imagePullPolicy: Always
+          image: ghcr.io/cannonfodder151/autobrain-backend:hosted
+          imagePullPolicy: IfNotPresent
           envFrom:
             - secretRef:
                 name: autobrain-secrets
@@ -98,8 +98,8 @@ spec:
           type: RuntimeDefault
       containers:
         - name: beat
-          image: autobrain-backend:latest
-          imagePullPolicy: Always
+          image: ghcr.io/cannonfodder151/autobrain-backend:hosted
+          imagePullPolicy: IfNotPresent
           envFrom:
             - secretRef:
                 name: autobrain-secrets
