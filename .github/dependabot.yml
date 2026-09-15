@@ -1,0 +1,30 @@
+# Dependabot configuration — monitors the k8s manifests for third-party image
+# digest drift (postgres, redis, minio). Autobrain-* images are pinned by the
+# build pipeline (AUT-2175/D4) and don't need Dependabot; this catches upstream
+# base-image bumps so a human can review and merge.
+version: 2
+updates:
+  - package-ecosystem: "docker"
+    directory: "/infra/k8s"
+    schedule:
+      interval: "daily"
+    commit-message:
+      prefix: "chore(k8s)"
+    labels:
+      - "dependencies"
+      - "k8s"
+    # Dependabot opens PRs for upstream image bumps. Block auto-merge; review
+    # release notes then merge manually or let the board decide.
+    open-pull-requests-limit: 5
+
+  # Also monitor GitHub Actions for action version bumps.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "ci"
+    labels:
+      - "dependencies"
+      - "ci"
+    open-pull-requests-limit: 5
