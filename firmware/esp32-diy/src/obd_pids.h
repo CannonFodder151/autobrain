@@ -186,4 +186,21 @@ inline bool bus_active(uint32_t responses, bool any_valid_pid, uint32_t required
     return responses >= required || any_valid_pid;
 }
 
+// Build a mode-22 single-PID CAN request frame (11-bit id 0x7DF).
+// Service 0x22, PCI=0x03 (3 data bytes: service + 2-byte PID).
+inline void build_mode22_request(uint8_t frame[8], uint16_t pid) {
+    memset(frame, 0, 8);
+    frame[0] = 0x03;  // PCI: 3 data bytes follow
+    frame[1] = 0x22;  // service 22
+    frame[2] = (uint8_t)((pid >> 8) & 0xFF);
+    frame[3] = (uint8_t)(pid & 0xFF);
+}
+
+// OBD Mode-22 response is valid if service byte echoes 0x62 and PID matches.
+inline bool is_valid_mode22_response(const uint8_t* d, uint16_t pid) {
+    return d && d[0] == 0x62 &&
+           d[1] == (uint8_t)((pid >> 8) & 0xFF) &&
+           d[2] == (uint8_t)(pid & 0xFF);
+}
+
 }  // namespace autobrain

@@ -59,6 +59,36 @@ int main() {
     assert(!is_valid_pid_response(resp, 0x0D));
     assert(!is_valid_pid_response(nullptr, 0x0C));
 
+    // Mode-22 request frame builder
+    uint8_t m22req[8];
+    build_mode22_request(m22req, 0x016B);  // Nissan SOC PID
+    assert(m22req[0] == 0x03);            // PCI: 3 data bytes
+    assert(m22req[1] == 0x22);            // service 0x22
+    assert(m22req[2] == 0x01);            // PID high byte
+    assert(m22req[3] == 0x6B);            // PID low byte
+    assert(m22req[7] == 0);               // padding
+
+    // Mode-22 response validation (synthetic frames)
+    uint8_t m22resp[8] = {0x62, 0x01, 0x6B, 0x50, 0, 0, 0, 0};
+    assert(is_valid_mode22_response(m22resp, 0x016B));
+    assert(!is_valid_mode22_response(m22resp, 0x016C));  // wrong PID
+    assert(!is_valid_mode22_response(m22resp, 0x5B));    // generic PID
+    assert(!is_valid_mode22_response(nullptr, 0x016B));
+
+    // Mode-22: generic fallback PID (0x005B)
+    uint8_t m22generic[8];
+    build_mode22_request(m22generic, 0x5B);
+    assert(m22generic[2] == 0x00);
+    assert(m22generic[3] == 0x5B);
+
+    // Mode-22: high PID (0xF18D, GM EV SOC)
+    uint8_t m22gm[8];
+    build_mode22_request(m22gm, 0xF18D);
+    assert(m22gm[2] == 0xF1);
+    assert(m22gm[3] == 0x8D);
+    uint8_t m22gmresp[8] = {0x62, 0xF1, 0x8D, 0x64};
+    assert(is_valid_mode22_response(m22gmresp, 0xF18D));
+
     // ignition heuristic
     assert(!bus_active(0, false));
     assert(!bus_active(1, false));          // 1 < PROBE_REQUIRED_FRAMES (2)
