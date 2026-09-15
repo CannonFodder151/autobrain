@@ -1,0 +1,159 @@
+{
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Getting Started",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": ["index"]
+          },
+          {
+            "group": "Guides",
+            "pages": ["desktop-breakpoints-audit-AUT-2524", "petrol-price-map"]
+          }
+        ]
+      },
+      {
+        "tab": "Business Reviews",
+        "groups": [
+          {
+            "group": "Reviews",
+            "pages": ["Business-Reviews/changelog", "Business-Reviews/product-rules"]
+          }
+        ]
+      },
+      {
+        "tab": "Company",
+        "groups": [
+          {
+            "group": "Policies",
+            "pages": ["Company/department-ownership-map", "Company/documentation-policy"]
+          }
+        ]
+      },
+      {
+        "tab": "Deployment & Infrastructure",
+        "groups": [
+          {
+            "group": "Guides",
+            "pages": [
+              "Deployment-and-Infrastructure/autobrain-deploy-trigger",
+              "Deployment-and-Infrastructure/backup-strategy",
+              "Deployment-and-Infrastructure/ci-cd",
+              "Deployment-and-Infrastructure/container-consolidation-migration",
+              "Deployment-and-Infrastructure/deployment-guide",
+              "Deployment-and-Infrastructure/infrastructure-diagrams",
+              "Deployment-and-Infrastructure/monitoring",
+              "Deployment-and-Infrastructure/server-migration"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Engineering",
+        "groups": [
+          {
+            "group": "Architecture",
+            "pages": [
+              "Engineering/architecture",
+              "Engineering/container-architecture",
+              "Engineering/database-schema",
+              "Engineering/versioning"
+            ]
+          },
+          {
+            "group": "AI & Models",
+            "pages": [
+              "Engineering/ai-models",
+              "Engineering/ai-router-integration",
+              "Engineering/ai/vector"
+            ]
+          },
+          {
+            "group": "API & Integration",
+            "pages": [
+              "Engineering/api-spec",
+              "Engineering/integrating-autobrain",
+              "Engineering/obd-integration"
+            ]
+          },
+          {
+            "group": "Development",
+            "pages": [
+              "Engineering/developer-onboarding",
+              "Engineering/change-validation-gate",
+              "Engineering/module-boundaries",
+              "Engineering/module-breakdown",
+              "Engineering/task-pipeline",
+              "Engineering/mobile-release"
+            ]
+          },
+          {
+            "group": "ADRs",
+            "pages": [
+              "Engineering/adr/0001-ownership-advisor",
+              "Engineering/adr/0026-home-assistant-integration"
+            ]
+          },
+          {
+            "group": "OBD2 Dongle",
+            "pages": [
+              "Engineering/obd2-dongle/README",
+              "Engineering/obd2-dongle/nodemcu32s-build-guide"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Finance",
+        "groups": [
+          {
+            "group": "Guides",
+            "pages": [
+              "Finance/fuel-pricing",
+              "Finance/fuel-servo-spy",
+              "Finance/market-data",
+              "Finance/payments"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Marketing & Website",
+        "groups": [
+          {
+            "group": "Guides",
+            "pages": [
+              "Marketing-and-Website/community-garage",
+              "Marketing-and-Website/social",
+              "Marketing-and-Website/social-image-generation"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Security",
+        "groups": [
+          {
+            "group": "Guides",
+            "pages": ["Security/security"]
+          }
+        ]
+      },
+      {
+        "tab": "Testing & QA",
+        "groups": [
+          {
+            "group": "Guides",
+            "pages": [
+              "Testing-and-QA/qa-run-logs",
+              "Testing-and-QA/test-strategy",
+              "Testing-and-QA/user-testing-results"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
