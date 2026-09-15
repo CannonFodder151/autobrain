@@ -16,8 +16,9 @@ import sys
 from pathlib import Path
 
 # service -> repo prefix as pinned in docker-compose.hosted.yml
+# AUT-2152: backend was removed from PIN_MAP — it uses the tag-based :hosted ref
+# so hosted redeploys always resolve the current multi-arch digest (no manual pin).
 PIN_MAP = {
-    "backend":  "ghcr.io/cannonfodder151/autobrain-backend",
     "worker":   "ghcr.io/cannonfodder151/autobrain-worker",
     "ai":       "ghcr.io/cannonfodder151/autobrain-ai",
     "frontend": "ghcr.io/cannonfodder151/autobrain-frontend",
