@@ -80,21 +80,9 @@ inline const EvProfile* ev_profile_for_wmi(const char* wmi) {
     return &GENERIC_EV;
 }
 
-// Mode-22 request frame builder (11-bit CAN id 0x7DF).
-inline void build_mode22_request(uint8_t frame[8], uint16_t pid) {
-    memset(frame, 0, 8);
-    frame[0] = 0x03;   // PCI: 3 data bytes follow
-    frame[1] = 0x22;   // service 22
-    frame[2] = (uint8_t)((pid >> 8) & 0xFF);
-    frame[3] = (uint8_t)(pid & 0xFF);
-}
-
-// Valid Mode-22 response: 0x62 + matching PID.
-inline bool is_valid_mode22_response(const uint8_t* d, uint16_t pid) {
-    return d && d[0] == 0x62 &&
-           d[1] == (uint8_t)((pid >> 8) & 0xFF) &&
-           d[2] == (uint8_t)(pid & 0xFF);
-}
+// Mode-22 request/response helpers now live in obd_pids.h (shared with
+// mode-01 functions) so they're available to all CAN layers without pulling
+// in the EV profile table. This header keeps the manufacturer PID lookup.
 
 // Decode one Mode-22 channel from the response payload. Channel-aware
 // because SOC is a single-byte percentage while pack voltage/current are
