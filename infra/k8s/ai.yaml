@@ -21,8 +21,8 @@ spec:
           type: RuntimeDefault
       containers:
         - name: ai
-          image: autobrain-ai:latest
-          imagePullPolicy: Always
+          image: ghcr.io/cannonfodder151/autobrain-ai:hosted
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8001
           env:
