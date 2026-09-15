@@ -1,63 +1,74 @@
 {
-  "name": "AutoBrain Docs → Outline Sync",
+  "name": "docs-sync-to-outline",
   "nodes": [
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "autobrain-docs-sync",
+        "path": "docs-sync",
         "responseMode": "responseNode",
         "options": {}
       },
-      "id": "webhook-trigger",
-      "name": "GitHub Push Webhook",
+      "id": "webhook",
+      "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "position": [250, 300],
-      "webhookId": "autobrain-docs-sync"
-    },
-    {
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ { \"status\": \"ok\", \"message\": \"Sync triggered\" } }}"
-      },
-      "id": "respond-accepted",
-      "name": "Respond Accepted",
-      "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [450, 300]
+      "position": [250, 300]
     },
     {
       "parameters": {
-        "url": "https://n8n.nathanmartina.com/webhook/autobrain-docs-sync/run",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ { \"trigger\": \"github_push\", \"branch\": $json.body.ref, \"repo\": $json.body.repository.full_name, \"timestamp\": $now.toISOString() } }}",
+        "functionCode": "const fs = require('fs');\nconst path = require('path');\nconst { execSync } = require('child_process');\n\nconst repoPath = '/tmp/autobrain-sync';\n\n// Clone or pull latest\nif (!fs.existsSync(repoPath)) {\n  execSync(`git clone https://github.com/CannonFodder151/autobrain.git ${repoPath}`);\n} else {\n  execSync(`cd ${repoPath} && git pull origin main`);\n}\n\n// Run sync script\nconst result = execSync('node scripts/sync-docs-outline.mjs', {\n  cwd: repoPath,\n  env: {\n    ...process.env,\n    OUTLINE_API_TOKEN: $json.OUTLINE_API_TOKEN || $env.OUTLINE_API_TOKEN,\n    OUTLINE_API_URL: $json.OUTLINE_API_URL || $env.OUTLINE_API_URL || 'https://outline.nathanmartina.com'\n  },\n  encoding: 'utf8',\n  maxBuffer: 10 * 1024 * 1024\n});\n\nreturn [{ json: { success: true, output: result } }];"
+      },
+      "id": "syncScript",
+      "name": "Run Sync Script",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
         "options": {}
       },
-      "id": "trigger-run",
-      "name": "Trigger Sync Run",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
-      "position": [650, 300]
+      "id": "successResponse",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [750, 200]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "errorResponse",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [750, 400]
     }
   ],
   "connections": {
-    "GitHub Push Webhook": {
+    "Webhook": {
       "main": [
         [
           {
-            "node": "Respond Accepted",
+            "node": "Run Sync Script",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Respond Accepted": {
+    "Run Sync Script": {
       "main": [
         [
           {
-            "node": "Trigger Sync Run",
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Response",
             "type": "main",
             "index": 0
           }
@@ -65,13 +76,7 @@
       ]
     }
   },
-  "active": true,
-  "settings": {
-    "executionOrder": "v1"
-  },
-  "tags": [
-    {
-      "name": "autobrain"
-    }
-  ]
+  "active": false,
+  "settings": {},
+  "id": "1"
 }
