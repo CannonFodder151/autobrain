@@ -5,17 +5,19 @@ on:
     branches: [main]
     paths:
       - 'docs/**'
-      - 'docs.json'
+      - 'docs/docs.json'
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   sync-docs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - uses: pnpm/action-setup@v4
         with:
           version: 9
@@ -24,7 +26,53 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile=false
-      - run: node scripts/sync-docs-outline.mjs
+
+      - name: Check consecutive failure gate
+        id: gate
+        run: |
+          STATE_FILE=".github/docs-sync-state.json"
+          if [ -f "$STATE_FILE" ]; then
+            FAILURES=$(python3 -c "import json; d=json.load(open('$STATE_FILE')); print(d.get('consecutiveFailures', 0))")
+          else
+            FAILURES=0
+          fi
+          echo "Consecutive failures: $FAILURES"
+          if [ "$FAILURES" -ge 3 ]; then
+            echo "::error ::3+ consecutive sync failures detected. Blocking merge until fix."
+            echo "blocked=true" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          echo "blocked=false" >> "$GITHUB_OUTPUT"
+
+      - name: Sync to Outline
+        if: steps.gate.outputs.blocked != 'true'
+        id: sync
+        run: node scripts/sync-docs-outline.mjs
         env:
           OUTLINE_API_TOKEN: ${{ secrets.OUTLINE_API_TOKEN }}
           OUTLINE_API_URL: ${{ secrets.OUTLINE_API_URL || 'https://outline.nathanmartina.com' }}
+
+      - name: Reset failure counter on success
+        if: steps.sync.outcome == 'success'
+        run: |
+          echo '{"consecutiveFailures":0}' > .github/docs-sync-state.json
+          git config user.name "AutoBrain CI"
+          git config user.email "ci@autobrainservice.app"
+          git add .github/docs-sync-state.json
+          git diff --cached --quiet || git commit -m "ci: reset docs-sync failure counter" && git push
+
+      - name: Increment failure counter on failure
+        if: failure() && steps.gate.outputs.blocked != 'true'
+        run: |
+          STATE_FILE=".github/docs-sync-state.json"
+          if [ -f "$STATE_FILE" ]; then
+            CURRENT=$(python3 -c "import json; d=json.load(open('$STATE_FILE')); print(d.get('consecutiveFailures', 0))")
+          else
+            CURRENT=0
+          fi
+          NEXT=$((CURRENT + 1))
+          echo "{\"consecutiveFailures\":$NEXT}" > "$STATE_FILE"
+          git config user.name "AutoBrain CI"
+          git config user.email "ci@autobrainservice.app"
+          git add "$STATE_FILE"
+          git commit -m "ci: docs-sync failure $NEXT/3" && git push
