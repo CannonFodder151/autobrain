@@ -13,15 +13,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [0.3.266] - 2026-09-11
 
-<<<<<<< HEAD
 ### Security (AUT-2060)
 - Bumped `python:3.13-slim` base image digest from `7ce4b6d...` to `cc9dffa...` (2026-08-31 Docker Hub latest) in `docker/backend/Dockerfile`, `docker/ai/Dockerfile`, `docker/worker/Dockerfile`, and `market-data/Dockerfile`. New digest ships `libssl3t64` 3.5.7-1~deb13u2, resolving CVE-2026-14456 (OpenSSL QUIC DoS) and related HIGH CVEs. Updated `PYTHON_BASE_IMAGE` env var in `.github/workflows/trivy-image-scan.yml`. Removed resolved CVE-2026-14456 suppression from `.trivyignore`.
 
 ## [0.3.245] - 2026-09-06
-=======
+
 ### Added (AUT-3251)
 - feat(backend,frontend): add `powertrain` field (ICE/HEV/PHEV/EV) to vehicle schemas, models, and add/edit screens — fixes missing EV feature wiring.
->>>>>>> origin/main
 
 ## [0.3.265] - 2026-09-11
 
@@ -129,7 +127,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Security (AUT-2060)
 - Bumped `python:3.13-slim` base image digest from `7ce4b6d...` to `cc9dffa...` (2026-08-31 Docker Hub latest) in `docker/backend/Dockerfile`, `docker/ai/Dockerfile`, `docker/worker/Dockerfile`, and `market-data/Dockerfile`. New digest ships `libssl3t64` 3.5.7-1~deb13u2, resolving CVE-2026-14456 (OpenSSL QUIC DoS) and related HIGH CVEs. Updated `PYTHON_BASE_IMAGE` env var in `.github/workflows/trivy-image-scan.yml`. Removed resolved CVE-2026-14456 suppression from `.trivyignore`.
->>>>>>> a32d58f (security(AUT-2060): bump python:3.13-slim + nginx frontend digests, fix image-scan)
 
 ## [0.3.243] - 2026-09-06
 ### Fixed (AUT-2656)
