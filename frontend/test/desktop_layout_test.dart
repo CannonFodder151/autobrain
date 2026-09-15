@@ -30,6 +30,11 @@ class _FakeApi extends ApiClient {
     if (path == '/vehicle-shares') return <dynamic>[];
     return <String, dynamic>{};
   }
+
+  @override
+  Future<dynamic>? getCachedDecoded(String path, Map<String, String>? query) {
+    return null;
+  }
 }
 
 class _FakeAuth extends AuthState {
