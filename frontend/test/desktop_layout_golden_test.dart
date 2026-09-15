@@ -20,8 +20,8 @@ class _FakeApi extends ApiClient {
         Vehicle(
           id: 'v1',
           nickname: 'Demo Car',
-          make: 'Toyota',
-          model: 'Camry',
+          make: null,
+          model: null,
           year: 2022,
           rego: 'ABC123',
           regoState: 'NSW',
@@ -34,6 +34,15 @@ class _FakeApi extends ApiClient {
         ),
       ];
     }
+    if (path == '/vehicle-shares') return <dynamic>[];
+    return <String, dynamic>{};
+  }
+
+  @override
+  Future<dynamic>? getCachedDecoded(String path, Map<String, String>? query) {
+    return null;
+  }
+}
     if (path == '/vehicle-shares') return <dynamic>[];
     return <String, dynamic>{};
   }

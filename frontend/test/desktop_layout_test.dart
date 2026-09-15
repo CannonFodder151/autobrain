@@ -19,11 +19,10 @@ class _FakeApi extends ApiClient {
     if (path == '/vehicles') {
       return <dynamic>[
         <String, dynamic>{
-          'id': 'v1', 'nickname': 'Demo Car', 'make': 'Toyota',
-          'model': 'Camry', 'year': 2022, 'rego': 'ABC123',
-          'rego_state': 'NSW', 'colour': 'White', 'body_type': 'Sedan',
-          'fuel_type': 'Petrol', 'odometer_km': 45000,
-          'is_primary': true, 'is_shared': false,
+          'id': 'v1', 'nickname': 'Demo Car', 'year': 2022,
+          'rego': 'ABC123', 'rego_state': 'NSW', 'colour': 'White',
+          'body_type': 'Sedan', 'fuel_type': 'Petrol',
+          'odometer_km': 45000, 'is_primary': true, 'is_shared': false,
         },
       ];
     }
