@@ -37,7 +37,11 @@ RUN python -m playwright install --with-deps chromium \
 COPY backend/app ./app
 COPY backend/alembic ./alembic
 COPY backend/alembic.ini ./
-COPY ai/app ./ai_app
+# AUT-2826: AI gateway code uses `from app.X` imports which collide with the
+# backend's `app` package. Isolate the AI gateway in its own directory so
+# `from app.X` resolves to the AI gateway code when uvicorn starts from
+# that directory.
+COPY ai/app /app/ai_pkg/app
 COPY ai/requirements.txt ./ai_requirements.txt
 COPY market-data ./market-data
 
@@ -93,4 +97,4 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=5 \
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
 # Runs Celery worker+beat and AI gateway (:8001) alongside the API (single-container backend).
-CMD ["sh", "-c", "/init-minio.sh && python -m app.db.bootstrap && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && (uvicorn ai_app.main:app --host 0.0.0.0 --port 8001 &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+CMD ["sh", "-c", "/init-minio.sh && python -m app.db.bootstrap && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && (cd /app/ai_pkg && uvicorn app.main:app --host 0.0.0.0 --port 8001 &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
