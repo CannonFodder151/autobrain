@@ -2,26 +2,50 @@
   "navigation": {
     "tabs": [
       {
-        "tab": "Company",
+        "tab": "Getting Started",
         "groups": [
           {
             "group": "Overview",
-            "pages": [
-              "index"
-            ]
+            "pages": ["index"]
           },
           {
-            "group": "Company",
-            "pages": [
-              "Company/documentation-policy",
-              "Company/department-ownership-map"
-            ]
-          },
+            "group": "Guides",
+            "pages": ["desktop-breakpoints-audit-AUT-2524", "petrol-price-map"]
+          }
+        ]
+      },
+      {
+        "tab": "Business Reviews",
+        "groups": [
           {
-            "group": "Business Reviews",
+            "group": "Reviews",
+            "pages": ["Business-Reviews/changelog", "Business-Reviews/product-rules"]
+          }
+        ]
+      },
+      {
+        "tab": "Company",
+        "groups": [
+          {
+            "group": "Policies",
+            "pages": ["Company/department-ownership-map", "Company/documentation-policy"]
+          }
+        ]
+      },
+      {
+        "tab": "Deployment & Infrastructure",
+        "groups": [
+          {
+            "group": "Guides",
             "pages": [
-              "Business-Reviews/changelog",
-              "Business-Reviews/product-rules"
+              "Deployment-and-Infrastructure/autobrain-deploy-trigger",
+              "Deployment-and-Infrastructure/backup-strategy",
+              "Deployment-and-Infrastructure/ci-cd",
+              "Deployment-and-Infrastructure/container-consolidation-migration",
+              "Deployment-and-Infrastructure/deployment-guide",
+              "Deployment-and-Infrastructure/infrastructure-diagrams",
+              "Deployment-and-Infrastructure/monitoring",
+              "Deployment-and-Infrastructure/server-migration"
             ]
           }
         ]
@@ -30,47 +54,39 @@
         "tab": "Engineering",
         "groups": [
           {
-            "group": "Overview",
-            "pages": [
-              "Engineering/index"
-            ]
-          },
-          {
-            "group": "Core",
+            "group": "Architecture",
             "pages": [
               "Engineering/architecture",
-              "Engineering/api-spec",
-              "Engineering/integrating-autobrain",
-              "Engineering/database-schema",
               "Engineering/container-architecture",
-              "Engineering/developer-onboarding",
-              "Engineering/versioning",
-              "Engineering/task-pipeline",
-              "Engineering/change-validation-gate"
+              "Engineering/database-schema",
+              "Engineering/versioning"
             ]
           },
           {
-            "group": "AI",
+            "group": "AI & Models",
             "pages": [
-              "Engineering/module-breakdown",
-              "Engineering/module-boundaries",
               "Engineering/ai-models",
               "Engineering/ai-router-integration",
               "Engineering/ai/vector"
             ]
           },
           {
-            "group": "Mobile",
+            "group": "API & Integration",
             "pages": [
-              "Engineering/mobile-release"
+              "Engineering/api-spec",
+              "Engineering/integrating-autobrain",
+              "Engineering/obd-integration"
             ]
           },
           {
-            "group": "OBD",
+            "group": "Development",
             "pages": [
-              "Engineering/obd-integration",
-              "Engineering/obd2-dongle/README",
-              "Engineering/obd2-dongle/nodemcu32s-build-guide"
+              "Engineering/developer-onboarding",
+              "Engineering/change-validation-gate",
+              "Engineering/module-boundaries",
+              "Engineering/module-breakdown",
+              "Engineering/task-pipeline",
+              "Engineering/mobile-release"
             ]
           },
           {
@@ -79,65 +95,12 @@
               "Engineering/adr/0001-ownership-advisor",
               "Engineering/adr/0026-home-assistant-integration"
             ]
-          }
-        ]
-      },
-      {
-        "tab": "Deployment",
-        "groups": [
-          {
-            "group": "Overview",
-            "pages": [
-              "Deployment-and-Infrastructure/index"
-            ]
           },
           {
-            "group": "Infrastructure",
+            "group": "OBD2 Dongle",
             "pages": [
-              "Deployment-and-Infrastructure/deployment-guide",
-              "Deployment-and-Infrastructure/infrastructure-diagrams",
-              "Deployment-and-Infrastructure/ci-cd",
-              "Deployment-and-Infrastructure/server-migration",
-              "Deployment-and-Infrastructure/backup-strategy",
-              "Deployment-and-Infrastructure/monitoring",
-              "Deployment-and-Infrastructure/autobrain-deploy-trigger",
-              "Deployment-and-Infrastructure/container-consolidation-migration"
-            ]
-          }
-        ]
-      },
-      {
-        "tab": "Security",
-        "groups": [
-          {
-            "group": "Overview",
-            "pages": [
-              "Security/index"
-            ]
-          },
-          {
-            "group": "Security",
-            "pages": [
-              "Security/security"
-            ]
-          }
-        ]
-      },
-      {
-        "tab": "Testing",
-        "groups": [
-          {
-            "group": "Overview",
-            "pages": [
-              "Testing-and-QA/index"
-            ]
-          },
-          {
-            "group": "Testing",
-            "pages": [
-              "Testing-and-QA/test-strategy",
-              "Testing-and-QA/qa-run-logs",
-              "Testing-and-QA/user-testing-results"
+              "Engineering/obd2-dongle/README",
+              "Engineering/obd2-dongle/nodemcu32s-build-guide"
             ]
           }
         ]
@@ -146,41 +109,47 @@
         "tab": "Finance",
         "groups": [
           {
-            "group": "Overview",
+            "group": "Guides",
             "pages": [
-              "Finance/index"
-            ]
-          },
-          {
-            "group": "Finance",
-            "pages": [
-              "Finance/payments",
-              "Finance/budget-tracking",
-              "Finance/infrastructure-costs",
-              "Finance/migration-budget",
               "Finance/fuel-pricing",
               "Finance/fuel-servo-spy",
-              "Finance/market-data"
+              "Finance/market-data",
+              "Finance/payments"
             ]
           }
         ]
       },
       {
-        "tab": "Marketing",
+        "tab": "Marketing & Website",
         "groups": [
           {
-            "group": "Overview",
+            "group": "Guides",
             "pages": [
-              "Marketing-and-Website/index"
-            ]
-          },
-          {
-            "group": "Marketing",
-            "pages": [
+              "Marketing-and-Website/community-garage",
               "Marketing-and-Website/social",
-              "Marketing-and-Website/social-image-generation",
-              "Marketing-and-Website/per-post-og-image-workflow",
-              "Marketing-and-Website/community-garage"
+              "Marketing-and-Website/social-image-generation"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Security",
+        "groups": [
+          {
+            "group": "Guides",
+            "pages": ["Security/security"]
+          }
+        ]
+      },
+      {
+        "tab": "Testing & QA",
+        "groups": [
+          {
+            "group": "Guides",
+            "pages": [
+              "Testing-and-QA/qa-run-logs",
+              "Testing-and-QA/test-strategy",
+              "Testing-and-QA/user-testing-results"
             ]
           }
         ]
