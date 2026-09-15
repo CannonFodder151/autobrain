@@ -129,7 +129,13 @@ async def _ensure_next_service(db: AsyncSession, vehicle: Vehicle) -> None:
             for s in history
         ],
     }
-    result = await predict_service(payload)
+    result = None
+    try:
+        result = await predict_service(payload)
+    except Exception:
+        from app.core.logging import get_logger
+        get_logger(__name__).warning("predict_service_failed", vehicle_id=vehicle.id)
+        return
     if not result:
         return
     svc_type = str(result.get("service_type") or "scheduled")
