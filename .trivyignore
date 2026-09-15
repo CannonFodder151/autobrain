@@ -113,6 +113,18 @@ CVE-2026-78410  # util-linux restricted bind-mount source pinning bypass: nginx 
 # noisy placeholder so PRs don't get blocked on DB freshness. Reviewer: Sec.
 CVE-2026-80256  # nginx placeholder; trivy 0.70 false-positive on missing metadata
 
+# --- POSTGRESQL libpcre2 CVEs (pgvector/pgvector:pg17) ---
+# CVE-2026-86145 / CVE-2026-89161: pcre2 out-of-bounds write + JIT memory corruption.
+# Source: libpcre2-8-0 10.42-1 in the pgvector/pgvector:pg17 (debian 12.15) base image.
+# Fixed in 10.42-1+deb12u1 (already published by Debian). The pgvector upstream
+# image has not yet been rebuilt with the patched pcre2 package. Suppress until
+# the pgvector:pg17 image digest is refreshed; re-check 2026-11-30. Postgres
+# reaches pcre2 only via server-side regex operators (~, ~*, POSIX regex) on
+# user-queried columns; AutoBrain's backend does not expose raw regex input to
+# end-users on any public API endpoint (AUT-2918).
+CVE-2026-86145  # pcre2 OOB write: not exposed via public API regex input
+CVE-2026-89161  # pcre2 JIT memory corruption: same exposure surface as above
+
 # --- AUT-1600-PR: nginx libuuid/util-linux HIGH CVEs (pending upstream rebuild) -----
 # Source: libuuid (util-linux 2.42.1-r0) in nginxinc/nginx-unprivileged:stable-alpine.
 # CVE-2026-53612/53613/53614: TOCTOU/SUID mount bypasses require filesystem
