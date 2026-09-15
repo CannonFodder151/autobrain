@@ -43,10 +43,11 @@ jobs:
       - name: Build and push autobrain-backend :hosted-arm64
         run: |
           set -euo pipefail
-          docker buildx build \
-            --platform linux/arm64 \
-            --push \
-            --tag ghcr.io/cannonfodder151/autobrain-backend:hosted-arm64 \
+           docker buildx build \
+             --platform linux/arm64 \
+             --push \
+             --no-cache \
+             --tag ghcr.io/cannonfodder151/autobrain-backend:hosted-arm64 \
             --file docker/backend/Dockerfile .
           echo "==> pushed ghcr.io/cannonfodder151/autobrain-backend:hosted-arm64"
 
