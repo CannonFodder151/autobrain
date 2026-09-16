@@ -11,6 +11,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-2132)
+- feat(backend): add `poll_vic_fuel_prices` Celery task and `poll-vic-fuel-prices` beat schedule entry — daily VIC Servo Saver polling consumer with `FUEL_VIC_ENABLED`/`FUEL_VIC_API_KEY` gating (AUT-1932 follow-up).
+- feat(backend): add `GET /api/fuel/vic` endpoint returning VIC-sourced stations + latest prices from the cached `fuel_stations`/`fuel_prices` tables.
+- test(backend): add VIC skip-case tests (`test_aut2132_vic_servo_saver.py`) covering enabled+key present, enabled+key absent, and disabled skip paths.
+
 ## [0.3.268] - 2026-09-16
 
 ### Fixed (AUT-3039)

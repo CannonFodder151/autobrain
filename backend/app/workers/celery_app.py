@@ -59,5 +59,10 @@ celery_app.conf.update(
             "task": "app.workers.tasks.refresh_sca_parts_cache",
             "schedule": crontab(hour=0, minute=0),
         },
+        # AUT-2132: once-per-day VIC Servo Saver poll
+        "poll-vic-fuel-prices": {
+            "task": "app.workers.tasks.poll_vic_fuel_prices",
+            "schedule": 60 * 60 * 24,
+        },
     },
 )

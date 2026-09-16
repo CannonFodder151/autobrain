@@ -459,6 +459,42 @@ def poll_nsw_fuel_prices() -> None:
     _run(_poll())
 
 
+@shared_task
+def poll_vic_fuel_prices() -> None:
+    """Daily VIC Servo Saver poll (AUT-2132 / AUT-1932).
+
+    Parallel to poll_nsw_fuel_prices but uses the fuel_feeds.ingest_vic_fuel_saver
+    path which handles FUEL_VIC_ENABLED / FUEL_VIC_API_KEY gating internally.
+    Runs on the existing Celery beat schedule (no new scheduler).
+    """
+    from app.services.fuel_feeds import ingest_vic_fuel_saver
+
+    async def _poll():
+        from app.core.config import settings
+        from app.services import fuel_prices as fuel_svc
+
+        instance_id = settings.INSTANCE_ID or _hostname()
+        if not settings.FUEL_VIC_ENABLED:
+            logger.info("vic_fuel_poll_skipped", reason="disabled", instance_id=instance_id)
+            return
+        if not settings.FUEL_VIC_API_KEY:
+            logger.info("vic_fuel_poll_skipped", reason="no_api_key", instance_id=instance_id)
+            return
+        async with SessionLocal() as db:
+            if not await fuel_svc.should_poll(db, instance_id, "VIC"):
+                logger.info("vic_fuel_poll_skipped", reason="already_polled_today", instance_id=instance_id)
+                return
+            try:
+                result = await ingest_vic_fuel_saver(db)
+            except Exception:
+                logger.exception("vic_fuel_poll_failed", instance_id=instance_id)
+                return
+            await fuel_svc.mark_polled(db, instance_id, "VIC")
+            logger.info("vic_fuel_poll_done", **result, instance_id=instance_id)
+
+    _run(_poll())
+
+
 def _hostname() -> str:
     import socket
 
