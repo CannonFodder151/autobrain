@@ -75,6 +75,10 @@ async def format_sca_parts(payload: dict) -> dict | None:
     return await _call("parts-guide", payload)
 
 
+async def compute_health_score(payload: dict) -> dict | None:
+    return await _call("health-score", payload)
+
+
 # --- AI Advisor (AUT-2450) -------------------------------------------------
 # 24h in-process cache keyed by (vehicle_id, stable module-outputs hash).
 # Same inputs = same answer for 24h so the router is never called twice for
