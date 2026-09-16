@@ -7,7 +7,7 @@ name: Security — base image CVE scan (trivy)
 # Scans the pinned Postgres data-store, frontend nginx AND python base images for
 # HIGH/CRITICAL CVEs and enforces digest pinning (no floating tags).
 # Postgres: AUT-1749. Frontend nginx: AUT-1740 (CVE-2026-14456 OpenSSL QUIC DoS).
-# Python base (backend/ai/worker/market-data): AUT-1735 (perl/SQLite/zlib RCEs).
+# Python base (backend/ai/market-data): AUT-1735 (perl/SQLite/zlib RCEs).
 
 on:
   pull_request:
@@ -18,7 +18,6 @@ on:
       - 'docker/frontend/Dockerfile'
       - 'docker/backend/Dockerfile'
       - 'docker/ai/Dockerfile'
-      - 'docker/worker/Dockerfile'
       - 'market-data/Dockerfile'
       - '.trivyignore'
       - '.github/workflows/trivy-image-scan.yml'
@@ -32,7 +31,6 @@ on:
       - 'docker/frontend/Dockerfile'
       - 'docker/backend/Dockerfile'
       - 'docker/ai/Dockerfile'
-      - 'docker/worker/Dockerfile'
       - 'market-data/Dockerfile'
       - '.trivyignore'
       - '.github/workflows/trivy-image-scan.yml'
@@ -87,7 +85,7 @@ jobs:
           # build is reproducible and the trivy gate below scans a fixed image.
           FLOATING="$(grep -rnE 'FROM python:[0-9]' \
             docker/backend/Dockerfile docker/ai/Dockerfile \
-            docker/worker/Dockerfile market-data/Dockerfile || true)"
+            market-data/Dockerfile || true)"
           FLOATING="$(printf '%s\n' "$FLOATING" | grep -v '@sha256' || true)"
           if [ -n "$FLOATING" ]; then
             echo "::error::floating python base image detected (missing @sha256 digest):"
@@ -106,7 +104,7 @@ jobs:
           # amd64-only digest; require the multi-arch 3.13.15-slim-trixie index.
           BAD="$(grep -rn 'cc9dffa47c8294ba9bb795a8dfaeb7b76f2b30acade2c52a461a2999d127eb00' \
               docker/backend/Dockerfile docker/ai/Dockerfile \
-              docker/worker/Dockerfile market-data/Dockerfile || true)"
+              market-data/Dockerfile || true)"
           if [ -n "$BAD" ]; then
             echo "::error::python base pin is the known amd64-only manifest (cc9dffa…) — use the multi-arch 3.13.15-slim-trixie index (AUT-2656). Offending lines:"
             printf '%s\n' "$BAD"
@@ -171,4 +169,4 @@ jobs:
           curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
             -H "Content-Type: application/json" \
             -d "$(jq -nc --arg c status --arg t "$TITLE" --arg col "$COLOR" --arg u "$RUN_URL" \
-              '{channel:$c,title:$t,description:"Weekly trivy scan of digest-pinned base images: postgres:17, nginx:stable-alpine frontend, python:3.13-slim (backend/ai/worker/market-data).",color:$col,author:"Security Scan",fields:[{name:"Scope",value:"postgres:17 + nginx frontend + python:3.13-slim",inline:true},{name:"Run",value:$u,inline:true}]}')"
+              '{channel:$c,title:$t,description:"Weekly trivy scan of digest-pinned base images: postgres:17, nginx:stable-alpine frontend, python:3.13-slim (backend/ai/market-data).",color:$col,author:"Security Scan",fields:[{name:"Scope",value:"postgres:17 + nginx frontend + python:3.13-slim",inline:true},{name:"Run",value:$u,inline:true}]}')"
