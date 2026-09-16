@@ -1,0 +1,82 @@
+{
+  "name": "docs-sync-to-outline",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "docs-sync",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const fs = require('fs');\nconst path = require('path');\nconst { execSync } = require('child_process');\n\nconst repoPath = '/tmp/autobrain-sync';\n\n// Clone or pull latest\nif (!fs.existsSync(repoPath)) {\n  execSync(`git clone https://github.com/CannonFodder151/autobrain.git ${repoPath}`);\n} else {\n  execSync(`cd ${repoPath} && git pull origin main`);\n}\n\n// Run sync script\nconst result = execSync('node scripts/sync-docs-outline.mjs', {\n  cwd: repoPath,\n  env: {\n    ...process.env,\n    OUTLINE_API_TOKEN: $json.OUTLINE_API_TOKEN || $env.OUTLINE_API_TOKEN,\n    OUTLINE_API_URL: $json.OUTLINE_API_URL || $env.OUTLINE_API_URL || 'https://outline.nathanmartina.com'\n  },\n  encoding: 'utf8',\n  maxBuffer: 10 * 1024 * 1024\n});\n\nreturn [{ json: { success: true, output: result } }];"
+      },
+      "id": "syncScript",
+      "name": "Run Sync Script",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "successResponse",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [750, 200]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "errorResponse",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [750, 400]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Run Sync Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Sync Script": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}

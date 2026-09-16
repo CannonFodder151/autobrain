@@ -167,7 +167,7 @@ class Settings(BaseSettings):
     APP_BASE_URL: str = "http://localhost:8000"
 
     # Versioning (local only; the GitHub update check was removed — AUT-461)
-    APP_VERSION: str = "0.3.266"  # mirror frontend/pubspec.yaml version
+    APP_VERSION: str = "0.3.267"  # mirror frontend/pubspec.yaml version
 
     # Scheduled backup (daily). When set, beats stores a full JSON snapshot to MinIO.
     BACKUP_ENABLED: bool = True
@@ -187,6 +187,15 @@ class Settings(BaseSettings):
     # only (the nginx frontend proxies /api, /ws, /ai). Never pair "*" with
     # allow_credentials=True — browsers reject that combo.
     CORS_ALLOWED_ORIGINS: list[str] = []
+
+    @model_validator(mode="after")
+    def _validate_cors_no_wildcard_credentials(self) -> "Settings":
+        if "*" in self.CORS_ALLOWED_ORIGINS:
+            raise ValueError(
+                "CORS_ALLOWED_ORIGINS must not contain '*' when allow_credentials=True. "
+                "Set explicit origins instead."
+            )
+        return self
 
     # CI Triage webhook (AUT-1669): receives GitHub Actions CI pings and relays
     # to the CI Triage Agent via Paperclip issue creation.
