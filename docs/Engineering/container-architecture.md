@@ -48,10 +48,6 @@ reads configuration exclusively from environment variables.
   then `uvicorn app.main:app` (AUT-3153).
 - **ai** (`docker/ai/Dockerfile`): entrypoint runs two uvicorn processes —
   market-data scraper on :8000 and AI gateway on :8001 (AUT-1242/C3).
-- **worker** (`docker/worker/Dockerfile`): standalone production image from
-  `backend/app`; retained for k8s/legacy consumers, **not used by the hosted
-  stack** (AUT-3153). CMD `celery -A app.workers.celery_app:celery_app worker -B -l
-  info --concurrency=2`.
 
 ## Healthchecks
 

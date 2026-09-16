@@ -18,7 +18,6 @@ from pathlib import Path
 # service -> repo prefix as pinned in docker-compose.hosted.yml
 PIN_MAP = {
     "backend":  "ghcr.io/cannonfodder151/autobrain-backend",
-    "worker":   "ghcr.io/cannonfodder151/autobrain-worker",
     "ai":       "ghcr.io/cannonfodder151/autobrain-ai",
     "frontend": "ghcr.io/cannonfodder151/autobrain-frontend",
 }
