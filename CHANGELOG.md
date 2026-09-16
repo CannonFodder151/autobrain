@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-2459)
+- fix(backend): drop dead `GetFuelTypes` HTTP call in QLD DirectAPI ingest — the per-country endpoint returns 404 for countryId=21 (the v1.5 contract has no country-scoped fuel-type list). Replace with a hardcoded `QLD_DIRECT_FUEL_TYPE_MAP` mapping FuelId → canonical name. The old call aborted the entire `_fetch_qld_direct` chain via `raise_for_status()`, causing ALL QLD data (stations + prices) to be lost every ingest cycle. Remove `_parse_qld_fuel_types` (no longer needed). Add `test_qld_direct_does_not_call_get_fuel_types` guard test.
+
 ### Fixed (AUT-3197)
 - fix(dev): wire dev ai service to the full `docker/ai/entrypoint.sh` (AI gateway :8001 + market-data :8000) instead of overriding the command with gateway-only `uvicorn`. Added `API_KEY` env pass-through for market-data auth, exposed port 8000, and added a `./market-data:/app/market-data` volume mount so the entrypoint's `cd /app/market-data` resolves. Added `MARKET_DATA_URL` to the shared backend env so the dev backend can reach the scraper — brings dev parity with prod/hosted.
 

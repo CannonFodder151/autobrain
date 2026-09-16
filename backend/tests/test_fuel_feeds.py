@@ -107,11 +107,11 @@ QLD_DIRECT_BRANDS = [
     {"BrandId": 1, "Name": "BP"},
     {"BrandId": 2, "Name": "Caltex"},
 ]
-QLD_DIRECT_FUELS = [
-    {"FuelId": 1, "Name": "Unleaded 91"},
-    {"FuelId": 2, "Name": "Premium Unleaded 95"},
-    {"FuelId": 4, "Name": "Diesel"},
-]
+QLD_DIRECT_FUELS = {
+    1: "91",
+    2: "95",
+    4: "Diesel",
+}
 QLD_DIRECT_REGIONS = [
     {"GeoRegionLevel": 1, "GeoRegionId": 10, "Name": "Australia", "Abbrev": "AU"},
     {"GeoRegionLevel": 3, "GeoRegionId": 33, "Name": "Queensland", "Abbrev": "QLD"},
@@ -129,7 +129,9 @@ QLD_DIRECT_PRICES = {"S": [
 
 def test_parse_qld_direct_brands_and_fuels() -> None:
     assert feeds._parse_qld_brands(QLD_DIRECT_BRANDS) == {1: "BP", 2: "Caltex"}
-    assert feeds._parse_qld_fuel_types(QLD_DIRECT_FUELS) == {1: "Unleaded 91", 2: "Premium Unleaded 95", 4: "Diesel"}
+    assert feeds.QLD_DIRECT_FUEL_TYPE_MAP[1] == "91"
+    assert feeds.QLD_DIRECT_FUEL_TYPE_MAP[2] == "95"
+    assert feeds.QLD_DIRECT_FUEL_TYPE_MAP[4] == "Diesel"
     assert feeds._parse_qld_geo_regions(QLD_DIRECT_REGIONS, level=3) == 33
     assert feeds._parse_qld_geo_regions(QLD_DIRECT_REGIONS, level=1) == 10
     assert feeds._parse_qld_geo_regions(QLD_DIRECT_REGIONS, level=99) is None
@@ -147,7 +149,7 @@ def test_parse_qld_direct_sites_resolves_brand() -> None:
 def test_parse_qld_direct_prices_normalises_cents_to_dollars() -> None:
     prices = feeds._parse_qld_direct_prices(
         QLD_DIRECT_PRICES,
-        {1: "Unleaded 91", 2: "Premium Unleaded 95", 4: "Diesel"},
+        {1: "91", 2: "95", 4: "Diesel"},
     )
     pairs = {(ft, price) for (ft, price, _) in prices["12345"]}
     assert pairs == {("91", 165.0), ("95", 175.0), ("Diesel", 180.0)}
@@ -158,8 +160,20 @@ def test_parse_qld_direct_prices_normalises_cents_to_dollars() -> None:
 def test_parse_qld_direct_prices_handles_unknown_fuel_keys() -> None:
     # Unknown fuel id / non-numeric key should be silently ignored.
     raw = {"S": [{"S": 1, "P1": 15000, "P999": 20000, "PX": 100, "LastUpdated": "2024-01-01T00:00:00"}]}
-    prices = feeds._parse_qld_direct_prices(raw, {1: "Unleaded 91"})
+    prices = feeds._parse_qld_direct_prices(raw, {1: "91"})
     assert {(ft, price) for (ft, price, _) in prices["1"]} == {("91", 150.0)}
+
+
+def test_qld_direct_does_not_call_get_fuel_types() -> None:
+    """AUT-2459: GetFuelTypes returns 404 for countryId=21 — the DirectAPI path
+    must not depend on it. ``QLD_DIRECT_FUEL_TYPE_MAP`` is a hardcoded constant
+    and ``_fetch_qld_direct`` must never call that endpoint."""
+    import inspect
+    src = inspect.getsource(feeds._fetch_qld_direct)
+    assert "GetFuelTypes" not in src
+    # The hardcoded map is the canonical source for fuel type resolution.
+    assert 1 in feeds.QLD_DIRECT_FUEL_TYPE_MAP
+    assert 4 in feeds.QLD_DIRECT_FUEL_TYPE_MAP
 
 
 def test_ingest_qld_skips_when_no_key() -> None:

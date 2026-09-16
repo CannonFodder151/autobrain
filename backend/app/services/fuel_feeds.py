@@ -209,8 +209,22 @@ def _parse_nsw(raw: Any) -> tuple[list[dict], dict[str, list[tuple[str, float, d
 # --------------------------------------------------------------------------- #
 
 # DirectAPI short keys used by ``GetSitesPrices`` — P1..Pn keyed by FuelId.
-# The mapping FuelId -> canonical fuel type is supplied by ``GetFuelTypes``.
 _QLD_FUEL_FIELD_RE = __import__("re").compile(r"^P\d+$")
+
+# QLD DirectAPI v1.5 fuel-ID → canonical fuel-type name.
+# AUT-2459: the per-country ``GetFuelTypes`` endpoint returns 404 for countryId=21
+# (the v1.5 contract has no country-scoped fuel-type list; fuel types surface as
+# P<id> keys in each station price record). These IDs are part of the QLD
+# DirectAPI schema and are stable across all country feeds.
+QLD_DIRECT_FUEL_TYPE_MAP: dict[int, str] = {
+    1: "91",        # Unleaded 91
+    2: "95",        # Premium Unleaded 95
+    3: "98",        # Premium Unleaded 98
+    4: "Diesel",
+    5: "E10",       # E10 ( ethanol blend )
+    6: "LPG",
+    7: "Diesel",    # Premium Diesel → canonical Diesel
+}
 
 
 def _parse_qld_direct_sites(
@@ -255,12 +269,13 @@ def _parse_qld_direct_prices(
     prices_raw: Any,
     fuel_id_to_name: dict[int, str],
 ) -> dict[str, list[tuple[str, float, datetime]]]:
-    """Parse ``GetSitesPrices`` payload into site_id -> [(fuel, cents/litre, ts)].
+    """Parse ``GetSitesPrices`` payload into site_id -> [(fuel, price_dollars, ts)].
 
     DirectAPI shape: ``{"S": [{"S": <SiteId>, "P1": <cents>, "P2": <cents>,
-    ..., "LastUpdated": <iso>}, ...]}``. P1..Pn are keyed by FuelId (from
-    ``GetFuelTypes``); prices are integer cents per litre (divide by 100 to
-    get dollars). We keep dollars for downstream consistency with WA/NSW.
+    ..., "LastUpdated": <iso>}, ...]}``. P1..Pn are keyed by FuelId (mapped via
+    the constant ``QLD_DIRECT_FUEL_TYPE_MAP``); prices are integer cents per
+    litre. We normalise cents → dollars for downstream consistency with WA
+    FuelWatch and NSW FuelCheck.
     """
     rows = []
     if isinstance(prices_raw, dict):
@@ -312,23 +327,6 @@ def _parse_qld_brands(brands_raw: Any) -> dict[int, str]:
         if bid is not None and name:
             try:
                 out[int(bid)] = str(name)
-            except (TypeError, ValueError):
-                continue
-    return out
-
-
-def _parse_qld_fuel_types(types_raw: Any) -> dict[int, str]:
-    """Parse ``GetFuelTypes`` payload: ``[{"FuelId": <int>, "Name": <str>}, ...]``."""
-    rows = types_raw if isinstance(types_raw, list) else []
-    out: dict[int, str] = {}
-    for r in rows:
-        if not isinstance(r, dict):
-            continue
-        fid = _first(r, ["FuelId", "Id"])
-        name = _first(r, ["Name", "Fuel"])
-        if fid is not None and name:
-            try:
-                out[int(fid)] = str(name)
             except (TypeError, ValueError):
                 continue
     return out
@@ -587,8 +585,8 @@ async def ingest_nsw_fuelcheck(db: AsyncSession, *, client: httpx.AsyncClient | 
     return await _ingest(db, "nsw", stations, prices)
 
 
-async def _fetch_qld_direct(client: httpx.AsyncClient | None) -> tuple[dict[int, str], dict[int, str], int | None, list[dict], dict[str, list[tuple[str, float, datetime]]]]:
-    """Call the 4 QLD DirectAPI endpoints in sequence; return parsed dicts."""
+async def _fetch_qld_direct(client: httpx.AsyncClient | None) -> tuple[dict[int, str], int | None, list[dict], dict[str, list[tuple[str, float, datetime]]]]:
+    """Call the QLD DirectAPI endpoints in sequence; return parsed dicts."""
     base = settings.FUEL_QLD_API_URL.rstrip("/")
     sub_token = settings.FUEL_QLD_API_KEY
     headers = {
@@ -598,18 +596,16 @@ async def _fetch_qld_direct(client: httpx.AsyncClient | None) -> tuple[dict[int,
     country = settings.FUEL_QLD_COUNTRY_ID
     level = settings.FUEL_QLD_REGION_LEVEL
     brands = await _fetch_json(f"{base}/Subscriber/GetCountryBrands", headers=headers, params={"countryId": country}, client=client)
-    fuel_types = await _fetch_json(f"{base}/Subscriber/GetFuelTypes", headers=headers, params={"countryId": country}, client=client)
     regions = await _fetch_json(f"{base}/Subscriber/GetCountryGeographicRegions", headers=headers, params={"countryId": country}, client=client)
     brand_map = _parse_qld_brands(brands)
-    fuel_map = _parse_qld_fuel_types(fuel_types)
     geo_id = _parse_qld_geo_regions(regions, level)
     if geo_id is None:
         raise ValueError(f"QLD DirectAPI: no GeoRegionId at level {level}")
     sites_raw = await _fetch_json(f"{base}/Subscriber/GetFullSiteDetails", headers=headers, params={"countryId": country, "geoRegionLevel": level, "geoRegionId": geo_id}, client=client)
     prices_raw = await _fetch_json(f"{base}/Subscriber/GetSitesPrices", headers=headers, params={"countryId": country, "geoRegionLevel": level, "geoRegionId": geo_id}, client=client)
     stations = _parse_qld_direct_sites(sites_raw, brand_map)
-    prices = _parse_qld_direct_prices(prices_raw, fuel_map)
-    return brand_map, fuel_map, geo_id, stations, prices
+    prices = _parse_qld_direct_prices(prices_raw, QLD_DIRECT_FUEL_TYPE_MAP)
+    return brand_map, geo_id, stations, prices
 
 
 async def ingest_qld_fuel_prices(db: AsyncSession, *, client: httpx.AsyncClient | None = None) -> dict:
@@ -624,7 +620,7 @@ async def ingest_qld_fuel_prices(db: AsyncSession, *, client: httpx.AsyncClient 
         logger.info("fuel_qld_skipped_no_key")
         return {"source": "qld", "stations": 0, "prices": 0, "skipped": "no_api_key"}
     try:
-        _, _, geo_id, stations, prices = await _fetch_qld_direct(client)
+        _, geo_id, stations, prices = await _fetch_qld_direct(client)
         logger.info("fuel_qld_direct_ok", geo_region_id=geo_id, stations=len(stations), prices=sum(len(v) for v in prices.values()))
         return await _ingest(db, "qld", stations, prices)
     except Exception as exc:  # noqa: BLE001
