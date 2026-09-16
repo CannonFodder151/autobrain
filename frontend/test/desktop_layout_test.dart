@@ -30,6 +30,21 @@ class _FakeApi extends ApiClient {
     if (path == '/vehicle-shares') return <dynamic>[];
     return <String, dynamic>{};
   }
+  @override
+  Future<dynamic>? getCachedDecoded(String path, Map<String, String>? query) {
+    if (path == '/vehicles') {
+      return <dynamic>[
+        <String, dynamic>{
+          'id': 'v1', 'nickname': 'Demo Car', 'make': 'Toyota',
+          'model': 'Camry', 'year': 2022, 'rego': 'ABC123',
+          'rego_state': 'NSW', 'colour': 'White', 'body_type': 'Sedan',
+          'fuel_type': 'Petrol', 'odometer_km': 45000,
+          'is_primary': true, 'is_shared': false,
+        },
+      ];
+    }
+    return null;
+  }
 }
 
 class _FakeAuth extends AuthState {
