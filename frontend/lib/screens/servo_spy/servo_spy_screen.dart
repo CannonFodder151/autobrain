@@ -25,7 +25,6 @@ import '../../core/fuel_types.dart';
 import '../../core/geoloc.dart';
 import '../../core/models.dart';
 import 'servo_spy_list_model.dart';
-import 'servo_spy_station_history_screen.dart';
 
 enum _ServoSpyView { map, list }
 
@@ -135,7 +134,7 @@ class _MapStation {
   });
 
   factory _MapStation.fromApi(Map<String, dynamic> m) {
-    final rawPrices = (m['prices'] as List? ?? []) as List;
+    final rawPrices = (m['prices'] as List? ?? []);
     return _MapStation(
       id: m['id'] as String? ?? '',
       brand: m['brand'] as String?,
@@ -176,11 +175,9 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
   String? _vehicleId;  // AUT-2053: for $/km + avg fill cost projection
   double _maxDistanceKm = 25;
   final MapController _mapController = MapController();
-  LatLng? _mapCenter;
 
   void _onMapEvent(MapEvent event) {
     if (event is MapEventMoveEnd) {
-      _mapCenter = event.camera.center;
       if (mounted) setState(() {});
     }
   }
@@ -696,21 +693,6 @@ class _StationSheet extends StatelessWidget {
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
       await launchUrl(uri);
     }
-  }
-
-  Future<void> _openHistory(BuildContext context) async {
-    final stationId = station.id;
-    if (stationId == null || stationId.isEmpty) return;
-    final stationName = station.name ?? 'Station';
-    Navigator.of(context, rootNavigator: true).pop();
-    Navigator.of(context, rootNavigator: true).push(
-      MaterialPageRoute(
-        builder: (_) => ServoSpyStationHistoryScreen(
-          stationId: stationId,
-          stationName: stationName,
-        ),
-      ),
-    );
   }
 
   @override
