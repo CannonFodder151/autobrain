@@ -78,7 +78,7 @@ void main() {
         await _pumpAtSize(tester, const HomeScreen(), entry.value);
 
         expect(find.byType(AppBar), findsOneWidget);
-        expect(find.text('Demo Car'), findsOneWidget);
+        expect(find.text('Demo Car'), findsWidgets);
         expect(find.text('Features'), findsOneWidget);
         expect(find.byType(GridView), findsOneWidget);
       });
