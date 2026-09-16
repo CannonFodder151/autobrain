@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Retired (AUT-3193)
+- Retire standalone `autobrain-worker` image build from `.github/workflows/build-hosted.yml` and `.github/workflows/dockerhub-publish.yml`; delete `docker/worker/Dockerfile`. Hosted stack no longer references the standalone worker image; k8s already uses `autobrain-backend:latest`.
+
 ## [0.3.268] - 2026-09-16
 
 ### Fixed (AUT-3039)
