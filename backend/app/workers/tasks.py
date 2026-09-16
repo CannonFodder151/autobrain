@@ -557,6 +557,14 @@ def ingest_fuel_qld() -> None:
 
 
 @shared_task
+def ingest_fuel_vic() -> None:
+    """AUT-2375: per-source manual-trigger ingest (VIC Fuel Saver / Servo Saver)."""
+    from app.services.fuel_feeds import ingest_vic_fuel_saver
+
+    return _run_single_source_ingest("vic", ingest_vic_fuel_saver)
+
+
+@shared_task
 def refresh_sca_parts_cache() -> dict:
     """Nightly SCA parts cache prewarm (AUT-2419).
 
