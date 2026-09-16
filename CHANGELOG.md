@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-3193)
+- chore(ci): retire autobrain-worker image build/publish jobs from CI workflows (build-hosted.yml, dockerhub-publish.yml, trivy-image-scan.yml, security-pr-gate.yml) and delete docker/worker/Dockerfile. AUT-3153 merged the standalone Celery worker into backend; docker-compose.hosted.yml no longer references the autobrain-worker image. k8s already uses autobrain-backend:latest.
+
 ## [0.3.268] - 2026-09-16
 
 ### Fixed (AUT-3039)
