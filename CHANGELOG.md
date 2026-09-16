@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.268] - 2026-09-16
+
 ### Fixed (AUT-3039)
 - fix(test): fix `pumpAndSettle` timeout in desktop layout visual regression tests by mocking `getCachedDecoded` in `_FakeApi`, setting `_loading = false` in `VehicleListScreen._load()`, and correcting test assertions. The visual regression workflow (desktop 1280/1440/1920) now passes.
 
