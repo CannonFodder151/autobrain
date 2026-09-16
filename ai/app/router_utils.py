@@ -138,6 +138,19 @@ _SYSTEM_PROMPTS: dict[str, str] = {
         '"next_actions": [string] (<=3 items)}. '
         "Any number you mention must be copied verbatim from the payload."
     ),
+    "health-score": (
+        "You are AutoBrain's vehicle health score assistant. The deterministic "
+        "engine has already computed a baseline score (0-100), a status_label, "
+        "a per-category breakdown of penalty points, and predictive failure "
+        "alerts. You must NOT change the score, status_label, breakdown, or "
+        "alerts values — they are authoritative. Your job is to only add a "
+        "concise plain-English 'summary' (<=280 chars) that explains the "
+        "score in terms of the breakdown, and optionally append additional "
+        "failure_prediction entries to the alerts list (each with category, "
+        "severity, message, and confidence) based on the vehicle data in the "
+        "payload. Do NOT invent new categories or numerical scores. "
+        'Return STRICT JSON: {"summary": string<=280, "alerts": [{"category": string, "severity": string, "message": string, "confidence": number}]}'
+    ),
     "car-check": (
         "You are AutoBrain's car-check narrator. A deterministic engine has "
         "already computed a deal score (0-100) and extracted structured "
@@ -170,6 +183,7 @@ _AI_IMMUTABLE: dict[str, frozenset[str]] = {
     "fuel-ocr": frozenset({"vendor", "date", "litres", "price_per_litre", "total_cost", "currency"}),
     "advisor": frozenset({"decision", "based_on"}),
     "car-check": frozenset({"deal_score", "red_flags", "green_flags"}),
+    "health-score": frozenset({"score", "status_label", "breakdown", "model"}),
 }
 
 # Per-module output schema whitelist: the only keys the router may contribute,
@@ -251,6 +265,10 @@ _SCHEMAS: dict[str, dict[str, tuple]] = {
         "summary": (str,),
         "red_flags": (list,),
         "green_flags": (list,),
+    },
+    "health-score": {
+        "summary": (str,),
+        "alerts": (list,),
     },
 }
 

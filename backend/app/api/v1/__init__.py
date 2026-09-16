@@ -17,6 +17,7 @@ from app.api.v1 import (
     fuel_prices,
     fuel_servo,
     ha,
+    health_score,
     issues,
     logbook,
     mods,
@@ -54,6 +55,7 @@ api_router.include_router(parts.router)
 api_router.include_router(valuation.router)
 api_router.include_router(advisor.router)
 api_router.include_router(analytics.router)
+api_router.include_router(health_score.router)
 api_router.include_router(notifications.router)
 api_router.include_router(devices.router)
 api_router.include_router(dongle_firmware.router)
