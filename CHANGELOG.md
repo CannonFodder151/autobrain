@@ -9,7 +9,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
 
-## [0.3.267] - 2026-09-15
+## [Unreleased]
+
+### Fixed (AUT-3197)
+- fix(dev): wire dev ai service to the full `docker/ai/entrypoint.sh` (AI gateway :8001 + market-data :8000) instead of overriding the command with gateway-only `uvicorn`. Added `API_KEY` env pass-through for market-data auth, exposed port 8000, and added a `./market-data:/app/market-data` volume mount so the entrypoint's `cd /app/market-data` resolves. Added `MARKET_DATA_URL` to the shared backend env so the dev backend can reach the scraper — brings dev parity with prod/hosted.
 
 ### Fixed (AUT-3080)
 - fix(security): restrict CORS `allow_methods` to explicit set (GET/POST/PATCH/DELETE) and `allow_headers` to narrow list (Authorization, Content-Type, Accept, X-Requested-With). Add startup validator rejecting `CORS_ALLOWED_ORIGINS=["*"]` with `allow_credentials=True`.

@@ -1,6 +1,6 @@
 # AutoBrain local development stack.
 # Usage: cp .env.example .env && docker compose up --build
-# Runs: postgres, redis, minio, backend (API + Celery worker+beat), ai (reload), frontend.
+# Runs: postgres, redis, minio, backend (API + Celery worker+beat), ai (gateway + market-data), frontend.
 # All services bind to localhost — connects to 9Router at AI_ROUTER_URL.
 
 # Backend service factory — reused by dev and test overrides.
@@ -22,6 +22,7 @@ x-backend-base: &backend-base
     AI_ROUTER_URL: ${AI_ROUTER_URL:?AI_ROUTER_URL must be set in .env}
     SOCIAL_FEDERATION_HUB_URL: ${SOCIAL_FEDERATION_HUB_URL:-https://hub.autobrainservice.app}
     SOCIAL_FEDERATION_HOSTED: ${SOCIAL_FEDERATION_HOSTED:-false}
+    MARKET_DATA_URL: ${MARKET_DATA_URL:-http://ai:8000}
   depends_on:
     postgres:
       condition: service_healthy
@@ -114,11 +115,18 @@ services:
       AI_ROUTER_URL: ${AI_ROUTER_URL:?AI_ROUTER_URL must be set in .env}
       # AB-INFRA-006: gateway auth stays on in dev; backend sends the shared key.
       AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:?AI_GATEWAY_API_KEY must be set in .env}
+      # AUT-3197: market-data scraper auth (matched with backend MARKET_DATA_API_KEY).
+      API_KEY: ${MARKET_DATA_API_KEY:-}
     ports:
       - "127.0.0.1:8001:8001"
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+    # AUT-3197: no command override — use the full entrypoint.sh which starts
+    # both AI gateway (:8001) and market-data scraper (:8000), matching
+    # prod/hosted parity. Market-data (:8000) is internal-only (backend reaches
+    # it via http://ai:8000); host port 8000 is occupied by the backend API.
+    # Volume mounts provide hot-reload for both services.
     volumes:
       - ./ai:/app
+      - ./market-data:/app/market-data
 
   frontend:
     build:
