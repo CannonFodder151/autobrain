@@ -156,10 +156,63 @@ def test_parse_qld_direct_prices_normalises_cents_to_dollars() -> None:
 
 
 def test_parse_qld_direct_prices_handles_unknown_fuel_keys() -> None:
-    # Unknown fuel id / non-numeric key should be silently ignored.
+    # Unknown fuel id gets a P<id> fallback label; non-P<id> keys ignored (AUT-2459).
     raw = {"S": [{"S": 1, "P1": 15000, "P999": 20000, "PX": 100, "LastUpdated": "2024-01-01T00:00:00"}]}
     prices = feeds._parse_qld_direct_prices(raw, {1: "Unleaded 91"})
-    assert {(ft, price) for (ft, price, _) in prices["1"]} == {("91", 150.0)}
+    assert {(ft, price) for (ft, price, _) in prices["1"]} == {("91", 150.0), ("P999", 200.0)}
+
+
+def test_parse_qld_direct_prices_empty_fuel_map_uses_fallback_label() -> None:
+    """When GetFuelTypes 404s, fuel_map is empty; prices use P<id> fallback (AUT-2459)."""
+    prices = feeds._parse_qld_direct_prices(QLD_DIRECT_PRICES, {})
+    pairs = {(ft, price) for (ft, price, _) in prices["12345"]}
+    assert pairs == {("P1", 165.0), ("P2", 175.0), ("P4", 180.0)}
+
+
+def test_ingest_qld_fuel_prices_works_when_getfueltypes_404s() -> None:
+    """Ingestion returns stations/prices even when GetFuelTypes 404s (AUT-2459)."""
+    from unittest.mock import patch
+
+    feeds.settings.FUEL_QLD_API_KEY = "test-token"
+
+    async def _fake_fetch(url, *, headers=None, params=None, client=None):  # noqa: ANN001
+        if "GetFuelTypes" in url:
+            raise Exception("404 Not Found")
+        if "GetCountryBrands" in url:
+            return QLD_DIRECT_BRANDS
+        if "GetCountryGeographicRegions" in url:
+            return QLD_DIRECT_REGIONS
+        if "GetFullSiteDetails" in url:
+            return QLD_DIRECT_SITES
+        if "GetSitesPrices" in url:
+            return QLD_DIRECT_PRICES
+        return {}
+
+    class FakeDB:
+        async def execute(self, stmt):  # noqa: ANN001
+            class Result:
+                def first(self):
+                    return None
+            return Result()
+
+        def add(self, obj):  # noqa: ANN001
+            pass
+
+        async def flush(self):  # noqa: ANN001
+            pass
+
+        async def scalars(self, stmt):  # noqa: ANN001
+            class Result:
+                def first(self):
+                    return None
+            return Result()
+
+    with patch.object(feeds, "_fetch_json", _fake_fetch):
+        res = asyncio.run(feeds.ingest_qld_fuel_prices(db=FakeDB()))  # type: ignore[arg-type]
+
+    assert res["source"] == "qld"
+    assert res["stations"] > 0
+    assert res["prices"] > 0
 
 
 def test_ingest_qld_skips_when_no_key() -> None:
