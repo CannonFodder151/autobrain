@@ -15,8 +15,9 @@ on:
 # main (PR merge or auto-bump) arriving mid-publish would otherwise cancel it
 # and starve the latest commit (AUT-967, AUT-1756). Queue the newer run behind
 # the in-flight one so every push to main still publishes. The auto-bump commit
-# is tagged [skip ci] (scripts/auto-bump.sh) so it never re-triggers this
-# workflow and the in-flight publish is never cancelled by its own version cut.
+# is version-only (CHANGELOG.md + config files); the version_only steps
+# in publish/publish-manifest skip image build, so a newer push to main
+# never cancels the in-flight publish (AUT-967, AUT-1756, AUT-2228).
 concurrency:
   group: dockerhub-publish-${{ github.ref }}
   cancel-in-progress: false

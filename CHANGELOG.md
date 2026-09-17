@@ -11,6 +11,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-2132)
+- feat(backend): add `poll_vic_fuel_prices` Celery task and `poll-vic-fuel-prices` beat schedule entry — daily VIC Servo Saver polling consumer with `FUEL_VIC_ENABLED`/`FUEL_VIC_API_KEY` gating (AUT-1932 follow-up).
+- feat(backend): add `GET /api/fuel/vic` endpoint returning VIC-sourced stations + latest prices from the cached `fuel_stations`/`fuel_prices` tables.
+- test(backend): add VIC skip-case tests (`test_aut2132_vic_servo_saver.py`) covering enabled+key present, enabled+key absent, and disabled skip paths.
+
+### Fixed (AUT-2228)
+- fix(scripts): remove `[skip ci]` from `auto-bump.sh` commit message — the dockerhub-publish.yml `version_only` step already skips image build on version-cut pushes, so `[skip ci]` was redundant and suppressed `sync-mobile.yml` and `github-release` on auto-bump pushes. Document rationale in script header.
+
 ## [0.3.269] - 2026-09-17
 
 ### Added (AUT-1872)
