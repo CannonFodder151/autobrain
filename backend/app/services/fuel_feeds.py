@@ -356,7 +356,7 @@ def _parse_qld_direct_prices(
             except ValueError:
                 continue
             fuel_name = fuel_id_to_name.get(fuel_id)
-            ft = _normalise_fuel_type(fuel_name)
+            ft = _normalise_fuel_type(fuel_name) or f"P{fuel_id}"
             price_dollars = _to_float(v)
             if price_dollars is not None:
                 # DirectAPI returns integer cents/litre; WA/NSW already in
@@ -367,8 +367,7 @@ def _parse_qld_direct_prices(
                 # is always > 100 cents/litre, so this is safe.
                 if price_dollars >= 50 and float(v).is_integer():
                     price_dollars = price_dollars / 100.0
-            if ft and price_dollars is not None:
-                out.setdefault(sid, []).append((ft, price_dollars, ts))
+            out.setdefault(sid, []).append((ft, price_dollars, ts))
     return out
 
 
@@ -670,10 +669,16 @@ async def _fetch_qld_direct(client: httpx.AsyncClient | None) -> tuple[dict[int,
     country = settings.FUEL_QLD_COUNTRY_ID
     level = settings.FUEL_QLD_REGION_LEVEL
     brands = await _fetch_json(f"{base}/Subscriber/GetCountryBrands", headers=headers, params={"countryId": country}, client=client)
-    fuel_types = await _fetch_json(f"{base}/Subscriber/GetFuelTypes", headers=headers, params={"countryId": country}, client=client)
+    # GetFuelTypes may 404 for some countries (e.g. countryId=21 / Australia);
+    # fuel types surface as P<id> keys per station record instead (AUT-2459).
+    fuel_map: dict[int, str] = {}
+    try:
+        fuel_types = await _fetch_json(f"{base}/Subscriber/GetFuelTypes", headers=headers, params={"countryId": country}, client=client)
+        fuel_map = _parse_qld_fuel_types(fuel_types)
+    except Exception:  # noqa: BLE001 — 404 is expected for some countries
+        pass
     regions = await _fetch_json(f"{base}/Subscriber/GetCountryGeographicRegions", headers=headers, params={"countryId": country}, client=client)
     brand_map = _parse_qld_brands(brands)
-    fuel_map = _parse_qld_fuel_types(fuel_types)
     geo_id = _parse_qld_geo_regions(regions, level)
     if geo_id is None:
         raise ValueError(f"QLD DirectAPI: no GeoRegionId at level {level}")
