@@ -19,6 +19,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed (AUT-2228)
 - fix(scripts): remove `[skip ci]` from `auto-bump.sh` commit message — the dockerhub-publish.yml `version_only` step already skips image build on version-cut pushes, so `[skip ci]` was redundant and suppressed `sync-mobile.yml` and `github-release` on auto-bump pushes. Document rationale in script header.
 
+### Fixed (AUT-2459)
+- fix(backend): guard `GetFuelTypes` 404 in QLD DirectAPI v1.5 — country 21 (Australia) returns 404 for `GetFuelTypes`; the call is now wrapped in try/except so the rest of the QLD ingest path continues. `_parse_qld_direct_prices` uses a `P<id>` fallback label when the fuel type name is absent, ensuring prices are still recorded.
+
+### Added (AUT-2459)
+- test(backend): add `test_parse_qld_direct_prices_empty_fuel_map_uses_fallback_label` and `test_ingest_qld_fuel_prices_works_when_getfueltypes_404s` — unit tests asserting QLD ingest returns stations/prices even when `GetFuelTypes` is absent or 404.
+
 ## [0.3.269] - 2026-09-17
 
 ### Added (AUT-1872)
