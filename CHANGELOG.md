@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.270] - 2026-09-17
+
 ### Fixed (AUT-1805)
 - fix(ci): add job-level `timeout-minutes: 15` to the `ocr-review` job in `.github/workflows/code-review.yml` so a 9Router stall or runner hang can never hold the x64 runner beyond 15 min (previously unbounded at job level). The step-level 10 min timeout remains as the inner guard.
 
