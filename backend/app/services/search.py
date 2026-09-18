@@ -1,7 +1,8 @@
 """Semantic search service — hybrid vector + keyword search across AutoBrain data."""
 
-from sqlalchemy import TextClause, and_, or_, select, text
+from sqlalchemy import TextClause, and_, or_, select, text, bindparam
 from sqlalchemy.ext.asyncio import AsyncSession
+from pgvector.sqlalchemy import Vector
 
 from app.core.logging import get_logger
 from app.models.diagnostic import Diagnostic
@@ -140,16 +141,18 @@ async def semantic_search(
     return results[:limit]
 
 
-def _embedding_literal(embedding: list[float]) -> str:
-    """Serialize a float vector as a pgvector array literal (floats only)."""
-    return "[" + ",".join(repr(float(v)) for v in embedding) + "]"
-
-
 def _vector_similarity(vec_col: str, embedding: list[float]) -> TextClause:
-    """Cosine-distance expression (`a <=> b`) with the vector bound as a parameter."""
+    """Cosine-distance expression (`a <=> b`) with the vector bound as a parameter.
+
+    Uses pgvector's Vector type for proper asyncpg binding — avoids the
+    22P02 errors that occur when a plain string is CAST to vector.
+    """
+    dim = len(embedding)
     return text(
         f"{vec_col} <=> CAST(:embedding AS vector)"
-    ).bindparams(embedding=_embedding_literal(embedding))
+    ).bindparams(
+        bindparam("embedding", value=embedding, type_=Vector(dim))
+    )
 
 
 def _serialise(etype: str, row, *, score: float, method: str) -> dict:
@@ -221,12 +224,14 @@ async def backfill_entity_embedding(
         return False
 
     table = model.__tablename__  # model-defined constant, never user input
-    await db.execute(
-        text(
-            f"UPDATE {table} SET embedding = CAST(:embedding AS vector) WHERE id = :id"
-        ),
-        {"embedding": _embedding_literal(embedding), "id": entity_id},
+    dim = len(embedding)
+    stmt = text(
+        f"UPDATE {table} SET embedding = :embedding WHERE id = :id"
+    ).bindparams(
+        bindparam("embedding", type_=Vector(dim)),
+        bindparam("id"),
     )
+    await db.execute(stmt, {"embedding": embedding, "id": entity_id})
     await db.commit()
     return True
 
