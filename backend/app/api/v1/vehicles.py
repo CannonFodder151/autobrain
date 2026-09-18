@@ -18,6 +18,7 @@ from app.db.session import get_db
 from app.models.share import VehicleShare
 from app.models.user import User
 from app.models.vehicle import Vehicle
+from app.schemas.health_score import HealthScore
 from app.schemas.vehicle import (
     RegoLookupRequest,
     RegoLookupResponse,
@@ -177,6 +178,24 @@ async def get_timeline(
 ) -> list:
     await get_accessible_vehicle(db, vehicle_id, user)
     return await get_vehicle_timeline(db, vehicle_id)
+
+
+@router.get("/{vehicle_id}/health-score", response_model=HealthScore)
+async def get_health_score(
+    vehicle_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Vehicle Health Score (AUT-3359).
+
+    Deterministic rule-based baseline computed from existing vehicle data:
+    OBD codes, diagnostics, fuel efficiency, service records, and parts
+    inventory. 9Router enrichment is optional (currently not implemented)
+    so the score is fully functional without the AI router.
+    """
+    from app.services.health_score import compute_health_score
+    await get_accessible_vehicle(db, vehicle_id, user)
+    return await compute_health_score(db, vehicle_id)
 
 
 @router.post("/{vehicle_id}/shares", response_model=ShareOut, status_code=201)
