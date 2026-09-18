@@ -389,8 +389,26 @@ def _parse_qld_brands(brands_raw: Any) -> dict[int, str]:
     return out
 
 
+# Default QLD DirectAPI fuel type mapping (GetFuelTypes endpoint removed in v1.5 —
+# returns 404). Keys are FuelId → raw label; _normalise_fuel_type maps to canonical.
+_QLD_DEFAULT_FUEL_TYPES: dict[int, str] = {
+    1: "Unleaded 91",
+    2: "Premium Unleaded 95",
+    3: "Premium Unleaded 98",
+    4: "Diesel",
+    5: "LPG",
+    6: "E10",
+    7: "98",
+    8: "E85",
+}
+
+
 def _parse_qld_fuel_types(types_raw: Any) -> dict[int, str]:
-    """Parse ``GetFuelTypes`` payload: ``[{"FuelId": <int>, "Name": <str>}, ...]``."""
+    """Parse ``GetFuelTypes`` payload: ``[{"FuelId": <int>, "Name": <str>}, ...]``.
+
+    Falls back to :data:`_QLD_DEFAULT_FUEL_TYPES` if the payload is empty or
+    the endpoint is unavailable (returns 404 in v1.5).
+    """
     rows = types_raw if isinstance(types_raw, list) else []
     out: dict[int, str] = {}
     for r in rows:
@@ -403,6 +421,9 @@ def _parse_qld_fuel_types(types_raw: Any) -> dict[int, str]:
                 out[int(fid)] = str(name)
             except (TypeError, ValueError):
                 continue
+    if not out:
+        logger.warning("fuel_qld_getfueltypes_empty_using_defaults")
+        return _QLD_DEFAULT_FUEL_TYPES.copy()
     return out
 
 
@@ -660,7 +681,12 @@ async def ingest_nsw_fuelcheck(db: AsyncSession, *, client: httpx.AsyncClient | 
 
 
 async def _fetch_qld_direct(client: httpx.AsyncClient | None) -> tuple[dict[int, str], dict[int, str], int | None, list[dict], dict[str, list[tuple[str, float, datetime]]]]:
-    """Call the 4 QLD DirectAPI endpoints in sequence; return parsed dicts."""
+    """Call the QLD DirectAPI endpoints in sequence; return parsed dicts.
+
+    GetFuelTypes (AUT-2195 v1.5) has been confirmed as not accepting a
+    countryId parameter and returns 404; the pipeline falls back to a
+    hardcoded default mapping instead of crashing.
+    """
     base = settings.FUEL_QLD_API_URL.rstrip("/")
     sub_token = settings.FUEL_QLD_API_KEY
     headers = {
@@ -670,8 +696,15 @@ async def _fetch_qld_direct(client: httpx.AsyncClient | None) -> tuple[dict[int,
     country = settings.FUEL_QLD_COUNTRY_ID
     level = settings.FUEL_QLD_REGION_LEVEL
     brands = await _fetch_json(f"{base}/Subscriber/GetCountryBrands", headers=headers, params={"countryId": country}, client=client)
-    fuel_types = await _fetch_json(f"{base}/Subscriber/GetFuelTypes", headers=headers, params={"countryId": country}, client=client)
     regions = await _fetch_json(f"{base}/Subscriber/GetCountryGeographicRegions", headers=headers, params={"countryId": country}, client=client)
+    # GetFuelTypes removed — returns 404 with countryId; use defaults instead.
+    # We still call the endpoint without countryId for graceful degradation,
+    # and fall back to the hardcoded _QLD_DEFAULT_FUEL_TYPES mapping.
+    try:
+        fuel_types = await _fetch_json(f"{base}/Subscriber/GetFuelTypes", headers=headers, client=client)
+    except Exception:
+        logger.info("fuel_qld_getfueltypes_fallback_defaults")
+        fuel_types = []
     brand_map = _parse_qld_brands(brands)
     fuel_map = _parse_qld_fuel_types(fuel_types)
     geo_id = _parse_qld_geo_regions(regions, level)

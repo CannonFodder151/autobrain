@@ -167,3 +167,89 @@ def test_ingest_qld_skips_when_no_key() -> None:
     res = asyncio.run(feeds.ingest_qld_fuel_prices(db=None))  # type: ignore[arg-type]
     assert res["skipped"] == "no_api_key"
     assert res["stations"] == 0
+
+
+def test_parse_qld_fuel_types_uses_defaults_when_empty() -> None:
+    """AUT-3500: GetFuelTypes returns 404; _parse_qld_fuel_types must fall
+    back to _QLD_DEFAULT_FUEL_TYPES when the payload is empty/missing."""
+    result = feeds._parse_qld_fuel_types([])
+    assert result == feeds._QLD_DEFAULT_FUEL_TYPES
+    assert result[1] == "Unleaded 91"
+    assert result[4] == "Diesel"
+
+
+def test_parse_qld_fuel_types_prefers_api_when_present() -> None:
+    """When a valid payload is supplied, use it rather than defaults."""
+    result = feeds._parse_qld_fuel_types([
+        {"FuelId": 99, "Name": "Special Fuel"},
+    ])
+    assert result == {99: "Special Fuel"}
+
+
+def test_fetch_qld_direct_falls_back_on_getfueltypes_error() -> None:
+    """AUT-3500: _fetch_qld_direct gracefully handles GetFuelTypes failure
+    and uses the hardcoded default fuel mapping instead of crashing."""
+    import httpx
+    from unittest.mock import AsyncMock, patch
+
+    async def fake_fetch(url, *, headers=None, params=None, client=None):
+        """Return canned responses for the known QLD endpoints."""
+        if "GetCountryBrands" in url:
+            return [{"BrandId": 1, "Name": "BP"}]
+        if "GetCountryGeographicRegions" in url:
+            return [{"GeoRegionLevel": 3, "GeoRegionId": 33}]
+        if "GetFuelTypes" in url:
+            raise httpx.HTTPStatusError("Not Found", request=httpx.Request("GET", url), response=httpx.Response(404))
+        if "GetFullSiteDetails" in url:
+            return {"S": [
+                {"S": 12345, "A": "123 Queen St", "N": "BP Brisbane CBD", "B": 1,
+                 "P": "4000", "Lat": -27.47, "Lng": 153.03, "LastModified": "2024-01-01T00:00:00"},
+            ]}
+        if "GetSitesPrices" in url:
+            return {"S": [
+                {"S": 12345, "P1": 16500, "P2": 17500, "P4": 18000,
+                 "LastUpdated": "2024-01-01T00:00:00"},
+            ]}
+        return []
+
+    feeds.settings.FUEL_QLD_API_KEY = "test-token"
+    with patch.object(feeds, "_fetch_json", new_callable=AsyncMock, side_effect=fake_fetch):
+        brand_map, fuel_map, geo_id, stations, prices = asyncio.run(feeds._fetch_qld_direct(None))
+    assert fuel_map == feeds._QLD_DEFAULT_FUEL_TYPES
+    assert geo_id == 33
+    assert len(stations) == 1
+    assert stations[0]["source_id"] == "12345"
+    pairs = {(ft, price) for (ft, price, _) in prices["12345"]}
+    assert pairs == {("91", 165.0), ("95", 175.0), ("Diesel", 180.0)}
+
+
+def test_fetch_qld_direct_uses_defaults_when_getfueltypes_returns_empty() -> None:
+    """AUT-3500: If GetFuelTypes returns an empty list (v1.5 shape with no
+    fuel data), the parser falls back to the hardcoded mapping."""
+    from unittest.mock import AsyncMock, patch
+
+    async def fake_fetch_empty_fuel_types(url, *, headers=None, params=None, client=None):
+        """Return empty list for GetFuelTypes."""
+        if "GetCountryBrands" in url:
+            return [{"BrandId": 1, "Name": "BP"}]
+        if "GetCountryGeographicRegions" in url:
+            return [{"GeoRegionLevel": 3, "GeoRegionId": 33}]
+        if "GetFuelTypes" in url:
+            return []
+        if "GetFullSiteDetails" in url:
+            return {"S": [
+                {"S": 100, "A": "5 Test Rd", "N": "Test", "B": 1,
+                 "P": "4000", "Lat": -27.0, "Lng": 153.0, "LastModified": "2024-01-01T00:00:00"},
+            ]}
+        if "GetSitesPrices" in url:
+            return {"S": [
+                {"S": 100, "P1": 15000, "LastUpdated": "2024-01-01T00:00:00"},
+            ]}
+        return []
+
+    feeds.settings.FUEL_QLD_API_KEY = "test-token"
+    with patch.object(feeds, "_fetch_json", new_callable=AsyncMock, side_effect=fake_fetch_empty_fuel_types):
+        _, fuel_map, _, _, prices = asyncio.run(feeds._fetch_qld_direct(None))
+    assert fuel_map == feeds._QLD_DEFAULT_FUEL_TYPES
+    pairs = {(ft, price) for (ft, price, _) in prices["100"]}
+    assert pairs == {("91", 150.0)}
