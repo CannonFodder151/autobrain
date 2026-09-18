@@ -315,6 +315,14 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
+    def _enforce_rego_lookup_https(self) -> "Settings":
+        if self.REGO_LOOKUP_URL and self.REGO_LOOKUP_URL.startswith("http://") and self.ENVIRONMENT != "development":
+            raise ValueError(
+                "REGO_LOOKUP_URL must use HTTPS. Set it to https://... or leave empty for offline mode."
+            )
+        return self
+
+    @model_validator(mode="after")
     def _harden_secrets(self) -> "Settings":
         """AUT-1181: fail closed on missing/weak secrets.
 
