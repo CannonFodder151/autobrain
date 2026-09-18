@@ -24,7 +24,7 @@ from app.schemas.mod import (
 )
 from app.services.ai_client import mod_impact
 from app.services.export import export_build_sheet_csv, export_build_sheet_pdf, export_zip
-from app.services.rate_limit import require_ai_rate_limit
+from app.api.rate_deps import require_ai_rate_limit
 
 router = APIRouter(prefix="/vehicles/{vehicle_id}/mods", tags=["mods"])
 

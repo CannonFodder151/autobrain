@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.services.trip_gps import clean_samples
+from app.core.gps import clean_samples
 
 
 class DeviceVerifyIn(BaseModel):

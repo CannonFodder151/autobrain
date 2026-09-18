@@ -1,10 +1,10 @@
 # AutoBrain local development stack.
 # Usage: cp .env.example .env && docker compose up --build
-# Runs: postgres, redis, minio, backend (API + AI gateway + Celery worker+beat), frontend.
-# AI gateway runs as a sub-process on :8001 within the backend container.
+# Runs: postgres, redis, minio, backend (API + AI gateway :8001 + Celery worker+beat), frontend.
 # All services bind to localhost — connects to 9Router at AI_ROUTER_URL.
 
 # Backend service factory — reused by dev and test overrides.
+# AUT-3461: AI gateway merged into backend (mirrors docker-compose.prod.yml).
 x-backend-base: &backend-base
   build:
     context: .
@@ -21,8 +21,7 @@ x-backend-base: &backend-base
     MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-}
     MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-}
     AI_ROUTER_URL: ${AI_ROUTER_URL:?AI_ROUTER_URL must be set in .env}
-    # AB-INFRA-006: gateway auth stays on in dev; backend sends the shared key.
-    AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:?AI_GATEWAY_API_KEY must be set in .env}
+    AI_LOCAL_BASE_URL: http://localhost:8001
     SOCIAL_FEDERATION_HUB_URL: ${SOCIAL_FEDERATION_HUB_URL:-https://hub.autobrainservice.app}
     SOCIAL_FEDERATION_HOSTED: ${SOCIAL_FEDERATION_HOSTED:-false}
   depends_on:
@@ -101,9 +100,12 @@ services:
     <<: *backend-base
     ports:
       - "127.0.0.1:8000:8000"
-    command: ["sh", "-c", "alembic upgrade head && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload & uvicorn ai_app.main:app --host 0.0.0.0 --port 8001 --reload & wait"]
+      - "127.0.0.1:8001:8001"
+    # AUT-3461: unified backend + AI gateway + Celery (matches prod).
+    command: ["sh", "-c", "alembic upgrade head && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && (uvicorn ai_app.main:app --host 0.0.0.0 --port 8001 --reload &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"]
     volumes:
       - ./backend:/app
+      - ./ai/app:/ai_app
 
   frontend:
     build:
