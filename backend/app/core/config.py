@@ -204,6 +204,7 @@ class Settings(BaseSettings):
     CI_TRIAGE_PARENT_ISSUE_ID: str = ""  # parent issue for child issue creation
     CI_TRIAGE_GOAL_ID: str = ""  # goal to link child issues to
     CI_TRIAGE_AGENT_ID: str = "acae6bf2"  # CI Triage Agent short id
+    CI_TRIAGE_ALLOWED_IPS: str = ""  # comma-separated CIDR/IP allowlist for webhook (e.g. 185.199.108.0/22,10.0.0.0/8)
     # Paperclip API (server-side, for creating child issues from the webhook)
     PAPERCLIP_API_URL: str = ""  # e.g. https://paperclip.nathanmartina.com
     PAPERCLIP_API_KEY: str = ""  # long-lived agent key or service token

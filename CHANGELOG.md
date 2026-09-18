@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-3103)
+- fix(security): harden CI triage webhook against auth bypass and abuse. Reject empty `CI_TRIAGE_WEBHOOK_SECRET` explicitly, add per-IP rate limiting (10 req/min, Redis-backed fail-open), add `CI_TRIAGE_ALLOWED_IPS` CIDR allowlist, and log request fingerprint on all webhook hits. Endpoint now returns 429 when rate-limited and 403 when caller IP is not in the allowlist. Config: `CI_TRIAGE_ALLOWED_IPS` (comma-separated CIDRs/IPs).
+
 ## [0.3.271] - 2026-09-18
 
 ### Added (AUT-3447)
