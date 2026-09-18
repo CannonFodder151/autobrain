@@ -276,7 +276,7 @@ jobs:
       contents: write
     env:
       TAG: ${{ github.event.inputs.tag || 'hosted' }}
-      BACKEND_DIGEST: ${{ needs.build-manifest.outputs.backend_digest }}
+      # AUT-2152: backend uses tag-based :hosted ref — no digest pin needed.
       WORKER_DIGEST: ${{ needs.build-manifest.outputs.worker_digest }}
       AI_DIGEST: ${{ needs.build-manifest.outputs.ai_digest }}
       FRONTEND_DIGEST: ${{ needs.build-manifest.outputs.frontend_digest }}
@@ -294,7 +294,6 @@ jobs:
           set -euo pipefail
           set +e
           ./scripts/update-compose-pins.py \
-            backend="${BACKEND_DIGEST}" \
             worker="${WORKER_DIGEST}" \
             ai="${AI_DIGEST}" \
             frontend="${FRONTEND_DIGEST}"
