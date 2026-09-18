@@ -1,10 +1,17 @@
 """Tests for the SCA parts-guide deterministic fallback engine."""
 
-import os
+import pytest
 
-os.environ.setdefault("AI_ROUTER_URL", "http://your-9router-instance:port")
 
-from app.fallbacks.parts_guide import (
+@pytest.fixture(autouse=True)
+def _ai_test_env(monkeypatch):
+    # AUT-3152: pin the router to the placeholder so router_enabled() is False
+    # and every module path uses its deterministic fallback. Per-test isolation
+    # via monkeypatch prevents env leaks across the pytest process.
+    monkeypatch.setenv("AI_ROUTER_URL", "http://your-9router-instance:port")
+
+
+from app.fallbacks.parts_guide import (  # noqa: E402
     build_inventory_from_categories,
     format_vehicle_str,
     suggest_parts_for_service,
