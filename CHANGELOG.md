@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security (AUT-3482)
+- fix(market-data): change transitive CVE pins from floor (`>=`) to exact (`==`) in `market-data/requirements.txt` to match `backend/requirements.txt`. `idna==3.18` (PYSEC-2026-215), `pycryptodome==3.23` (PYSEC-2026-1811), `pygments==2.20` (PYSEC-2023-117 + PYSEC-2026-2987). Floor pins allowed pip to resolve to vulnerable versions if upstream constraints drifted.
+
 ## [0.3.271] - 2026-09-18
 
 ### Added (AUT-3447)
