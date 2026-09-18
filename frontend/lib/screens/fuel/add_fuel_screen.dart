@@ -144,12 +144,11 @@ class _AddFuelScreenState extends State<AddFuelScreen> {
       final day = data['date'];
       setState(() {
         _receiptId = (data['receipt_id'] as String?) ?? _receiptId;
-        if (litres != null) _litres.text = litres.toString();
-        if (price != null) _price.text = double.parse(price.toString()).toString();
-        if (total != null) _total.text = double.parse(total.toString()).toStringAsFixed(2);
+        if (litres != null) _litres.text = double.tryParse(litres.toString())?.toString() ?? '';
+        if (price != null) _price.text = double.tryParse(price.toString())?.toString() ?? '';
+        if (total != null) _total.text = double.tryParse(total.toString())?.toStringAsFixed(2) ?? '';
         if (day != null && day.toString().isNotEmpty) _date.text = day.toString().substring(0, 10);
       });
-      _price.text = double.parse(_price.text.isEmpty ? '0' : _price.text).toString();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(
