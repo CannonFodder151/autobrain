@@ -144,7 +144,7 @@ jobs:
           echo "::error::mobile sync push failed after 3 attempts (non-fast-forward)"
           exit 1
 
-      - name: Tag version and trigger mobile release pipeline
+      - name: Tag version and trigger mobile release pipelines
         if: steps.commit.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ secrets.MOBILE_SYNC_TOKEN }}
@@ -169,36 +169,55 @@ jobs:
             echo "deferred=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # A freshly pushed tag can lag GitHub's ref lookup (eventual
-          # consistency); dispatch then 422s "No ref found". Poll with
-          # linear backoff (5–60s per retry, up to 12 retries) before giving
-          # up so the pinned tag is released (AUT-451, AUT-1652).
-          for attempt in $(seq 1 12); do
-            http_code=$(curl -s -o /tmp/dispatch_resp.txt -w '%{http_code}' -X POST \
-              -H "Authorization: token $GH_TOKEN" \
-              -H "Accept: application/vnd.github.v3+json" \
-              https://api.github.com/repos/CannonFodder151/autobrain-mobile/actions/workflows/release-mobile.yml/dispatches \
-              -d "{\"ref\":\"$tag\",\"inputs\":{\"version\":\"$tag\"}}" 2>&1)
-            out=$(cat /tmp/dispatch_resp.txt 2>/dev/null || echo "")
-            if [ "$http_code" = "204" ]; then
-              echo "dispatched mobile release $tag"
-              exit 0
-            fi
-            echo "dispatch attempt $attempt/12 failed (HTTP $http_code): $out"
-            # Rate limit (403) — wait for window to reset then retry
-            if echo "$out" | grep -qi 'rate limit'; then
-              echo "::warning::rate limit hit during dispatch — waiting for reset (attempt $attempt/12)"
-              sleep $(( attempt * 5 ))
-              continue
-            fi
-            # 422 "No ref found" — tag not yet visible (eventual consistency)
-            if echo "$out" | grep -qi 'No ref found'; then
-              sleep 5
-              continue
-            fi
-            # Any other error is unexpected — fail fast
-            echo "::error::$out"
+
+          dispatch_workflow() {
+            local workflow="$1"
+            local label="$2"
+            # A freshly pushed tag can lag GitHub's ref lookup (eventual
+            # consistency); dispatch then 422s "No ref found". Poll with
+            # linear backoff (5–60s per retry, up to 12 retries) before giving
+            # up so the pinned tag is released (AUT-451, AUT-1652).
+            for attempt in $(seq 1 12); do
+              http_code=$(curl -s -o /tmp/dispatch_resp_${workflow}.txt -w '%{http_code}' -X POST \
+                -H "Authorization: token $GH_TOKEN" \
+                -H "Accept: application/vnd.github.v3+json" \
+                "https://api.github.com/repos/CannonFodder151/autobrain-mobile/actions/workflows/${workflow}/dispatches" \
+                -d "{\"ref\":\"$tag\",\"inputs\":{\"version\":\"$tag\"}}" 2>&1)
+              out=$(cat /tmp/dispatch_resp_${workflow}.txt 2>/dev/null || echo "")
+              if [ "$http_code" = "204" ]; then
+                echo "dispatched $label $tag"
+                return 0
+              fi
+              echo "$label dispatch attempt $attempt/12 failed (HTTP $http_code): $out"
+              if echo "$out" | grep -qi 'rate limit'; then
+                echo "::warning::rate limit hit during $label dispatch — waiting for reset (attempt $attempt/12)"
+                sleep $(( attempt * 5 ))
+                continue
+              fi
+              if echo "$out" | grep -qi 'No ref found'; then
+                sleep 5
+                continue
+              fi
+              echo "::error::$label dispatch failed: $out"
+              return 1
+            done
+            echo "::error::could not dispatch $label $tag — retries exhausted"
+            return 1
+          }
+
+          # Dispatch both Android (.aab) and iOS (.ipa) release pipelines.
+          # MOBILE_SYNC_TOKEN uses x-access-token auth (GitHub App), so pushes
+          # alone do NOT trigger workflows — explicit dispatch is required for
+          # both pipelines (AUT-3214).
+          ios_ok=true
+          android_ok=true
+          dispatch_workflow "release-mobile.yml" "Android" || android_ok=false
+          dispatch_workflow "release-ios.yml" "iOS" || ios_ok=false
+
+          if [ "$android_ok" = false ] && [ "$ios_ok" = false ]; then
+            echo "::error::both Android and iOS release dispatches failed"
             exit 1
-          done
-          echo "::error::could not dispatch mobile release $tag — retries exhausted"
-          exit 1
+          fi
+          if [ "$android_ok" = false ] || [ "$ios_ok" = false ]; then
+            echo "::warning::partial dispatch: android=$android_ok ios=$ios_ok"
+          fi
