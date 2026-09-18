@@ -79,8 +79,8 @@ def main():
         },
     )
     with urllib.request.urlopen(req, timeout=120) as r:
-        resp = r.read().decode()
-    print(f"stack={args.stack} id={stack_id} endpoint={args.endpoint} -> {resp[:200]}")
+        r.read()
+    print(f"stack={args.stack} id={stack_id} endpoint={args.endpoint} updated")
     return 0
 
 
