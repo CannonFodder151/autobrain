@@ -1,12 +1,14 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/auth_state.dart';
 import '../../core/config.dart';
+import '../../services/passkey/passkey.dart';
 import 'reset_password.dart';
 import 'signup_screen.dart';
 
@@ -170,6 +172,41 @@ class _LoginScreenState extends State<LoginScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not open the support page.')),
       );
+    }
+  }
+
+  Future<void> _signInWithPasskey() async {
+    if (_busy) return;
+    final email = _email.text.trim();
+    if (email.isEmpty || !email.contains('@')) {
+      setState(() => _error = 'Enter your email to use a passkey');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+      _serverOffline = false;
+    });
+    final outcome = await context.read<AuthState>().signInWithPasskey(email);
+    if (!mounted) return;
+    if (outcome == LoginOutcome.ok) {
+      await _afterAuth();
+    } else if (outcome == LoginOutcome.failed) {
+      setState(() {
+        _busy = false;
+        _error = 'Passkey authentication failed';
+      });
+    } else if (outcome == LoginOutcome.serverOffline) {
+      setState(() {
+        _busy = false;
+        _serverOffline = true;
+        _error = 'Backend server offline. Please check your connection and try again.';
+      });
+    } else {
+      setState(() {
+        _busy = false;
+        _error = 'Passkey authentication not available';
+      });
     }
   }
 
@@ -355,6 +392,15 @@ class _LoginScreenState extends State<LoginScreen> {
                               validator: (v) =>
                                   v == null || v.isEmpty ? 'Password required' : null,
                             ),
+                            const SizedBox(height: 14),
+                            if (!kIsWeb)
+                              const SizedBox.shrink()
+                            else
+                              TextButton.icon(
+                                onPressed: _busy ? null : _signInWithPasskey,
+                                icon: const Icon(Icons.fingerprint, size: 18),
+                                label: const Text('Sign in with Passkey'),
+                              ),
                           ],
                           if (_error != null) ...[
                             const SizedBox(height: 12),

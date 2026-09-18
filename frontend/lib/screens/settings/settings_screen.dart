@@ -9,6 +9,7 @@ import '../../core/api_client.dart';
 import '../../core/auth_state.dart';
 import '../../core/download.dart';
 import '../../widgets/responsive.dart';
+import '../auth/passkey_management_screen.dart';
 import 'car_integration_screen.dart';
 
 String _errorText(Object e) => e is ApiException ? e.message : '$e';
@@ -332,7 +333,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     trailing: _chip(_obdEnabled),
                   ),
                 const Divider(height: 1),
-                ListTile(
+ListTile(
                   leading: const Icon(Icons.verified_user_outlined),
                   title: const Text('Rego lookup'),
                   subtitle: Text(
@@ -340,10 +341,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ? 'Enabled — auto-fill vehicle details from an AU plate'
                           : 'Disabled on this account — upgrade to enable'),
                   trailing: _chip(_aiEnabled),
-          ),
-        ],
+            ),
+            if (kIsWeb)
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.fingerprint),
+                  title: const Text('Passkeys'),
+                  subtitle: const Text(
+                      'Manage and register PassKeys for passwordless sign-in'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const PasskeyManagementScreen()),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
-    ),
+      ),
           const SizedBox(height: 16),
           if (!kIsWeb)
             Card(

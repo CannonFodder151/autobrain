@@ -27,6 +27,7 @@ websockets==14.1
 structlog==24.4.0
 pyotp==2.9.0
 qrcode[pil]==8.0
+webauthn==2.1.0  # AUT-3503: WebAuthn/PassKey authentication
 stripe==15.4.0
 
 # AUT-1189: exact transitive pins for known-CVE packages. The resolved-tree

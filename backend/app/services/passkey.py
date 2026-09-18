@@ -9,35 +9,20 @@ import json as _json
 import secrets
 import time
 from base64 import urlsafe_b64decode
-from datetime import datetime, timezone
-from typing import List, Optional, Tuple
-
-from fastapi import HTTPException
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from typing import List, Tuple
 
 from app.core.logging import get_logger
-from app.models.passkey import PasskeyCredential
-from app.models.user import User
 
 logger = get_logger(__name__)
 
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
-# Challenge TTL: challenges are valid for 5 minutes (in seconds)
 _CHALLENGE_TTL_SECONDS = 300
 
-# In-memory challenge store — keyed by (user_id, ceremony, request_id).
-# In production this lives in Redis; here we use a dict for simplicity
-# (a single-worker deployment won't outlive this, and we use Redis when
-# it's available).
+# In-memory challenge store — keyed by f"webauthn:challenge:{ceremony}:{user_id}:{request_id}".
+# In production use Redis; dict is fine for single-worker.
 _challenge_store: dict[str, tuple[bytes, float]] = {}
 
 
 def _b64url_to_bytes(value: str) -> bytes:
-    """Decode a base64url-encoded string to bytes (per WebAuthn spec)."""
     remainder = len(value) % 4
     if remainder:
         value += "=" * (4 - remainder)
@@ -45,7 +30,6 @@ def _b64url_to_bytes(value: str) -> bytes:
 
 
 def _bytes_to_b64url(value: bytes) -> str:
-    """Encode bytes to base64url string (per WebAuthn spec)."""
     import base64
     return base64.urlsafe_b64encode(value).rstrip(b"=").decode()
 
@@ -64,7 +48,7 @@ def _challenge_key(user_id: str, ceremony: str, request_id: str) -> str:
 
 
 def build_registration_options(
-    user: User,
+    user: "User",
     rp_id: str,
     rp_name: str,
     user_id_b64: str,
@@ -78,8 +62,6 @@ def build_registration_options(
     """Generate WebAuthn registration options for the frontend.
 
     Returns (options_json_dict, request_id).
-    The frontend calls navigator.credentials.create(options) and posts
-    the result to the complete-registration endpoint.
     """
     import webauthn
     from webauthn.helpers.structs import (
@@ -91,8 +73,7 @@ def build_registration_options(
     challenge_bytes = _b64url_to_bytes(challenge_b64)
     user_id_bytes = _b64url_to_bytes(user_id_b64)
 
-    # Build exclude list from existing credentials
-    exclude_creds: list[PublicKeyCredentialDescriptor] | None = None
+    exclude_creds = None
     if exclude_credential_ids:
         exclude_creds = []
         for cid_b64 in exclude_credential_ids:
@@ -103,7 +84,6 @@ def build_registration_options(
             except Exception:
                 continue
 
-    # Map attestation string to enum
     attestation_enum = {
         "none": AttestationConveyancePreference.NONE,
         "indirect": AttestationConveyancePreference.INDIRECT,
@@ -111,8 +91,7 @@ def build_registration_options(
         "user preferred": AttestationConveyancePreference.USER_PREFERRED,
     }.get(attestation, AttestationConveyancePreference.NONE)
 
-    # Parse authenticator selection if provided
-    selection: AuthenticatorSelectionCriteria | None = None
+    selection = None
     if authenticator_selection:
         selection = AuthenticatorSelectionCriteria(**authenticator_selection)
 
@@ -133,7 +112,6 @@ def build_registration_options(
     store_key = _challenge_key(user.id, "register", request_id)
     _challenge_store[store_key] = (challenge_bytes, time.time())
 
-    from webauthn.helpers import options_to_json
     return {
         "rp": {"name": options.rp.name, "id": options.rp.id},
         "user": {
@@ -155,24 +133,27 @@ def build_registration_options(
 
 
 def verify_registration(
-    user: User,
+    *,
+    user: "User",
     request_id: str,
-    credential_public_key_b64: str,
-    credential_attestation: str,
-    credential_client_data_json: str,
-    credential_device_type: str,
-    credential_attestation_transport: str | None,
+    credential_id_b64: str,
+    attestation_object_b64: str,
+    client_data_json_b64: str,
     rp_id: str,
     expected_origin: str,
 ) -> dict:
-    """Verify a registration ceremony response and return credential data.
+    """Verify a registration ceremony and return credential data.
 
-    Raises ValueError on any validation failure.
-    Returns dict with: credential_id, credential_public_key, sign_count,
-    credential_backed_up, credential_device_type, user_verified.
+    The frontend calls navigator.credentials.create(), then sends the result
+    as JSON with fields: id, attestationObject, clientDataJSON (all base64url).
+
+    Raises ValueError on validation failure.
     """
     import webauthn
-    from webauthn.helpers.structs import RegistrationCredential
+    from webauthn.helpers.structs import (
+        RegistrationCredential,
+        AuthenticatorResponse,
+    )
 
     store_key = _challenge_key(user.id, "register", request_id)
     if store_key not in _challenge_store:
@@ -182,14 +163,19 @@ def verify_registration(
     if time.time() - created_at > _CHALLENGE_TTL_SECONDS:
         raise ValueError("Registration session expired — try again")
 
+    credential = RegistrationCredential(
+        id=_b64url_to_bytes(credential_id_b64),
+        raw_id=_b64url_to_bytes(credential_id_b64),
+        response=AuthenticatorResponse(
+            attestation_object=_b64url_to_bytes(attestation_object_b64),
+            client_data_json=_b64url_to_bytes(client_data_json_b64),
+        ),
+        type="public-key",
+    )
+
     try:
         result = webauthn.verify_registration_response(
-            credential=RegistrationCredential(
-                id=_b64url_to_bytes(credential_attestation),
-                raw_id=_b64url_to_bytes(credential_attestation),
-                response=None,  # We pass the response data below
-                type="public-key",
-            ),
+            credential=credential,
             expected_challenge=expected_challenge_bytes,
             expected_rp_id=rp_id,
             expected_origin=expected_origin,
@@ -197,7 +183,6 @@ def verify_registration(
             require_user_verification=False,
         )
     except Exception as exc:
-        # Try to use the raw credential data directly
         logger.warning("webauthn_registration_verification_failed", error=str(exc))
         raise ValueError(f"Registration verification failed: {exc}") from exc
 
@@ -231,31 +216,29 @@ def build_authentication_options(
     Returns (options_json_dict, request_id).
     """
     import webauthn
-    from webauthn.helpers.structs import PublicKeyCredentialDescriptor
+    from webauthn.helpers.structs import (
+        PublicKeyCredentialDescriptor,
+        UserVerificationRequirement,
+    )
 
     challenge_bytes = _b64url_to_bytes(challenge_b64)
 
-    # Build allow_credentials from dicts
-    allow_list: list[PublicKeyCredentialDescriptor] = []
+    allow_list = []
     for cred in allow_credentials:
         try:
-            desc = PublicKeyCredentialDescriptor(
-                id=_b64url_to_bytes(cred["id"]),
-                type="public-key",
+            allow_list.append(
+                PublicKeyCredentialDescriptor(
+                    id=_b64url_to_bytes(cred["id"]),
+                    type="public-key",
+                )
             )
-            allow_list.append(desc)
         except Exception:
             continue
 
-    uv_enum = {
-        "required": "required",
-        "preferred": "preferred",
-        "discouraged": "discouraged",
-    }.get(user_verification, "preferred")
-
-    # Use PREFERRED by default
-    from webauthn.helpers.structs import UserVerificationRequirement
-    uv = UserVerificationRequirement(uv_enum)
+    uv = UserVerificationRequirement(
+        {"required": "required", "preferred": "preferred", "discouraged": "discouraged"}
+        .get(user_verification, "preferred")
+    )
 
     request_id = _gen_request_id()
 
@@ -270,7 +253,6 @@ def build_authentication_options(
     store_key = _challenge_key(user_id, "auth", request_id)
     _challenge_store[store_key] = (challenge_bytes, time.time())
 
-    from webauthn.helpers import options_to_json
     return {
         "challenge": _bytes_to_b64url(options.challenge),
         "timeout": options.timeout,
@@ -284,9 +266,14 @@ def build_authentication_options(
 
 
 def verify_authentication(
+    *,
     user_id: str,
     request_id: str,
-    credential_response: dict,
+    credential_id_b64: str,
+    authenticator_data_b64: str,
+    client_data_json_b64: str,
+    signature_b64: str,
+    user_handle_b64: str | None,
     expected_credential_public_key_b64: str,
     expected_sign_count: int,
     rp_id: str,
@@ -294,10 +281,10 @@ def verify_authentication(
 ) -> dict:
     """Verify an authentication ceremony response.
 
-    Raises ValueError on any validation failure.
-    Returns dict with: new_sign_count, user_verified, credential_backed_up.
+    Raises ValueError on validation failure.
     """
     import webauthn
+    from webauthn.helpers.structs import AuthenticationCredential, AuthenticatorResponse
 
     store_key = _challenge_key(user_id, "auth", request_id)
     if store_key not in _challenge_store:
@@ -307,9 +294,23 @@ def verify_authentication(
     if time.time() - created_at > _CHALLENGE_TTL_SECONDS:
         raise ValueError("Authentication session expired — try again")
 
+    credential = AuthenticationCredential(
+        id=_b64url_to_bytes(credential_id_b64),
+        raw_id=_b64url_to_bytes(credential_id_b64),
+        response=AuthenticatorResponse(
+            authenticator_data=_b64url_to_bytes(authenticator_data_b64),
+            client_data_json=_b64url_to_bytes(client_data_json_b64),
+            signature=_b64url_to_bytes(signature_b64),
+            user_handle=(
+                _b64url_to_bytes(user_handle_b64) if user_handle_b64 else None
+            ),
+        ),
+        type="public-key",
+    )
+
     try:
         result = webauthn.verify_authentication_response(
-            credential=credential_response,
+            credential=credential,
             expected_challenge=expected_challenge_bytes,
             expected_rp_id=rp_id,
             expected_origin=expected_origin,

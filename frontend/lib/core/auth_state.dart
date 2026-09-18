@@ -8,6 +8,7 @@ import 'api_client.dart';
 import 'config.dart';
 import 'token_store.dart';
 import '../services/dongle/dongle_settings.dart';
+import '../services/passkey/passkey.dart';
 
 enum LoginOutcome { ok, mfaRequired, mfaSetupRequired, failed, serverOffline }
 
@@ -222,6 +223,123 @@ class AuthState extends ChangeNotifier {
         '/auth/password-reset/confirm',
         {'token': token, 'new_password': newPassword},
       );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Sign in with a passkey (WebAuthn).
+  ///
+  /// [email] identifies the account. The frontend calls the passkey service
+  /// to perform the WebAuthn ceremony, then posts the credential to
+  /// `/auth/passkey/authenticate/complete`. On success, persists the session.
+  Future<LoginOutcome> signInWithPasskey(String email) async {
+    if (!webAuthnSupported) {
+      return LoginOutcome.failed;
+    }
+    try {
+      // 1) Start the ceremony: get options from the server for this user's passkeys.
+      final beginResp = await _anonymous().post(
+        '/auth/passkey/authenticate/begin',
+        {'rp_id': AppConfig.apiHost, 'timeout': 60000, 'user_verification': 'preferred'},
+        query: {'email': email},
+      ) as Map<String, dynamic>;
+
+      final options = beginResp['options'] as Map<String, dynamic>;
+      final requestId = beginResp['request_id'] as String;
+
+      // 2) Call navigator.credentials.get() via the passkey service.
+      final credential = await startAuthentication(options);
+      if (credential == null) {
+        return LoginOutcome.failed;
+      }
+
+      // 3) Complete the ceremony: send the credential to the server.
+      final completePayload = {
+        'credential_id': credential['id'],
+        'authenticator_data': credential['response']['authenticatorData'],
+        'client_data_json': credential['response']['clientDataJSON'],
+        'signature': credential['response']['signature'],
+        'user_handle': credential['response']['userHandle'],
+      };
+
+      final completeResp = await _anonymous().post(
+        '/auth/passkey/authenticate/complete',
+        completePayload,
+        query: {'request_id': requestId},
+      ) as Map<String, dynamic>;
+
+      await _persist(completeResp);
+      return LoginOutcome.ok;
+    } on ApiException {
+      return LoginOutcome.failed;
+    } catch (_) {
+      return LoginOutcome.serverOffline;
+    }
+  }
+
+  /// Register a new passkey for the currently authenticated user.
+  ///
+  /// [displayName] is the human-readable name for the passkey (e.g., "Chrome on MacBook").
+  /// Returns true on success.
+  Future<bool> registerPasskey(String displayName) async {
+    if (!webAuthnSupported || !isLoggedIn) return false;
+    try {
+      // 1) Get registration options from the server.
+      final beginResp = await api.post(
+        '/auth/passkey/register/begin',
+        {
+          'rp_id': AppConfig.apiHost,
+          'rp_name': 'AutoBrain',
+          'user_display_name': displayName,
+          'user_id': _userId,
+          'timeout': 60000,
+          'attestation': 'none',
+        },
+      ) as Map<String, dynamic>;
+
+      final options = beginResp['options'] as Map<String, dynamic>;
+      final requestId = beginResp['request_id'] as String;
+
+      // 2) Call navigator.credentials.create() via the passkey service.
+      final credential = await startRegistration(options);
+      if (credential == null) return false;
+
+      // 3) Complete registration on the server.
+      final completePayload = {
+        'credential_id': credential['id'],
+        'attestation_object': credential['response']['attestationObject'],
+        'client_data_json': credential['response']['clientDataJSON'],
+      };
+
+      await api.post(
+        '/auth/passkey/register/complete',
+        completePayload,
+        query: {'request_id': requestId},
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// List all passkeys registered to the current user.
+  Future<List<Map<String, dynamic>>?> listPasskeys() async {
+    if (!isLoggedIn) return null;
+    try {
+      final resp = await api.get('/auth/passkey/list') as Map<String, dynamic>;
+      return (resp['passkeys'] as List).cast<Map<String, dynamic>>();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Delete a passkey by credential ID.
+  Future<bool> deletePasskey(String credentialId) async {
+    if (!isLoggedIn) return false;
+    try {
+      await api.delete('/auth/passkey/$credentialId');
       return true;
     } catch (_) {
       return false;

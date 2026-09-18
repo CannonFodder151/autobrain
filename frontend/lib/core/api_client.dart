@@ -131,8 +131,8 @@ class ApiClient {
   static String cacheKeyForTest(String path, Map<String, String>? query) =>
       _cacheKey(path, query);
   Future<dynamic> post(String path,
-          [Object? body, Map<String, String>? headers]) =>
-      _send('POST', path, body, headers);
+          [Object? body, Map<String, String>? headers, Map<String, String>? query]) =>
+      _send('POST', path, body, headers, query);
   Future<dynamic> patch(String path, [Object? body]) =>
       _send('PATCH', path, body);
   Future<dynamic> put(String path, [Object? body]) => _send('PUT', path, body);
