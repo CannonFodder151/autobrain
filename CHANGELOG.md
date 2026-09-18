@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-3105)
+- fix(frontend): force re-authentication when legacy plaintext JWT is detected in SharedPreferences, preventing silent token downgrade attacks.
+
 ## [0.3.271] - 2026-09-18
 
 ### Added (AUT-3447)
