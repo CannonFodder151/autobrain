@@ -29,14 +29,15 @@ import 'servo_spy_station_history_screen.dart';
 
 enum _ServoSpyView { map, list }
 
-// AUT-2220: CARTO basemap API key, injected at build time via
-// --dart-define=CARTO_API_KEY=<key>. CARTO keys are designed to be public
-// (embedded in tile URLs as ?api_key=...). Empty -> key-less public basemap.
-// File-private top-level so both State classes can share them; the param
-// string cannot be `const` because `isEmpty` is not a constant expression.
-const String _cartoApiKey = String.fromEnvironment('CARTO_API_KEY');
-final String _cartoKeyParam =
-    _cartoApiKey.isEmpty ? '' : '?api_key=$_cartoApiKey';
+
+///
+/// Empty key -> empty string. Non-empty key -> `?key=<key>` (CARTO's
+/// required parameter name for raster basemaps; `api_key` is the old name
+/// and is silently ignored, leaving the "API key required" watermark).
+@visibleForTesting
+String cartoKeyParam(String key) => key.isEmpty ? '' : '?key=$key';
+
+>>>>>>> pr-468
 
 class ServoSpyScreen extends StatefulWidget {
   const ServoSpyScreen({super.key});
@@ -473,8 +474,8 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
                 children: [
                   TileLayer(
                     urlTemplate: isDark
-                        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png${_cartoKeyParam}'
-                        : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png${_cartoKeyParam}',
+                        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png$_kCartoKeyParam'
+                        : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png$_kCartoKeyParam',
                     subdomains: const ['a', 'b', 'c', 'd'],
                     userAgentPackageName: 'com.autobrain',
                   ),
