@@ -1,0 +1,24 @@
+# AUT-2175: keep k8s + compose image pins current
+# Dependabot can only update version tags, not SHA digests.
+# This config watches for newer :hosted tags so the next build-hosted.yml run
+# captures fresh digests. The k8s-pin job will then commit new digests.
+version: 2
+updates:
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "daily"
+      time: "01:00"
+      timezone: "Australia/Sydney"
+    # Watch compose files and k8s manifests that reference :hosted tag
+    # Note: Dependabot updates the tag (e.g. :hosted), not @sha256: digests.
+    # The build-hosted.yml pipeline re-pins to the new digest on next run.
+    include:
+      - "docker-compose*.yml"
+      - "infra/k8s/*.yaml"
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "chore(deps): "
+    rebase-strategy: "auto"
