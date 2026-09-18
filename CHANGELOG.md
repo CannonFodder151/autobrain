@@ -11,40 +11,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-### Fixed (AUT-3456)
-- fix(frontend): wrap getCachedDecoded in try/catch to prevent indefinite spinner on web
-
-## [0.3.271] - 2026-09-18
-
-### Added (AUT-3447)
-- feat(backend): WebAuthn passkey authentication — registration & authentication endpoints, DB schema, validation. Accepts credential creation options and verifies assertions. Endpoints: POST /api/v1/auth/passkey/register/begin, POST /api/v1/auth/passkey/register/complete, POST /api/v1/auth/passkey/authenticate/begin, POST /api/v1/auth/passkey/authenticate/complete, GET /api/v1/auth/passkey/list, DELETE /api/v1/auth/passkey/{credential_id}.
-
-### Changed (AUT-3172)
-- infra(ci): retire the standalone `autobrain-worker` image build (AUT-3153 follow-up). Removed the `worker` leg from every `for svc in backend worker ai frontend` loop in `.github/workflows/build-hosted.yml` (build, per-arch verify, manifest assembly, digest capture) and `.github/workflows/dockerhub-publish.yml` (amd64 build + manifest assembly), dropped the `WORKER_DIGEST` env + `worker=...` arg from the compose-pin step, and removed the `worker` pin from `scripts/update-compose-pins.py`. CI no longer publishes the unused multi-arch worker image. The `docker/worker/Dockerfile` stays on disk as a reference for the security-scan workflows; `infra/k8s/worker.yaml` already runs the Celery worker+beat from `autobrain-backend:latest` and is unchanged.
-
-### Fixed (AUT-3189)
-- infra(env): declare `FUEL_SA_API_KEY` and `FUEL_SA_ENABLED` in `.env.example` so hosted operators can provision the SA SAFPIS feed referenced by `docker-compose.hosted.yml`.
-
-## [0.3.270] - 2026-09-17
-
-### Fixed (AUT-1805)
-- fix(ci): add job-level `timeout-minutes: 15` to the `ocr-review` job in `.github/workflows/code-review.yml` so a 9Router stall or runner hang can never hold the x64 runner beyond 15 min (previously unbounded at job level). The step-level 10 min timeout remains as the inner guard.
-
-## [0.3.269] - 2026-09-17
-
-### Added (AUT-1872)
-- feat(deploy): upgrade script + hardened hosted compose. `scripts/upgrade-instances.sh` redeploys Portainer stacks tier-by-tier (Demo → Default → Hosted) with explicit image pulls and health gates. `docker-compose.hosted.yml` drops dead `dongle-server` + duplicate `hub`, uses `:-` defaults for `POSTGRES_USER`/`POSTGRES_DB` and `DONGLE_SERVER_URL` so Portainer redeploys survive empty-stack env. PR #375.
-
-## [0.3.268] - 2026-09-16
-
-### Fixed (AUT-3039)
-- fix(test): fix `pumpAndSettle` timeout in desktop layout visual regression tests by mocking `getCachedDecoded` in `_FakeApi`, setting `_loading = false` in `VehicleListScreen._load()`, and correcting test assertions. The visual regression workflow (desktop 1280/1440/1920) now passes.
-
-## [0.3.267] - 2026-09-15
-
-### Fixed (AUT-3080)
-- fix(security): restrict CORS `allow_methods` to explicit set (GET/POST/PATCH/DELETE) and `allow_headers` to narrow list (Authorization, Content-Type, Accept, X-Requested-With). Add startup validator rejecting `CORS_ALLOWED_ORIGINS=["*"]` with `allow_credentials=True`.
-
 ## [0.3.266] - 2026-09-11
 
 ### Security (AUT-2060)
@@ -92,14 +58,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - fix(ci): arm64 build-hosted.yml no longer fails with `exec format error` at the first `RUN` step in `docker/backend/Dockerfile`. The previous `python:3.13-slim@sha256:cc9dffa…` pin was a **single-arch amd64** manifest (annotation `com.docker.official-images.bashbrew.arch: amd64`), so the arm64 runner pulled amd64 layers and every `RUN` died with exit 255 — the build never reached flutter/dart2js. Re-pin to the multi-arch index `python:3.13.15-slim-trixie@sha256:9d2e555…` (resolves to aarch64 on arm64) across backend/ai/worker/market-data Dockerfiles and the trivy scan env; add a pin-guard check that the python base index contains an arm64 manifest.
 
 ## [0.3.258] - 2026-09-09
-
-### Fixed (AUT-3154)
-- fix(docs): repair vector-store doc drift — all 5 embedding entity tables (`diagnostics`, `service_records`, `modifications`, `receipts`, `social_issue_posts`) now referenced consistently across `docs/Engineering/ai/vector.md`, `docs/Engineering/database-schema.md`, `docs/Engineering/container-architecture.md`, and `docs/Engineering/architecture.md`. Cross-references that pointed at the non-existent `docs/ai/vector.md` / `docs/README.md` / `postgres-pg17-upgrade.md` now resolve to the canonical `docs/Engineering/ai/vector.md`, `docs/index.md`, and `docs/Deployment-and-Infrastructure/server-migration.md`. Migration comments in `g7h8i9j0k1l2` / `h1i2j3k4l5m6` corrected (pg16 → pg17 image; IVFFlat-claim → HNSW-claim) and `vector.md`'s migration reference table now lists all three vector migrations (`g7h8i9j0k1l2`, `h1i2j3k4l5m6`, `u1v2w3x4y5z6`) with the verified single-head chain (`m3rge06`).
-
-### Fixed (AUT-3152)
-- fix(ai/tests): isolate test env globals. `ai/tests/test_car_check.py`, `test_advisor.py`, `test_fallbacks.py`, `test_parts_guide.py`, `test_router_validation.py`, `test_gateway_security.py`, and `test_social_image.py` previously set `AI_ROUTER_URL` / `AI_GATEWAY_API_KEY` via module-level `os.environ.setdefault`, leaking `AI_GATEWAY_AUTH_DISABLED=1` across the pytest process and producing 2 false 401s in `test_gateway_security.py` during combined runs. All module-level env mutation is now done through per-test `monkeypatch.setenv`/`delenv` autouse fixtures; `test_gateway_security.py` additionally clears `AI_GATEWAY_AUTH_DISABLED` so its 401 assertions hold regardless of run order. Verified: `pytest ai/tests` passes 109/109 both clean (`-u` env) and combined.
-
-## [0.3.260] - 2026-09-10
 
 ### Fixed (AUT-2281)
 - fix(backend): `cost_per_km` divisor `/100` → `/10000` in `_project_price` (`app/api/v1/fuel_servo.py:399`) so the result is **$/km** not cents/km. The old code pre-divided `price` by 100 then divided again — double conversion. Also fixed `avg_litres_per_fill` → `avg_fill_litres` field-name mismatch in `_station_out` (`app/api/v1/fuel_servo.py:417`) and `annotate_station`/`annotate_prices` (`app/services/fuel_servo.py:69,93`); corrected an `IndentationError` in `_station_out`; updated frozen assertions in `tests/test_aut2201_station_annotations.py`. All 8 tests in `test_aut2201_station_annotations.py` + `test_servo_projection_aut2053.py` pass.
@@ -164,6 +122,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed (AUT-2481)
 - frontend(servo-spy): dart2js compile error on `_cartoApiKey`/`_cartoKeyParam`. The two were declared as instance fields on `_ServoSpyScreenState` but referenced from `_ServoSpyMapState.build()` (different class, so name-resolution failed at compile time). Promoted both to file-private top-level `const` so both widget trees see them; removed the `const` from `_cartoKeyParam` (the runtime `isEmpty` check is not a constant expression).
+
+### Security (AUT-2060)
+- Bumped `python:3.13-slim` base image digest from `7ce4b6d...` to `cc9dffa...` (2026-08-31 Docker Hub latest) in `docker/backend/Dockerfile`, `docker/ai/Dockerfile`, `docker/worker/Dockerfile`, and `market-data/Dockerfile`. New digest ships `libssl3t64` 3.5.7-1~deb13u2, resolving CVE-2026-14456 (OpenSSL QUIC DoS) and related HIGH CVEs. Updated `PYTHON_BASE_IMAGE` env var in `.github/workflows/trivy-image-scan.yml`. Removed resolved CVE-2026-14456 suppression from `.trivyignore`.
 
 ## [0.3.243] - 2026-09-06
 ### Fixed (AUT-2656)
