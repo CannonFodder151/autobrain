@@ -57,20 +57,25 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _load() async {
     final api = context.read<AuthState>().api;
     // Cache-first: render immediately from cache if available.
-    final cached = await api.getCachedDecoded('/vehicles', null);
-    if (cached != null) {
-      final data = cached as List;
-      final vehicles = data
-          .map((e) => Vehicle.fromJson(e as Map<String, dynamic>))
-          .toList();
-      if (mounted) {
-        setState(() {
-          _vehicles = vehicles;
-          _selected = Vehicle.resolveSelection(vehicles, _selected);
-          _loading = false;
-          _stale = true;
-        });
+    try {
+      final cached = await api.getCachedDecoded('/vehicles', null);
+      if (cached != null) {
+        final data = cached as List;
+        final vehicles = data
+            .map((e) => Vehicle.fromJson(e as Map<String, dynamic>))
+            .toList();
+        if (mounted) {
+          setState(() {
+            _vehicles = vehicles;
+            _selected = Vehicle.resolveSelection(vehicles, _selected);
+            _loading = false;
+            _stale = true;
+          });
+        }
       }
+    } catch (_) {
+      // Cache read failed (e.g. IndexedDB unavailable on web). Continue
+      // to the network path so the spinner does not hang.
     }
     // Background refresh if online.
     if (!ConnectivityService.instance.isOnline) {
