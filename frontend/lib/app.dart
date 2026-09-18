@@ -226,7 +226,12 @@ class _AdvisorDeepLinkState extends State<_AdvisorDeepLink> {
   Future<void> _load() async {
     final auth = context.read<AuthState>();
     // Cache-first: render immediately from cache if available.
-    final cached = await auth.api.getCachedDecoded('/vehicles', null);
+    dynamic cached;
+    try {
+      cached = await auth.api.getCachedDecoded('/vehicles', null);
+    } catch (_) {
+      // Cache read failed (e.g. corrupted IndexedDB on web) – treat as empty.
+    }
     if (cached != null) {
       final data = cached as List;
       final vehicles = data
