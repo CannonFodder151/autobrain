@@ -273,13 +273,20 @@ async def test_auth_complete_requires_request_id() -> None:
         resp = await client.post(
             "/api/v1/auth/passkey/authenticate/complete",
             json={
-                "credential_id": "test-cred-id",
-                "credential_response": {"type": "public-key"},
+                "credential": {
+                    "id": "test-cred-id",
+                    "rawId": "test-cred-id",
+                    "response": {
+                        "clientDataJSON": "dGVzdA",
+                        "authenticatorData": "dGVzdA",
+                        "signature": "dGVzdA",
+                    },
+                    "type": "public-key",
+                },
             },
         )
-        # Missing request_id query param
-        assert resp.status_code == 400
-        assert "request_id" in resp.json()["detail"]
+        # Missing request_id in payload
+        assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
@@ -289,11 +296,20 @@ async def test_auth_complete_bad_credential_id() -> None:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post(
-            "/api/v1/auth/passkey/authenticate/complete?request_id=fake-request-id",
+            "/api/v1/auth/passkey/authenticate/complete",
             headers=headers,
             json={
-                "credential_id": "nonexistent-cred",
-                "credential_response": {"type": "public-key"},
+                "credential": {
+                    "id": "nonexistent-cred",
+                    "rawId": "nonexistent-cred",
+                    "response": {
+                        "clientDataJSON": "dGVzdA",
+                        "authenticatorData": "dGVzdA",
+                        "signature": "dGVzdA",
+                    },
+                    "type": "public-key",
+                },
+                "request_id": "fake-request-id",
             },
         )
         assert resp.status_code == 401
@@ -310,15 +326,19 @@ async def test_register_complete_requires_request_id() -> None:
             "/api/v1/auth/passkey/register/complete",
             headers=headers,
             json={
-                "credential_public_key": "dGVzdA",
-                "credential_attestation": "dGVzdA",
-                "credential_client_data_json": "dGVzdA",
-                "credential_device_type": "platform",
+                "credential": {
+                    "id": "test-cred-id",
+                    "rawId": "test-cred-id",
+                    "response": {
+                        "clientDataJSON": "dGVzdA",
+                        "attestationObject": "dGVzdA",
+                    },
+                    "type": "public-key",
+                },
             },
         )
-        # Missing request_id query param
-        assert resp.status_code == 400
-        assert "request_id" in resp.json()["detail"]
+        # Missing request_id in payload
+        assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
@@ -328,13 +348,19 @@ async def test_register_complete_bad_request_id() -> None:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post(
-            "/api/v1/auth/passkey/register/complete?request_id=expired-or-fake",
+            "/api/v1/auth/passkey/register/complete",
             headers=headers,
             json={
-                "credential_public_key": "dGVzdA",
-                "credential_attestation": "dGVzdA",
-                "credential_client_data_json": "dGVzdA",
-                "credential_device_type": "platform",
+                "credential": {
+                    "id": "test-cred-id",
+                    "rawId": "test-cred-id",
+                    "response": {
+                        "clientDataJSON": "dGVzdA",
+                        "attestationObject": "dGVzdA",
+                    },
+                    "type": "public-key",
+                },
+                "request_id": "expired-or-fake",
             },
         )
         assert resp.status_code == 400
@@ -390,18 +416,19 @@ async def test_auth_complete_invalid_response() -> None:
 
         # Try to complete with garbage response
         resp = await client.post(
-            f"/api/v1/auth/passkey/authenticate/complete?request_id={request_id}",
+            "/api/v1/auth/passkey/authenticate/complete",
             json={
-                "credential_id": cred.credential_id,
-                "credential_response": {
-                    "type": "public-key",
-                    "id": "fake-id",
+                "credential": {
+                    "id": cred.credential_id,
+                    "rawId": cred.credential_id,
                     "response": {
-                        "authenticatorData": "dGVzdA",
                         "clientDataJSON": "dGVzdA",
+                        "authenticatorData": "dGVzdA",
                         "signature": "dGVzdA",
                     },
+                    "type": "public-key",
                 },
+                "request_id": request_id,
             },
         )
         # Should fail verification (garbage data)

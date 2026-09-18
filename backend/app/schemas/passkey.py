@@ -2,7 +2,7 @@
 
 from base64 import urlsafe_b64decode
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -73,42 +73,41 @@ class PasskeyRegistrationComplete(BaseModel):
     """Request body for completing a passkey registration ceremony.
 
     The frontend posts the authenticator response to navigator.credentials.create().
+    The credential object structure from navigator.credentials.create():
+    - id: base64url string (credential ID)
+    - rawId: base64url string (raw credential ID bytes)
+    - response: { clientDataJSON, attestationObject, transports[] }
+    - type: "public-key"
     """
 
-    credential_public_key: str = Field(..., description="COSE public key bytes (base64url)")
-    credential_attestation: str = Field(
-        ..., description="Attestation object (base64url or stringified JSON)"
-    )
-    credential_client_data_json: str = Field(
-        ..., description="Client data JSON (base64url or stringified JSON)"
-    )
-    credential_device_type: str = Field(
+    credential: dict = Field(
         ...,
-        pattern="^(platform|cross-platform|unknown)$",
+        description="Full navigator.credentials.create() response object "
+        "(dict with: id, rawId, response {clientDataJSON, attestationObject, transports}, type)",
     )
-    credential_attestation_transport: Optional[str] = Field(
-        default=None,
-        pattern="^(none|usb|nfc|ble|internal)$",
+    request_id: str = Field(
+        ..., min_length=1, max_length=128,
+        description="Request ID from /register/begin response",
     )
 
-    @field_validator("credential_public_key", "credential_attestation", "credential_client_data_json")
+    @field_validator("credential")
     @classmethod
-    def _b64url_or_json(cls, v: str) -> str:
-        """Accept either base64url or a JSON string."""
-        # Try base64url decode first
-        try:
-            _b64url_to_bytes(v)
-            return v  # valid base64url
-        except Exception:
-            pass
-        # Try JSON parse
-        try:
-            import json as _json
-            _json.loads(v)
-            return v  # valid JSON
-        except Exception:
-            pass
-        raise ValueError("credential data must be base64url or stringified JSON")
+    def _credential_must_have_required_fields(cls, v: dict) -> dict:
+        if not isinstance(v, dict):
+            raise ValueError("credential must be a dict")
+        required_keys = {"id", "rawId", "response", "type"}
+        missing = required_keys - set(v.keys())
+        if missing:
+            raise ValueError(f"credential missing required fields: {missing}")
+        if v.get("type") != "public-key":
+            raise ValueError("credential type must be 'public-key'")
+        response = v.get("response")
+        if not isinstance(response, dict):
+            raise ValueError("credential.response must be a dict")
+        r_keys = {"clientDataJSON", "attestationObject"}
+        if not r_keys.issubset(set(response.keys())):
+            raise ValueError(f"credential.response missing fields: {r_keys - set(response.keys())}")
+        return v
 
 
 class PasskeyAuthenticationBegin(BaseModel):
@@ -145,29 +144,41 @@ class PasskeyAuthenticationComplete(BaseModel):
     """Request body for completing a passkey authentication ceremony.
 
     The frontend posts the authenticator response to navigator.credentials.get().
+    The credential object structure from navigator.credentials.get():
+    - id: base64url string (credential ID)
+    - rawId: base64url string (raw credential ID bytes)
+    - response: { clientDataJSON, authenticatorData, signature, userHandle }
+    - type: "public-key"
     """
 
-    credential_id: str = Field(..., description="Credential ID (base64url) matching a stored passkey")
-    credential_response: dict = Field(
+    credential: dict = Field(
         ...,
         description="Full navigator.credentials.get() response object "
-        "(stringified JSON or dict with: authenticatorData, clientDataJSON, signature, unsignedPermission)",
+        "(dict with: id, rawId, response {clientDataJSON, authenticatorData, signature, userHandle}, type)",
+    )
+    request_id: str = Field(
+        ..., min_length=1, max_length=128,
+        description="Request ID from /authenticate/begin response",
     )
 
-    @staticmethod
-    def _normalize_credential_response(value: Any) -> dict:
-        """Ensure credential_response is a dict."""
-        if isinstance(value, dict):
-            return value
-        if isinstance(value, str):
-            import json as _json
-            return _json.loads(value)
-        raise ValueError("credential_response must be a dict or stringified JSON")
-
-    @field_validator("credential_response")
+    @field_validator("credential")
     @classmethod
-    def _credential_response_must_be_dict(cls, v: Any) -> dict:
-        return cls._normalize_credential_response(v)
+    def _credential_must_have_required_fields(cls, v: dict) -> dict:
+        if not isinstance(v, dict):
+            raise ValueError("credential must be a dict")
+        required_keys = {"id", "rawId", "response", "type"}
+        missing = required_keys - set(v.keys())
+        if missing:
+            raise ValueError(f"credential missing required fields: {missing}")
+        if v.get("type") != "public-key":
+            raise ValueError("credential type must be 'public-key'")
+        response = v.get("response")
+        if not isinstance(response, dict):
+            raise ValueError("credential.response must be a dict")
+        r_keys = {"clientDataJSON", "authenticatorData", "signature"}
+        if not r_keys.issubset(set(response.keys())):
+            raise ValueError(f"credential.response missing fields: {r_keys - set(response.keys())}")
+        return v
 
 
 class PasskeyListFilter(BaseModel):

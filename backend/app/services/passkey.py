@@ -5,19 +5,12 @@ calls navigator.credentials.create/get() and posts back the raw results here
 for server-side verification.
 """
 
-import json as _json
 import secrets
 import time
 from base64 import urlsafe_b64decode
-from datetime import datetime, timezone
-from typing import List, Optional, Tuple
-
-from fastapi import HTTPException
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from typing import List, Tuple
 
 from app.core.logging import get_logger
-from app.models.passkey import PasskeyCredential
 from app.models.user import User
 
 logger = get_logger(__name__)
@@ -133,7 +126,6 @@ def build_registration_options(
     store_key = _challenge_key(user.id, "register", request_id)
     _challenge_store[store_key] = (challenge_bytes, time.time())
 
-    from webauthn.helpers import options_to_json
     return {
         "rp": {"name": options.rp.name, "id": options.rp.id},
         "user": {
@@ -157,11 +149,11 @@ def build_registration_options(
 def verify_registration(
     user: User,
     request_id: str,
-    credential_public_key_b64: str,
-    credential_attestation: str,
-    credential_client_data_json: str,
-    credential_device_type: str,
-    credential_attestation_transport: str | None,
+    credential_id_b64: str,
+    raw_id_b64: str,
+    client_data_json_b64: str,
+    attestation_object_b64: str,
+    transports: List[str] | None,
     rp_id: str,
     expected_origin: str,
 ) -> dict:
@@ -172,7 +164,10 @@ def verify_registration(
     credential_backed_up, credential_device_type, user_verified.
     """
     import webauthn
-    from webauthn.helpers.structs import RegistrationCredential
+    from webauthn.helpers.structs import (
+        AuthenticatorAttestationResponse,
+        RegistrationCredential,
+    )
 
     store_key = _challenge_key(user.id, "register", request_id)
     if store_key not in _challenge_store:
@@ -183,13 +178,18 @@ def verify_registration(
         raise ValueError("Registration session expired — try again")
 
     try:
-        result = webauthn.verify_registration_response(
-            credential=RegistrationCredential(
-                id=_b64url_to_bytes(credential_attestation),
-                raw_id=_b64url_to_bytes(credential_attestation),
-                response=None,  # We pass the response data below
-                type="public-key",
+        credential = RegistrationCredential(
+            id=credential_id_b64,
+            raw_id=_b64url_to_bytes(raw_id_b64),
+            type="public-key",
+            response=AuthenticatorAttestationResponse(
+                client_data_json=_b64url_to_bytes(client_data_json_b64),
+                attestation_object=_b64url_to_bytes(attestation_object_b64),
+                transports=transports,
             ),
+        )
+        result = webauthn.verify_registration_response(
+            credential=credential,
             expected_challenge=expected_challenge_bytes,
             expected_rp_id=rp_id,
             expected_origin=expected_origin,
@@ -197,7 +197,6 @@ def verify_registration(
             require_user_verification=False,
         )
     except Exception as exc:
-        # Try to use the raw credential data directly
         logger.warning("webauthn_registration_verification_failed", error=str(exc))
         raise ValueError(f"Registration verification failed: {exc}") from exc
 
@@ -270,7 +269,6 @@ def build_authentication_options(
     store_key = _challenge_key(user_id, "auth", request_id)
     _challenge_store[store_key] = (challenge_bytes, time.time())
 
-    from webauthn.helpers import options_to_json
     return {
         "challenge": _bytes_to_b64url(options.challenge),
         "timeout": options.timeout,
@@ -286,7 +284,12 @@ def build_authentication_options(
 def verify_authentication(
     user_id: str,
     request_id: str,
-    credential_response: dict,
+    credential_id_b64: str,
+    raw_id_b64: str,
+    client_data_json_b64: str,
+    authenticator_data_b64: str,
+    signature_b64: str,
+    user_handle_b64: str | None,
     expected_credential_public_key_b64: str,
     expected_sign_count: int,
     rp_id: str,
@@ -298,6 +301,10 @@ def verify_authentication(
     Returns dict with: new_sign_count, user_verified, credential_backed_up.
     """
     import webauthn
+    from webauthn.helpers.structs import (
+        AuthenticationCredential,
+        AuthenticatorAssertionResponse,
+    )
 
     store_key = _challenge_key(user_id, "auth", request_id)
     if store_key not in _challenge_store:
@@ -308,8 +315,19 @@ def verify_authentication(
         raise ValueError("Authentication session expired — try again")
 
     try:
+        credential = AuthenticationCredential(
+            id=credential_id_b64,
+            raw_id=_b64url_to_bytes(raw_id_b64),
+            type="public-key",
+            response=AuthenticatorAssertionResponse(
+                client_data_json=_b64url_to_bytes(client_data_json_b64),
+                authenticator_data=_b64url_to_bytes(authenticator_data_b64),
+                signature=_b64url_to_bytes(signature_b64),
+                user_handle=_b64url_to_bytes(user_handle_b64) if user_handle_b64 else None,
+            ),
+        )
         result = webauthn.verify_authentication_response(
-            credential=credential_response,
+            credential=credential,
             expected_challenge=expected_challenge_bytes,
             expected_rp_id=rp_id,
             expected_origin=expected_origin,

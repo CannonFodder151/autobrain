@@ -153,62 +153,31 @@ async def passkey_register_complete(
     expected_rp_id = _get_expected_rp_id(request)
     expected_origin = _get_expected_origin(request)
 
-    # The request_id is embedded in the credential_attestation or we
-    # need it passed separately. For simplicity we include it in the
-    # credential_attestation field as a composite value, but the proper
-    # way is to pass it as a separate field. Let's require it in the
-    # payload. Actually, looking at the schema, we don't have request_id
-    # there. We'll need to add it or derive it. Let's add it to the
-    # schema or infer from the session. For now, we'll require it as
-    # a query param or in the payload. Let's modify the approach:
-    # The frontend stores the request_id from /register/begin and
-    # includes it in the complete call.
-
-    # For now, we'll require request_id in the payload - let's
-    # extract from the credential_attestation if it's a JSON string
-    # or add a separate field. Let's check the payload structure.
-
-    # Actually, I need to rethink this. The standard flow is:
-    # 1. Client calls /register/begin -> gets options + request_id
-    # 2. Client calls navigator.credentials.create(options)
-    # 3. Client posts credential response + request_id to /register/complete
-    # The schema needs request_id. Let me add it.
-
-    # For backward compat, let's try to extract from the attestation
-    # or require it. I'll add request_id to the payload validation.
-
-    # This is a simplified implementation - we'll pass request_id
-    # as a query parameter for now.
-    request_id = request.query_params.get("request_id")
-    if not request_id:
-        raise HTTPException(
-            status_code=400,
-            detail="Missing request_id query parameter (from /register/begin response)",
-        )
+    cred = payload.credential
+    resp = cred.get("response", {})
 
     try:
         result = passkey_svc.verify_registration(
             user=user,
-            request_id=request_id,
-            credential_public_key_b64=payload.credential_public_key,
-            credential_attestation=payload.credential_attestation,
-            credential_client_data_json=payload.credential_client_data_json,
-            credential_device_type=payload.credential_device_type,
-            credential_attestation_transport=payload.credential_attestation_transport,
+            request_id=payload.request_id,
+            credential_id_b64=cred.get("id", ""),
+            raw_id_b64=cred.get("rawId", ""),
+            client_data_json_b64=resp.get("clientDataJSON", ""),
+            attestation_object_b64=resp.get("attestationObject", ""),
+            transports=resp.get("transports"),
             rp_id=expected_rp_id,
             expected_origin=expected_origin,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    # Store the credential
     credential = PasskeyCredential(
         user_id=user.id,
         credential_id=result["credential_id"],
         public_key=result["credential_public_key"],
         sign_count=result["sign_count"],
         device_type=result["credential_device_type"],
-        transports=payload.credential_attestation_transport or "",
+        transports=",".join(resp.get("transports", [])) if resp.get("transports") else "",
         label=f"Passkey {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}",
     )
     db.add(credential)
@@ -319,17 +288,14 @@ async def passkey_authenticate_complete(
     expected_rp_id = _get_expected_rp_id(request)
     expected_origin = _get_expected_origin(request)
 
-    request_id = request.query_params.get("request_id")
-    if not request_id:
-        raise HTTPException(
-            status_code=400,
-            detail="Missing request_id query parameter (from /authenticate/begin response)",
-        )
+    cred = payload.credential
+    resp = cred.get("response", {})
+    credential_id_b64 = cred.get("id", "")
 
     # Look up the credential by credential_id
     credential = await db.scalar(
         select(PasskeyCredential).where(
-            PasskeyCredential.credential_id == payload.credential_id
+            PasskeyCredential.credential_id == credential_id_b64
         )
     )
     if not credential:
@@ -342,8 +308,13 @@ async def passkey_authenticate_complete(
     try:
         result = passkey_svc.verify_authentication(
             user_id=user.id,
-            request_id=request_id,
-            credential_response=payload.credential_response,
+            request_id=payload.request_id,
+            credential_id_b64=credential_id_b64,
+            raw_id_b64=cred.get("rawId", ""),
+            client_data_json_b64=resp.get("clientDataJSON", ""),
+            authenticator_data_b64=resp.get("authenticatorData", ""),
+            signature_b64=resp.get("signature", ""),
+            user_handle_b64=resp.get("userHandle"),
             expected_credential_public_key_b64=credential.public_key,
             expected_sign_count=credential.sign_count,
             rp_id=expected_rp_id,
