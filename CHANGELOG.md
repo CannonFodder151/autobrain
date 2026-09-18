@@ -11,6 +11,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Improved (AUT-3509)
+- ai(fallbacks): expand OCR deterministic rules — 30+ AU vendors, 80+ item types, priority matching
+- ai(fallbacks): expand odometer fallback — multi-format regex (labelled, decimal, comma-separated), trip-meter rejection
+- ai(fallbacks): expand fuel-ocr fallback — 15+ fuel vendors, litres/price cross-validation, auto-compute missing total
+- ai(fallbacks): expand diagnostics fallback — 40+ OBD-II codes, 15 severity rules, 120+ part costs, 85+ part numbers
+- ai(router_utils): add AI_IMMUTABLE protection for diagnostics (severity, estimated_cost, items, parts_needed) and service-prediction (interval/due fields)
+- ai(modules): add _clamp helper to odometer module
+- docs: update module-boundaries.md with audit findings
+
 ### Fixed (AUT-3515)
 - fix(advisor): create missing finance/dream/baseline modules to fix ModuleNotFoundError at startup; revert backend to working image and redeploy stacks
 

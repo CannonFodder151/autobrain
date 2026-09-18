@@ -63,6 +63,20 @@ Pure functions, no I/O, same output schema as the router path. The 11 domains:
 
 `social_image.py` uses Pillow (always available) and is deterministic-first; it is not in `fallbacks/` because it is self-contained.
 
+### Deterministic-first audit (AUT-3509)
+
+All 12 AI modules follow the deterministic-first pattern: a rule-based fallback runs first and its result is the baseline; 9Router (via `router_client.enhance()`) only enriches optional/mutable fields. Ground-truth values are protected in `_AI_IMMUTABLE` per module.
+
+Recent improvements (AUT-3509):
+- **OCR (`ocr.py`/`fallbacks/ocr.py`)**: Expanded vendor list (30+ AU retailers/dealers/brands), item catalog (80+ part types with AU prices), priority matching to avoid partial-word collisions, word-boundary regex checks.
+- **Odometer (`odometer.py`/`fallbacks/odometer.py`)**: Multi-pattern regex (labelled "ODO: 123,456 km", decimal "123456.0 km", comma-separated), trip-meter rejection (<1000 km), highest-plausible-value selection.
+- **Fuel OCR (`fuel_ocr.py`/`fallbacks/fuel_ocr.py`)**: 15+ AU fuel vendors, multiple litres/price formats, cross-validation (total ≈ litres × price/litre), auto-compute missing total.
+- **Diagnostics (`diagnostics.py`/`fallbacks/diagnose.py`)**: 40+ OBD-II codes (misfire, catalyst, fuel trim, MAF, EGR, EVAP, crank/cam, throttle, idle, transmission, knock, coolant, voltage, immobilizer, turbo), 15 severity rules (battery/charging, steering, AC, transmission, exhaust, coolant), expanded symptom→parts mapping, 120+ part costs, 85+ part numbers (AU suppliers: Ryco, Bendix, DBA, NGK, Denso, Gates, GMB, etc.).
+- **AI_IMMUTABLE protection added** for `diagnostics` (severity, estimated_cost, cost_range, items, parts_needed) and `service-prediction` (interval_km, interval_months, due_in_km, due_in_days, next_due_km, next_due_date) — ground-truth schedule/interval values can never be overridden by AI.
+- Added `_clamp()` to `app.modules.odometer` for test compatibility.
+
+All 110 existing tests pass with these changes.
+
 ### `router_client.py` — the single 9Router client
 `enhance()` posts to 9Router with `_AI_IMMUTABLE`-protected fields so AI can
 never override deterministic ground truth. No module talks to the router

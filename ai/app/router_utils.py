@@ -170,6 +170,8 @@ _AI_IMMUTABLE: dict[str, frozenset[str]] = {
     "fuel-ocr": frozenset({"vendor", "date", "litres", "price_per_litre", "total_cost", "currency"}),
     "advisor": frozenset({"decision", "based_on"}),
     "car-check": frozenset({"deal_score", "red_flags", "green_flags"}),
+    "diagnostics": frozenset({"severity", "estimated_cost", "cost_range", "items", "parts_needed"}),
+    "service-prediction": frozenset({"interval_km", "interval_months", "due_in_km", "due_in_days", "next_due_km", "next_due_date"}),
 }
 
 # Per-module output schema whitelist: the only keys the router may contribute,

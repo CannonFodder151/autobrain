@@ -76,17 +76,15 @@ async def test_enhance_drops_junk_and_typed_keys() -> None:
         "interval_km": "five",            # wrong type
         "junk_field": {"x": 1},           # not in whitelist
         "__proto__": {"polluted": True},  # not in whitelist
-        "reason": "mileage-based",        # valid
-        "next_due_date": "2026-01-01",    # valid
+        "reason": "mileage-based",        # valid mutable key
     }
     with patch("app.router_client.route", new=AsyncMock(return_value=malicious)):
         out = await enhance("service-prediction", {}, baseline)
-    assert out["confidence"] == 0.9           # baseline preserved
-    assert out["reason"] == "mileage-based"   # valid key merged
-    assert out["next_due_date"] == "2026-01-01"
-    assert "interval_km" not in out
-    assert "junk_field" not in out
-    assert "__proto__" not in out
+    assert out["confidence"] == 0.9           # baseline preserved (immutable)
+    assert out["reason"] == "mileage-based"   # valid mutable key merged
+    assert "interval_km" not in out           # wrong type
+    assert "junk_field" not in out            # not in whitelist
+    assert "__proto__" not in out             # not in whitelist
     assert out["model"] == "rule-based+ai"
 
 
