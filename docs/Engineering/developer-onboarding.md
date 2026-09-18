@@ -16,10 +16,12 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
+The dev stack runs **5 containers**: postgres, redis, minio, backend (API + AI gateway + Celery worker+beat), frontend. The AI gateway runs as a subprocess on `:8001` inside the backend container (AUT-3461).
+
 ## 3. Verify
 
 - `curl http://localhost:8000/health` → `{"status":"ok",...}`
-- `curl http://localhost:8001/health` → router status
+- `curl http://localhost:8001/health` → AI gateway status
 - Open http://localhost:8000/docs
 
 ## 4. Code layout

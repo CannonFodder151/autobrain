@@ -15,16 +15,17 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.fallbacks.utils import (
+    _clip,
+    format_price,
+    format_year,
+    format_odometer,
+    parse_listing,
+    validate_confidence,
+)
+
 _SUMMARY_MAX = 280
 _FLAG_MAX = 120
-
-
-def _clip(text: str, limit: int) -> str:
-    if not text:
-        return ""
-    if len(text) <= limit:
-        return text
-    return text[: max(0, limit - 1)].rstrip() + "\u2026"
 
 
 def _score_label(score: float | None) -> str:
@@ -35,48 +36,6 @@ def _score_label(score: float | None) -> str:
     if score >= 50:
         return "fair"
     return "weak"
-
-
-def _parse_listing(payload: dict[str, Any]) -> dict[str, Any]:
-    listing = payload.get("listing") or {}
-    if not isinstance(listing, dict):
-        listing = {}
-    return {
-        "title": str(listing.get("title") or "").strip() or "not available",
-        "price": listing.get("price"),
-        "year": listing.get("year"),
-        "odometer_km": listing.get("odometer_km"),
-        "make": str(listing.get("make") or "").strip() or "not available",
-        "model": str(listing.get("model") or "").strip() or "not available",
-        "listing_url": str(listing.get("listing_url") or "").strip() or "not available",
-    }
-
-
-def _price_str(price: Any) -> str:
-    if price is None:
-        return "not available"
-    try:
-        return f"${float(price):,.0f}"
-    except (TypeError, ValueError):
-        return "not available"
-
-
-def _year_str(year: Any) -> str:
-    if year is None:
-        return "not available"
-    try:
-        return str(int(year))
-    except (TypeError, ValueError):
-        return "not available"
-
-
-def _odo_str(odo: Any) -> str:
-    if odo is None:
-        return "not available"
-    try:
-        return f"{int(odo):,} km"
-    except (TypeError, ValueError):
-        return "not available"
 
 
 def _red_flags(listing: dict[str, Any], deal_score: float | None) -> list[str]:
@@ -97,9 +56,9 @@ def _green_flags(listing: dict[str, Any], deal_score: float | None) -> list[str]
     elif deal_score is not None and deal_score >= 50:
         flags.append(f"Deal score {deal_score:.0f}/100 — fair value.")
     if listing.get("price") is not None:
-        flags.append(f"Listed at {_price_str(listing['price'])}.")
+        flags.append(f"Listed at {format_price(listing['price'])}.")
     if listing.get("year") is not None:
-        flags.append(f"{_year_str(listing['year'])} model.")
+        flags.append(f"{format_year(listing['year'])} model.")
     if listing.get("listing_url") and listing["listing_url"] != "not available":
         flags.append("Direct listing link available.")
     return flags[:_FLAG_MAX][:5]
@@ -108,9 +67,9 @@ def _green_flags(listing: dict[str, Any], deal_score: float | None) -> list[str]
 def _build_summary(listing: dict[str, Any], deal_score: float | None) -> str:
     score_text = _score_label(deal_score)
     parts = [
-        f"{listing['make']} {listing['model']} ({_year_str(listing['year'])})",
-        f"listed at {_price_str(listing['price'])}",
-        f"with {_odo_str(listing.get('odometer_km'))}",
+        f"{listing['make']} {listing['model']} ({format_year(listing['year'])})",
+        f"listed at {format_price(listing.get('price'))}",
+        f"with {format_odometer(listing.get('odometer_km'))}",
         f"has a {score_text} deal score.",
     ]
     return _clip(" ".join(parts), _SUMMARY_MAX)
@@ -144,7 +103,7 @@ def car_check_fallback(payload: dict[str, Any]) -> dict[str, Any]:
     except (TypeError, ValueError):
         deal_score_f = None
 
-    listing = _parse_listing(payload)
+    listing = parse_listing(payload.get("listing"))
     reds = _red_flags(listing, deal_score_f)
     greens = _green_flags(listing, deal_score_f)
     summary = _build_summary(listing, deal_score_f)

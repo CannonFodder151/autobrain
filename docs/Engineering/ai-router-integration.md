@@ -44,8 +44,8 @@ Check available models with `GET {AI_ROUTER_URL}/models`.
 
 ```
 backend (ai_client.py)
-  └─ HTTP POST http://ai:8001/v1/{module}   {"payload": {...}}
-       └─ modules/{module}.run(payload)
+  └─ HTTP POST http://localhost:8001/v1/{module}   {"payload": {...}}
+       └─ modules/{module}.run(payload)   [ai_app/main.py]
             ├─ fallbacks/{module}.py  → baseline (deterministic, always runs)
             ├─ router_client.enhance(module, payload, baseline)
             │    └─ route(): POST {AI_ROUTER_URL}/chat/completions   (OpenAI format)
@@ -55,6 +55,10 @@ backend (ai_client.py)
             │    → shallow-merge into baseline, skipping _AI_IMMUTABLE keys
             └─ validated, clamped result
 ```
+
+Note: In production/hosted stacks, the AI gateway runs in a separate container
+on :8001. In dev mode, both the backend API (:8000) and AI gateway (:8001)
+run within the same backend container for simplicity.
 
 ## Failure behaviour
 

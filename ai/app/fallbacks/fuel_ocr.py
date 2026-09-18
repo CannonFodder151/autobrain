@@ -2,14 +2,8 @@
 
 import re
 
+from app.fallbacks.utils import to_float as _num
 from app.ocr_utils import _extract_date
-
-
-def _num(s) -> float | None:
-    try:
-        return float(s)
-    except (TypeError, ValueError):
-        return None
 
 
 def _fuel_receipt_fallback(text: str) -> dict:

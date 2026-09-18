@@ -1,11 +1,11 @@
 # Container Architecture
 
-## Compose (dev)
+## Compose (dev) — 5 containers
 
-`docker-compose.yml`: postgres, redis, minio, backend (reload, runs API +
-Celery worker+beat), ai (reload, AI gateway), frontend. Source volumes for hot
-reload. Market-data runs inside the ai image (AUT-1242/C3); the dev `ai` service
-currently runs only the gateway (gateway-only reload override).
+`docker-compose.yml`: postgres, redis, minio, backend (API + AI gateway +
+Celery worker+beat), frontend. Source volumes for hot reload. The AI gateway
+runs as a sub-process on :8001 within the backend container (AUT-3461),
+reducing the dev stack from 7 to 5 containers (AI gateway merged into backend).
 
 ## Compose (prod)
 
