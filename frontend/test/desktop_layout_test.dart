@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:autobrain/core/theme.dart';
 import 'package:autobrain/core/api_client.dart';
@@ -19,20 +18,16 @@ class _FakeApi extends ApiClient {
     if (path == '/vehicles') {
       return <dynamic>[
         <String, dynamic>{
-          'id': 'v1', 'nickname': 'Demo Car', 'year': 2022,
-          'rego': 'ABC123', 'rego_state': 'NSW', 'colour': 'White',
-          'body_type': 'Sedan', 'fuel_type': 'Petrol',
-          'odometer_km': 45000, 'is_primary': true, 'is_shared': false,
+          'id': 'v1', 'nickname': 'Demo Car', 'make': 'Toyota',
+          'model': 'Camry', 'year': 2022, 'rego': 'ABC123',
+          'rego_state': 'NSW', 'colour': 'White', 'body_type': 'Sedan',
+          'fuel_type': 'Petrol', 'odometer_km': 45000,
+          'is_primary': true, 'is_shared': false,
         },
       ];
     }
     if (path == '/vehicle-shares') return <dynamic>[];
     return <String, dynamic>{};
-  }
-
-  @override
-  Future<dynamic>? getCachedDecoded(String path, Map<String, String>? query) {
-    return null;
   }
 }
 
@@ -67,9 +62,6 @@ const _kSizes = {
 };
 
 void main() {
-  sqfliteFfiInit();
-  databaseFactory = databaseFactoryFfi;
-
   group('HomeScreen desktop layout assertions', () {
     for (final entry in _kSizes.entries) {
       final width = entry.key;
@@ -78,7 +70,7 @@ void main() {
         await _pumpAtSize(tester, const HomeScreen(), entry.value);
 
         expect(find.byType(AppBar), findsOneWidget);
-        expect(find.text('Demo Car'), findsWidgets);
+        expect(find.textContaining('Demo Car'), findsOneWidget);
         expect(find.text('Features'), findsOneWidget);
         expect(find.byType(GridView), findsOneWidget);
       });
@@ -93,7 +85,8 @@ void main() {
         await _pumpAtSize(tester, const VehicleListScreen(), entry.value);
 
         expect(find.byType(AppBar), findsOneWidget);
-        expect(find.text('Vehicles'), findsOneWidget);
+        expect(find.textContaining('Demo Car'), findsOneWidget);
+        expect(find.textContaining('Vehicles'), findsOneWidget);
         expect(find.byType(ListView), findsOneWidget);
         expect(find.byType(FloatingActionButton), findsOneWidget);
       });

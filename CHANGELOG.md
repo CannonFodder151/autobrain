@@ -10,6 +10,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Fixed (AUT-2858)
+### Fixed (AUT-2858)
+- fix(frontend): fix nested single-quote syntax error in vehicle_timeline_screen.dart and Card block indentation in add_vehicle_screen.dart for dart2js compat.
+
+### Fixed (AUT-2858)
+- fix(frontend): fix nested single-quote syntax error in vehicle_timeline_screen.dart and Card block indentation in add_vehicle_screen.dart for dart2js compat.
+
+- fix(frontend): resolve nested single-quote syntax error in `vehicle_timeline_screen.dart`. Inner string literal switched from single quotes to double quotes so the Dart parser no longer fails during Docker build.
+
+
 
 ## [0.3.271] - 2026-09-18
 
