@@ -437,15 +437,5 @@ def _station_out(
         lon=s.lon,
         logo=feeds.BRAND_LOGOS.get((s.brand or "").lower()),
         distance_km=round(dist, 2) if dist is not None else None,
-        prices=[
-            FuelPriceOut(
-                fuel_type=p.fuel_type,
-                price=p.price,
-                effective_at=p.effective_at,
-                cost_per_km=cpkm,
-                avg_fill_cost=afc,
-            )
-            for p in prices
-            for cpkm, afc in [_project_price(p, stats)]
-        ],
+        prices=out_prices,
     )
