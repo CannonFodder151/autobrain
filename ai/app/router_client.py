@@ -51,6 +51,17 @@ def router_url() -> str:
 
 
 def router_enabled() -> bool:
+    """Return True when the AI router should be called.
+
+    Three conditions must all hold:
+      1. ``AI_ENABLED`` is not explicitly set to ``false`` / ``0``.
+      2. ``AI_ROUTER_URL`` is configured and not the placeholder.
+    Setting ``AI_ENABLED=false`` forces every module into deterministic-only
+    mode — useful for cost control, incident response, or offline deploys.
+    """
+    ai_enabled = os.getenv("AI_ENABLED", "true").strip().lower()
+    if ai_enabled in ("false", "0", "no"):
+        return False
     url = router_url()
     return bool(url) and "your-9router-instance" not in url
 
