@@ -22,13 +22,15 @@ permissions:
 
 jobs:
   ocr-review:
+    timeout-minutes: 15
     # AUT-1785: OCR routes to bare [self-hosted, linux, x64] (not the `vm2`
     # label) so GitHub can pick the idle legacy x64 runner (gh-runner-autobrain)
     # when vm2 (gh-runner-autobrain-2) is busy with the heavy docker publish
     # pipeline. AUT-1802: OCR must NOT run on the arm64 runner. OCR is a pure
     # Node/CPU workload with no arch-specific binaries. Note: OCR is already
-    # non-blocking (continue-on-error + 10min timeout + AUT-1814 auto-approve),
-    # so a legacy-runner stall degrades to a neutral advisory, never a block.
+    # non-blocking (continue-on-error + 10min step timeout + AUT-1814
+    # auto-approve + AUT-1805 15min job timeout), so a 9Router stall or
+    # runner hang degrades to a neutral advisory, never a block.
     runs-on: [self-hosted, linux, x64]
     permissions:
       contents: read

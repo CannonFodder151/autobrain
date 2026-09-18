@@ -1,10 +1,15 @@
 """Tests for rule-based fallback engines."""
 
-import os
+import pytest
 
-os.environ.setdefault("AI_ROUTER_URL", "http://your-9router-instance:port")
 
-import pytest  # noqa: E402
+@pytest.fixture(autouse=True)
+def _ai_test_env(monkeypatch):
+    # AUT-3152: pin the router to the placeholder so router_enabled() is False
+    # and every module path uses its deterministic fallback. Per-test isolation
+    # via monkeypatch prevents env leaks across the pytest process.
+    monkeypatch.setenv("AI_ROUTER_URL", "http://your-9router-instance:port")
+
 
 from app import modules  # noqa: E402
 from app.fallbacks import (  # noqa: E402
@@ -131,9 +136,8 @@ def test_receipt_extraction() -> None:
 
 @pytest.mark.asyncio
 async def test_module_router_disabled_uses_fallback() -> None:
-    # Force the router-disabled path regardless of the container env,
-    # so the test never calls a live router and never burns API quota.
-    os.environ["AI_ROUTER_URL"] = "http://your-9router-instance:port"
+    # Router-disabled path is pinned by the autouse fixture; the test never
+    # calls a live router and never burns API quota.
     out = await modules.diagnostics.run({"symptoms": "car won't start"})
     assert out["model"] == "rule-based-fallback"
 
@@ -142,7 +146,6 @@ async def test_module_router_disabled_uses_fallback() -> None:
 async def test_module_deterministic_model_label() -> None:
     # Deterministic-first: every module returns a rule-based baseline (with the
     # router disabled), never an AI-only response.
-    os.environ["AI_ROUTER_URL"] = "http://your-9router-instance:port"
     cases = [
         ("diagnostics", {"symptoms": "squealing brakes"}),
         ("service-prediction", {"make": "Toyota", "odometer_km": 40000, "last_service_km": 35000}),

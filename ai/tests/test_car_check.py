@@ -12,13 +12,20 @@ Plus an end-to-end test that the module is registered in
 auto-discovers it.
 """
 
-import os
+import pytest
 
-os.environ.setdefault("AI_ROUTER_URL", "http://your-9router-instance:port")
-os.environ.setdefault("AI_GATEWAY_API_KEY", "test-gateway-key")
-os.environ.setdefault("AI_GATEWAY_AUTH_DISABLED", "1")
+# Per-test env isolation: previously these were set with os.environ.setdefault
+# at module import, which leaked AI_GATEWAY_AUTH_DISABLED across the pytest
+# process and surfaced as false 401s in test_gateway_security/test_auth (AUT-3152).
+# The router URL is the only thing these tests need — the placeholder below makes
+# router_enabled() return False, so every module path falls back to its
+# deterministic rule engine and never touches 9Router.
 
-import pytest  # noqa: E402
+
+@pytest.fixture(autouse=True)
+def _ai_test_env(monkeypatch):
+    monkeypatch.setenv("AI_ROUTER_URL", "http://your-9router-instance:port")
+
 
 from app.fallbacks.car_check import (  # noqa: E402
     car_check_fallback,
