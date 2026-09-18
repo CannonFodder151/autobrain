@@ -51,7 +51,7 @@ x-core-env: &core-env
   # AB-INFRA-004: broker requires a password; lib-load-secrets derives the
   # authenticated REDIS_URL / CELERY_*_URL from this file at startup.
   REDIS_PASSWORD_FILE: /run/secrets/redis_password
-  AI_LOCAL_BASE_URL: http://ai:8001
+  AI_LOCAL_BASE_URL: http://localhost:8001
 
 x-router-env: &router-env
   # Keep the STACK-LOCAL 9router (reachable via docker DNS on the Oracle VM).
@@ -158,9 +158,11 @@ services:
     # AUT-3153: the standalone Celery worker+beat service is merged into this
     # container. The backend image already carries the worker dependencies and
     # its default CMD runs the same topology as docker-compose.prod.yml.
+    # AUT-2824: celery worker+beat and AI gateway run as co-processes inside
+    # the backend container, matching the unified backend+ai image topology.
     image: ghcr.io/cannonfodder151/autobrain-backend:hosted-arm64@sha256:80053f3d6d4642c3f199fc3755b0d34c68f458faaa804195f6373cf3a68dd638
     restart: unless-stopped
-    command: sh -c "export AI_ROUTER_API_KEY=$(cat /run/secrets/ai_router_api_key) && python -m app.db.bootstrap && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    command: sh -c "export AI_ROUTER_API_KEY=$(cat /run/secrets/ai_router_api_key) && python -m app.db.bootstrap && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && (cd /app/ai_pkg && uvicorn app.main:app --host 0.0.0.0 --port 8001 &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
       <<: [*db-env, *core-env, *router-env]
       PYTHONPATH: /app
@@ -265,6 +267,7 @@ services:
         condition: service_healthy
     expose:
       - "8000"
+      - "8001"
     # Backend pinned to .15 (AUT-439): the frontend's static .14 was being
     # grabbed by the recreated backend during redeploys, stalling the stack.
     networks:
@@ -276,15 +279,15 @@ services:
     restart: unless-stopped
     # AUT-1739: adequate /dev/shm for Chromium (market-data scraper).
     shm_size: "256m"
-    # AUT-1242-C3: image CMD runs entrypoint.sh — AI gateway :8001 + market-data :8000 in one container.
+    # AUT-2824: AI gateway now runs in backend container; this service only runs market-data.
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+    working_dir: /app/market-data
     environment:
       <<: *router-env
-      AI_GATEWAY_API_KEY_FILE: /run/secrets/ai_gateway_api_key
       API_KEY_FILE: /run/secrets/market_data_api_key
     <<: *secrets
     expose:
       - "8000"
-      - "8001"
 
   # AUT-3153: the standalone `worker` service has been merged into `backend`
   # (see the backend command above — Celery worker+beat now run as a
