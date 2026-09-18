@@ -10,6 +10,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Fixed (AUT-3456)
+- fix(frontend, web): wrap `api.getCachedDecoded("/vehicles")` in try/catch in `HomeScreen._load()` and `_AdvisorDeepLink._load()` to prevent indefinite loading spinner when IndexedDB/sqflite throws on web (private browsing, storage corruption). The spinner now stops and an error surface is shown instead of hanging forever. Closes AUT-3456.
+
 ### Added (AUT-2352)
 - test(frontend): add `frontend/test/app_config_validate_test.dart` — 6 hermetic reachability cases for `AppConfig.validate()` covering 2xx ok, 5xx fail, timeout, connection refused, malformed URL, and `healthz` origin stripping. Per-test isolation via `tearDown` resetting `apiBase` / `lastValidationOk` / `lastValidationError`. Closes AUT-2352.
 

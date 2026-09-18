@@ -57,7 +57,12 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _load() async {
     final api = context.read<AuthState>().api;
     // Cache-first: render immediately from cache if available.
-    final cached = await api.getCachedDecoded('/vehicles', null);
+    dynamic cached;
+    try {
+      cached = await api.getCachedDecoded('/vehicles', null);
+    } catch (_) {
+      // Cache read failed (e.g. corrupted IndexedDB on web) – treat as empty.
+    }
     if (cached != null) {
       final data = cached as List;
       final vehicles = data
