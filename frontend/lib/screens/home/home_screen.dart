@@ -57,6 +57,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _load() async {
     final api = context.read<AuthState>().api;
     // Cache-first: render immediately from cache if available.
+<<<<<<< HEAD
     try {
       final cached = await api.getCachedDecoded('/vehicles', null);
       if (cached != null) {
@@ -72,6 +73,26 @@ class _HomeScreenState extends State<HomeScreen> {
             _stale = true;
           });
         }
+=======
+    dynamic cached;
+    try {
+      cached = await api.getCachedDecoded('/vehicles', null);
+    } catch (_) {
+      // Cache read failed (e.g. corrupted IndexedDB on web) – treat as empty.
+    }
+    if (cached != null) {
+      final data = cached as List;
+      final vehicles = data
+          .map((e) => Vehicle.fromJson(e as Map<String, dynamic>))
+          .toList();
+      if (mounted) {
+        setState(() {
+          _vehicles = vehicles;
+          _selected = Vehicle.resolveSelection(vehicles, _selected);
+          _loading = false;
+          _stale = true;
+        });
+>>>>>>> ad581e9b (fix: wrap getCachedDecoded in try/catch to prevent web loading hang)
       }
     } catch (_) {
       // Cache read failed (e.g. IndexedDB unavailable on web). Continue

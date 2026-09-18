@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'core/auth_state.dart';
 import 'core/connectivity_service.dart';
-import 'core/config.dart';
+import 'core/config.dart'
 import 'core/theme.dart';
 import 'core/models.dart';
 import 'widgets/stale_hint.dart';
