@@ -60,7 +60,10 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
       final invites = await api.get('/vehicle-shares') as List;
       _invites = invites.map((e) => e as Map<String, dynamic>).toList();
     } catch (_) {}
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() {});
+      _loading = false;
+    }
   }
 
   Future<void> _delete(Vehicle v) async {

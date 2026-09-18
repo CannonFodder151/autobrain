@@ -1,0 +1,187 @@
+{
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Company",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "index"
+            ]
+          },
+          {
+            "group": "Company",
+            "pages": [
+              "Company/documentation-policy",
+              "Company/department-ownership-map"
+            ]
+          },
+          {
+            "group": "Business Reviews",
+            "pages": [
+              "Business-Reviews/changelog",
+              "Business-Reviews/product-rules"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Engineering",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "Engineering/index"
+            ]
+          },
+          {
+            "group": "Core",
+            "pages": [
+              "Engineering/architecture",
+              "Engineering/api-spec",
+              "Engineering/integrating-autobrain",
+              "Engineering/database-schema",
+              "Engineering/container-architecture",
+              "Engineering/developer-onboarding",
+              "Engineering/versioning",
+              "Engineering/task-pipeline",
+              "Engineering/change-validation-gate"
+            ]
+          },
+          {
+            "group": "AI",
+            "pages": [
+              "Engineering/module-breakdown",
+              "Engineering/module-boundaries",
+              "Engineering/ai-models",
+              "Engineering/ai-router-integration",
+              "Engineering/ai/vector"
+            ]
+          },
+          {
+            "group": "Mobile",
+            "pages": [
+              "Engineering/mobile-release"
+            ]
+          },
+          {
+            "group": "OBD",
+            "pages": [
+              "Engineering/obd-integration",
+              "Engineering/obd2-dongle/README",
+              "Engineering/obd2-dongle/nodemcu32s-build-guide"
+            ]
+          },
+          {
+            "group": "ADRs",
+            "pages": [
+              "Engineering/adr/0001-ownership-advisor",
+              "Engineering/adr/0026-home-assistant-integration"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Deployment",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "Deployment-and-Infrastructure/index"
+            ]
+          },
+          {
+            "group": "Infrastructure",
+            "pages": [
+              "Deployment-and-Infrastructure/deployment-guide",
+              "Deployment-and-Infrastructure/infrastructure-diagrams",
+              "Deployment-and-Infrastructure/ci-cd",
+              "Deployment-and-Infrastructure/server-migration",
+              "Deployment-and-Infrastructure/backup-strategy",
+              "Deployment-and-Infrastructure/monitoring",
+              "Deployment-and-Infrastructure/autobrain-deploy-trigger",
+              "Deployment-and-Infrastructure/container-consolidation-migration"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Security",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "Security/index"
+            ]
+          },
+          {
+            "group": "Security",
+            "pages": [
+              "Security/security"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Testing",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "Testing-and-QA/index"
+            ]
+          },
+          {
+            "group": "Testing",
+            "pages": [
+              "Testing-and-QA/test-strategy",
+              "Testing-and-QA/qa-run-logs",
+              "Testing-and-QA/user-testing-results"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Finance",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "Finance/index"
+            ]
+          },
+          {
+            "group": "Finance",
+            "pages": [
+              "Finance/payments",
+              "Finance/fuel-pricing",
+              "Finance/fuel-servo-spy",
+              "Finance/market-data"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Marketing",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "Marketing-and-Website/index"
+            ]
+          },
+          {
+            "group": "Marketing",
+            "pages": [
+              "Marketing-and-Website/social",
+              "Marketing-and-Website/social-image-generation",
+              "Marketing-and-Website/per-post-og-image-workflow",
+              "Marketing-and-Website/community-garage"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

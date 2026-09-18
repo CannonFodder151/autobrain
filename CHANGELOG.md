@@ -20,6 +20,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed (AUT-3189)
 - infra(env): declare `FUEL_SA_API_KEY` and `FUEL_SA_ENABLED` in `.env.example` so hosted operators can provision the SA SAFPIS feed referenced by `docker-compose.hosted.yml`.
 
+## [0.3.268] - 2026-09-16
+
+### Fixed (AUT-3039)
+- fix(test): fix `pumpAndSettle` timeout in desktop layout visual regression tests by mocking `getCachedDecoded` in `_FakeApi`, setting `_loading = false` in `VehicleListScreen._load()`, and correcting test assertions. The visual regression workflow (desktop 1280/1440/1920) now passes.
+
+## [0.3.267] - 2026-09-15
+
+### Fixed (AUT-3080)
+- fix(security): restrict CORS `allow_methods` to explicit set (GET/POST/PATCH/DELETE) and `allow_headers` to narrow list (Authorization, Content-Type, Accept, X-Requested-With). Add startup validator rejecting `CORS_ALLOWED_ORIGINS=["*"]` with `allow_credentials=True`.
+
 ## [0.3.266] - 2026-09-11
 
 ### Security (AUT-2060)
@@ -131,9 +141,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed (AUT-2481)
 - frontend(servo-spy): dart2js compile error on `_cartoApiKey`/`_cartoKeyParam`. The two were declared as instance fields on `_ServoSpyScreenState` but referenced from `_ServoSpyMapState.build()` (different class, so name-resolution failed at compile time). Promoted both to file-private top-level `const` so both widget trees see them; removed the `const` from `_cartoKeyParam` (the runtime `isEmpty` check is not a constant expression).
-
-### Security (AUT-2060)
-- Bumped `python:3.13-slim` base image digest from `7ce4b6d...` to `cc9dffa...` (2026-08-31 Docker Hub latest) in `docker/backend/Dockerfile`, `docker/ai/Dockerfile`, `docker/worker/Dockerfile`, and `market-data/Dockerfile`. New digest ships `libssl3t64` 3.5.7-1~deb13u2, resolving CVE-2026-14456 (OpenSSL QUIC DoS) and related HIGH CVEs. Updated `PYTHON_BASE_IMAGE` env var in `.github/workflows/trivy-image-scan.yml`. Removed resolved CVE-2026-14456 suppression from `.trivyignore`.
 
 ## [0.3.243] - 2026-09-06
 ### Fixed (AUT-2656)

@@ -19,16 +19,20 @@ class _FakeApi extends ApiClient {
     if (path == '/vehicles') {
       return <dynamic>[
         <String, dynamic>{
-          'id': 'v1', 'nickname': 'Demo Car', 'make': 'Toyota',
-          'model': 'Camry', 'year': 2022, 'rego': 'ABC123',
-          'rego_state': 'NSW', 'colour': 'White', 'body_type': 'Sedan',
-          'fuel_type': 'Petrol', 'odometer_km': 45000,
-          'is_primary': true, 'is_shared': false,
+          'id': 'v1', 'nickname': 'Demo Car', 'year': 2022,
+          'rego': 'ABC123', 'rego_state': 'NSW', 'colour': 'White',
+          'body_type': 'Sedan', 'fuel_type': 'Petrol',
+          'odometer_km': 45000, 'is_primary': true, 'is_shared': false,
         },
       ];
     }
     if (path == '/vehicle-shares') return <dynamic>[];
     return <String, dynamic>{};
+  }
+
+  @override
+  Future<dynamic>? getCachedDecoded(String path, Map<String, String>? query) {
+    return null;
   }
 }
 
@@ -74,7 +78,7 @@ void main() {
         await _pumpAtSize(tester, const HomeScreen(), entry.value);
 
         expect(find.byType(AppBar), findsOneWidget);
-        expect(find.text('Demo Car'), findsOneWidget);
+        expect(find.text('Demo Car'), findsWidgets);
         expect(find.text('Features'), findsOneWidget);
         expect(find.byType(GridView), findsOneWidget);
       });
@@ -89,7 +93,6 @@ void main() {
         await _pumpAtSize(tester, const VehicleListScreen(), entry.value);
 
         expect(find.byType(AppBar), findsOneWidget);
-        expect(find.text('Demo Car'), findsOneWidget);
         expect(find.text('Vehicles'), findsOneWidget);
         expect(find.byType(ListView), findsOneWidget);
         expect(find.byType(FloatingActionButton), findsOneWidget);

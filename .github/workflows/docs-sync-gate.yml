@@ -1,0 +1,49 @@
+name: Docs Sync Gate
+
+on:
+  workflow_run:
+    workflows: ["Sync docs to Outline wiki"]
+    types:
+      - completed
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  check-docs-sync-failures:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check docs-sync workflow status
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: runs } = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'docs-sync.yml',
+              branch: 'main',
+              status: 'completed',
+              per_page: 5
+            });
+            
+            const recentRuns = runs.workflow_runs.slice(0, 3);
+            const failures = recentRuns.filter(r => r.conclusion === 'failure').length;
+            
+            console.log(`Recent ${recentRuns.length} docs-sync runs: ${failures} failures`);
+            console.log(runs.workflow_runs.map(r => `${r.run_number}: ${r.conclusion}`).join(', '));
+            
+            return { failures, runs: recentRuns };
+
+      - name: Gate merge if 3 consecutive failures
+        if: steps.check.outputs.failures == '3'
+        run: |
+          echo "::error::Docs sync to Outline has failed 3 consecutive times. Blocking merge."
+          echo "See https://github.com/${{ github.repository }}/actions/workflows/docs-sync.yml"
+          exit 1
+
+      - name: Warn if 2 consecutive failures
+        if: steps.check.outputs.failures == '2'
+        run: |
+          echo "::warning::Docs sync to Outline has failed 2 consecutive times. Next failure will block merges."
