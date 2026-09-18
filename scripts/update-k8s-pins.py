@@ -5,11 +5,8 @@ After build-hosted.yml publishes multi-arch manifests, this updates the
 image references in infra/k8s/*.yaml from `repo:tag` to `repo@sha256:...`
 so k8s never pulls a different image for the same commit.
 
-worker.yaml and beat (worker.yaml second doc) both reference the backend
-image — both are updated with backend_digest.
-
 Usage: python3 scripts/update-k8s-pins.py \
-        backend=sha256:... worker=sha256:... ai=sha256:... frontend=sha256:... \
+        backend=sha256:... ai=sha256:... frontend=sha256:... \
         [--dir infra/k8s]
 """
 import argparse
@@ -19,7 +16,6 @@ from pathlib import Path
 
 PIN_MAP = {
     "backend":  "ghcr.io/cannonfodder151/autobrain-backend",
-    "worker":   "ghcr.io/cannonfodder151/autobrain-backend",   # worker uses backend image
     "ai":       "ghcr.io/cannonfodder151/autobrain-ai",
     "frontend": "ghcr.io/cannonfodder151/autobrain-frontend",
 }
@@ -27,7 +23,6 @@ PIN_MAP = {
 # files that need a given service's digest applied
 SERVICE_FILES = {
     "backend":  ["backend.yaml"],
-    "worker":   ["worker.yaml"],
     "ai":       ["ai.yaml"],
     "frontend": ["frontend.yaml"],
 }
