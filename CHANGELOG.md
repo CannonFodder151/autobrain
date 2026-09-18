@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.273] - 2026-09-18
+
 ### Fixed (AUT-3495)
 - fix(frontend): fix Dart syntax error in vehicle_timeline_screen.dart
 
