@@ -34,6 +34,12 @@ Architecture, API, database, AI modules, OBD, mobile, developer onboarding, vers
 |----------|---------|
 | [mobile-release.md](./mobile-release.md) | Mobile `.aab` release runbook + Discord change-notes delivery |
 
+### Integrations
+
+| Document | Purpose |
+|----------|---------|
+| [../home-assistant-integration.md](../home-assistant-integration.md) | Home Assistant REST integration setup + API reference |
+
 ### OBD
 
 | Document | Purpose |

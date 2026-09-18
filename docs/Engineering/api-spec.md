@@ -225,9 +225,9 @@ A diagnostic auto-flips to `resolved` when its linked service is completed.
 |--------|------|-------------|
 | GET    | `/health` | Liveness + router status |
 | GET    | `/v1/modules` | List modules |
-| POST   | `/v1/{module}` | Infer — `diagnostics`, `service-prediction`, `ocr`, `fuel-ocr`, `odometer`, `resale`, `mod-impact` |
+| POST   | `/v1/{module}` | Infer — `diagnostics`, `service-prediction`, `ocr`, `fuel-ocr`, `odometer`, `resale`, `mod-impact`, `advisor`, `car-check`, `condition`, `parts-guide`, `social-image` |
 
-All modules are deterministic (temperature 0) and validate/clamp numeric output (`resale` clamps low ≤ estimated ≤ high).
+All modules are deterministic-first (temperature 0) and validate/clamp numeric output (`resale` clamps low ≤ estimated ≤ high; `advisor` `decision` is immutable). The `social-image` module uses Pillow (always available) and optionally calls Pollinations for AI images.
 
 ## Ownership Advisor (`/advisor`) — premium-only, paid tier
 

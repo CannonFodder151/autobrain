@@ -56,9 +56,10 @@ backend (ai_client.py)
             └─ validated, clamped result
 ```
 
-Note: In production/hosted stacks, the AI gateway runs in a separate container
-on :8001. In dev mode, both the backend API (:8000) and AI gateway (:8001)
-run within the same backend container for simplicity.
+Note: In dev and prod stacks, the AI gateway runs inside the backend container
+on :8001 (alongside the API on :8000 and Celery worker+beat). In the hosted
+stack, the AI gateway runs in a separate `ai` container (AUT-1242/C3) because
+it also hosts the market-data scraper.
 
 ## Failure behaviour
 
