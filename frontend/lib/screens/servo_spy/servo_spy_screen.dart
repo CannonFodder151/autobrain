@@ -31,13 +31,20 @@ enum _ServoSpyView { map, list }
 
 
 ///
+// AUT-2220/2383: CARTO basemap API key, injected at build time via
+// --dart-define=CARTO_API_KEY=<key>. CARTO raster basemaps require ?key=.
+// flutter_map's BuiltInMapCachingProvider handles disk tile caching.
+const String _cartoApiKey = String.fromEnvironment('CARTO_API_KEY');
+
+/// Compose the CARTO basemap query string from a key.
+///
 /// Empty key -> empty string. Non-empty key -> `?key=<key>` (CARTO's
-/// required parameter name for raster basemaps; `api_key` is the old name
-/// and is silently ignored, leaving the "API key required" watermark).
+/// required parameter name for raster basemaps; `api_key` is silently
+/// ignored, leaving the "API key required" watermark).
 @visibleForTesting
 String cartoKeyParam(String key) => key.isEmpty ? '' : '?key=$key';
 
->>>>>>> pr-468
+final String _cartoKeyParam = cartoKeyParam(_cartoApiKey);
 
 class ServoSpyScreen extends StatefulWidget {
   const ServoSpyScreen({super.key});
