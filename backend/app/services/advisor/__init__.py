@@ -99,3 +99,6 @@ from app.services.advisor.advisor_baseline import (  # noqa: F401
     _ADVISOR_RATIONALE_MAX,
     _ADVISOR_NEXT_ACTIONS_MAX,
 )
+
+# Re-export get_market_data so tests can monkeypatch via app.services.advisor.get_market_data
+from app.services.market_data import get_market_data  # noqa: F401
