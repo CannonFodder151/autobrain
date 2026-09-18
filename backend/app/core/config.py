@@ -3,6 +3,7 @@
 All settings are read from environment variables (see .env.example).
 """
 
+import os
 import secrets
 from functools import lru_cache
 from pathlib import Path
@@ -31,7 +32,6 @@ class Settings(BaseSettings):
     # is generated per boot. Generate a real one with:
     #   python -c "import secrets; print(secrets.token_urlsafe(64))"
     SECRET_KEY: str = ""
-    ALGORITHM: str = "HS256"
     # Short-lived access tokens (minutes) — renewal goes through /auth/refresh
     # (refresh rotation revokes the previous token). Bump token_version on
     # logout/password change to revoke all outstanding tokens.
@@ -197,6 +197,19 @@ class Settings(BaseSettings):
                 "Set explicit origins instead."
             )
         return self
+
+    @model_validator(mode="before")
+    @classmethod
+    def _refuse_non_hs256_algorithm(cls, data: object) -> object:
+        """Reject any ALGORITHM env override other than HS256 — the algorithm
+        is now a hardcoded constant in security.py (AUT-3077)."""
+        raw = os.environ.get("ALGORITHM")
+        if raw is not None and raw != "HS256":
+            raise ValueError(
+                f"ALGORITHM={raw!r} is not permitted. "
+                "JWT algorithm is pinned to HS256 (see app/core/security.py)."
+            )
+        return data
 
     # CI Triage webhook (AUT-1669): receives GitHub Actions CI pings and relays
     # to the CI Triage Agent via Paperclip issue creation.

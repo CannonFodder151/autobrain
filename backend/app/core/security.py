@@ -8,6 +8,8 @@ from passlib.context import CryptContext
 
 from app.core.config import settings
 
+HS256_ALGORITHM = "HS256"
+
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
@@ -33,7 +35,7 @@ def create_access_token(
             "ver": token_version,
         },
         settings.SECRET_KEY,
-        algorithm=settings.ALGORITHM,
+        algorithm=HS256_ALGORITHM,
     )
 
 
@@ -43,7 +45,7 @@ def create_mfa_token(subject: str | int) -> str:
     return jwt.encode(
         {"sub": str(subject), "exp": expire, "type": "mfa"},
         settings.SECRET_KEY,
-        algorithm=settings.ALGORITHM,
+        algorithm=HS256_ALGORITHM,
     )
 
 
@@ -53,7 +55,7 @@ def create_password_reset_token(subject: str | int) -> str:
     return jwt.encode(
         {"sub": str(subject), "exp": expire, "type": "password_reset"},
         settings.SECRET_KEY,
-        algorithm=settings.ALGORITHM,
+        algorithm=HS256_ALGORITHM,
     )
 
 
@@ -63,7 +65,7 @@ def create_invite_token(subject: str | int, days: int = 7) -> str:
     return jwt.encode(
         {"sub": str(subject), "exp": expire, "type": "invite"},
         settings.SECRET_KEY,
-        algorithm=settings.ALGORITHM,
+        algorithm=HS256_ALGORITHM,
     )
 
 
@@ -85,12 +87,12 @@ def create_refresh_token(subject: str | int, token_version: int = 0) -> str:
             "ver": token_version,
         },
         settings.SECRET_KEY,
-        algorithm=settings.ALGORITHM,
+        algorithm=HS256_ALGORITHM,
     )
 
 
 def decode_token(token: str) -> dict | None:
     try:
-        return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        return jwt.decode(token, settings.SECRET_KEY, algorithms=[HS256_ALGORITHM])
     except jwt.InvalidTokenError:
         return None

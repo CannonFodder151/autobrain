@@ -22,7 +22,7 @@ import uuid  # noqa: E402
 import pytest  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 
-from app.core.security import create_access_token, create_password_reset_token  # noqa: E402
+from app.core.security import HS256_ALGORITHM, create_access_token, create_password_reset_token  # noqa: E402
 from app.db.session import SessionLocal, init_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.refresh_token import RevokedRefreshToken  # noqa: E402
@@ -85,7 +85,7 @@ async def test_access_token_carries_ver() -> None:
     payload = jose_jwt.decode(
         create_access_token("user-x", token_version=3),
         settings.SECRET_KEY,
-        algorithms=[settings.ALGORITHM],
+        algorithms=[HS256_ALGORITHM],
     )
     assert payload["type"] == "access"
     assert payload["ver"] == 3
@@ -101,7 +101,7 @@ async def test_refresh_token_carries_jti_and_ver() -> None:
     payload = jose_jwt.decode(
         create_refresh_token("user-x", token_version=3),
         settings.SECRET_KEY,
-        algorithms=[settings.ALGORITHM],
+        algorithms=[HS256_ALGORITHM],
     )
     assert payload["type"] == "refresh"
     assert payload["ver"] == 3
@@ -131,7 +131,7 @@ async def test_denylist_row_written() -> None:
     user = await _make_user()
     pair = await _login(user)
     old_payload = jose_jwt.decode(
-        pair["refresh"], settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
+        pair["refresh"], settings.SECRET_KEY, algorithms=[HS256_ALGORITHM]
     )
     await _refresh(pair["refresh"])
     async with SessionLocal() as db:
