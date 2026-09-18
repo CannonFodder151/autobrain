@@ -27,7 +27,7 @@ from app.services.export import export_fuel_csv, export_zip
 from app.services import fuel as fuel_svc
 from app.services import fuel_prices as fp_svc
 from app.services.odometer import sync_odometer
-from app.services.rate_limit import require_ai_rate_limit_best_effort
+from app.api.rate_deps import require_ai_rate_limit_best_effort
 
 router = APIRouter(prefix="/vehicles/{vehicle_id}/fuel", tags=["fuel"])
 

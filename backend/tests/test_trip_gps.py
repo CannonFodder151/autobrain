@@ -28,7 +28,8 @@ from app.main import app  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.models.vehicle import Vehicle  # noqa: E402
 from app.schemas.logbook import LogEntryCreate  # noqa: E402
-from app.services.trip_gps import MAX_GPS_SAMPLES, clean_samples, parse_board_csv  # noqa: E402
+from app.core.gps import MAX_GPS_SAMPLES, clean_samples  # noqa: E402
+from app.services.trip_gps import parse_board_csv  # noqa: E402
 
 
 @pytest.fixture(scope="module", autouse=True)

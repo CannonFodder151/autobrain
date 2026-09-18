@@ -6,59 +6,12 @@ emits CSV rows of `epoch,...,lat,lon` where lat/lon are raw degrees x10^7 and
 into the stored sample shape `[{"t": epoch, "lat": deg, "lon": deg}, ...]`.
 
 Pure, raw-coordinates-only — no AI involved.
+
+Uses the shared cleaning logic from ``core.gps`` so schemas and services share
+the same normalization.
 """
 
-from pydantic import BaseModel
-
-
-class _Sample(BaseModel):
-    t: int
-    lat: float
-    lon: float
-
-
-# Server-side cap on stored samples per trip, mirroring the client's
-# `maxGpsSamples` (2400) with headroom for longer trips (AUT-852, AUT-786).
-MAX_GPS_SAMPLES = 5000
-
-
-def clean_samples(samples: list | None) -> list[_Sample] | None:
-    """Drop invalid `0,0` (no-fix) and out-of-range samples, deterministically.
-
-    Keeps the same list/None shape as the input so Create/Update payloads round
-    trip without surprises. Accepts dicts or objects exposing `t`/`lat`/`lon`
-    (pydantic already coerced the payload by the time the schema validator runs).
-
-    Returns at most `MAX_GPS_SAMPLES` samples, keeping the earliest fixes, so
-    per-trip payload size stays bounded even if a client sends more.
-    """
-    if samples is None:
-        return None
-    cleaned: list[_Sample] = []
-    for s in samples:
-        if isinstance(s, dict):
-            t, lat, lon = s.get("t"), s.get("lat"), s.get("lon")
-        else:
-            t = getattr(s, "t", None)
-            lat = getattr(s, "lat", None)
-            lon = getattr(s, "lon", None)
-        if not isinstance(t, (int, float)) or not isinstance(lat, (int, float)) or not isinstance(lon, (int, float)):
-            continue
-        t = int(t)
-        lat = float(lat)
-        lon = float(lon)
-        if lat == 0 and lon == 0:
-            continue  # no fix
-        if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
-            continue
-        cleaned.append(_Sample(t=t, lat=round(lat, 7), lon=round(lon, 7)))
-    # Drop GPS jitter: consecutive identical fixes add no route information.
-    deduped: list[_Sample] = []
-    for s in cleaned:
-        if not deduped or (s.lat, s.lon) != (deduped[-1].lat, deduped[-1].lon):
-            deduped.append(s)
-    # Cap payload size: keep the earliest fixes past the cap (AUT-852).
-    return deduped[:MAX_GPS_SAMPLES]
+from app.core.gps import MAX_GPS_SAMPLES, clean_samples
 
 
 def parse_board_csv(text: str) -> list[dict]:

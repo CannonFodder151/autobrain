@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_premium, require_premium_write
+from app.api.deps import require_premium, require_premium_write, require_social_feature
 from app.core.logging import get_logger
 from app.db.session import get_db
 from app.models.user import User
@@ -39,12 +39,6 @@ from app.social.snapshot import build_snapshot, dumps, loads
 logger = get_logger(__name__)
 
 _INBOX_SYNC_TTL_SECONDS = 60
-
-
-async def require_social_feature(db: AsyncSession = Depends(get_db)) -> None:
-    cfg = await get_server_config(db)
-    if not cfg.feature_enabled:
-        raise HTTPException(status_code=403, detail="Disabled by your admin")
 
 
 router = APIRouter(

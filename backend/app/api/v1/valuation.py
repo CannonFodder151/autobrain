@@ -24,7 +24,7 @@ from app.schemas.valuation import (
 )
 from app.services.ai_client import estimate_value
 from app.services.market_data import get_market_data, search_market
-from app.services.rate_limit import require_ai_rate_limit
+from app.api.rate_deps import require_ai_rate_limit
 
 router = APIRouter(prefix="/vehicles/{vehicle_id}/valuation", tags=["valuation"])
 

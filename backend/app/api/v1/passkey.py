@@ -12,7 +12,6 @@ Endpoints:
 import secrets
 from base64 import urlsafe_b64encode
 from datetime import datetime, timezone
-from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
@@ -20,14 +19,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, require_write
 from app.core.config import settings
-from app.core.security import create_access_token, create_refresh_token
 from app.models.passkey import PasskeyCredential
 from app.models.user import User
+from app.schemas.auth import TokenPair
 from app.schemas.passkey import (
     PasskeyAuthenticationBegin,
     PasskeyAuthenticationBeginResponse,
     PasskeyAuthenticationComplete,
-    PasskeyAuthenticationSuccess,
     PasskeyCredentialOut,
     PasskeyError,
     PasskeyListResponse,
@@ -37,6 +35,7 @@ from app.schemas.passkey import (
     PasskeyRegistrationSuccess,
 )
 from app.services import passkey as passkey_svc
+from app.services.auth import token_pair as auth_token_pair
 
 import logging
 
@@ -303,17 +302,19 @@ async def passkey_authenticate_begin(
 
 @router.post(
     "/authenticate/complete",
-    response_model=PasskeyAuthenticationSuccess,
+    response_model=TokenPair,
     responses={400: {"model": PasskeyError}, 401: {"model": PasskeyError}},
 )
 async def passkey_authenticate_complete(
     request: Request,
     payload: PasskeyAuthenticationComplete,
     db: AsyncSession = Depends(get_db),
-) -> PasskeyAuthenticationSuccess:
+) -> TokenPair:
     """Complete a passkey authentication ceremony.
 
     Verifies the assertion, updates sign_count, issues JWT tokens.
+    Returns the same TokenPair format as password login so the frontend
+    can use the same persistence logic.
     """
     expected_rp_id = _get_expected_rp_id(request)
     expected_origin = _get_expected_origin(request)
@@ -356,18 +357,8 @@ async def passkey_authenticate_complete(
     credential.last_used_at = datetime.now(timezone.utc)
     await db.commit()
 
-    # Issue tokens
-    access_token = create_access_token(user.id, token_version=user.token_version)
-    refresh_token = create_refresh_token(user.id, token_version=user.token_version)
-
-    # The frontend expects the standard token pair format
-    from app.schemas.auth import TokenPair, UserOut
-
-    return PasskeyAuthenticationSuccess(
-        success=True,
-        user_verified=result["user_verified"],
-        sign_count=result["new_sign_count"],
-    )
+    # Issue tokens (same format as password login)
+    return auth_token_pair(user)
 
 
 # ---------------------------------------------------------------------------

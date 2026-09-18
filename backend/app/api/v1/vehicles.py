@@ -5,7 +5,7 @@ from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_write
-from app.services.rate_limit import require_rego_rate_limit
+from app.api.rate_deps import require_rego_rate_limit
 from app.services.ownership import (
     clear_primary,
     effective_feature_owner,

@@ -81,6 +81,16 @@ async def authenticate_ws(ws: WebSocket, db: AsyncSession) -> User | None:
     return user
 
 
+async def require_social_feature(
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    from app.social.models import get_server_config
+
+    cfg = await get_server_config(db)
+    if not cfg.feature_enabled:
+        raise HTTPException(status_code=403, detail="Disabled by your admin")
+
+
 async def require_admin(user: User = Depends(get_current_user)) -> User:
     if user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin privileges required")

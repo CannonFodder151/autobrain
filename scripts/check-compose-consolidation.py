@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""AUT-3153: structural checks for the consolidated hosted compose file.
+"""AUT-3153 + AUT-3461: structural checks for the consolidated hosted compose file.
 
 Run: python3 scripts/check-compose-consolidation.py
 No docker daemon needed — validates YAML/anchors and consolidation invariants.
@@ -39,7 +39,15 @@ def main():
         if key not in backend_env:
             errors.append(f"backend env missing {key}")
 
-    # C4: ai service (gateway + market-data) remains intact.
+    # C4: AUT-3461 — AI gateway merged into backend (mirrors prod).
+    if "uvicorn ai_app.main:app" not in backend_cmd:
+        errors.append("backend command missing AI gateway (uvicorn ai_app.main:app)")
+    if "AI_LOCAL_BASE_URL" not in backend_env:
+        errors.append("backend env missing AI_LOCAL_BASE_URL for localhost AI gateway")
+    elif "localhost" not in backend_env["AI_LOCAL_BASE_URL"]:
+        errors.append("AI_LOCAL_BASE_URL should point to localhost:8001 after AUT-3461 merge")
+
+    # C5: ai service (market-data) remains for Playwright/Chromium scraping.
     if "ai" not in svcs:
         errors.append("`ai` service missing")
     ai_env = svcs.get("ai", {}).get("environment") or {}
@@ -49,7 +57,7 @@ def main():
     if errors:
         print("\n".join(f"FAIL: {e}" for e in errors))
         sys.exit(1)
-    print(f"OK: {COMPOSE} satisfies AUT-3153 consolidation invariants")
+    print(f"OK: {COMPOSE} satisfies AUT-3153 + AUT-3461 consolidation invariants")
 
 
 if __name__ == "__main__":
