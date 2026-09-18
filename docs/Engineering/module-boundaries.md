@@ -45,7 +45,7 @@ Deterministic-first: it always computes the rule-based baseline first, then
 fills/refines optional fields — measured values are never overridden.
 
 ### `fallbacks/` — deterministic engines (one module per domain)
-Pure functions, no I/O, same output schema as the router path. The 7 domains:
+Pure functions, no I/O, same output schema as the router path. The 11 domains:
 
 | Fallback module | Provides |
 |-----------------|----------|
@@ -56,10 +56,12 @@ Pure functions, no I/O, same output schema as the router path. The 7 domains:
 | `ocr.py` | `extract_receipt_fallback`, `_extract_date` (shared by fuel-ocr) |
 | `fuel_ocr.py` | `_fuel_receipt_fallback` (uses `ocr._extract_date`) |
 | `odometer.py` | `_odometer_fallback` (regex over OCR text) |
+| `parts_guide.py` | `parts_guide_fallback` (SCA taxonomy normalisation + service-type prefill) |
+| `advisor.py` | `advisor_fallback` (composes Value/Replace/Upgrade/Finance/Dream sub-modules) |
+| `car_check.py` | `car_check_fallback` (listing fields + deal score) |
+| `condition.py` | `estimate_condition` (label from vehicle context, diagnostics, history, mods) |
 
-`fallbacks/__init__.py` is a barrel that re-exports the public symbols so
-`from app.fallbacks import ...` keeps working. Modules import from their
-specific domain file.
+`social_image.py` uses Pillow (always available) and is deterministic-first; it is not in `fallbacks/` because it is self-contained.
 
 ### `router_client.py` — the single 9Router client
 `enhance()` posts to 9Router with `_AI_IMMUTABLE`-protected fields so AI can

@@ -31,15 +31,16 @@
 
 ## Deployment topologies
 
-- **Dev:** single `docker-compose.yml` with source mounts + reload. Backend
-  container runs the API and the Celery worker+beat (dev compose command).
+- **Dev:** single `docker-compose.yml` with source mounts + reload. 5 containers:
+  postgres, redis, minio, backend (API + AI gateway + Celery worker+beat), frontend.
+  Source volumes for hot reload.
 - **Prod:** `docker-compose.prod.yml` behind nginx frontend container. Backend
-  image runs API + Celery worker+beat in one container (see
+  image runs API + AI gateway + Celery worker+beat in one container (see
   `docker/backend/Dockerfile`).
-- **Hosted:** `docker-compose.hosted.yml` — prebuilt Docker Hub images, Stripe
-  billing, self-service signup, Portainer-managed on Oracle Cloud. Celery
-  worker + beat run in a **dedicated `worker` container** (AUT-1242/C1), not in
-  backend.
+- **Hosted:** `docker-compose.hosted.yml` — 8 containers (postgres, redis, minio,
+  backend, ai, frontend, hub, 9router). Prebuilt Docker Hub images, Stripe
+  billing, self-service signup, Portainer-managed on Oracle Cloud. The `ai`
+  container runs AI gateway + market-data scraper (AUT-1242/C3).
 - **Kubernetes:** `infra/k8s/*` deployments + services + secrets.
 - **Bare metal:** `infra/systemd/*` units (container-backed).
 

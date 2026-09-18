@@ -102,7 +102,15 @@ def _valid_embedding(value: object) -> list[float] | None:
 
 
 async def _call_embedding_api(text: str) -> list[float] | None:
-    """Get embedding from 9Router (OpenAI-compatible /embeddings endpoint)."""
+    """Get embedding from 9Router (OpenAI-compatible /embeddings endpoint).
+
+    Respects the ``AI_ENABLED`` toggle — when set to ``false``/``0``, embedding
+    generation is skipped and the caller falls back to keyword-only search.
+    """
+    if not settings.AI_ENABLED:
+        logger.info("embedding_ai_disabled")
+        return None
+
     url = settings.AI_ROUTER_URL.rstrip("/")
     if not url or "your-9router-instance" in url:
         logger.info("embedding_router_disabled")

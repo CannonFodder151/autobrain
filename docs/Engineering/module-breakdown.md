@@ -9,9 +9,9 @@ is reachable. The product never depends on the LLM router being up.
 
 ```
 rule-based baseline (always)  ──►  enhance()  ──►  validated result
-                                   │
-                                   └── 9Router (optional): shallow-merge of
-                                       enrichment fields only
+                                    │
+                                    └── 9Router (optional): shallow-merge of
+                                        enrichment fields only
 ```
 
 `enhance()` (in `ai/app/router_client.py`):
@@ -33,6 +33,7 @@ rule-based baseline (always)  ──►  enhance()  ──►  validated result
 | `rule-based+ai` | Baseline enriched by 9Router (advice/facts only — never the measured numbers) |
 
 The **odometer** module is deterministic-only: it never calls the router.
+The **social_image** module is deterministic-first: renders a branded card with Pillow (always available), AI path (Pollinations text-to-image) is optional and only used when explicitly requested.
 
 ## Modules (`ai/app/modules/`)
 
@@ -46,6 +47,10 @@ The **odometer** module is deterministic-only: it never calls the router.
 | Fuel receipt OCR | `/v1/fuel-ocr` | `fuel_ocr.py` — line-scan for vendor, date, litres, price-per-litre, total | Only fills optional/missing fields; never the measured numbers | `vendor`, `date`, `litres`, `price_per_litre`, `total_cost`, `currency` |
 | Odometer | `/v1/odometer` | `odometer.py` — local Tesseract OCR + regex digit scan on the dashboard photo | **None — deterministic-only** (reads are ~95% accurate, AI adds nothing) | all output |
 | Parts guide | `/v1/parts-guide` | `parts_guide.py` — SCA category taxonomy normalisation + service-type inventory prefill | Tidy descriptions, brands, categories (never overrides SKU/service_group/supplier) | `sku`, `service_group`, `supplier` |
+| Advisor | `/v1/advisor` | `advisor.py` — composes Value/Replace/Upgrade/Finance/Dream sub-modules into a decision (keep/upgrade/delay/strategy) with confidence | Richer rationale, sharper next_actions (never overrides `decision`) | `decision` |
+| Car check | `/v1/car-check` | `car_check.py` — structured listing fields + deterministic deal score into summary, red/green flags | Refine narrative only | `deal_score` |
+| Condition | `/v1/condition` | `condition.py` — label (excellent/good/fair/poor) from vehicle context, diagnostics, service history, mods | Human-readable narrative summary of evidence | `label`, `confidence` |
+| Social image | `/v1/social-image` | Pillow renderer — branded card (headline, hook, CTA, brand palette) | Optional Pollinations text-to-image when `prompt` provided | `image_base64` (deterministic card always produced) |
 
 ## Gateway contract
 
@@ -64,8 +69,8 @@ The **odometer** module is deterministic-only: it never calls the router.
 The rule engines live in the `ai/app/fallbacks/` package — one module per
 feature (`diagnose.py`, `service_prediction.py`, `ocr.py`, `resale.py`,
 `mod_impact.py`, `fuel_ocr.py`, `odometer.py`, `parts_guide.py`,
-`condition.py`). Each exports a single `*_fallback()` entry point used by
-the matching `ai/app/modules/` handler.
+`condition.py`, `advisor.py`, `car_check.py`). Each exports a single
+`*_fallback()` entry point used by the matching `ai/app/modules/` handler.
 
 > When adding a module: add the fallback first, expose it, then layer the
 > router enrichment on top. A module must always work with the router down.

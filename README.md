@@ -3,7 +3,7 @@
 AI-powered car enthusiast companion. Manage vehicles, track maintenance & fuel, run AI diagnostics, log modifications, scan receipts, manage parts inventory, estimate resale value, and get analytics — with every AI feature routed through your **9Router** instance.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.3.4-green)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.3.270-green)](CHANGELOG.md)
 
 - **Website / hosted service** — https://autobrainservice.app
 - **Live demo** — https://demo.autobrainservice.app (login: `demo@autobrainservice.app` / `demo`)
@@ -58,9 +58,9 @@ curl http://localhost:8001/health        # AI gateway
 
 ## Services
 
-`docker-compose.prod.yml` runs: **postgres, redis, minio, backend (API + Celery worker+beat in-container), ai, frontend** — 6 containers. The frontend nginx container serves the Flutter web app at `/` and proxies `/api/*`, `/ws/*`, `/ai/*` to backend/AI — same-origin, no CORS needed.
+`docker-compose.prod.yml` runs: **postgres, redis, minio, backend (API + AI gateway + Celery worker+beat in-container), frontend** — 5 containers. The frontend nginx container serves the Flutter web app at `/` and proxies `/api/*`, `/ws/*`, `/ai/*` to backend/AI — same-origin, no CORS needed. The AI gateway runs as a subprocess on `:8001` inside the backend container.
 
-`docker-compose.hosted.yml` runs the same stack plus Stripe billing and self-service signup, with prebuilt Docker Hub images (`cannonfodder151/autobrain-*:hosted`).
+`docker-compose.hosted.yml` runs the same stack plus Stripe billing and self-service signup, with prebuilt Docker Hub images (`cannonfodder151/autobrain-*:hosted`). Hosted uses 8 containers: postgres, redis, minio, backend, ai, frontend, hub, 9router — with a separate `ai` container (AI gateway + market-data) and dedicated `9router` instance.
 
 ## Documentation
 
@@ -70,7 +70,7 @@ Full docs are maintained in the Outline wiki (AutoBrain collection) and mirrored
 
 ```
 /backend    FastAPI + SQLAlchemy + Celery + MinIO
-/ai         AI inference gateway (7 modules) + rule-based fallbacks
+/ai         AI inference gateway (12 modules) + rule-based fallbacks
 /frontend   Flutter web frontend
 /infra      Kubernetes manifests, systemd units, nginx config
 /docker     Build contexts: backend (unified API+AI+worker), ai, frontend
@@ -107,6 +107,11 @@ All AI features route through 9Router (OpenAI-compatible). If the router is unre
 | Odometer | `/v1/odometer` | Dashboard photo → odometer reading |
 | Resale | `/v1/resale` | Vehicle attributes → value estimate + trend |
 | Mod impact | `/v1/mod-impact` | Modification → performance/value/reliability impact |
+| Advisor | `/v1/advisor` | Maintenance planning + cost forecasting |
+| Car check | `/v1/car-check` | Vehicle inspection checklist generation |
+| Condition | `/v1/condition` | Vehicle condition scoring from photos |
+| Parts guide | `/v1/parts-guide` | Parts compatibility + sourcing |
+| Social image | `/v1/social-image` | Community post image generation |
 
 ## Key features
 
@@ -124,6 +129,8 @@ All AI features route through 9Router (OpenAI-compatible). If the router is unre
 - **Multi-tier** — Free, Enthusiast, Garage plans via Stripe (hosted)
 - **Profile export/import** — download/import your whole account as JSON
 - **Admin backup & restore** — full JSON snapshot, wipe-and-restore, scheduled backups
+- **Community Garage** — social features, issues blog, federation hub
+- **Petrol price map** — NSW/QLD/VIC/SA fuel prices with map view
 
 ## Contributing
 

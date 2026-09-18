@@ -31,6 +31,21 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.fallbacks.utils import (
+    _f,
+    _clip,
+    _signal_strength,
+    _funding_gap,
+    _estimated_value,
+    _monthly_finance,
+    _dream_affordable,
+    _decide,
+    _rationale,
+    _next_actions,
+    _based_on,
+    validate_confidence,
+)
+
 _DECISIONS = ("keep", "upgrade", "delay", "strategy")
 
 _UPGRADE_TCO_SAVING = 0.15
@@ -40,162 +55,6 @@ _STRATEGY_AFFORDABILITY_RATIO = 1.2
 
 _RATIONALE_MAX = 280
 _NEXT_ACTIONS_MAX = 3
-
-
-def _f(value: Any) -> float | None:
-    if value is None:
-        return None
-    try:
-        f = float(value)
-    except (TypeError, ValueError):
-        return None
-    if f != f:
-        return None
-    return f
-
-
-def _clip(text: str, limit: int) -> str:
-    if not text:
-        return ""
-    if len(text) <= limit:
-        return text
-    return text[: max(0, limit - 1)].rstrip() + "\u2026"
-
-
-def _signal_strength(modules: dict[str, Any]) -> tuple[float, list[str]]:
-    """Return a (0..1, list_of_missing) tuple.
-
-    Stronger signal = more modules answered with usable numerics. Missing
-    modules drop confidence so the router can compensate with its
-    reasoning — but the deterministic baseline never overclaims.
-    """
-    required = ("value", "replace", "upgrade", "finance", "dream")
-    present = [m for m in required if modules.get(m)]
-    ratio = len(present) / len(required)
-    missing = [m for m in required if not modules.get(m)]
-    return ratio, missing
-
-
-def _funding_gap(modules: dict[str, Any]) -> float | None:
-    replace = modules.get("replace") or {}
-    val = modules.get("value") or {}
-    gap = _f(replace.get("funding_gap"))
-    if gap is not None:
-        return gap
-    used = _f(replace.get("used_replacement_cost"))
-    mid = _f(val.get("mid") or val.get("estimated_value"))
-    if used is None or mid is None:
-        return None
-    return used - mid
-
-
-def _estimated_value(modules: dict[str, Any]) -> float | None:
-    val = modules.get("value") or {}
-    return _f(val.get("mid") or val.get("estimated_value"))
-
-
-def _monthly_finance(modules: dict[str, Any]) -> float | None:
-    fin = modules.get("finance") or {}
-    for key in ("monthly", "effective_monthly", "payment"):
-        v = _f(fin.get(key))
-        if v is not None:
-            return v
-    return None
-
-
-def _dream_affordable(modules: dict[str, Any]) -> bool | None:
-    dream = modules.get("dream") or {}
-    aff = dream.get("affordability")
-    if isinstance(aff, str):
-        s = aff.strip().lower()
-        if s in ("affordable", "yes", "within_budget", "ok"):
-            return True
-        if s in ("unaffordable", "no", "out_of_budget", "stretch"):
-            return False
-    if isinstance(aff, bool):
-        return aff
-    return None
-
-
-def _decide(modules: dict[str, Any]) -> str:
-    gap = _funding_gap(modules)
-    est = _estimated_value(modules)
-    gap_ratio = None
-    if gap is not None and est not in (None, 0):
-        gap_ratio = gap / est
-
-    if gap_ratio is not None:
-        if gap_ratio <= _UPGRADE_GAP_RATIO:
-            return "upgrade"
-        if gap_ratio > _DELAY_GAP_RATIO:
-            return "delay"
-
-    monthly = _monthly_finance(modules)
-    if monthly is not None and est is not None and est > 0:
-        annual = monthly * 12
-        if annual < est * _UPGRADE_TCO_SAVING:
-            return "upgrade"
-
-    dream = modules.get("dream") or {}
-    dream_aff = _dream_affordable(modules)
-    if dream and dream_aff is True:
-        return "strategy"
-
-    return "keep"
-
-
-def _rationale(decision: str, modules: dict[str, Any], missing: list[str]) -> str:
-    parts: list[str] = []
-    est = _estimated_value(modules)
-    gap = _funding_gap(modules)
-    if est is not None:
-        parts.append(f"current value ~${est:,.0f}")
-    if gap is not None:
-        parts.append(f"replacement gap ~${gap:,.0f}")
-    base = ""
-    if decision == "keep":
-        base = "Your current car is the smart money move."
-    elif decision == "upgrade":
-        base = "A clear trade-up is within reach."
-    elif decision == "delay":
-        base = "Wait — the numbers aren't in your favour yet."
-    elif decision == "strategy":
-        base = "A non-binary play fits this scenario."
-    summary = base
-    if parts:
-        summary = f"{base} " + ", ".join(parts) + "."
-    if missing:
-        summary += f" (limited data: {', '.join(missing)}.)"
-    return _clip(summary, _RATIONALE_MAX)
-
-
-def _next_actions(decision: str, modules: dict[str, Any]) -> list[str]:
-    actions: list[str] = []
-    if decision == "keep":
-        actions.append("Stick with the current car; revisit in 6 months.")
-        actions.append("Keep up scheduled services to protect residual value.")
-    elif decision == "upgrade":
-        actions.append("Shortlist 2-3 concrete upgrade candidates from the Upgrade tab.")
-        actions.append("Get a pre-purchase inspection budget for each shortlist.")
-    elif decision == "delay":
-        actions.append("Re-run the advisor after your next service or in 3 months.")
-        actions.append("Track market median for your model weekly on the Value tab.")
-    elif decision == "strategy":
-        actions.append("Compare a novated lease vs outright purchase on the Finance tab.")
-        actions.append("Talk to a broker about a 2-3 year hold before committing.")
-    return actions[:_NEXT_ACTIONS_MAX]
-
-
-def _based_on(modules: dict[str, Any]) -> dict[str, Any]:
-    """Record which sub-modules contributed structured data.
-
-    Lets the caller (and the audit log) trace any number in the rationale
-    back to its source module. Booleans only; nothing in here is invented.
-    """
-    return {
-        m: bool(modules.get(m))
-        for m in ("value", "replace", "upgrade", "finance", "dream")
-    }
 
 
 def advisor_fallback(payload: dict) -> dict:
