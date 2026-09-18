@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-3456)
+- fix(frontend): wrap getCachedDecoded in try/catch to prevent indefinite spinner on web
+
 ## [0.3.271] - 2026-09-18
 
 ### Added (AUT-3447)
