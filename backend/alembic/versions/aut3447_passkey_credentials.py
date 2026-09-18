@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from alembic import context, op
 
 revision: str = "aut3447_passkey_credentials"
-down_revision: Union[str, None] = "aut2706_device_vehicle_type"
+down_revision: Union[str, None] = "aut2705_phev_logbook_columns"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
