@@ -10,6 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+- fix(frontend,AUT-3456): wrap sqflite getCachedDecoded in try/catch to prevent indefinite spinner on Flutter web bootstrap
 
 ## [0.3.271] - 2026-09-18
 

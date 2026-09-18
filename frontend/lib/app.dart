@@ -226,17 +226,24 @@ class _AdvisorDeepLinkState extends State<_AdvisorDeepLink> {
   Future<void> _load() async {
     final auth = context.read<AuthState>();
     // Cache-first: render immediately from cache if available.
-    final cached = await auth.api.getCachedDecoded('/vehicles', null);
-    if (cached != null) {
-      final data = cached as List;
-      final vehicles = data
-          .map((e) => Vehicle.fromJson(e as Map<String, dynamic>))
-          .toList();
-      if (!mounted) return;
-      setState(() {
-        _vehicle = Vehicle.resolveSelection(vehicles, null);
-        _loading = false;
-      });
+    // Wrap in try/catch so a sqflite/IndexedDB failure on web never leaves
+    // _loading stuck at true (AUT-3456).
+    try {
+      final cached = await auth.api.getCachedDecoded('/vehicles', null);
+      if (cached != null) {
+        final data = cached as List;
+        final vehicles = data
+            .map((e) => Vehicle.fromJson(e as Map<String, dynamic>))
+            .toList();
+        if (!mounted) return;
+        setState(() {
+          _vehicle = Vehicle.resolveSelection(vehicles, null);
+          _loading = false;
+        });
+      }
+    } catch (_) {
+      // Cache read failed (e.g. web IndexedDB unavailable); fall through to
+      // the network path below.
     }
     // Background refresh if online.
     if (!ConnectivityService.instance.isOnline) return;
