@@ -61,11 +61,9 @@ class _AdvisorFinanceScreenState extends State<AdvisorFinanceScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Finance')),
-      body: RefreshIndicator(
-        onRefresh: _submit,
-        child: ListView(
+    return RefreshIndicator(
+      onRefresh: _submit,
+      child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
             _InputCard(

@@ -42,17 +42,15 @@ class _AdvisorUpgradeScreenState extends State<AdvisorUpgradeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Upgrade')),
-      body: RefreshIndicator(
-        onRefresh: _load,
-        child: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : _error != null
-                ? Center(child: Text(_error!))
-                : _data == null
-                    ? const Center(child: Text('No data available.'))
-                    : ListView(
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(child: Text(_error!))
+              : _data == null
+                  ? const Center(child: Text('No data available.'))
+                  : ListView(
                         padding: const EdgeInsets.all(16),
                         children: [
                           _UpgradeCard(data: _data!),

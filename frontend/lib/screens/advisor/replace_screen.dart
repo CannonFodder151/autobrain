@@ -43,17 +43,15 @@ class _AdvisorReplaceScreenState extends State<AdvisorReplaceScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Replace')),
-      body: RefreshIndicator(
-        onRefresh: _load,
-        child: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : _error != null
-                ? Center(child: Text(_error!))
-                : _resp == null
-                    ? const Center(child: Text('No data available.'))
-                    : ListView(
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(child: Text(_error!))
+              : _resp == null
+                  ? const Center(child: Text('No data available.'))
+                  : ListView(
                         padding: const EdgeInsets.all(16),
                         children: [
                           _ReplaceCard(data: _resp!.data),

@@ -53,11 +53,9 @@ class _AdvisorAiScreenState extends State<AdvisorAiScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Scaffold(
-      appBar: AppBar(title: const Text('AI Advisor')),
-      body: RefreshIndicator(
-        onRefresh: _submit,
-        child: ListView(
+    return RefreshIndicator(
+      onRefresh: _submit,
+      child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
             TextField(
