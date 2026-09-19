@@ -56,10 +56,28 @@ class _PetrolPriceMapScreenState extends State<PetrolPriceMapScreen> {
   String? _error;
 
   late final FuelPricesApi _api;
+  late String _selectedState;
+  final MapController _mapController = MapController();
+
+  static const _auStates = [
+    'NSW', 'VIC', 'QLD', 'WA', 'SA', 'TAS', 'NT', 'ACT',
+  ];
+
+  static const _stateCentroids = <String, LatLng>{
+    'NSW': LatLng(-32.5, 147.0),
+    'VIC': LatLng(-37.8, 144.9),
+    'QLD': LatLng(-22.0, 144.0),
+    'WA': LatLng(-25.0, 121.0),
+    'SA': LatLng(-31.0, 136.0),
+    'TAS': LatLng(-42.0, 146.0),
+    'NT': LatLng(-19.5, 134.0),
+    'ACT': LatLng(-35.3, 149.1),
+  };
 
   @override
   void initState() {
     super.initState();
+    _selectedState = widget.state;
     _api = FuelPricesApi(context.read<AuthState>().api);
     _load();
   }
@@ -70,7 +88,7 @@ class _PetrolPriceMapScreenState extends State<PetrolPriceMapScreen> {
       _error = null;
     });
     try {
-      final prices = await _api.listPrices(state: widget.state);
+      final prices = await _api.listPrices(state: _selectedState);
       final watch = await _api.listWatchlist();
       if (mounted) {
         setState(() {
@@ -139,8 +157,26 @@ class _PetrolPriceMapScreenState extends State<PetrolPriceMapScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Petrol prices — ${widget.state}'),
+        title: Text('Petrol prices — $_selectedState'),
         actions: [
+          DropdownButton<String>(
+            value: _selectedState,
+            underline: const SizedBox.shrink(),
+            icon: const Icon(Icons.filter_list, color: Colors.white),
+            dropdownColor: scheme.surface,
+            items: _auStates
+                .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                .toList(),
+            onChanged: (v) {
+              if (v == null || v == _selectedState) return;
+              setState(() => _selectedState = v);
+              _mapController.move(
+                _stateCentroids[v]!,
+                _mapController.camera.zoom,
+              );
+              _load();
+            },
+          ),
           IconButton(
             tooltip: 'Refresh',
             icon: _loading
@@ -165,10 +201,11 @@ class _PetrolPriceMapScreenState extends State<PetrolPriceMapScreen> {
               : Stack(
                   children: [
                     FlutterMap(
-                      options: const MapOptions(
-                        initialCenter: LatLng(-32.5, 147.0), // NSW centroid
+                      mapController: _mapController,
+                      options: MapOptions(
+                        initialCenter: _stateCentroids[_selectedState]!,
                         initialZoom: 6,
-                        interactionOptions: InteractionOptions(
+                        interactionOptions: const InteractionOptions(
                           flags: InteractiveFlag.all &
                               ~InteractiveFlag.rotate,
                         ),
