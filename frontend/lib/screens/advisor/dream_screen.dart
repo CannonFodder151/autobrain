@@ -65,105 +65,102 @@ class _AdvisorDreamScreenState extends State<AdvisorDreamScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Dream Car')),
-      body: RefreshIndicator(
-        onRefresh: _submit,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _makeCtrl,
-                            decoration: const InputDecoration(
-                                labelText: 'Make', isDense: true),
-                          ),
+    return RefreshIndicator(
+      onRefresh: _submit,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _makeCtrl,
+                          decoration: const InputDecoration(
+                              labelText: 'Make', isDense: true),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextField(
-                            controller: _modelCtrl,
-                            decoration: const InputDecoration(
-                                labelText: 'Model', isDense: true),
-                          ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: _modelCtrl,
+                          decoration: const InputDecoration(
+                              labelText: 'Model', isDense: true),
                         ),
                       ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _yearCtrl,
-                            decoration: const InputDecoration(
-                                labelText: 'Year', isDense: true),
-                            keyboardType: TextInputType.number,
-                          ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _yearCtrl,
+                          decoration: const InputDecoration(
+                              labelText: 'Year', isDense: true),
+                          keyboardType: TextInputType.number,
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextField(
-                            controller: _downCtrl,
-                            decoration: const InputDecoration(
-                                labelText: 'Down payment', isDense: true),
-                            keyboardType: TextInputType.number,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _termCtrl,
-                            decoration: const InputDecoration(
-                                labelText: 'Term (m)', isDense: true),
-                            keyboardType: TextInputType.number,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextField(
-                            controller: _rateCtrl,
-                            decoration: const InputDecoration(
-                                labelText: 'Rate (%)', isDense: true),
-                            keyboardType: TextInputType.number,
-                          ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: _downCtrl,
+                          decoration: const InputDecoration(
+                              labelText: 'Down payment', isDense: true),
+                          keyboardType: TextInputType.number,
                         ),
                       ],
-                    ),
-                    const SizedBox(height: 12),
-                    FilledButton.icon(
-                      onPressed: _loading ? null : _submit,
-                      icon: _loading
-                          ? const SizedBox(
-                              width: 16, height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Icon(Icons.star),
-                      label: Text(_loading ? 'Looking up…' : 'Look up'),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _termCtrl,
+                          decoration: const InputDecoration(
+                              labelText: 'Term (m)', isDense: true),
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: _rateCtrl,
+                          decoration: const InputDecoration(
+                              labelText: 'Rate (%)', isDense: true),
+                          keyboardType: TextInputType.number,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed: _loading ? null : _submit,
+                    icon: _loading
+                        ? const SizedBox(
+                            width: 16, height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.star),
+                    label: Text(_loading ? 'Looking up…' : 'Look up'),
+                  ),
+                ],
               ),
             ),
-            if (_error != null) ...[
-              const SizedBox(height: 12),
-              Text(_error!, style: const TextStyle(color: Colors.red)),
-            ],
-            if (_dream != null) ...[
-              const SizedBox(height: 12),
-              _DreamCard(dream: _dream!),
-            ],
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Text(_error!, style: const TextStyle(color: Colors.red)),
           ],
-        ),
+          if (_dream != null) ...[
+            const SizedBox(height: 12),
+            _DreamCard(dream: _dream!),
+          ],
+        ],
       ),
     );
   }
