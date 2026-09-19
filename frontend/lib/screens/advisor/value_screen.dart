@@ -43,18 +43,15 @@ class _AdvisorValueScreenState extends State<AdvisorValueScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Vehicle Value')),
-      body: RefreshIndicator(
-        onRefresh: _load,
-        child: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : _error != null
-                ? Center(child: Text(_error!))
-                : _resp == null
-                    ? const Center(child: Text('No data available.'))
-                    : _buildBody(),
-      ),
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(child: Text(_error!))
+              : _resp == null
+                  ? const Center(child: Text('No data available.'))
+                  : _buildBody(),
     );
   }
 
