@@ -243,8 +243,12 @@ class _AdvisorDeepLinkState extends State<_AdvisorDeepLink> {
       // Cache read failed (e.g. IndexedDB unavailable on web). Continue
       // to the network path so the spinner does not hang.
     }
-    // Background refresh if online.
-    if (!ConnectivityService.instance.isOnline) return;
+    // Ensure we don't spin forever if the cache layer failed and we're offline.
+    if (!mounted) return;
+    if (!ConnectivityService.instance.isOnline) {
+      setState(() => _loading = false);
+      return;
+    }
     try {
       final data = await auth.api.get('/vehicles') as List;
       final vehicles = data

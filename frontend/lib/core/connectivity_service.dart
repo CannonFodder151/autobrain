@@ -23,8 +23,13 @@ class ConnectivityService {
   void addListener(VoidCallback cb) => _listeners.add(cb);
   void removeListener(VoidCallback cb) => _listeners.remove(cb);
 
+  /// Initialises the service. The first connectivity probe is raced against a
+  /// 3-second timeout so that a hung `checkConnectivity()` on web (where the
+  /// Network Information API can be absent) never blocks `main()` past
+  /// `runApp()`. Connectivity listeners are wired immediately so state stays
+  /// correct once the platform plugin does resolve.
   Future<void> init() async {
-    await _check();
+    _check().timeout(const Duration(seconds: 3)).catchError((_) {});
     Connectivity().onConnectivityChanged.listen((_) => _check());
   }
 

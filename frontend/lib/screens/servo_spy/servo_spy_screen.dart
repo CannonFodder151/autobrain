@@ -37,6 +37,9 @@ enum _ServoSpyView { map, list }
 @visibleForTesting
 String cartoKeyParam(String key) => key.isEmpty ? '' : '?key=$key';
 
+/// Injected at build time via `--dart-define=CARTO_API_KEY=...`.
+const String cartoApiKey = String.fromEnvironment('CARTO_API_KEY');
+
 
 class ServoSpyScreen extends StatefulWidget {
   const ServoSpyScreen({super.key});
@@ -473,8 +476,8 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
                 children: [
                   TileLayer(
                     urlTemplate: isDark
-                        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-                        : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+                        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png${cartoKeyParam(cartoApiKey)}'
+                        : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png${cartoKeyParam(cartoApiKey)}',
                     subdomains: const ['a', 'b', 'c', 'd'],
                     userAgentPackageName: 'com.autobrain',
                   ),
