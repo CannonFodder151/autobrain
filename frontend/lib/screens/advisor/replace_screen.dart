@@ -60,7 +60,6 @@ class _AdvisorReplaceScreenState extends State<AdvisorReplaceScreen> {
                               style: Theme.of(context).textTheme.bodySmall),
                         ],
                       ),
-      ),
     );
   }
 }
