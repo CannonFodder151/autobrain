@@ -37,6 +37,8 @@ enum _ServoSpyView { map, list }
 @visibleForTesting
 String cartoKeyParam(String key) => key.isEmpty ? '' : '?key=$key';
 
+const String _kCartoApiKey = String.fromEnvironment('CARTO_API_KEY');
+final String _kCartoKeyParam = cartoKeyParam(_kCartoApiKey);
 
 class ServoSpyScreen extends StatefulWidget {
   const ServoSpyScreen({super.key});
