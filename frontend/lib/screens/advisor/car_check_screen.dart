@@ -263,7 +263,7 @@ class _CarCheckScreenState extends State<CarCheckScreen> {
               ],
             ),
             const SizedBox(height: 16),
-            if (d.aiSummary?.isNotEmpty ?? false) ...[
+            if (d.aiSummary.isNotEmpty) ...[
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -272,7 +272,7 @@ class _CarCheckScreenState extends State<CarCheckScreen> {
                     children: [
                       Text('Why', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
                       const SizedBox(height: 4),
-                      Text(d.aiSummary!),
+                      Text(d.aiSummary),
                     ],
                   ),
                 ),
