@@ -15,7 +15,7 @@ x-core-env: &core-env
   PYTHONPATH: /app
   REDIS_URL: "redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379/0"
   MINIO_ENDPOINT: minio:9000
-  # AUT-1786: explicit passthrough for init-minio.sh and runtime uploads.
+  # AUT-3196: MINIO_ACCESS_KEY/SECRET_KEY for runtime uploads only (init folded into minio entrypoint).
   MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-}
   MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-}
   # AUT-2000: AI gateway runs inside the backend container on :8001,
@@ -116,6 +116,9 @@ services:
     # AUT-1737: pinned BY DIGEST to harden against Supply-chain base image CVEs.
     # Docker Hub has no minio release newer than RELEASE.2025-09-07T16-13-09Z in this
     # environment; upgrade to a patched image is blocked until upstream publishes it.
+    # AUT-3196: bucket init folded into the minio entrypoint (one-shot init sidecar dropped);
+    # see docker-compose.hosted.yml for the pattern. MINIO_ROOT_USER/ROOT_PASSWORD use env
+    # vars from .env; this entrypoint initialises the bucket idempotently.
     image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
     restart: unless-stopped
     read_only: true
@@ -123,10 +126,21 @@ services:
       - ALL
     tmpfs:
       - /tmp
-    command: server /data --console-address ":9001"
+    entrypoint: >
+      /bin/sh -c "
+      minio server /data --console-address ':9001' &
+      MINIO_PID=$$!;
+      trap 'kill -TERM $${MINIO_PID} 2>/dev/null' TERM INT;
+      until mc alias set local http://localhost:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" >/dev/null 2>&1 && mc ready local >/dev/null 2>&1; do sleep 2; done;
+      mc mb -p local/${MINIO_BUCKET:-autobrain-assets} 2>/dev/null || true;
+      mc anonymous set none local/${MINIO_BUCKET:-autobrain-assets} 2>/dev/null || true;
+      echo '[minio] bucket init complete';
+      trap - TERM INT;
+      wait $${MINIO_PID}
+      "
     environment:
-      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
-      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY must be set in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY must be set in .env}
     volumes:
       - minio-data:/data
     healthcheck:
@@ -150,8 +164,7 @@ services:
       - /tmp
       - /app/tmp
     command: >-
-      sh -c "/init-minio.sh
-      && alembic upgrade head
+      sh -c "alembic upgrade head
       && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &)
       && (uvicorn ai_app.main:app --host 0.0.0.0 --port 8001 &)
       && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
