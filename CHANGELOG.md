@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-3512)
+- feat(backend): extend pgvector embeddings to fuel_prices, devices, market_listing_cache, and vehicles tables. New Alembic migration adds embedding columns + HNSW cosine indexes. Search service now supports hybrid keyword + vector search across all 9 entity types. Backfill task automatically sweeps the new tables.
+
 ## [0.3.274] - 2026-09-18
 
 ### Fixed (AUT-3515)

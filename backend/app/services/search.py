@@ -4,10 +4,14 @@ from sqlalchemy import TextClause, and_, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
+from app.models.device import Device
 from app.models.diagnostic import Diagnostic
+from app.models.fuel_station import FuelPrice
+from app.models.market_listing import MarketListingCache
 from app.models.mod import Modification
 from app.models.receipt import Receipt
 from app.models.service import ServiceRecord
+from app.models.vehicle import Vehicle
 from app.services.vector_search import generate_embedding
 from app.social.models import SocialIssuePost
 
@@ -16,6 +20,8 @@ logger = get_logger(__name__)
 # Entity tables with their searchable columns and vector column mapping.
 # `community: True` marks entities that are visible to every user (NOT scoped
 # to the requesting user's vehicles) and whose rows have a status_hidden flag.
+# `vehicle_id_col` overrides the column used for vehicle-scoping (default
+# `vehicle_id`); "id" means the entity IS the vehicle.
 _ENTITY_MAP = {
     "diagnostic": {
         "model": Diagnostic,
@@ -42,6 +48,29 @@ _ENTITY_MAP = {
         "columns": ["title", "body"],
         "vector_col": "embedding",
         "community": True,
+    },
+    "fuel_price": {
+        "model": FuelPrice,
+        "columns": ["fuel_type"],
+        "vector_col": "embedding",
+        "community": True,
+    },
+    "device": {
+        "model": Device,
+        "columns": ["name"],
+        "vector_col": "embedding",
+    },
+    "market_listing": {
+        "model": MarketListingCache,
+        "columns": ["make", "model"],
+        "vector_col": "embedding",
+        "community": True,
+    },
+    "vehicle": {
+        "model": Vehicle,
+        "columns": ["nickname", "make", "model", "rego"],
+        "vector_col": "embedding",
+        "vehicle_id_col": "id",
     },
 }
 
@@ -82,10 +111,14 @@ async def semantic_search(
 
         base_filters = []
         if vehicle_ids is not None and not cfg.get("community"):
-            base_filters.append(model.vehicle_id.in_(vehicle_ids))
+            fk_col = cfg.get("vehicle_id_col", "vehicle_id")
+            col = getattr(model, fk_col, None)
+            if col is not None:
+                base_filters.append(col.in_(vehicle_ids))
         if cfg.get("community"):
             # Hidden/modded posts must never surface in search.
-            base_filters.append(model.status_hidden.is_(False))
+            if hasattr(model, "status_hidden"):
+                base_filters.append(model.status_hidden.is_(False))
 
         # Keyword search (ILIKE on text columns) — always runs. Columns are
         # OR-ed (match any column); vehicle scope stays AND-ed. `%`/`_` in the
@@ -196,6 +229,34 @@ def _serialise(etype: str, row, *, score: float, method: str) -> dict:
             "status": row.status,
             "author_display_name": row.author_display_name,
         })
+    elif etype == "fuel_price":
+        station = getattr(row, "station", None)
+        data.update({
+            "fuel_type": row.fuel_type,
+            "price": row.price,
+            "station_name": getattr(station, "name", None),
+            "station_brand": getattr(station, "brand", None),
+        })
+    elif etype == "device":
+        data.update({
+            "name": row.name,
+            "vehicle_id": row.vehicle_id,
+        })
+    elif etype == "market_listing":
+        data.update({
+            "make": row.make,
+            "model": row.model,
+            "year": row.year,
+            "median_price": row.median_price,
+        })
+    elif etype == "vehicle":
+        data.update({
+            "nickname": row.nickname,
+            "make": row.make,
+            "model": row.model,
+            "year": row.year,
+            "rego": row.rego,
+        })
 
     return data
 
@@ -266,5 +327,42 @@ def _row_to_dict(row, entity_type: str) -> dict:
             "title": row.title,
             "body": row.body,
             "tags": list(row.tags or []),
+        }
+    if entity_type == "fuel_price":
+        station = getattr(row, "station", None)
+        return {
+            "fuel_type": row.fuel_type,
+            "price": row.price,
+            "station_name": getattr(station, "name", ""),
+            "station_brand": getattr(station, "brand", ""),
+            "station_address": getattr(station, "address", ""),
+        }
+    if entity_type == "device":
+        return {
+            "name": row.name,
+            "vehicle_id": row.vehicle_id,
+        }
+    if entity_type == "market_listing":
+        return {
+            "make": row.make,
+            "model": row.model,
+            "year": row.year,
+            "source": row.source,
+        }
+    if entity_type == "vehicle":
+        return {
+            "nickname": row.nickname,
+            "make": row.make,
+            "model": row.model,
+            "year": row.year,
+            "rego": row.rego,
+            "vin": row.vin,
+            "colour": row.colour,
+            "body_type": row.body_type,
+            "engine": row.engine,
+            "transmission": row.transmission,
+            "fuel_type": row.fuel_type,
+            "powertrain": row.powertrain,
+            "vehicle_type": row.vehicle_type,
         }
     return {}
