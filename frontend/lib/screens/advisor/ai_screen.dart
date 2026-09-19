@@ -53,52 +53,49 @@ class _AdvisorAiScreenState extends State<AdvisorAiScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Scaffold(
-      appBar: AppBar(title: const Text('AI Advisor')),
-      body: RefreshIndicator(
-        onRefresh: _submit,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            TextField(
-              controller: _questionCtrl,
-              minLines: 2,
-              maxLines: 4,
-              decoration: const InputDecoration(
-                labelText: 'Your question',
-                hintText: 'Should I keep or upgrade?',
-                border: OutlineInputBorder(),
-              ),
+    return RefreshIndicator(
+      onRefresh: _submit,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          TextField(
+            controller: _questionCtrl,
+            minLines: 2,
+            maxLines: 4,
+            decoration: const InputDecoration(
+              labelText: 'Your question',
+              hintText: 'Should I keep or upgrade?',
+              border: OutlineInputBorder(),
             ),
+          ),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: _loading ? null : _submit,
+            icon: _loading
+                ? const SizedBox(
+                    width: 16, height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.psychology),
+            label: Text(_loading ? 'Thinking…' : 'Ask'),
+          ),
+          if (_error != null) ...[
             const SizedBox(height: 12),
-            FilledButton.icon(
-              onPressed: _loading ? null : _submit,
-              icon: _loading
-                  ? const SizedBox(
-                      width: 16, height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.psychology),
-              label: Text(_loading ? 'Thinking…' : 'Ask'),
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 12),
-              Text(_error!, style: const TextStyle(color: Colors.red)),
-            ],
-            if (_decision != null) ...[
-              const SizedBox(height: 12),
-              _DecisionCard(decision: _decision!),
-            ],
-            Padding(
-              padding: const EdgeInsets.only(top: 16),
-              child: Text(
-                'AI Advisor reasons over the structured outputs of Value, '
-                'Replace, Upgrade, Finance, and Dream. It never invents '
-                'prices; numbers come from the deterministic modules.',
-                style: theme.textTheme.bodySmall,
-              ),
-            ),
+            Text(_error!, style: const TextStyle(color: Colors.red)),
           ],
-        ),
+          if (_decision != null) ...[
+            const SizedBox(height: 12),
+            _DecisionCard(decision: _decision!),
+          ],
+          Padding(
+            padding: const EdgeInsets.only(top: 16),
+            child: Text(
+              'AI Advisor reasons over the structured outputs of Value, '
+              'Replace, Upgrade, Finance, and Dream. It never invents '
+              'prices; numbers come from the deterministic modules.',
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -61,32 +61,29 @@ class _AdvisorFinanceScreenState extends State<AdvisorFinanceScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Finance')),
-      body: RefreshIndicator(
-        onRefresh: _submit,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            _InputCard(
-              downPayment: _downPayment,
-              termMonths: _termMonths,
-              ratePct: _ratePct,
-              novated: _novated,
-              onNovatedChanged: (v) => setState(() => _novated = v),
-              onSubmit: _submit,
-              loading: _loading,
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 12),
-              Text(_error!, style: const TextStyle(color: Colors.red)),
-            ],
-            if (_plan != null) ...[
-              const SizedBox(height: 12),
-              _PlanCard(plan: _plan!),
-            ],
+    return RefreshIndicator(
+      onRefresh: _submit,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _InputCard(
+            downPayment: _downPayment,
+            termMonths: _termMonths,
+            ratePct: _ratePct,
+            novated: _novated,
+            onNovatedChanged: (v) => setState(() => _novated = v),
+            onSubmit: _submit,
+            loading: _loading,
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Text(_error!, style: const TextStyle(color: Colors.red)),
           ],
-        ),
+          if (_plan != null) ...[
+            const SizedBox(height: 12),
+            _PlanCard(plan: _plan!),
+          ],
+        ],
       ),
     );
   }
