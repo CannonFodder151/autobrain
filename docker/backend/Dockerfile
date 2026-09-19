@@ -37,10 +37,6 @@ COPY ai/requirements.txt ./ai_requirements.txt
 # Non-root user
 RUN useradd -m -u 1000 autobrain && chown -R autobrain:autobrain /app
 
-# MinIO init entrypoint (before dropping privileges)
-COPY scripts/init-minio.sh /init-minio.sh
-RUN chmod +x /init-minio.sh
-
 # AUT-1533: *_FILE secret loader wraps the CMD so credentials arrive via
 # bind-mounted files instead of plain env vars.
 COPY docker/entrypoint.sh docker/lib-load-secrets.sh /usr/local/bin/
@@ -56,4 +52,4 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=5 \
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
 # Runs Celery worker+beat alongside the API (single-container backend).
-CMD ["sh", "-c", "/init-minio.sh && python -m app.db.bootstrap && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+CMD ["sh", "-c", "python -m app.db.bootstrap && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
