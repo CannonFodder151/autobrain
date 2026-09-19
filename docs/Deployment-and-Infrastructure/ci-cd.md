@@ -134,7 +134,37 @@ directive AUT-78; see `docs/deployment-guide.md` for the full checklist).
 - DB migrations run inside the backend container on boot (Alembic `upgrade
   head`); `scripts/deploy.sh` drives remote deploys over SSH.
 
-## 7. Where CI secrets live
+## 7. Arm64 runner watchdog (`runner-watchdog.yml`) — AUT-2471
+
+The arm64 self-hosted runner (`gh-runner-autobrain-arm64`) on EP5 (Oracle VM)
+is critical for native multi-arch image builds. AUT-2395 showed the runner can
+silently de-register from GitHub Actions (e.g. crash loop due to missing
+`./bin/Runner.Listener`) and go unnoticed for hours, blocking all multi-arch
+builds.
+
+**Solution:** A cron-based GitHub Actions workflow (`.github/workflows/runner-watchdog.yml`)
+runs every 10 minutes on `ubuntu-latest` (GitHub-hosted, so it works even if the
+self-hosted runner is down):
+
+1. **Check** — Queries the GitHub Actions API (`GET /repos/.../actions/runners`)
+   for the arm64 runner's registration and status.
+2. **Restart** — If the runner is offline/unregistered, restarts its Docker
+   container on EP5 via the Portainer API (`POST /endpoints/5/docker/containers/{id}/restart`).
+3. **Cooldown** — Only one restart per 24h; subsequent detections within the
+   cooldown period are skipped (state tracked via workflow artifact).
+4. **Alert** — Posts to Discord `#incidents` via the n8n Reporter on the first
+   recreation, with links to the container logs. Escalates to the Deployment
+   Lead if the restart fails or the container is missing.
+
+**Secrets required:**
+- `PORTAINER_API_KEY` — EP5 Portainer API key (same secret used by deploy workflows)
+- `GH_PAT` — Classic PAT with `actions:read` on `CannonFodder151/autobrain`
+
+**Negative test:** After deployment, the watchdog runs hourly without recreating
+a healthy runner. The cooldown mechanism ensures it does not interfere with
+normal operation.
+
+## 8. Where CI secrets live
 
 GitHub Actions secrets on `CannonFodder151/autobrain`:
 `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` (image publish),
