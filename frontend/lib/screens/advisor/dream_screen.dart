@@ -65,11 +65,9 @@ class _AdvisorDreamScreenState extends State<AdvisorDreamScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Dream Car')),
-      body: RefreshIndicator(
-        onRefresh: _submit,
-        child: ListView(
+    return RefreshIndicator(
+      onRefresh: _submit,
+      child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
             Card(
