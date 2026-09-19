@@ -363,6 +363,7 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final scheme = Theme.of(context).colorScheme;
+    final cartoKey = const String.fromEnvironment('CARTO_API_KEY');
     final LatLng center = _userLoc ?? _auCenter;
     final markers = <Marker>[
       for (final s in _stations)
@@ -472,9 +473,10 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
                 ),
                 children: [
                   TileLayer(
-                    urlTemplate: isDark
-                        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-                        : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+                    urlTemplate: (isDark
+                            ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+                            : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png') +
+                        cartoKeyParam(cartoKey),
                     subdomains: const ['a', 'b', 'c', 'd'],
                     userAgentPackageName: 'com.autobrain',
                   ),
