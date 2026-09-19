@@ -56,7 +56,6 @@ class _AdvisorUpgradeScreenState extends State<AdvisorUpgradeScreen> {
                           _UpgradeCard(data: _data!),
                         ],
                       ),
-      ),
     );
   }
 }
