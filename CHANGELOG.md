@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Added/Changed (AUT-3246)
+- fix: shared-car fuel save resilience + receipt OCR pre-fill (PR #638)
 
 ## [0.3.265] - 2026-09-11
 
