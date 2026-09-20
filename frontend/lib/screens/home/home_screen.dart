@@ -16,7 +16,6 @@ import '../analytics/analytics_screen.dart';
 import '../../community_garage/community_garage_screen.dart';
 import '../diagnostics/diagnostics_screen.dart';
 import '../fuel/fuel_screen.dart';
-import '../fuel/petrol_price_map_screen.dart';
 import '../logbook/logbook_screen.dart';
 import '../mods/mods_screen.dart';
 import '../notifications/notifications_screen.dart';
@@ -398,15 +397,13 @@ class _FeatureGrid extends StatelessWidget {
           VehicleTimelineScreen(vehicleId: vehicle.id)),
       _Feature('Services', Icons.build, const Color(0xFF2563EB),
           ServiceListScreen(vehicleId: vehicle.id)),
-      _Feature('Fuel', Icons.local_gas_station, const Color(0xFF16A34A),
+_Feature('Fuel', Icons.local_gas_station, const Color(0xFF16A34A),
           FuelScreen(vehicleId: vehicle.id)),
       if (!vehicle.clubReg)
         _Feature('Logbook', Icons.book, const Color(0xFF0D9488),
             LogbookScreen(vehicleId: vehicle.id)),
       _Feature('Diagnostics', Icons.medical_services, const Color(0xFFEA580C),
-          DiagnosticsScreen(vehicleId: vehicle.id)),
-      const _Feature('Petrol Prices', Icons.map, Color(0xFF0E7490),
-          PetrolPriceMapScreen()),
+        DiagnosticsScreen(vehicleId: vehicle.id)),
       _Feature('Mods', Icons.tune, const Color(0xFF7C3AED),
           ModsScreen(vehicleId: vehicle.id)),
       _Feature('Receipts', Icons.receipt_long, const Color(0xFFDB2777),
