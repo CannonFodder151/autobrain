@@ -35,6 +35,8 @@ SOURCE_AUTHORITY: dict[str, int] = {
     "qld": 0,  # GOVERNMENT_MANDATORY_REALTIME
     "sa": 0,   # GOVERNMENT_MANDATORY_REALTIME (SAFPIS — included for forward
                # compatibility, the SA feed is wired in a follow-up).
+    "vic": 0,  # GOVERNMENT_MANDATORY_REALTIME (Servo Saver — VIC government
+               # mandate)
     "wa": 1,   # GOVERNMENT_DAILY (FuelWatch)
     "other": 2,  # OTHER (e.g. 7-Eleven, Caltex, or community scrapes).
 }
