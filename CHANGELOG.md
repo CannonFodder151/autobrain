@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Added/Changed (AUT-3079)
+- fix: enforce HTTPS for REGO_LOOKUP_URL in production (PR #687)
 
 ## [0.3.292] - 2026-10-01
 
