@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Added/Changed (AUT-3470)
+- feat: add AI_ENABLED toggle to force deterministic-only mode in all AI modules (PR #693)
 
 ## [0.3.270] - 2026-09-17
 
