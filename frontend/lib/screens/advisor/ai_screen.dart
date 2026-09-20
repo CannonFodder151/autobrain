@@ -100,7 +100,6 @@ class _AdvisorAiScreenState extends State<AdvisorAiScreen> {
       ),
     );
   }
-}
 
 class _DecisionCard extends StatelessWidget {
   const _DecisionCard({required this.decision});
@@ -174,3 +173,4 @@ class _DecisionCard extends StatelessWidget {
     }
   }
 }
+
