@@ -16,7 +16,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-AdvisorModule = Literal["value", "replace", "upgrade", "finance", "dream", "ai", "car-check"]
+AdvisorModule = Literal["value", "replace", "upgrade", "finance", "dream", "ai", "car-check", "loan-time-left"]
 AdvisorModel = Literal["rule-based-fallback", "rule-based+ai", "9router/<combo>"]
 AdvisorDecision = Literal["keep", "upgrade", "delay", "strategy"]
 AdvisorFinanceMode = Literal["buy", "finance", "lease", "novated"]
@@ -537,6 +537,49 @@ class CarCheckRequest(BaseModel):
     odometer_km: int | None = Field(None, ge=0, description="Odometer reading (km)")
     condition: str | None = Field(None, description="Vehicle condition: excellent|good|fair|poor")
     vehicle_type: str = Field("car", pattern=r"^(car|bike|motorcycle|truck|van)$")
+
+
+class TimeLeftLoanRequest(BaseModel):
+    """Request body for ``POST /advisor/loan-time-left`` (AUT-3589).
+
+    The caller supplies the current loan balance and repayment terms;
+    the response surfaces how many periods remain until the loan is
+    fully repaid.
+    """
+
+    remaining_amount: float = Field(..., ge=0, description="Outstanding principal (AUD)")
+    annual_rate_pct: float = Field(
+        ..., ge=0, le=40,
+        description="Nominal annual interest rate percentage points (e.g. 7.5)",
+    )
+    repayment_frequency: str = Field(
+        ..., description="Repayment frequency: weekly | fortnnightly | monthly | quarterly | annually",
+    )
+    repayment_amount: float = Field(
+        ..., ge=0, description="Cash paid per period (AUD)",
+    )
+    fees_per_period: float = Field(
+        default=0.0, ge=0, description="Fixed fees per period (AUD). Defaults to 0.",
+    )
+
+
+class TimeLeftLoanData(BaseModel):
+    """Structured output for ``POST /advisor/loan-time-left`` (AUT-3589).
+
+    ``periods`` is the number of repayment periods remaining. When the
+    repayment cannot cover per-period interest + fees, ``periods`` is
+    ``None`` and ``note`` explains why.
+    """
+
+    periods: int | None = Field(
+        None, description="Number of periods remaining; None if loan never pays off",
+    )
+    periods_per_year: int = Field(..., description="Number of repayment periods per year")
+    repayment_frequency: str = Field(..., description="Repayment frequency")
+    total_interest: float = Field(0.0, description="Total interest paid over remaining term")
+    total_fees: float = Field(0.0, description="Total fees paid over remaining term")
+    total_paid: float = Field(0.0, description="Total amount paid (principal + interest + fees)")
+    note: str | None = Field(None, description="Human-readable explanation if loan never pays off")
 
 
 class AdvisorResponse(BaseModel):
