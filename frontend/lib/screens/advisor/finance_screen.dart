@@ -85,7 +85,6 @@ class _AdvisorFinanceScreenState extends State<AdvisorFinanceScreen> {
             ],
           ],
         ),
-      ),
     );
   }
 }
