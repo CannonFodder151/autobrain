@@ -21,6 +21,7 @@ from app.models.notification import NotificationPreference, NotificationDelivery
 from app.models.share import VehicleShare
 from app.models.refresh_token import RevokedRefreshToken
 from app.models.ha import HaIntegration
+from app.models.tire import TireSet, TireSession, TireTreadReading
 from app.social.models import (
     SocialBuild,
     SocialComment,
@@ -63,6 +64,9 @@ __all__ = [
     "VehicleShare",
     "RevokedRefreshToken",
     "HaIntegration",
+    "TireSet",
+    "TireSession",
+    "TireTreadReading",
     "SocialBuild",
     "SocialPhoto",
     "SocialComment",

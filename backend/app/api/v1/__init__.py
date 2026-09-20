@@ -29,6 +29,7 @@ from app.api.v1 import (
     services,
     shares,
     social,
+    tires,
     valuation,
     vehicles,
 )
@@ -53,6 +54,7 @@ api_router.include_router(obd.router)
 api_router.include_router(mods.router)
 api_router.include_router(receipts.router)
 api_router.include_router(parts.router)
+api_router.include_router(tires.router)
 api_router.include_router(valuation.router)
 api_router.include_router(advisor.router)
 api_router.include_router(analytics.router)
