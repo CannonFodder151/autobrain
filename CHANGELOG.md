@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Added/Changed (AUT-3589)
+- feat(advisor): add loan time-left calculation for remaining loan period estimation (PR #727)
 
 ## [0.3.270] - 2026-09-17
 
