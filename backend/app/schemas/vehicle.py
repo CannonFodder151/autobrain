@@ -52,6 +52,7 @@ class VehicleCreate(BaseModel):
     auto_suggest_service: bool = False
     fuel_type: str | None = None
     powertrain: PowertrainType = PowertrainType.ICE
+    is_financed: bool = False
 
 
 class VehicleUpdate(BaseModel):
@@ -74,6 +75,7 @@ class VehicleUpdate(BaseModel):
     auto_suggest_service: bool | None = None
     fuel_type: str | None = None
     powertrain: PowertrainType | None = None
+    is_financed: bool | None = None
 
 
 class VehicleOut(BaseModel):
@@ -97,6 +99,7 @@ class VehicleOut(BaseModel):
     auto_suggest_service: bool = False
     fuel_type: str | None = None
     powertrain: PowertrainType = PowertrainType.ICE
+    is_financed: bool = False
     rego_status: str | None = None  # AUT-2415/2416: cached lookup status
     rego_expiry_date: str | None = None  # ISO YYYY-MM-DD; null when unknown
     is_shared: bool = False
