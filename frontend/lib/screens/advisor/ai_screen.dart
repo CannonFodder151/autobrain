@@ -97,8 +97,7 @@ class _AdvisorAiScreenState extends State<AdvisorAiScreen> {
             ),
           ],
         ),
-      ),
-    );
+      );
   }
 }
 
