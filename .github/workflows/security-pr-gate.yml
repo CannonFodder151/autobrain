@@ -259,9 +259,9 @@ jobs:
             printf '%s\n' "${CHANGED[@]}"
             printf 'EOF\n'
           } >> "$GITHUB_OUTPUT"
-- name: Install docker compose
-          if: steps.detect.outputs.changed != ''
-          run: |
+      - name: Install docker compose
+        if: steps.detect.outputs.changed != ''
+        run: |
             set -euo pipefail
             # Ensure docker compose plugin exists; install to user plugin dir if missing.
             if ! docker compose version >/dev/null 2>&1; then
