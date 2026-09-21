@@ -11,6 +11,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Removed
+- feat(flutter): remove petrol prices button from home screen, keep servo saver only
+
+
 ## [0.3.275] - 2026-09-21
 
 ### Added (AUT-3661)
