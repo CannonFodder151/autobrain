@@ -12,6 +12,7 @@ from app.models.diagnostic import Diagnostic
 from app.models.mod import Modification
 from app.models.part import Part, PartMovement
 from app.models.receipt import Receipt, ExtractedItem
+from app.models.cost_entry import CostEntry, CostCategory
 from app.models.valuation import ValuationSnapshot
 from app.models.market_listing import MarketListingCache
 from app.models.sca_parts import SCAPartsCache
@@ -49,6 +50,8 @@ __all__ = [
     "PartMovement",
     "Receipt",
     "ExtractedItem",
+    "CostEntry",
+    "CostCategory",
     "ValuationSnapshot",
     "MarketListingCache",
     "SCAPartsCache",

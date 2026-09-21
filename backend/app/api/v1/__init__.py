@@ -10,6 +10,7 @@ from app.api.v1 import (
     auth,
     billing,
     ci,
+    cost_entries,
     devices,
     diagnostics,
     dongle_firmware,
@@ -57,6 +58,7 @@ api_router.include_router(parts.router)
 api_router.include_router(valuation.router)
 api_router.include_router(advisor.router)
 api_router.include_router(analytics.router)
+api_router.include_router(cost_entries.router)
 api_router.include_router(notifications.router)
 api_router.include_router(devices.router)
 api_router.include_router(dongle_firmware.router)
