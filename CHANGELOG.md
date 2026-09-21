@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.275] - 2026-09-21
+
 ### Added (AUT-3661)
 - feat(engineer): new engineer marketplace API with search/filter endpoints
   - GET `/api/v1/engineers/search` — geospatial search by postcode/radius, specialty multi-select, minimum rating, price range, availability window filters
