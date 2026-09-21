@@ -11,6 +11,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-3661)
+- feat(engineer): add engineer marketplace search/filter API — geospatial (postcode/radius, lat/lon), specialty multi-select, min rating, price range, availability window, pagination, sorting by rating/distance/price; pgvector embedding support
+
+### Added (AUT-3659)
+- feat(vass): add VASS Engineer profile model with certification_number, vic_roads_registration, specialties, service_area, pricing_model, availability_schedule, review_aggregate; CRUD API endpoints under /api/v1/vass/engineers; Alembic migration
+
 ## [0.3.274] - 2026-09-18
 
 ### Fixed (AUT-3515)

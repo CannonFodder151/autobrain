@@ -21,6 +21,22 @@ from app.models.notification import NotificationPreference, NotificationDelivery
 from app.models.share import VehicleShare
 from app.models.refresh_token import RevokedRefreshToken
 from app.models.ha import HaIntegration
+from app.models.cost_entry import CostEntry, Budget, CostCategory
+from app.models.vass import (
+    ComplianceResult,
+    ComplianceRule,
+    RuleReference,
+    SeverityLevel,
+    VassVehicle,
+    VassModification,
+)
+from app.models.vass_engineer import (
+    VassEngineer,
+    EngineerSpecialty as VassEngineerSpecialty,
+    PricingModelType as VassEngineerPricingModel,
+)
+from app.models.track_session import TrackSession, IntensityLevel
+from app.models.engineer import Engineer, EngineerReview
 from app.social.models import (
     SocialBuild,
     SocialComment,
@@ -63,6 +79,22 @@ __all__ = [
     "VehicleShare",
     "RevokedRefreshToken",
     "HaIntegration",
+    "CostEntry",
+    "Budget",
+    "CostCategory",
+    "ComplianceResult",
+    "ComplianceRule",
+    "RuleReference",
+    "SeverityLevel",
+    "VassVehicle",
+    "VassModification",
+    "VassEngineer",
+    "VassEngineerSpecialty",
+    "VassEngineerPricingModel",
+    "Engineer",
+    "EngineerReview",
+    "TrackSession",
+    "IntensityLevel",
     "SocialBuild",
     "SocialPhoto",
     "SocialComment",
