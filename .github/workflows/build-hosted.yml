@@ -204,7 +204,6 @@ jobs:
     needs: build
     outputs:
       backend_digest: ${{ steps.digest.outputs.backend_digest }}
-      worker_digest: ${{ steps.digest.outputs.worker_digest }}
       ai_digest: ${{ steps.digest.outputs.ai_digest }}
       frontend_digest: ${{ steps.digest.outputs.frontend_digest }}
     if: github.event_name != 'pull_request'
@@ -343,7 +342,6 @@ jobs:
       contents: write
     env:
       BACKEND_DIGEST: ${{ needs.build-manifest.outputs.backend_digest }}
-      WORKER_DIGEST: ${{ needs.build-manifest.outputs.worker_digest }}
       AI_DIGEST: ${{ needs.build-manifest.outputs.ai_digest }}
       FRONTEND_DIGEST: ${{ needs.build-manifest.outputs.frontend_digest }}
     steps:
@@ -357,9 +355,12 @@ jobs:
         run: |
           set -euo pipefail
           set +e
+          # Worker uses the backend image (worker.yaml references
+          # ghcr.io/cannonfodder151/autobrain-backend). Pass BACKEND_DIGEST
+          # for both backend and worker so worker.yaml also gets pinned.
           ./scripts/update-k8s-pins.py \
             backend="${BACKEND_DIGEST}" \
-            worker="${WORKER_DIGEST}" \
+            worker="${BACKEND_DIGEST}" \
             ai="${AI_DIGEST}" \
             frontend="${FRONTEND_DIGEST}"
           code=$?
