@@ -11,6 +11,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-3663)
+- feat(engineer-dashboard): engineer dashboard API with incoming booking requests, certifications with expiry tracking, completed jobs with earnings summary, and CSV export
+  - GET `/api/v1/engineers/dashboard` — full dashboard summary
+  - GET `/api/v1/engineers/dashboard/requests` — incoming booking requests with pre-check reports
+  - GET `/api/v1/engineers/dashboard/requests/{id}` — request detail view
+  - PATCH `/api/v1/engineers/dashboard/requests/{id}` — respond to requests
+  - GET/POST/PATCH `/api/v1/engineers/dashboard/certifications` — certifications with expiry dates
+  - GET `/api/v1/engineers/dashboard/certifications/reminders` — renewal reminders (90/30/7 day)
+  - GET `/api/v1/engineers/dashboard/jobs` — completed jobs with earnings
+  - GET `/api/v1/engineers/dashboard/earnings` — earnings summary by period
+  - GET `/api/v1/engineers/dashboard/earnings/by-type` — earnings breakdown by job type
+  - GET `/api/v1/engineers/dashboard/earnings/by-period` — earnings by day/week/month/quarter/year
+  - GET `/api/v1/engineers/dashboard/export` — CSV export for earnings/certifications/requests
+
 ## [0.3.275] - 2026-09-21
 
 ### Added (AUT-3661)
