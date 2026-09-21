@@ -1,0 +1,380 @@
+# AutoBrain SHOP stack — Portainer stack "autobrain-shop" (EP5, Oracle Cloud 152.69.188.133)
+# Private Docker registry at 152.69.188.133:5000 — all images pulled from there.
+# Built by .github/workflows/build-shop.yml; images pushed to the self-hosted registry.
+# Secret-file pattern (AUT-1533): secret-class values are bind-mounted from
+# ${SECRETS_DIR:-/data/autobrain-shop/secrets} via the *_FILE pattern.
+# Seed with scripts/seed-shop-secrets.sh BEFORE deploying.
+
+x-secrets: &secrets
+  volumes:
+    - type: bind
+      source: ${SECRETS_DIR:-/data/autobrain-shop/secrets}
+      target: /run/secrets
+      read_only: true
+
+x-db-env: &db-env
+  ENVIRONMENT: production
+  POSTGRES_HOST: postgres
+  POSTGRES_USER: ${POSTGRES_USER:-autobrain_shop}
+  POSTGRES_DB: ${POSTGRES_DB:-autobrain_shop}
+  POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+
+x-core-env: &core-env
+  MINIO_ENDPOINT: minio:9000
+  MINIO_BUCKET: ${MINIO_BUCKET:-autobrain-shop-assets}
+  MINIO_ACCESS_KEY_FILE: /run/secrets/minio_access_key
+  MINIO_SECRET_KEY_FILE: /run/secrets/minio_secret_key
+  REDIS_PASSWORD_FILE: /run/secrets/redis_password
+  AI_LOCAL_BASE_URL: http://ai-gateway:8001
+
+x-router-env: &router-env
+  AI_ROUTER_URL: ${AI_ROUTER_URL:-http://9router:20128/v1}
+  AI_ROUTER_API_KEY_FILE: /run/secrets/ai_router_api_key
+  AI_ROUTER_MODEL: ${AI_ROUTER_MODEL:-General-Use}
+  EMBEDDING_MODEL: ${EMBEDDING_MODEL:-openrouter/openai/text-embedding-3-small}
+
+x-registry: &registry
+  registry: ${REGISTRY:-152.69.188.133:5000}
+  image_prefix: ${IMAGE_PREFIX:-autobrain-shop}
+  tag: ${IMAGE_TAG:-latest}
+
+services:
+  # ── Private Docker Registry ──
+  registry:
+    image: registry:2@sha256:95e03b6d147c784e09e658c33647972f061533d4e2372f5106e1d79f01b5885e
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:5000:5000"
+    volumes:
+      - registry-data:/var/lib/registry
+    environment:
+      REGISTRY_STORAGE_DELETE_ENABLED: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5000/v2/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Database ──
+  postgres:
+    image: pgvector/pgvector:pg17@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be set}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB must be set}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - type: bind
+        source: ${SECRETS_DIR:-/data/autobrain-shop/secrets}/postgres_password
+        target: /run/secrets/postgres_password
+        read_only: true
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Cache / Message Broker ──
+  redis:
+    image: redis:7.2.5-alpine@sha256:6aaf3f5e6bc8a592fbfe2cccf19eb36d27c39d12dab4f4b01556b7449e7b1f44
+    restart: unless-stopped
+    command: ["/bin/sh", "-c", "exec redis-server --requirepass \"$$(cat /run/secrets/redis_password)\""]
+    volumes:
+      - redis-data:/data
+      - type: bind
+        source: ${SECRETS_DIR:-/data/autobrain-shop/secrets}/redis_password
+        target: /run/secrets/redis_password
+        read_only: true
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$(cat /run/secrets/redis_password)\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Object Storage ──
+  minio:
+    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    restart: unless-stopped
+    entrypoint: >
+      /bin/sh -c "
+      minio server /data --console-address ':9001' &
+      MINIO_PID=$$!;
+      trap 'kill -TERM $${MINIO_PID} 2>/dev/null' TERM INT;
+      until mc alias set local http://localhost:9000 "$$(cat /run/secrets/minio_access_key)" "$$(cat /run/secrets/minio_secret_key)" >/dev/null 2>&1 && mc ready local >/dev/null 2>&1; do sleep 2; done;
+      mc mb -p local/${MINIO_BUCKET:-autobrain-shop-assets} 2>/dev/null || true;
+      mc anonymous set none local/${MINIO_BUCKET:-autobrain-shop-assets} 2>/dev/null || true;
+      echo '[minio] bucket init complete';
+      trap - TERM INT;
+      wait $${MINIO_PID}
+      "
+    environment:
+      MINIO_ROOT_USER_FILE: /run/secrets/minio_access_key
+      MINIO_ROOT_PASSWORD_FILE: /run/secrets/minio_secret_key
+    volumes:
+      - minio-data:/data
+      - type: bind
+        source: ${SECRETS_DIR:-/data/autobrain-shop/secrets}/minio_access_key
+        target: /run/secrets/minio_access_key
+        read_only: true
+      - type: bind
+        source: ${SECRETS_DIR:-/data/autobrain-shop/secrets}/minio_secret_key
+        target: /run/secrets/minio_secret_key
+        read_only: true
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Backend (API + Celery worker+beat) ──
+  backend:
+    image: ${REGISTRY:-152.69.188.133:5000}/autobrain-shop-backend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    command: sh -c "export AI_ROUTER_API_KEY=$(cat /run/secrets/ai_router_api_key) && python -m app.db.bootstrap && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    environment:
+      <<: [*db-env, *core-env, *router-env]
+      PYTHONPATH: /app
+      SECRET_KEY_FILE: /run/secrets/backend_secret_key
+      MINIO_PUBLIC_ENDPOINT: ${APP_BASE_URL:-https://shop.autobrainservice.app}
+      AI_ROUTER_TIMEOUT_SECONDS: 120
+      REGO_LOOKUP_URL: ${REGO_LOOKUP_URL:-}
+      REGO_LOOKUP_API_KEY_FILE: /run/secrets/rego_lookup_api_key
+      MARKET_DATA_URL: ${MARKET_DATA_URL:-http://ai-gateway:8000}
+      MARKET_DATA_API_KEY_FILE: /run/secrets/market_data_api_key
+      FUEL_NSW_API_KEY_FILE: /run/secrets/fuel_nsw_api_key
+      FUEL_NSW_API_SECRET_FILE: /run/secrets/fuel_nsw_api_secret
+      FUEL_NSW_ENABLED: "true"
+      FUEL_VIC_API_KEY_FILE: /run/secrets/fuel_vic_api_key
+      FUEL_VIC_API_SECRET_FILE: /run/secrets/fuel_vic_api_secret
+      FUEL_VIC_ENABLED: "true"
+      FUEL_QLD_API_KEY_FILE: /run/secrets/fuel_qld_api_key
+      FUEL_SA_API_KEY_FILE: /run/secrets/fuel_sa_api_key
+      FUEL_SA_ENABLED: "true"
+      AI_GATEWAY_API_KEY_FILE: /run/secrets/ai_gateway_api_key
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@autobrain.io}
+      ADMIN_DISPLAY_NAME: AutoBrain Admin
+      ADMIN_INITIAL_PASSWORD_FILE: /run/secrets/admin_initial_password
+      DEMO_MODE: "false"
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
+      SMTP_USERNAME_FILE: /run/secrets/smtp_username
+      SMTP_PASSWORD_FILE: /run/secrets/smtp_password
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-no-reply@autobrainservice.app}
+      SMTP_FROM_NAME: AutoBrain
+      APP_BASE_URL: ${APP_BASE_URL:-https://shop.autobrainservice.app}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-["https://shop.autobrainservice.app"]}
+      MFA_ENFORCED: "true"
+      LOGIN_MAX_ATTEMPTS: 5
+      LOGIN_WINDOW_SECONDS: 10800
+      ADMIN_API_KEY_FILE: /run/secrets/admin_api_key
+      SELF_SIGNUP_ENABLED: ${SELF_SIGNUP_ENABLED:-true}
+      LICENSE_ENABLED: "true"
+      SOCIAL_FEDERATION_HUB_URL: ${SOCIAL_FEDERATION_HUB_URL:-}
+      SOCIAL_FEDERATION_HOSTED: "false"
+      STRIPE_SECRET_KEY_FILE: /run/secrets/stripe_secret_key
+      STRIPE_WEBHOOK_SECRET_FILE: /run/secrets/stripe_webhook_secret
+      STRIPE_PRICE_ENTHUSIAST_MONTHLY: ${STRIPE_PRICE_ENTHUSIAST_MONTHLY:-}
+      STRIPE_PRICE_ENTHUSIAST_YEARLY: ${STRIPE_PRICE_ENTHUSIAST_YEARLY:-}
+      STRIPE_PRICE_GARAGE_MONTHLY: ${STRIPE_PRICE_GARAGE_MONTHLY:-}
+      STRIPE_PRICE_GARAGE_YEARLY: ${STRIPE_PRICE_GARAGE_YEARLY:-}
+      DONGLE_SERVER_API_KEY_FILE: /run/secrets/dongle_server_api_key
+      DONGLE_SERVER_URL: http://dongle-server:8000
+      IAP_GOOGLE_SERVICE_ACCOUNT_JSON_FILE: /run/secrets/iap_google_service_account_json
+      IAP_GOOGLE_PACKAGE_NAME: ${IAP_GOOGLE_PACKAGE_NAME:-com.autobrainservice.app}
+      IAP_APPLE_ISSUER_ID: ${IAP_APPLE_ISSUER_ID:-}
+      IAP_APPLE_KEY_ID: ${IAP_APPLE_KEY_ID:-}
+      IAP_APPLE_PRIVATE_KEY_FILE: /run/secrets/iap_apple_private_key
+      IAP_APPLE_BUNDLE_ID: ${IAP_APPLE_BUNDLE_ID:-com.autobrainservice.app}
+    <<: *secrets
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    expose:
+      - "8000"
+    networks:
+      default:
+        ipv4_address: 172.20.0.15
+
+  # ── AI Gateway ──
+  ai-gateway:
+    image: ${REGISTRY:-152.69.188.133:5000}/autobrain-shop-ai:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    shm_size: "256m"
+    environment:
+      <<: *router-env
+      AI_GATEWAY_API_KEY_FILE: /run/secrets/ai_gateway_api_key
+      API_KEY_FILE: /run/secrets/market_data_api_key
+    <<: *secrets
+    expose:
+      - "8000"
+      - "8001"
+    networks:
+      default:
+        ipv4_address: 172.20.0.16
+
+  # ── Celery Worker (separate, per AUT-3693 acceptance criteria) ──
+  celery:
+    image: ${REGISTRY:-152.69.188.133:5000}/autobrain-shop-backend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    command: sh -c "export AI_ROUTER_API_KEY=$(cat /run/secrets/ai_router_api_key) && celery -A app.workers.celery_app:celery_app worker -l info --concurrency=4"
+    environment:
+      <<: [*db-env, *core-env, *router-env]
+      PYTHONPATH: /app
+      SECRET_KEY_FILE: /run/secrets/backend_secret_key
+      REDIS_PASSWORD_FILE: /run/secrets/redis_password
+      AI_ROUTER_TIMEOUT_SECONDS: 120
+      REGO_LOOKUP_URL: ${REGO_LOOKUP_URL:-}
+      REGO_LOOKUP_API_KEY_FILE: /run/secrets/rego_lookup_api_key
+      MARKET_DATA_URL: ${MARKET_DATA_URL:-http://ai-gateway:8000}
+      MARKET_DATA_API_KEY_FILE: /run/secrets/market_data_api_key
+      FUEL_NSW_API_KEY_FILE: /run/secrets/fuel_nsw_api_key
+      FUEL_NSW_API_SECRET_FILE: /run/secrets/fuel_nsw_api_secret
+      FUEL_NSW_ENABLED: "true"
+      FUEL_VIC_API_KEY_FILE: /run/secrets/fuel_vic_api_key
+      FUEL_VIC_API_SECRET_FILE: /run/secrets/fuel_vic_api_secret
+      FUEL_VIC_ENABLED: "true"
+      FUEL_QLD_API_KEY_FILE: /run/secrets/fuel_qld_api_key
+      FUEL_SA_API_KEY_FILE: /run/secrets/fuel_sa_api_key
+      FUEL_SA_ENABLED: "true"
+      AI_GATEWAY_API_KEY_FILE: /run/secrets/ai_gateway_api_key
+      APP_BASE_URL: ${APP_BASE_URL:-https://shop.autobrainservice.app}
+    <<: *secrets
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      default:
+        ipv4_address: 172.20.0.17
+
+  # ── Frontend (Flutter web → nginx) ──
+  frontend-nginx:
+    image: ${REGISTRY:-152.69.188.133:5000}/autobrain-shop-frontend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
+    ports:
+      - "127.0.0.1:8087:8080"
+    environment:
+      BACKEND_URL: ${BACKEND_URL:-http://backend:8000}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- \"${BACKEND_URL:-http://backend:8000}/health\" | grep -q '\"status\":\"ok\"'"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      - backend
+      - ai-gateway
+    networks:
+      default:
+        ipv4_address: 172.20.0.14
+
+  # ── Dongle Server ──
+  dongle-server:
+    image: ghcr.io/cannonfodder151/autobrain-dongle-server:hosted@sha256:c5768948a9dfd85f2b6e513896b3cbf2b77f6046576cd39152327f2ce9d47b28
+    restart: unless-stopped
+    environment:
+      <<: *core-env
+      AUTOBRAIN_BACKEND_URL: http://backend:8000
+      DONGLE_SERVER_API_KEY_FILE: /run/secrets/dongle_server_api_key
+      MINIO_ENDPOINT: minio:9000
+      MINIO_EXTERNAL_ENDPOINT: ${MINIO_EXTERNAL_ENDPOINT:-${APP_BASE_URL:-https://shop.autobrainservice.app}}
+      MINIO_BUCKET: ${MINIO_BUCKET:-autobrain-shop-assets}
+      MINIO_ACCESS_KEY_FILE: /run/secrets/minio_access_key
+      MINIO_SECRET_KEY_FILE: /run/secrets/minio_secret_key
+      MINIO_SECURE: ${MINIO_SECURE:-true}
+      WEB_UI_BASIC_USER: ${WEB_UI_BASIC_USER:-admin}
+      WEB_UI_BASIC_PASSWORD_FILE: /run/secrets/dongle_web_basic_password
+      FIRMWARE_BUCKET_PREFIX: dongle_firmware
+      SIGNED_URL_TTL_SECONDS: 900
+      MAX_FIRMWARE_BYTES: 16777216
+    <<: *secrets
+    depends_on:
+      - backend
+    expose:
+      - "8000"
+
+  # ── 9Router AI Router ──
+  9router:
+    image: decolua/9router:0.5.55@sha256:f00fe389ef41a1999dd0d0275ad0c2955d13d176f7c4c5cb844b2f88c293c471
+    restart: unless-stopped
+    entrypoint: ["/entrypoint.sh"]
+    command: ["node", "custom-server.js"]
+    environment:
+      NODE_ENV: production
+      PORT: 20128
+      HOSTNAME: 0.0.0.0
+      NEXT_TELEMETRY_DISABLED: "1"
+      DATA_DIR: /app/data
+    volumes:
+      - 9router-data:/app/data
+    ports:
+      - "0.0.0.0:20129:20128"
+
+  # ── Backup ──
+  autobrain-backup:
+    image: ghcr.io/cannonfodder151/autobrain-backup:hosted@sha256:e76fac3c69ce5d6e2f670cbe9d41f72fec235d6769bf9f046faa71c9c06b4880
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8081:8080"
+    volumes:
+      - /data/autobrain-shop-backup/config:/config
+      - /data/autobrain-shop-backup/data:/backups
+
+  backup-agent:
+    image: ghcr.io/cannonfodder151/autobrain-backup-agent:hosted@sha256:59f26bf04d48874754ed99cd8b133cd8eb433bde149d5d7babc27e8e9a849092
+    restart: unless-stopped
+    environment:
+      AUTOBRAIN_URL: "http://backend:8000"
+      AUTOBRAIN_API_KEY: "${ADMIN_API_KEY}"
+      BACKUP_ENDPOINT: "/api/v1/admin-api/backup"
+      OUT_DIR: "/backups"
+      KEEP: "30"
+      TARGET_URL: "http://autobrain-backup:8080/ingest"
+    volumes:
+      - /data/autobrain-shop-backup/agent-data:/backups
+
+  # ── NGINX Reverse Proxy (SSL termination, public access) ──
+  nginx:
+    image: nginx:1.25-alpine@sha256:e42005f0a757358c956c7ea331d9806340324708483c1305a56e3405526589c7
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:443:443"
+      - "0.0.0.0:80:80"
+    volumes:
+      - /data/autobrain-shop/nginx.conf:/etc/nginx/nginx.conf:ro
+      - /data/autobrain-shop/certs:/etc/nginx/certs:ro
+    depends_on:
+      - frontend-nginx
+    networks:
+      default:
+        ipv4_address: 172.20.0.10
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:
+  9router-data:
+  registry-data:
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+          gateway: 172.20.0.1
