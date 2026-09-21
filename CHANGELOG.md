@@ -10,6 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+- fix(backend): add VIC (Servo Saver) to SOURCE_AUTHORITY with authority 0 (GOVERNMENT_MANDATORY_REALTIME), matching NSW and QLD priority for fair fuel price arbitration
 
 ## [0.3.296] - 2026-10-02
 
