@@ -11,6 +11,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-3614)
+- feat(tires): implement tire inventory & usage tracking with deterministic wear predictions, tread depth monitoring, and end-of-life alerts
+
+
 ## [0.3.275] - 2026-09-21
 
 ### Added (AUT-3661)
