@@ -11,6 +11,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-3533)
+- fix(flutter): append CARTO_API_KEY to TileLayer URL in Servo Spy map to fix blank white tiles on hosted builds
+
+
 ## [0.3.275] - 2026-09-21
 
 ### Added (AUT-3661)
