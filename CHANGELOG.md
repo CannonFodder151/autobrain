@@ -10,6 +10,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+- Deterministic, AI-free rule engine for all compliance checks
+- New Pydantic models: `VehicleLookupRequest/Response`, `VinValidationRequest/Response`, `ModificationChecklistRequest/Response`, `ComplianceAggregationRequest/Response`, `ModificationItem`, `ModificationCreate/Out`
+- New services: `vin_decoder.py`, `vehicle_lookup.py`, `modification_checklist.py`, `compliance_aggregator.py`
+- `GET /api/v1/vass/compliance/aggregate/{precheck_id}` — GET variant for aggregation
+- `GET /api/v1/vass/vehicle-lookup/makes` — list available vehicle makes
+- `GET /api/v1/vass/vehicle-lookup/models/{make}` — list models for a make
+- `GET /api/v1/vass/vehicle-lookup/year-range` — year range for make/model
+- `POST /api/v1/vass/compliance/aggregate` — compliance results aggregation with pass/fail/conditional scoring
+- `POST /api/v1/vass/modification-checklist` — deterministic modification checklist generation with ADR/VSB references
+- `POST /api/v1/vass/vehicle-lookup` — vehicle make/model/year lookup from AU compliance database
+- `POST /api/v1/vass/vin/validate` — 17-character VIN validation with ISO 3779 check digit, WMI lookup, RHD inference
+- feat(vass): add VASS backend API endpoints + data models
 
 ## [0.3.296] - 2026-10-02
 
