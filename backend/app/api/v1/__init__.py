@@ -13,6 +13,7 @@ from app.api.v1 import (
     devices,
     diagnostics,
     dongle_firmware,
+    engineer,
     fuel,
     fuel_prices,
     fuel_servo,
@@ -61,6 +62,7 @@ api_router.include_router(analytics.router)
 api_router.include_router(notifications.router)
 api_router.include_router(devices.router)
 api_router.include_router(dongle_firmware.router)
+api_router.include_router(engineer.router)
 api_router.include_router(search.router)
 api_router.include_router(social.router)
 api_router.include_router(issues.router)
