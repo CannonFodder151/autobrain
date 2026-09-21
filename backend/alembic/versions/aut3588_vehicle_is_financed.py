@@ -14,7 +14,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "aut3588_vehicle_is_financed"
-down_revision: Union[str, Sequence[str], None] = "aut3447_passkey_credentials"
+down_revision: Union[str, Sequence[str], None] = "aut3448_fuel_price_snapshots"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
