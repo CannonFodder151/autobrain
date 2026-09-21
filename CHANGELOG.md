@@ -11,6 +11,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-3661)
+- feat(engineer): new engineer marketplace API with search/filter endpoints
+  - GET `/api/v1/engineers/search` — geospatial search by postcode/radius, specialty multi-select, minimum rating, price range, availability window filters
+  - GET `/api/v1/engineers/{id}` — engineer profile detail with reviews
+  - Pagination and sorting by rating, distance, price
+  - Backend: `Engineer` + `EngineerReview` models, pgvector embedding support for semantic search
+  - Database migration: `a3661engineers_add_engineer_marketplace.py`
+
 ## [0.3.274] - 2026-09-18
 
 ### Fixed (AUT-3515)
