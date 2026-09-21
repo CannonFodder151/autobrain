@@ -11,6 +11,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-3588)
+- feat(vehicle): add `is_financed` boolean column and conditional Finance button in home feature grid
+  - Backend: `is_financed` column on `vehicles` table (defaults to `false`)
+  - Frontend: `isFinanced` field on `Vehicle` model
+  - Home screen: shows Finance feature tile for financed vehicles, opening `AdvisorFinanceScreen`
+  - Database migration: `aut3588_vehicle_is_financed.py`
+
 ## [0.3.274] - 2026-09-18
 
 ### Fixed (AUT-3515)
