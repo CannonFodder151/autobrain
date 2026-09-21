@@ -136,3 +136,4 @@ volumes:
   postgres-data:
   redis-data:
   minio-data:
+# compose-config-diff verification test
