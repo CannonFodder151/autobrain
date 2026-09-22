@@ -1,5 +1,6 @@
 """Deterministic modification-impact fallback."""
 
+from app.chroma_client import query_regulatory_context
 from app.fallbacks.resale import _mod_value_impact
 
 _MOD_IMPACT: dict[str, tuple[str, float, str]] = {
@@ -22,7 +23,7 @@ def mod_impact_fallback(payload: dict) -> dict:
     summary, score, reliability = _MOD_IMPACT.get(cat, _MOD_IMPACT["other"])
     name = payload.get("name") or "This modification"
     value_impact = _mod_value_impact({"category": cat, "cost": payload.get("cost")})
-    return {
+    result = {
         "summary": f"{name}: {summary}",
         "performance_score": score,
         "value_impact": value_impact,
@@ -30,3 +31,16 @@ def mod_impact_fallback(payload: dict) -> dict:
         "confidence": 0.9 if known else 0.5,
         "model": "rule-based-fallback",
     }
+    # AUT-3631: enrich with VASS regulatory context from ChromaDB when available.
+    # Query is non-blocking; empty result degrades cleanly to no-ctx.
+    try:
+        query_text = f"{name} modification category {cat} Australian Design Rules compliance"
+        ctx = query_regulatory_context(query_text, n_results=3)
+        if ctx:
+            result["regulatory_context"] = [
+                {"text": c["text"], "source": c["source"], "doc_type": c["doc_type"]}
+                for c in ctx
+            ]
+    except Exception:
+        pass
+    return result

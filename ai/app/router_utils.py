@@ -165,7 +165,7 @@ _TEMPERATURES: dict[str, float] = {}
 # they are the ground truth and the whole point of deterministic-first.
 _AI_IMMUTABLE: dict[str, frozenset[str]] = {
     "resale": frozenset({"estimated_value", "low", "high", "currency"}),
-    "mod-impact": frozenset({"performance_score", "value_impact", "reliability_impact"}),
+    "mod-impact": frozenset({"performance_score", "value_impact", "reliability_impact", "regulatory_context"}),
     "ocr": frozenset({"vendor", "invoice_date", "total", "tax", "currency", "items"}),
     "fuel-ocr": frozenset({"vendor", "date", "litres", "price_per_litre", "total_cost", "currency"}),
     "advisor": frozenset({"decision", "based_on"}),
@@ -220,6 +220,7 @@ _SCHEMAS: dict[str, dict[str, tuple]] = {
         "value_impact": (int, float, type(None)),
         "reliability_impact": (str,),
         "model": (str,),
+        "regulatory_context": (list, type(None)),
     },
     "condition": {
         "summary": (str,),

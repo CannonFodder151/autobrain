@@ -25,12 +25,17 @@ x-backend-base: &backend-base
     AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:?AI_GATEWAY_API_KEY must be set in .env}
     SOCIAL_FEDERATION_HUB_URL: ${SOCIAL_FEDERATION_HUB_URL:-https://hub.autobrainservice.app}
     SOCIAL_FEDERATION_HOSTED: ${SOCIAL_FEDERATION_HOSTED:-false}
+    # AUT-3631: ChromaDB vector store for VASS regulatory corpus
+    CHROMA_HOST: ${CHROMA_HOST:-chromadb}
+    CHROMA_PORT: ${CHROMA_PORT:-8000}
   depends_on:
     postgres:
       condition: service_healthy
     redis:
       condition: service_healthy
     minio:
+      condition: service_healthy
+    chromadb:
       condition: service_healthy
 
 services:
@@ -96,6 +101,23 @@ services:
       timeout: 5s
       retries: 10
 
+  # ── Vector store ──────────────────────────────────────────
+  chromadb:
+    image: chromadb/chroma:0.6.3
+    restart: unless-stopped
+    environment:
+      IS_PERSISTENT: "true"
+      PERSIST_DIRECTORY: /chroma/chroma
+    ports:
+      - "127.0.0.1:8002:8000"
+    volumes:
+      - chromadb-data:/chroma/chroma
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/heartbeat')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # ── App services ───────────────────────────────────────────
   backend:
     <<: *backend-base
@@ -136,3 +158,4 @@ volumes:
   postgres-data:
   redis-data:
   minio-data:
+  chromadb-data:
