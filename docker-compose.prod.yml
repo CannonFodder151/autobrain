@@ -22,6 +22,9 @@ x-core-env: &core-env
   # so localhost routing is correct (no separate `ai` service).
   AI_LOCAL_BASE_URL: http://localhost:8001
   AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:?AI_GATEWAY_API_KEY must be set (prod fails closed)}
+  # AUT-3631: ChromaDB vector store for VASS regulatory corpus
+  CHROMA_HOST: ${CHROMA_HOST:-chromadb}
+  CHROMA_PORT: ${CHROMA_PORT:-8000}
 
 x-backend-base: &backend-base
   build:
@@ -61,6 +64,8 @@ x-backend-base: &backend-base
     redis:
       condition: service_healthy
     minio:
+      condition: service_healthy
+    chromadb:
       condition: service_healthy
   expose:
     - "8000"
@@ -135,6 +140,26 @@ services:
       timeout: 5s
       retries: 10
 
+  # ── Vector store ──────────────────────────────────────────
+  chromadb:
+    image: chromadb/chroma:0.6.3
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp
+    environment:
+      IS_PERSISTENT: "true"
+      PERSIST_DIRECTORY: /chroma/chroma
+    volumes:
+      - chromadb-data:/chroma/chroma
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/heartbeat')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # ── App services ───────────────────────────────────────────
   # AUT-2000: backend image is the unified backend+ai image. The AI gateway
   # (FastAPI app at /app/ai_app) runs as a co-process on :8001, alongside
@@ -199,3 +224,4 @@ volumes:
   postgres-data:
   redis-data:
   minio-data:
+  chromadb-data:

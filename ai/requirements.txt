@@ -15,6 +15,9 @@ pytesseract==0.3.13
 pillow==12.3.0
 pypdf==6.16.1
 
+# AUT-3631: VASS regulatory vector store
+chromadb==1.1.5
+
 # AUT-1189: exact transitive pins for known-CVE packages. The resolved-tree
 # pip-audit pass (security-pr-gate.yml) audits the *resolved* environment, so
 # these must be exact `==` pins (a `>=` floor lets pip resolve to the latest,

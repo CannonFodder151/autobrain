@@ -52,6 +52,9 @@ x-core-env: &core-env
   # authenticated REDIS_URL / CELERY_*_URL from this file at startup.
   REDIS_PASSWORD_FILE: /run/secrets/redis_password
   AI_LOCAL_BASE_URL: http://ai:8001
+  # AUT-3631: ChromaDB vector store for VASS regulatory corpus
+  CHROMA_HOST: ${CHROMA_HOST:-chromadb}
+  CHROMA_PORT: ${CHROMA_PORT:-8000}
 
 x-router-env: &router-env
   # Keep the STACK-LOCAL 9router (reachable via docker DNS on the Oracle VM).
@@ -153,6 +156,21 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  # AUT-3631: ChromaDB vector store for VASS regulatory corpus
+  chromadb:
+    image: chromadb/chroma:0.6.3
+    restart: unless-stopped
+    environment:
+      IS_PERSISTENT: "true"
+      PERSIST_DIRECTORY: /chroma/chroma
+    volumes:
+      - chromadb-data:/chroma/chroma
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/heartbeat')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   backend:
     # AUT-3153: the standalone Celery worker+beat service is merged into this
@@ -262,6 +280,8 @@ services:
       redis:
         condition: service_healthy
       minio:
+        condition: service_healthy
+      chromadb:
         condition: service_healthy
     expose:
       - "8000"
@@ -506,6 +526,7 @@ volumes:
    postgres-data:
    redis-data:
    minio-data:
+   chromadb-data:
    hub-data:
    9router-data:
      external: true
