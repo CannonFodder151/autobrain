@@ -11,6 +11,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-3667)
+- feat(vass): VASS compliance backend API with data models
+  - POST `/api/v1/vass/vehicle-lookup` — vehicle make/model/year lookup with ADR category
+  - POST `/api/v1/vass/vin-validate` — VIN validation (format, checksum, decode)
+  - POST `/api/v1/vass/modification-checklist` — generate modification compliance checklist
+  - POST `/api/v1/vass/compliance-results` — aggregate compliance results for vehicle
+  - GET `/api/v1/vass/vehicle/{vehicle_id}/compliance` — convenience endpoint combining lookup + validation + aggregation
+  - Pydantic schemas: `VehicleLookupRequest/Response`, `VINValidationRequest/Response`, `ModificationChecklistRequest/Response`, `ComplianceAggregationRequest/Response`
+  - Deterministic VIN validation using ISO 3779 checksum standard
+  - Compliance assessment based on ADR/VSI/VSB6 requirements per modification category
+
 ## [0.3.275] - 2026-09-21
 
 ### Added (AUT-3661)
