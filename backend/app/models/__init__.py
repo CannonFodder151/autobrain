@@ -25,6 +25,7 @@ from app.models.sca_parts import SCAPartsCache
 from app.models.fuel_station import FuelStation, FuelPrice, FuelPriceArbitration
 from app.models.fuel_price import FuelPricePollState, FuelPriceSnapshot, FuelPriceWatchlist
 from app.models.notification import NotificationPreference, NotificationDelivery
+from app.models.vass import VASRule, VASCheck, VehicleClass, StandardType, ModificationCategory, ComplianceStatus
 from app.models.share import VehicleShare
 from app.models.refresh_token import RevokedRefreshToken
 from app.models.ha import HaIntegration
@@ -82,4 +83,10 @@ __all__ = [
     "SocialShareScope",
     "SocialServerConfig",
     "SocialRemoteTombstone",
+    "VASRule",
+    "VASCheck",
+    "VehicleClass",
+    "StandardType",
+    "ModificationCategory",
+    "ComplianceStatus",
 ]
