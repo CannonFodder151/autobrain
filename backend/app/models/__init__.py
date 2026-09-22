@@ -2,6 +2,13 @@
 
 from app.models.user import User
 from app.models.device import Device
+from app.models.engineer import (
+    EngineerProfile,
+    EngineerCertification,
+    BookingRequest,
+    PreCheckReport,
+    EngineerJob,
+)
 from app.models.dongle_firmware import DongleFirmware, DongleInstalledFirmware
 from app.models.vehicle import Vehicle, VehicleEvent
 from app.models.logbook import LogEntry
@@ -35,6 +42,11 @@ __all__ = [
     "User",
     "Device",
     "DongleFirmware",
+    "EngineerProfile",
+    "EngineerCertification",
+    "BookingRequest",
+    "PreCheckReport",
+    "EngineerJob",
     "DongleInstalledFirmware",
     "Vehicle",
     "VehicleEvent",

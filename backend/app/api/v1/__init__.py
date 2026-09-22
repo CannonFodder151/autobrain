@@ -30,6 +30,7 @@ from app.api.v1 import (
     shares,
     social,
     valuation,
+    vass,
     vehicles,
 )
 
@@ -63,3 +64,4 @@ api_router.include_router(search.router)
 api_router.include_router(social.router)
 api_router.include_router(issues.router)
 api_router.include_router(ci.router)
+api_router.include_router(vass.router)
