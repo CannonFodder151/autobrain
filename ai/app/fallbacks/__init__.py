@@ -14,6 +14,7 @@ from app.fallbacks.condition import estimate_condition
 from app.fallbacks.diagnose import diagnose_fallback
 from app.fallbacks.fuel_ocr import _fuel_receipt_fallback
 from app.fallbacks.mod_impact import mod_impact_fallback
+from app.fallbacks.mod_legality import mod_legality_fallback
 from app.fallbacks.ocr import extract_receipt_fallback
 from app.ocr_utils import _extract_date
 from app.fallbacks.odometer import _odometer_fallback
@@ -27,6 +28,7 @@ __all__ = [
     "estimate_value_fallback",
     "extract_receipt_fallback",
     "mod_impact_fallback",
+    "mod_legality_fallback",
     "predict_service_fallback",
     "rrp_for",
     "_extract_date",

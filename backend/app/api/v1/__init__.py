@@ -20,6 +20,7 @@ from app.api.v1 import (
     issues,
     logbook,
     mods,
+    mod_legality,
     notifications,
     obd,
     parts,
@@ -49,6 +50,7 @@ api_router.include_router(diagnostics.router)
 api_router.include_router(logbook.router)
 api_router.include_router(obd.router)
 api_router.include_router(mods.router)
+api_router.include_router(mod_legality.router)
 api_router.include_router(receipts.router)
 api_router.include_router(parts.router)
 api_router.include_router(valuation.router)

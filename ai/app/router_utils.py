@@ -154,6 +154,22 @@ _SYSTEM_PROMPTS: dict[str, str] = {
         '"red_flags": [string] (<=5 items, each <=120 chars), '
         '"green_flags": [string] (<=5 items, each <=120 chars)}.'
     ),
+    "mod-legality": (
+        "You are AutoBrain's VASS modification legality assessor for "
+        "Australian vehicles. A deterministic engine has already classified "
+        "the modification category and returned a compliance assessment. "
+        "Do NOT change the is_legal flag, status, relevant_references, or "
+        "confidence — those are authoritative. Your ONLY job is to refine "
+        "the summary (plain English, no markdown) and restrictions list "
+        "with state-specific regulatory context. When the state_territory "
+        "is provided, reference the correct state VSI/VSB6 requirements. "
+        "Return STRICT JSON: "
+        '{"is_legal": bool, "status": "legal"|"non_compliant"|"conditional"|"requires_engineer", '
+        '"summary": string (<=280 chars, plain English, no markdown), '
+        '"relevant_references": [string], '
+        '"restrictions": [string] (<=5 items, each <=200 chars), '
+        '"confidence": number (0-1)}.'
+    ),
 }
 
 # Sampling temperature per module. All modules default to 0 (deterministic);
@@ -166,6 +182,7 @@ _TEMPERATURES: dict[str, float] = {}
 _AI_IMMUTABLE: dict[str, frozenset[str]] = {
     "resale": frozenset({"estimated_value", "low", "high", "currency"}),
     "mod-impact": frozenset({"performance_score", "value_impact", "reliability_impact"}),
+    "mod-legality": frozenset({"is_legal", "status", "confidence", "relevant_references"}),
     "ocr": frozenset({"vendor", "invoice_date", "total", "tax", "currency", "items"}),
     "fuel-ocr": frozenset({"vendor", "date", "litres", "price_per_litre", "total_cost", "currency"}),
     "advisor": frozenset({"decision", "based_on"}),
@@ -251,6 +268,14 @@ _SCHEMAS: dict[str, dict[str, tuple]] = {
         "summary": (str,),
         "red_flags": (list,),
         "green_flags": (list,),
+    },
+    "mod-legality": {
+        "is_legal": (bool,),
+        "status": (str,),
+        "summary": (str,),
+        "relevant_references": (list,),
+        "restrictions": (list,),
+        "confidence": (int, float),
     },
 }
 

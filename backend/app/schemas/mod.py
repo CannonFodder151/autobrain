@@ -4,6 +4,8 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
+from app.schemas.vass import StateTerritory
+
 
 class ModCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
@@ -55,3 +57,21 @@ class ModImpactResponse(BaseModel):
     value_impact: float | None = None
     reliability_impact: str | None = None
     model: str = ""
+
+
+class ModLegalityRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    category: str = "other"
+    state_territory: StateTerritory = StateTerritory.VIC
+    notes: str | None = None
+    vehicle: dict | None = None
+
+
+class ModLegalityResponse(BaseModel):
+    is_legal: bool
+    status: str
+    summary: str
+    relevant_references: list[str]
+    restrictions: list[str]
+    confidence: float
+    model: str

@@ -7,6 +7,7 @@ from app.modules import (
     diagnostics,
     fuel_ocr,
     mod_impact,
+    mod_legality,
     ocr,
     odometer,
     parts_guide,
@@ -26,6 +27,7 @@ MODULES = {
     "odometer": odometer.run,
     "resale": resale.run,
     "mod-impact": mod_impact.run,
+    "mod-legality": mod_legality.run,
     "parts-guide": parts_guide.run,
     "social-image": social_image.run,
 }

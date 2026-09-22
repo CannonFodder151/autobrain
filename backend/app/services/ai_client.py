@@ -63,9 +63,13 @@ async def read_odometer(payload: dict) -> dict | None:
 async def estimate_value(payload: dict) -> dict | None:
     return await _call("resale", payload)
 
-
 async def mod_impact(payload: dict) -> dict | None:
     return await _call("mod-impact", payload)
+
+
+async def mod_legality(payload: dict) -> dict | None:
+    return await _call("mod-legality", payload)
+
 
 async def estimate_condition(payload: dict) -> dict | None:
     return await _call("condition", payload)
