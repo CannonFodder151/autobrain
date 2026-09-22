@@ -48,7 +48,7 @@ class EngineerSearchFilters(BaseModel):
     available_to: time | None = Field(default=None, description="Latest end time (HH:MM:SS).")
 
 
-class EngineerSortBy(str, list):
+class EngineerSortBy(str):
     """Sort key enumeration."""
     RATING = "rating"
     DISTANCE = "distance"
