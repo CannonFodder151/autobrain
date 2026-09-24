@@ -6,6 +6,13 @@
 # values come from ${SECRETS_DIR:-/data/autobrain/secrets} via the *_FILE pattern
 # (AUT-1533). Env must stay applied via the stack so redeploys never revert
 # SMTP2GO/SMTP_* (see AUT-97/AUT-101).
+# AUT-3153 (Phase 1a): the standalone `worker` service is merged into `backend`
+# (the backend image already runs Celery worker+beat — see docker/backend/Dockerfile
+# CMD and docker-compose.prod.yml). The hosted stack drops from 9 to 8 containers.
+# The separate autobrain-worker image is no longer referenced here; its build is
+# retired from CI (AUT-3172).
+# The fuel-poll tasks that used to live in the worker now run in the backend
+# container, so FUEL_*_FILE secrets moved from the worker block to backend env.
 
 # Secret-file pattern (AUT-1533): secret-class values are bind-mounted from
 # ${SECRETS_DIR:-/data/autobrain/secrets} (root:1000, 0640) and loaded into
@@ -148,11 +155,15 @@ services:
       retries: 10
 
   backend:
-    image: ghcr.io/cannonfodder151/autobrain-backend:hosted-arm64@sha256:80053f3d6d4642c3f199fc3755b0d34c68f458faaa804195f6373cf3a68dd638
+    # AUT-3153: the standalone Celery worker+beat service is merged into this
+    # container. The backend image already carries the worker dependencies and
+    # its default CMD runs the same topology as docker-compose.prod.yml.
+    image: ghcr.io/cannonfodder151/autobrain-backend:hosted@sha256:14543848e3e428701be45afc9848642a5fc5b2c6a4e9d1356a6fd1fa3eba9462
     restart: unless-stopped
-    command: sh -c "export AI_ROUTER_API_KEY=$(cat /run/secrets/ai_router_api_key) && python -m app.db.bootstrap && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    command: sh -c "export AI_ROUTER_API_KEY=$(cat /run/secrets/ai_router_api_key) && python -m app.db.bootstrap && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
       <<: [*db-env, *core-env, *router-env]
+      PYTHONPATH: /app
       SECRET_KEY_FILE: /run/secrets/backend_secret_key
       MINIO_PUBLIC_ENDPOINT: ${APP_BASE_URL:-https://hosted.autobrainservice.app}
       AI_ROUTER_TIMEOUT_SECONDS: 120
@@ -261,7 +272,7 @@ services:
         ipv4_address: 172.18.0.15
 
   ai:
-    image: ghcr.io/cannonfodder151/autobrain-ai:hosted@sha256:ba0f2d194fe0241b8cda5678c6ea79e94ceea67481f6993ba41c338830a698cf
+    image: ghcr.io/cannonfodder151/autobrain-ai:hosted@sha256:c58a7c3d5817fd98d29055c5e9daeff6fca0c374fae0912c8c6761f298f1a3ca
     restart: unless-stopped
     # AUT-1739: adequate /dev/shm for Chromium (market-data scraper).
     shm_size: "256m"
@@ -275,39 +286,11 @@ services:
       - "8000"
       - "8001"
 
-  worker:
-    # AUT-2482: pinned to post-fix worker digest (built 2026-09-04 from main 16b784c, includes AUT-2506 op.get_inspector fix).
-    # AUT-1878: bumped to arm64 digest from 9d81e4d build (hosted-arm64), which adds
-    # the deterministic /proc-based HEALTHCHECK that fixes the stale celerybeat-schedule
-    # mtime false-negative. NOTE: this pin is arm64-only; amd64 arm still building.
-    image: ghcr.io/cannonfodder151/autobrain-worker:hosted-arm64@sha256:41db9068ef1b0fb431d3a003a9f41d2e70fd5fa8b21eb1937e2e0f32f27043c5
-    restart: unless-stopped
-    # AUT-1242/C1: beat scheduler embedded in the worker (-B), matching the dev
-    # compose. Removes the separate beat container.
-    command: sh -c "export AI_ROUTER_API_KEY=$(cat /run/secrets/ai_router_api_key) && celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2"
-    environment:
-      <<: [*db-env, *core-env, *router-env]
-      PYTHONPATH: /app
-      SECRET_KEY_FILE: /run/secrets/backend_secret_key
-      # AUT-1858: the daily NSW Fuel API poll (AUT-1813) runs as a Celery task
-      # in this worker; it reads the keys from the secret files like the backend.
-      FUEL_NSW_API_KEY_FILE: /run/secrets/fuel_nsw_api_key
-      FUEL_NSW_API_SECRET_FILE: /run/secrets/fuel_nsw_api_secret
-      FUEL_NSW_ENABLED: "true"
-      # AUT-1813/AUT-1932: VIC Servo Saver — approved partner key + secret.
-      FUEL_VIC_API_KEY_FILE: /run/secrets/fuel_vic_api_key
-      FUEL_VIC_API_SECRET_FILE: /run/secrets/fuel_vic_api_secret
-      FUEL_VIC_ENABLED: "true"
-      # AUT-2218: QLD fuel — celery beat polls alongside NSW/VIC.
-      FUEL_QLD_API_KEY_FILE: /run/secrets/fuel_qld_api_key
-      # AUT-2610: SA SAFPIS ingester — same wiring as backend.
-      FUEL_SA_API_KEY_FILE: /run/secrets/fuel_sa_api_key
-    <<: *secrets
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+  # AUT-3153: the standalone `worker` service has been merged into `backend`
+  # (see the backend command above — Celery worker+beat now run as a
+  # background process in the same container, matching docker-compose.prod.yml).
+  # The dedicated autobrain-worker image is no longer built by CI (AUT-3172);
+  # docker/worker/Dockerfile is retained on disk only for reference.
 
   # AUT-1673: firmware release + distribution service for OBD ESP32 dongles.
   # Owns firmware manifests, MinIO signed blob URLs, the serial-number
@@ -341,7 +324,7 @@ services:
       - "8000"
 
   frontend:
-    image: ghcr.io/cannonfodder151/autobrain-frontend@sha256:f8cde5cdfa2604c852790404e228b91e21d2abc689399c3da578596bba969cc4
+    image: ghcr.io/cannonfodder151/autobrain-frontend:hosted@sha256:02ed10e3b1a5f70f3f17253e60f7c6dc1825dcd2e1d79687dfce7ed2ff57554e
     # AUT-2087: pinned to the verified arm64 child manifest digest of the
     # autobrain-frontend :hosted OCI image index. Earlier pin
     # (`@sha256:8937c2bb…`) targeted an arm64 image whose nginx + busybox
@@ -423,17 +406,9 @@ services:
   # (AUT-1533 *_FILE pattern), so the short-lived runner token never needs to
   # be persisted across container recreates. ARM CI on Hosted is unblocked.
   gh-runner:
-    # AUT-2469: the official image ships amd64 + arm64 binaries; on EP5 Docker
-    # pulls the arm64 variant. We build a thin wrapper that only adds the
-    # registration-token-refresh entrypoint; the build runs on the x64 runner,
-    # but buildx cross-builds the arm64 variant (the Oracle VM is aarch64).
-    # Pin the base by digest (AUT-1533); update this digest when rotating.
-    build:
-      context: .
-      dockerfile: docker/runner/Dockerfile
-      args:
-        RUNNER_BASE_IMAGE: ${GH_RUNNER_BASE_IMAGE:-ghcr.io/actions/actions-runner:latest}
-    image: ghcr.io/cannonfodder151/autobrain-gh-runner:arm64-latest
+    # AUT-2469: use official multi-arch actions-runner image directly (includes arm64).
+    # Custom wrapper image (ghcr.io/cannonfodder151/autobrain-gh-runner:arm64-latest) to be built separately.
+    image: ghcr.io/actions/actions-runner:latest
     pull_policy: always
     restart: unless-stopped
     privileged: true
@@ -451,9 +426,15 @@ services:
       RUNNER_GROUP: ${RUNNER_GROUP:-Default}
       RUNNER_REPLACE: ${RUNNER_REPLACE:-true}
       DISABLE_RUNNER_UPDATE: ${DISABLE_RUNNER_UPDATE:-false}
-    # CMD ["/entrypoint.sh", "run"] lives in the wrapper Dockerfile (docker/runner)
-    # so the runner entrypoint can refresh the registration token before
-    # delegating. No command override needed in compose.
+    # AUT-3822: upstream image has Entrypoint=null and Cmd=["/bin/bash"], so compose
+    # must explicitly configure the runner from the PAT secret file, then start it.
+    # Without this override bash exits immediately (no TTY/stdin) and the
+    # unless-stopped policy restarts the container in a tight loop.
+    # Note: use $$VAR in YAML so compose passes $VAR to container, letting the
+    # containers shell expand from the environment (compose only substitutes
+    # ${VAR} from .env/shell, not from the services own environment section).
+    command: >
+      /bin/bash -c "cd /home/runner && ./config.sh --url https://github.com/$$GITHUB_REPOSITORY --pat $$(cat $$GITHUB_PAT_FILE) --name $$RUNNER_NAME --labels $$RUNNER_LABELS --unattended --replace && ./run.sh"
 
   # 9Router AI router (AUT-473). Published on `0.0.0.0:20128` so it is reachable
   # on the host's public interface, but the host firewall (`fw-keeper`) restricts
@@ -497,7 +478,7 @@ services:
     # stack file works on every Portainer endpoint without re-tagging.
     # Bind mounts live under /data (snap dockerd masks /opt + /srv as RO
     # core24 squashfs; see AUT-1853).
-    image: ghcr.io/cannonfodder151/autobrain-backup:hosted@sha256:4dcdf610a4c3a9ad16947358c42ed5fd986f73176a468627e090ee15b7bed76f
+    image: ghcr.io/cannonfodder151/autobrain-backup:hosted@sha256:e76fac3c69ce5d6e2f670cbe9d41f72fec235d6769bf9f046faa71c9c06b4880
     restart: unless-stopped
     ports:
       - "127.0.0.1:8080:8080"
