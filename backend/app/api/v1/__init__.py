@@ -9,11 +9,13 @@ from app.api.v1 import (
     analytics,
     auth,
     billing,
+    booking_requests,
     ci,
     devices,
     diagnostics,
     dongle_firmware,
     engineer,
+    engineer_dashboard,
     fuel,
     fuel_prices,
     fuel_servo,
@@ -62,6 +64,9 @@ api_router.include_router(devices.router)
 api_router.include_router(dongle_firmware.router)
 api_router.include_router(engineer.router)
 api_router.include_router(search.router)
+api_router.include_router(engineer_dashboard.router)
 api_router.include_router(social.router)
 api_router.include_router(issues.router)
 api_router.include_router(ci.router)
+api_router.include_router(booking_requests.submit_router)
+api_router.include_router(booking_requests.owner_router)
