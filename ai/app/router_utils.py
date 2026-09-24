@@ -32,13 +32,14 @@ _SYSTEM_PROMPTS: dict[str, str] = {
         'Return STRICT JSON (no markdown, no prose outside the object): '
         '{"summary": string, "severity": "low"|"medium"|"high"|"critical", '
         '"estimated_cost": number|null, "cost_range": [number, number]|null, '
-        '"items": [{"cause": string, "confidence": number (0-1), "severity": string, '
-        '"parts_needed": [string], '
-        '"parts": [{"name": string, "part_number": string|null}], '
-        '"repair_notes": string, '
-        '"estimated_cost": number|null}], '
-        '"parts_needed": [string], "recommended_actions": [string]}'
-        "For each part include a real-world part number when you can identify one "
+         '"items": [{"cause": string, "confidence": number (0-1), "severity": string, '
+         '"parts_needed": [string], '
+         '"parts": [{"name": string, "part_number": string|null}], '
+         '"repair_notes": string, '
+         '"estimated_cost": number|null}], '
+         '"parts_needed": [string], "recommended_actions": [string], '
+         '"confidence": number (0-1)}'
+         "For each part include a real-world part number when you can identify one "
         "(e.g. NGK BKR6EIX, RYCO Z89A); otherwise null."
     ),
     "service-prediction": (
@@ -60,7 +61,8 @@ _SYSTEM_PROMPTS: dict[str, str] = {
         '"total": number|null, "tax": number|null, "currency": "AUD", '
         '"items": [{"kind": "part"|"labour", "name": string, '
         '"quantity": int, "unit_cost": number, "warranty_months": int|null}], '
-        '"next_recommended_service": string|null, "warranty_notes": string|null}'
+        '"next_recommended_service": string|null, "warranty_notes": string|null, '
+        '"confidence": number (0-1)}'
     ),
     "resale": (
         "You are a used-car valuation expert. The deterministic engine has "
@@ -73,7 +75,7 @@ _SYSTEM_PROMPTS: dict[str, str] = {
         "condition and fuel efficiency, add actionable advice: "
         'Return STRICT JSON: {"rrp": number|null, "used_price": number|null, '
         '"factors": {string: number|string}, '
-        '"recommendations": [string], "trend": []}. '
+        '"recommendations": [string], "trend": [], "confidence": number (0-1)}. '
         "Keep factors/recommendations AU-market-specific."
     ),
     "mod-impact": (
@@ -84,7 +86,7 @@ _SYSTEM_PROMPTS: dict[str, str] = {
         '"performance_score": number|null (0-10), '
         '"value_impact": number|null, '
         '"reliability_impact": "None"|"Minor"|"Medium"|"High", '
-        '"model": "9router"}'
+        '"confidence": number (0-1), "model": "9router"}'
     ),
     "condition": (
         "You are a used-vehicle condition assessor. The deterministic engine has "
@@ -93,14 +95,15 @@ _SYSTEM_PROMPTS: dict[str, str] = {
         "Your job is only to write a concise narrative summary of the evidence "
         "(open issues, service coverage, kilometres, modifications) that a "
         "buyer would understand. "
-        'Return STRICT JSON: {"summary": string}'
+        'Return STRICT JSON: {"summary": string, "confidence": number (0-1)}'
     ),
     "fuel-ocr": (
         "You are a fuel station receipt OCR extractor. From the receipt text "
         "extract the fuel purchase. "
         'Return STRICT JSON: {"vendor": string|null, "date": string|null '
-        '(ISO YYYY-MM-DD), "litres": number|null, "price_per_litre": number|null, '
-        '"total_cost": number|null, "currency": "AUD", "notes": string|null}'
+        "(ISO YYYY-MM-DD), \"litres\": number|null, \"price_per_litre\": number|null, "
+        "\"total_cost\": number|null, \"currency\": \"AUD\", \"notes\": string|null, "
+        "\"confidence\": number (0-1)}"
     ),
     "odometer": (
         "You are an odometer-reading OCR engine. The user photographed a car "
@@ -108,7 +111,7 @@ _SYSTEM_PROMPTS: dict[str, str] = {
         'Return STRICT JSON: {"odometer_km": int|null, "confidence": number (0-1)}. '
         "If the reading is not clearly visible, return odometer_km null with low confidence."
     ),
-    "parts-guide": (
+        "parts-guide": (
         "You are AutoBrain's parts-catalogue formatter. The deterministic engine "
         "has already classified Supercheap Auto parts-guide categories into "
         "Inventory-shaped part suggestions (each with name, category, supplier, "
@@ -119,7 +122,8 @@ _SYSTEM_PROMPTS: dict[str, str] = {
         "new parts, changing 'sku', 'service_group', or 'supplier'. "
         "Today's vehicle is identified by make/model/year in the payload. "
         'Return STRICT JSON: {"parts": [{"name": string, "category": string, '
-        '"brand": string, "description": string}], "note": string|null}. '
+        '"brand": string, "description": string}], "note": string|null, '
+        '"confidence": number (0-1)}. '
         "Keep every part from the baseline; only refine the listed fields."
     ),
     "advisor": (
@@ -152,7 +156,8 @@ _SYSTEM_PROMPTS: dict[str, str] = {
         "'not available' rather than guessing. Return "
         'STRICT JSON: {"summary": string (<=280 chars, plain English), '
         '"red_flags": [string] (<=5 items, each <=120 chars), '
-        '"green_flags": [string] (<=5 items, each <=120 chars)}.'
+        '"green_flags": [string] (<=5 items, each <=120 chars), '
+        '"confidence": number (0-1)}.'
     ),
 }
 
@@ -170,6 +175,8 @@ _AI_IMMUTABLE: dict[str, frozenset[str]] = {
     "fuel-ocr": frozenset({"vendor", "date", "litres", "price_per_litre", "total_cost", "currency"}),
     "advisor": frozenset({"decision", "based_on"}),
     "car-check": frozenset({"deal_score", "red_flags", "green_flags"}),
+    "diagnostics": frozenset({"summary", "severity", "items", "parts_needed", "recommended_actions"}),
+    "service-prediction": frozenset({"service_type", "interval_km", "interval_months", "next_due_km", "next_due_date"}),
 }
 
 # Per-module output schema whitelist: the only keys the router may contribute,
@@ -185,6 +192,7 @@ _SCHEMAS: dict[str, dict[str, tuple]] = {
         "items": (list,),
         "parts_needed": (list,),
         "recommended_actions": (list,),
+        "confidence": (int, float),
     },
     "service-prediction": {
         "service_type": (str,),
@@ -206,6 +214,7 @@ _SCHEMAS: dict[str, dict[str, tuple]] = {
         "items": (list,),
         "next_recommended_service": (str, type(None)),
         "warranty_notes": (str, type(None)),
+        "confidence": (int, float),
     },
     "resale": {
         "rrp": (int, float, type(None)),
@@ -213,16 +222,19 @@ _SCHEMAS: dict[str, dict[str, tuple]] = {
         "factors": (dict,),
         "recommendations": (list,),
         "trend": (list,),
+        "confidence": (int, float),
     },
     "mod-impact": {
         "summary": (str,),
         "performance_score": (int, float, type(None)),
         "value_impact": (int, float, type(None)),
         "reliability_impact": (str,),
+        "confidence": (int, float),
         "model": (str,),
     },
     "condition": {
         "summary": (str,),
+        "confidence": (int, float),
     },
     "fuel-ocr": {
         "vendor": (str, type(None)),
@@ -232,12 +244,14 @@ _SCHEMAS: dict[str, dict[str, tuple]] = {
         "total_cost": (int, float, type(None)),
         "currency": (str,),
         "notes": (str, type(None)),
+        "confidence": (int, float),
     },
     "parts-guide": {
         "parts": (list,),
         "vehicle": (dict,),
         "model": (str,),
         "suggested_parts": (list,),
+        "confidence": (int, float),
     },
     "advisor": {
         "decision": (str,),
@@ -251,6 +265,7 @@ _SCHEMAS: dict[str, dict[str, tuple]] = {
         "summary": (str,),
         "red_flags": (list,),
         "green_flags": (list,),
+        "confidence": (int, float),
     },
 }
 

@@ -46,6 +46,36 @@ _matches_type = _matches_type
 _validate_nested = _validate_nested
 
 
+# --- AI vs deterministic telemetry (AUT-3813) -------------------------------
+# In-process counters so operators can grep the logs for ai_path events and
+# compute the hybrid/deterministic split per module without a separate
+# metrics store. Reset on process start; for long-lived services, restart or
+# read the cumulative log lines.
+_AI_TELEMETRY: dict[str, dict[str, int]] = {}
+
+
+def _telemetry_record(module: str, path: str, **extra) -> None:
+    """Record one inference-path decision for later audit.
+
+    path is one of: ``deterministic`` (router down / low confidence / no
+    enrichable fields), ``hybrid`` (router enriched the baseline), or
+    ``router_error`` (router returned an error and we fell back).
+    """
+    bucket = _AI_TELEMETRY.setdefault(module, {"deterministic": 0, "hybrid": 0, "router_error": 0})
+    bucket[path] = bucket.get(path, 0) + 1
+    logger.info("ai_path", module=module, path=path, **extra)
+
+
+def ai_telemetry_snapshot() -> dict[str, dict[str, int]]:
+    """Return a copy of the current telemetry counters (for /v1/telemetry)."""
+    return {m: dict(c) for m, c in _AI_TELEMETRY.items()}
+
+
+def ai_telemetry_reset() -> None:
+    """Clear all telemetry counters (admin endpoint)."""
+    _AI_TELEMETRY.clear()
+
+
 def router_url() -> str:
     return os.getenv("AI_ROUTER_URL", "http://10.0.3.17:20128/v1").rstrip("/")
 
@@ -77,6 +107,7 @@ async def route(module: str, payload: dict) -> dict | None:
     """
     if not router_enabled():
         logger.info("router_disabled_using_fallback", module=module)
+        _telemetry_record(module, "deterministic", reason="router_disabled")
         return None
 
     url = f"{router_url()}/chat/completions"
@@ -112,9 +143,11 @@ async def route(module: str, payload: dict) -> dict | None:
             return result
     except httpx.HTTPStatusError as exc:
         logger.warning("router_http_error", module=module, status=exc.response.status_code)
+        _telemetry_record(module, "router_error", status=exc.response.status_code)
         return None
     except Exception as exc:
         logger.warning("router_unreachable_using_fallback", module=module, error=str(exc))
+        _telemetry_record(module, "router_error", error=str(exc))
         return None
 
 
@@ -123,12 +156,26 @@ async def enhance(module: str, payload: dict, baseline: dict) -> dict:
 
     The rule engine runs first and its result is always returned. When the
     router is reachable its response is shallow-merged into the baseline, never
-    overwriting deterministic-critical keys (see _AI_IMMUTABLE). model becomes
+    overwriting deterministic-critical keys (see _AI_IMMUTABLE). The router
+    response must include a "confidence" field (0-1); only fields from responses
+    with confidence >= MIN_AI_CONFIDENCE are merged. model becomes
     ``rule-based+ai`` when the router contributed fields, else the baseline is
     returned untouched. The service stays fully functional with the router down.
     """
+    min_confidence = float(os.getenv("MIN_AI_CONFIDENCE", "0.75"))
     result = await route(module, payload)
     if not isinstance(result, dict):
+        logger.info("ai_path", module=module, path="deterministic", reason="router_unavailable")
+        return baseline
+
+    confidence = result.get("confidence")
+    try:
+        conf_val = float(confidence) if confidence is not None else 0.0
+    except (TypeError, ValueError):
+        conf_val = 0.0
+
+    if conf_val < min_confidence:
+        logger.info("ai_path", module=module, path="deterministic", reason="low_confidence", confidence=conf_val, threshold=min_confidence)
         return baseline
 
     immutable = _AI_IMMUTABLE.get(module, frozenset())
@@ -148,4 +195,7 @@ async def enhance(module: str, payload: dict, baseline: dict) -> dict:
         enriched = True
     if enriched:
         merged["model"] = "rule-based+ai"
+        logger.info("ai_path", module=module, path="hybrid", confidence=conf_val)
+    else:
+        logger.info("ai_path", module=module, path="deterministic", reason="no_enrichable_fields")
     return merged

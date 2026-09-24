@@ -20,7 +20,7 @@ from app.fallbacks.parts_guide import (
     build_inventory_from_categories,
     suggest_parts_for_service,
 )
-from app.router_client import route
+from app.router_client import enhance
 
 
 async def run(payload: dict) -> dict:
@@ -37,9 +37,10 @@ async def run(payload: dict) -> dict:
 
     if not baseline_parts and not service_type:
         return {"parts": [], "vehicle": vehicle,
-                "note": "no SCA categories to format"}
+                "note": "no SCA categories to format",
+                "model": "rule-based"}
 
-    result: dict = {
+    baseline: dict = {
         "parts": baseline_parts,
         "vehicle": vehicle,
         "source": source,
@@ -47,26 +48,10 @@ async def run(payload: dict) -> dict:
     }
 
     if service_type and baseline_parts:
-        result["suggested_parts"] = suggest_parts_for_service(
+        baseline["suggested_parts"] = suggest_parts_for_service(
             service_type, payload.get("inventory", []), baseline_parts)
 
-    # Per-item tidy: 9Router returns the same ordered parts list; we copy only
-    # the human-readable fields it is allowed to touch (description/brand/
-    # category), leaving the deterministic sku/service_group/supplier intact.
-    ai = await route("parts-guide", payload)
-    if isinstance(ai, dict):
-        ai_parts = ai.get("parts") if isinstance(ai.get("parts"), list) else None
-        if ai_parts:
-            for i, tidy in enumerate(ai_parts):
-                if i >= len(result["parts"]) or not isinstance(tidy, dict):
-                    break
-                part = result["parts"][i]
-                for field in ("description", "brand", "category"):
-                    val = tidy.get(field)
-                    if isinstance(val, str) and val.strip():
-                        part[field] = val.strip()
-            if ai.get("note"):
-                result["note"] = ai["note"]
-            result["model"] = "rule-based+ai"
-
-    return result
+    # Use enhance() for deterministic-first with confidence threshold and
+    # telemetry. Router only tidies description/brand/category.
+    merged = await enhance("parts-guide", payload, baseline)
+    return merged

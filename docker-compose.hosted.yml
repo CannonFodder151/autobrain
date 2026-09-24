@@ -51,7 +51,7 @@ x-core-env: &core-env
   # AB-INFRA-004: broker requires a password; lib-load-secrets derives the
   # authenticated REDIS_URL / CELERY_*_URL from this file at startup.
   REDIS_PASSWORD_FILE: /run/secrets/redis_password
-  AI_LOCAL_BASE_URL: http://ai:8001
+  AI_LOCAL_BASE_URL: http://backend:8001
 
 x-router-env: &router-env
   # Keep the STACK-LOCAL 9router (reachable via docker DNS on the Oracle VM).
@@ -160,7 +160,7 @@ services:
     # its default CMD runs the same topology as docker-compose.prod.yml.
     image: ghcr.io/cannonfodder151/autobrain-backend:hosted@sha256:14543848e3e428701be45afc9848642a5fc5b2c6a4e9d1356a6fd1fa3eba9462
     restart: unless-stopped
-    command: sh -c "export AI_ROUTER_API_KEY=$(cat /run/secrets/ai_router_api_key) && python -m app.db.bootstrap && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    command: sh -c "export AI_ROUTER_API_KEY=$(cat /run/secrets/ai_router_api_key) && python -m app.db.bootstrap && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && (uvicorn ai_app.main:app --host 0.0.0.0 --port 8001 &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
       <<: [*db-env, *core-env, *router-env]
       PYTHONPATH: /app
@@ -265,26 +265,26 @@ services:
         condition: service_healthy
     expose:
       - "8000"
+      - "8001"
     # Backend pinned to .15 (AUT-439): the frontend's static .14 was being
     # grabbed by the recreated backend during redeploys, stalling the stack.
     networks:
       default:
         ipv4_address: 172.18.0.15
 
-  ai:
+  # Market-data scraper only (AI gateway moved to backend container)
+  market-data:
     image: ghcr.io/cannonfodder151/autobrain-ai:hosted@sha256:c58a7c3d5817fd98d29055c5e9daeff6fca0c374fae0912c8c6761f298f1a3ca
     restart: unless-stopped
     # AUT-1739: adequate /dev/shm for Chromium (market-data scraper).
     shm_size: "256m"
-    # AUT-1242-C3: image CMD runs entrypoint.sh — AI gateway :8001 + market-data :8000 in one container.
+    command: ["sh", "-c", "cd /app/market-data && exec uvicorn main:app --host 0.0.0.0 --port 8000"]
     environment:
       <<: *router-env
-      AI_GATEWAY_API_KEY_FILE: /run/secrets/ai_gateway_api_key
       API_KEY_FILE: /run/secrets/market_data_api_key
     <<: *secrets
     expose:
       - "8000"
-      - "8001"
 
   # AUT-3153: the standalone `worker` service has been merged into `backend`
   # (see the backend command above — Celery worker+beat now run as a

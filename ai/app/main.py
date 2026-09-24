@@ -29,7 +29,7 @@ from pydantic import BaseModel
 
 from app.logging import get_logger, setup_logging
 from app.modules import MODULES
-from app.router_client import router_enabled, router_url
+from app.router_client import ai_telemetry_reset, ai_telemetry_snapshot, router_enabled, router_url
 
 logger = get_logger(__name__)
 
@@ -136,6 +136,19 @@ async def health() -> dict:
         "service": "autobrain-ai",
         "version": os.environ.get("APP_VERSION", "0.3.275"),
     }
+
+
+@app.get("/v1/telemetry")
+async def telemetry(_: None = Depends(require_gateway_key)) -> dict:
+    """Return AI vs deterministic usage counters per module (AUT-3813)."""
+    return {"telemetry": ai_telemetry_snapshot()}
+
+
+@app.post("/v1/telemetry/reset")
+async def telemetry_reset(_: None = Depends(require_gateway_key)) -> dict:
+    """Reset AI telemetry counters (admin only)."""
+    ai_telemetry_reset()
+    return {"status": "reset"}
 
 
 @app.get("/v1/modules")
