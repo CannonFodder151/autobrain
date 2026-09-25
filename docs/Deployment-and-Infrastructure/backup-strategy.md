@@ -6,16 +6,32 @@
 2. **MinIO bucket** — receipts, photos, uploads.
 3. **`.env`** — environment configuration (store separately, encrypted).
 
-## autobrain-backup service (recommended)
+## autobrain-backup service (Portainer-Host, EP2)
 
 The `autobrain-backup` service runs on the Portainer-Host (port 8080) and
-provides hourly/daily/weekly backups:
+provides hourly/daily/weekly backups for Demo/Default tiers:
 
 - **`autobrain-backup`** — web GUI, restore feature, health/stats, email alerts
   on failure/corruption, config on the docker host (`/srv/autobrain-backup/config`).
 - **`backup-agent`** — pulls backups hourly from the instance admin API
   (`/api/v1/admin-api/backup`) with the per-instance admin API key, combines to
   hourly/daily/weekly, stores under `/srv/autobrain-backup/agent-data`, retention 30.
+
+## autobrain-backup service (AutoBrain-Hosted, EP5 / Oracle Cloud)
+
+A separate backup stack runs on the Oracle Cloud VM (Portainer endpoint 5, stack #110)
+for the Hosted tier:
+
+- **Stack:** `autobrain-backup` (stack ID 110 on EP5)
+- **Services:** `autobrain-backup` + `autobrain-backup-agent`
+- **Schedule:** `backup-agent` pulls hourly from `GET /api/v1/admin-api/backup` on the
+  Hosted backend using the Hosted admin API key
+- **Volumes:**
+  - `autobrain-backup-data` — agent hourly/daily/weekly snapshots (retention 30)
+  - `autobrain-backup-config` — backup GUI config
+- **Secret provisioning:** Hosted secrets (admin API key, etc.) are seeded via
+  `scripts/seed-secrets.sh` on the Oracle VM (see docs/security.md "Oracle VM path
+  migration (AUT-1853)"). The `SECRETS_DIR` default is `/data/autobrain/secrets`.
 
 ## Admin JSON backup (instant, in-app)
 
