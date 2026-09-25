@@ -4,7 +4,7 @@ from base64 import urlsafe_b64decode
 from datetime import datetime
 from typing import Any, List, Optional
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 
 def _b64url_to_bytes(value: str) -> bytes:
@@ -59,7 +59,8 @@ class PasskeyRegistrationBegin(BaseModel):
     authenticator_selection: Optional[dict] = Field(default=None)
     exclude_credential_ids: List[str] = Field(default_factory=list)  # base64url
 
-    @validator("challenge")
+    @field_validator("challenge")
+    @classmethod
     def _challenge_must_be_valid_b64url(cls, v: str) -> str:
         try:
             _b64url_to_bytes(v)
@@ -90,7 +91,8 @@ class PasskeyRegistrationComplete(BaseModel):
         pattern="^(none|usb|nfc|ble|internal)$",
     )
 
-    @validator("credential_public_key", "credential_attestation", "credential_client_data_json")
+    @field_validator("credential_public_key", "credential_attestation", "credential_client_data_json")
+    @classmethod
     def _b64url_or_json(cls, v: str) -> str:
         """Accept either base64url or a JSON string."""
         # Try base64url decode first
@@ -129,7 +131,8 @@ class PasskeyAuthenticationBegin(BaseModel):
         pattern="^(required|preferred|discouraged)$",
     )
 
-    @validator("challenge")
+    @field_validator("challenge")
+    @classmethod
     def _challenge_must_be_valid_b64url(cls, v: str) -> str:
         try:
             _b64url_to_bytes(v)
@@ -161,7 +164,8 @@ class PasskeyAuthenticationComplete(BaseModel):
             return _json.loads(value)
         raise ValueError("credential_response must be a dict or stringified JSON")
 
-    @validator("credential_response")
+    @field_validator("credential_response")
+    @classmethod
     def _credential_response_must_be_dict(cls, v: Any) -> dict:
         return cls._normalize_credential_response(v)
 
