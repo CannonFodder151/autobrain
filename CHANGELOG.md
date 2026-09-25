@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-3049)
+- fix(frontend): replace `withValues(alpha:)` with `withOpacity(alpha:)` in servo_spy_screen.dart for dart2js arm64 compatibility (PR #608)
+
 ## [0.3.275] - 2026-09-21
 
 ### Added (AUT-3661)
