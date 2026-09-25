@@ -11,6 +11,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-3208)
+- fix(ci): grant docker socket access on Oracle VM arm64 runner so buildx can build multi-arch images. The arm64 runner (gh-runner-autobrain-arm64) lacked permission to connect to the docker daemon, causing `permission denied while trying to connect to the docker API` failures. Added a conditional step to `sudo chmod 666 /var/run/docker.sock` for arm64 builds in `build-hosted.yml`.
+
+
 ## [0.3.275] - 2026-09-21
 
 ### Added (AUT-3661)
