@@ -1,0 +1,6 @@
+git_url("https://github.com/CannonFodder151/autobrain-certificates")
+storage_mode("s3")
+s3_bucket("autobrain-ios-certificates")
+s3_region("us-east-1")
+type("appstore")
+app_identifier(["com.autobrain.autobrain"])

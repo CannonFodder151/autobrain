@@ -1,0 +1,11 @@
+{
+  "en-US": {
+    "name": "AutoBrain",
+    "subtitle": "Drive smarter, maintain better.",
+    "description": "AutoBrain turns your phone into an AI-powered car companion. Track trips, monitor vehicle health, find fuel, log maintenance, and plan routes — all from one dashboard that learns how you drive.",
+    "keywords": "car,ai,trip,obd,fuel,maintenance,driving,vehicle,companion,diagnostic",
+    "marketing_url": "https://autobrain.app",
+    "privacy_url": "https://autobrain.app/privacy",
+    "support_url": "https://autobrain.app/support"
+  }
+}

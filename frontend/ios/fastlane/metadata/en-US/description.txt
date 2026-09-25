@@ -1,0 +1,22 @@
+AutoBrain turns your phone into an AI-powered car companion. Track trips, monitor vehicle health, find fuel, log maintenance, and plan routes — all from one dashboard that learns how you drive.
+
+KEY FEATURES
+• Trip tracking and history with detailed route maps.
+• Real-time vehicle diagnostics and maintenance reminders.
+• Petrol price map so you always know where to fill up.
+• OBD-II companion support via AutoBrain hardware.
+• In-app purchases unlock pro diagnostics and advanced analytics.
+
+DRIVE SMARTER
+AutoBrain analyses each trip to surface fuel efficiency, driving patterns, and cost-per-kilometre trends. The AI advisor flags issues before they become expensive repairs.
+
+BUILT FOR ENTHUSIASTS
+Log every fill-up, service, and modification. Generate shareable reports for insurance, resale, or just bragging rights.
+
+PRIVACY
+Your trips and diagnostics stay on your device unless you choose to share. We do not sell your data.
+
+LEGAL
+Subscription auto-renews unless turned off at least 24 hours before the end of the current period. Manage in App Store Settings.
+
+Questions? Visit https://autobrain.app or follow @autobrain on social.
