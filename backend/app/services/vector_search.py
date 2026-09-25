@@ -3,6 +3,7 @@
 import json
 
 import httpx
+from redis.asyncio import Redis
 
 from app.core.config import settings
 from app.core.logging import get_logger
@@ -10,6 +11,18 @@ from app.core.logging import get_logger
 logger = get_logger(__name__)
 
 _EMBEDDING_DIM = settings.EMBEDDING_DIMENSION
+_EMBEDDING_CACHE_TTL = 3600  # 1 hour
+
+
+def _redis() -> Redis | None:
+    """Get Redis client, returning None if URL not configured."""
+    if not settings.REDIS_URL or "your-redis" in settings.REDIS_URL:
+        return None
+    try:
+        return Redis.from_url(settings.REDIS_URL, decode_responses=False)
+    except Exception:
+        logger.warning("redis_client_init_failed")
+        return None
 
 
 def _to_text(entity_type: str, data: dict) -> str:
@@ -142,8 +155,40 @@ async def _call_embedding_api(text: str) -> list[float] | None:
 
 
 async def generate_embedding(entity_type: str, data: dict) -> list[float] | None:
-    """Generate embedding vector for an entity. Returns None if router disabled."""
+    """Generate embedding vector for an entity. Returns None if router disabled.
+
+    Caches query embeddings in Redis (TTL 1h) to avoid re-embedding identical
+    queries. Falls back to direct API call on cache miss or Redis failure.
+    """
     text = _to_text(entity_type, data)
     if not text.strip():
         return None
-    return await _call_embedding_api(text)
+
+    r = _redis()
+    cache_key = f"emb:{entity_type}:{hash(text)}"
+
+    if r:
+        try:
+            cached = await r.get(cache_key)
+            if cached:
+                import pickle
+                try:
+                    emb = pickle.loads(cached)
+                    if _valid_embedding(emb):
+                        logger.debug("embedding_cache_hit", entity_type=entity_type)
+                        return emb
+                except Exception:
+                    pass
+        except Exception:
+            logger.warning("embedding_cache_read_failed")
+
+    emb = await _call_embedding_api(text)
+
+    if emb and r:
+        try:
+            import pickle
+            await r.setex(cache_key, _EMBEDDING_CACHE_TTL, pickle.dumps(emb))
+        except Exception:
+            logger.warning("embedding_cache_write_failed")
+
+    return emb
