@@ -9,6 +9,7 @@ test locks the pins deterministically.
 """
 
 from pathlib import Path
+import re
 
 REQ_FILES = [
     Path(__file__).resolve().parents[1] / "requirements.txt",
@@ -28,7 +29,9 @@ def _pins(req_file: Path) -> dict[str, tuple[int, ...]]:
         name, _, version = line.partition("==")
         name = name.strip()
         if name and version:
-            pins[name.lower()] = tuple(int(part) for part in version.split("."))
+            version_core = re.match(r"^(\d+(?:\.\d+)*)", version)
+            if version_core:
+                pins[name.lower()] = tuple(int(part) for part in version_core.group(1).split("."))
     return pins
 
 
@@ -51,7 +54,7 @@ def test_fastapi_and_starlette_above_cve_fixes() -> None:
 
 def test_pyjwt_replaces_python_jose_and_ecdsa() -> None:
     pins = _pins(REQ_FILES[0])
-    assert pins.get("pyjwt") is not None, "backend must pin PyJWT[crypto]"
+    assert pins.get("pyjwt") is not None or pins.get("pyjwt[crypto]") is not None, "backend must pin PyJWT[crypto]"
     assert "python-jose" not in pins and "ecdsa" not in pins, (
         "python-jose/ecdsa must not be reintroduced: ecdsa 0.19.2 (the latest "
         "published) carries PYSEC-2026-1325 and python-jose is unmaintained"
