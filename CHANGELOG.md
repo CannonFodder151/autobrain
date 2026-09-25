@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-3911)
+- feat(backend): vector search weight tuning per entity type — `VECTOR_SEARCH_WEIGHTS` (JSON per-entity multiplier), `VECTOR_SEARCH_SIMILARITY_THRESHOLD`, and `VECTOR_SEARCH_KEYWORD_WEIGHT` settings in `app.core.config.Settings`. `semantic_search()` now resolves weights at runtime, drops vector hits below the similarity floor, and scales vector scores by entity weight. Tuning knobs documented in `docs/Engineering/ai/vector.md`.
+
 ## [0.3.275] - 2026-09-21
 
 ### Added (AUT-3661)
