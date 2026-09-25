@@ -10,6 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+- feat(alembic): add migration for `fuel_price_snapshots` — the table was only
 
 ## [0.3.296] - 2026-10-02
 
