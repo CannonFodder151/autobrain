@@ -97,6 +97,27 @@ Results from both strategies are merged and deduplicated by entity ID. The final
 
 If 9Router is unreachable or the embedding fails, search falls back to keyword-only mode — the platform never breaks.
 
+### Tuning knobs (AUT-3911)
+
+Three env-driven knobs control how the hybrid merge ranks results:
+
+| Setting | Default | Purpose |
+|---------|---------|---------|
+| `VECTOR_SEARCH_WEIGHTS` | `{"diagnostic":1.0,"service":1.0,"modification":1.0,"receipt":1.0,"issue":1.0}` | Per-entity multiplier applied to the vector similarity score. JSON object; unknown entity types are ignored. |
+| `VECTOR_SEARCH_SIMILARITY_THRESHOLD` | `0.75` | Cosine similarity floor (0..1). Vector hits below this are dropped before ranking. |
+| `VECTOR_SEARCH_KEYWORD_WEIGHT` | `0.5` | Score assigned to every keyword hit. Vector hits use the entity weight directly. |
+
+Example override:
+
+```
+VECTOR_SEARCH_WEIGHTS='{"diagnostic":1.2,"service":0.9,"modification":1.1,"receipt":0.7,"issue":1.0}'
+VECTOR_SEARCH_SIMILARITY_THRESHOLD=0.8
+VECTOR_SEARCH_KEYWORD_WEIGHT=0.4
+```
+
+All three are read from `app.core.config.Settings` at runtime and applied in
+`backend/app/services/search.py::semantic_search` (see `_resolve_vector_weights`).
+
 > **Implementation note:** `backend/app/services/search.py` runs the keyword
 > ILIKE pass and merges/dedupes results; the vector similarity SQL is executed
 > in the same module with the embedding passed as a bound parameter (never

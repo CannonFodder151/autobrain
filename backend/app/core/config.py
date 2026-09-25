@@ -7,12 +7,21 @@ import secrets
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Known-insecure SECRET_KEY values (AUT-1181): the historic default and the
 # .env.example placeholder — both public in the repo, so forgeable.
 _INSECURE_SECRET_KEYS = ("", "change-me", "change-me-to-a-long-random-string")
+
+# Default per-entity vector weight multipliers (AUT-3911).
+DEFAULT_VECTOR_WEIGHTS: dict[str, float] = {
+    "diagnostic": 1.0,
+    "service": 1.0,
+    "modification": 1.0,
+    "receipt": 1.0,
+    "issue": 1.0,
+}
 
 
 class Settings(BaseSettings):
@@ -69,6 +78,17 @@ class Settings(BaseSettings):
     AI_ENABLED: bool = True  # AUT-3470: global toggle for deterministic-first mode
     EMBEDDING_MODEL: str = "text-embedding-3-small"
     EMBEDDING_DIMENSION: int = 1536  # text-embedding-3-small output size
+
+    # Vector search weight tuning per entity type (AUT-3911).
+    # JSON object mapping entity type -> weight multiplier. Empty = use defaults.
+    VECTOR_SEARCH_WEIGHTS: dict[str, float] = Field(
+        default_factory=lambda: dict(DEFAULT_VECTOR_WEIGHTS)
+    )
+    # Cosine similarity threshold for vector results (0..1). Results below
+    # this threshold are excluded from the vector pass.
+    VECTOR_SEARCH_SIMILARITY_THRESHOLD: float = 0.75
+    # Weight applied to keyword-match score (vector score uses entity weight directly).
+    VECTOR_SEARCH_KEYWORD_WEIGHT: float = 0.5
 
     # AI usage caps (AUT-302): per-user fixed-window burst + UTC-day total,
     # Redis-backed and enforced before any 9Router spend. 429 once exceeded.
