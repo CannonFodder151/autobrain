@@ -10,16 +10,17 @@ on:
   pull_request:
   workflow_dispatch:
 
-# Only one publish pipeline per branch at a time, but do NOT cancel an
-# in-flight run. The publish/buildx steps take many minutes; a newer push to
-# main (PR merge or auto-bump) arriving mid-publish would otherwise cancel it
-# and starve the latest commit (AUT-967, AUT-1756). Queue the newer run behind
-# the in-flight one so every push to main still publishes. The auto-bump commit
-# is tagged [skip ci] (scripts/auto-bump.sh) so it never re-triggers this
-# workflow and the in-flight publish is never cancelled by its own version cut.
+# Only one publish pipeline per branch at a time. Cancel stale runs so the
+# queue never grows: with 2 self-hosted x64 runners + 1 arm64 runner, each
+# rebuild of all 5 images takes many minutes, and a burst of merges to main
+# would otherwise leave 6+ runs queued behind each other, each rebuilding
+# everything (AUT-1029). The latest main head is the only one that matters —
+# cancel the older runs in the same concurrency group so only the newest
+# publishes. The auto-bump commit is tagged [skip ci] (scripts/auto-bump.sh)
+# so it never re-triggers this workflow.
 concurrency:
   group: dockerhub-publish-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   changelog-gate:
