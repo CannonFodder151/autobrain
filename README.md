@@ -11,6 +11,13 @@ AI-powered car enthusiast companion. Manage vehicles, track maintenance & fuel, 
 - **AU rego lookup API** — self-hosted Plate-API-Scraper (`rego-lookup-api` repo)
 - **Mobile app** — [`CannonFodder151/autobrain-mobile`](https://github.com/CannonFodder151/autobrain-mobile) (private)
 
+## Stack
+
+- **Database:** PostgreSQL 17 with **pgvector** extension (`pgvector/pgvector:pg17`) for semantic search
+- **Containers:** All services run as **non-root** (`autobrain` uid 1000) with healthchecks
+- **AI routing:** 9Router (OpenAI-compatible) for LLM + embeddings
+- **Federation:** Optional **federation hub** (Community Garage) for cross-instance social features
+
 ## Quick start (Docker)
 
 Requires Docker 24+ and Docker Compose v2. No other toolchain needed.

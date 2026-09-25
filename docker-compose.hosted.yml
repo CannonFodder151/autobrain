@@ -6,13 +6,16 @@
 # values come from ${SECRETS_DIR:-/data/autobrain/secrets} via the *_FILE pattern
 # (AUT-1533). Env must stay applied via the stack so redeploys never revert
 # SMTP2GO/SMTP_* (see AUT-97/AUT-101).
-# AUT-3153 (Phase 1a): the standalone `worker` service is merged into `backend`
+# AUT-3153 Phase 1a: the standalone `worker` service is merged into `backend`
 # (the backend image already runs Celery worker+beat — see docker/backend/Dockerfile
 # CMD and docker-compose.prod.yml). The hosted stack drops from 9 to 8 containers.
 # The separate autobrain-worker image is no longer referenced here; its build is
 # retired from CI (AUT-3172).
 # The fuel-poll tasks that used to live in the worker now run in the backend
 # container, so FUEL_*_FILE secrets moved from the worker block to backend env.
+# AUT-3153 Phase 2: the standalone `ai` service (AI gateway + market-data) is
+# merged into `backend`. The backend image now runs API (:8000), AI gateway
+# (:8001), market-data (:8002), and Celery worker+beat. Stack drops to 11 containers.
 
 # Secret-file pattern (AUT-1533): secret-class values are bind-mounted from
 # ${SECRETS_DIR:-/data/autobrain/secrets} (root:1000, 0640) and loaded into
@@ -51,7 +54,9 @@ x-core-env: &core-env
   # AB-INFRA-004: broker requires a password; lib-load-secrets derives the
   # authenticated REDIS_URL / CELERY_*_URL from this file at startup.
   REDIS_PASSWORD_FILE: /run/secrets/redis_password
-  AI_LOCAL_BASE_URL: http://ai:8001
+  # AI gateway and market-data now run in the backend container (AUT-3153 phase 2)
+  AI_LOCAL_BASE_URL: http://localhost:8001
+  MARKET_DATA_URL: http://localhost:8002
 
 x-router-env: &router-env
   # Keep the STACK-LOCAL 9router (reachable via docker DNS on the Oracle VM).
@@ -155,12 +160,14 @@ services:
       retries: 10
 
   backend:
-    # AUT-3153: the standalone Celery worker+beat service is merged into this
-    # container. The backend image already carries the worker dependencies and
-    # its default CMD runs the same topology as docker-compose.prod.yml.
+    # AUT-3153 Phase 2: AI gateway + market-data merged into backend container.
+    # The backend image now carries AI gateway, market-data scraper, and Celery.
+    # Runs: API (:8000), AI gateway (:8001), market-data (:8002), Celery worker+beat.
     image: ghcr.io/cannonfodder151/autobrain-backend:hosted@sha256:14543848e3e428701be45afc9848642a5fc5b2c6a4e9d1356a6fd1fa3eba9462
     restart: unless-stopped
-    command: sh -c "export AI_ROUTER_API_KEY=$(cat /run/secrets/ai_router_api_key) && python -m app.db.bootstrap && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    # Shmem for Playwright chromium (market-data scraper)
+    shm_size: "256m"
+    # Use the image's default CMD which runs all services
     environment:
       <<: [*db-env, *core-env, *router-env]
       PYTHONPATH: /app
@@ -169,7 +176,6 @@ services:
       AI_ROUTER_TIMEOUT_SECONDS: 120
       REGO_LOOKUP_URL: ${REGO_LOOKUP_URL:-}
       REGO_LOOKUP_API_KEY_FILE: /run/secrets/rego_lookup_api_key
-      MARKET_DATA_URL: ${MARKET_DATA_URL:-http://ai:8000}
       MARKET_DATA_API_KEY_FILE: /run/secrets/market_data_api_key
       # AUT-1858: petrol price map (NSW Fuel API, AUT-1813) — Hosted/Default only.
       # Keys arrive via secret files (AUT-1533, see scripts/seed-secrets.sh);
@@ -265,26 +271,19 @@ services:
         condition: service_healthy
     expose:
       - "8000"
+      - "8001"
+      - "8002"
     # Backend pinned to .15 (AUT-439): the frontend's static .14 was being
     # grabbed by the recreated backend during redeploys, stalling the stack.
     networks:
       default:
         ipv4_address: 172.18.0.15
 
-  ai:
-    image: ghcr.io/cannonfodder151/autobrain-ai:hosted@sha256:c58a7c3d5817fd98d29055c5e9daeff6fca0c374fae0912c8c6761f298f1a3ca
-    restart: unless-stopped
-    # AUT-1739: adequate /dev/shm for Chromium (market-data scraper).
-    shm_size: "256m"
-    # AUT-1242-C3: image CMD runs entrypoint.sh — AI gateway :8001 + market-data :8000 in one container.
-    environment:
-      <<: *router-env
-      AI_GATEWAY_API_KEY_FILE: /run/secrets/ai_gateway_api_key
-      API_KEY_FILE: /run/secrets/market_data_api_key
-    <<: *secrets
-    expose:
-      - "8000"
-      - "8001"
+  # AUT-3153 Phase 2: the standalone `ai` service (AI gateway + market-data)
+  # has been merged into the `backend` container. The backend image now runs
+  # API (:8000), AI gateway (:8001), market-data (:8002), and Celery worker+beat.
+  # This drops the hosted stack from 12 to 11 containers.
+  # The separate autobrain-ai image is no longer referenced here.
 
   # AUT-3153: the standalone `worker` service has been merged into `backend`
   # (see the backend command above — Celery worker+beat now run as a
@@ -366,7 +365,6 @@ services:
       start_period: 30s
     depends_on:
       - backend
-      - ai
 
   hub:
     # Community Garage federation hub (AUT-333) — deploy config only.

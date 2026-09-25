@@ -46,7 +46,9 @@
               "Engineering/developer-onboarding",
               "Engineering/versioning",
               "Engineering/task-pipeline",
-              "Engineering/change-validation-gate"
+              "Engineering/change-validation-gate",
+              "Engineering/product-rules",
+              "Engineering/module-graph"
             ]
           },
           {
@@ -71,6 +73,13 @@
               "Engineering/obd-integration",
               "Engineering/obd2-dongle/README",
               "Engineering/obd2-dongle/nodemcu32s-build-guide"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "home-assistant-integration",
+              "petrol-price-map"
             ]
           },
           {

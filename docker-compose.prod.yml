@@ -18,9 +18,10 @@ x-core-env: &core-env
   # AUT-1786: explicit passthrough for init-minio.sh and runtime uploads.
   MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-}
   MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-}
-  # AUT-2000: AI gateway runs inside the backend container on :8001,
-  # so localhost routing is correct (no separate `ai` service).
+  # AUT-2000 / AUT-3153: AI gateway and market-data run in the backend
+  # container on :8001 and :8002 respectively.
   AI_LOCAL_BASE_URL: http://localhost:8001
+  MARKET_DATA_URL: http://localhost:8002
   AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:?AI_GATEWAY_API_KEY must be set (prod fails closed)}
 
 x-backend-base: &backend-base
@@ -136,11 +137,11 @@ services:
       retries: 10
 
   # ── App services ───────────────────────────────────────────
-  # AUT-2000: backend image is the unified backend+ai image. The AI gateway
-  # (FastAPI app at /app/ai_app) runs as a co-process on :8001, alongside
-  # the backend API (:8000) and the Celery worker+beat. This collapses three
-  # compose services (backend, ai, worker) into one container, matching the
-  # dev compose and the backend Dockerfile's default CMD.
+  # AUT-2000: backend image is the unified backend+ai+market-data image.
+  # The AI gateway (FastAPI app at /app/ai_app) runs on :8001, market-data
+  # scraper runs on :8002, alongside the backend API (:8000) and the
+  # Celery worker+beat. This collapses four compose services (backend, ai,
+  # market-data, worker) into one container.
   backend:
     <<: *backend-base
     read_only: true
@@ -153,11 +154,13 @@ services:
       sh -c "/init-minio.sh
       && alembic upgrade head
       && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &)
+      && (uvicorn market-data.main:app --host 0.0.0.0 --port 8002 &)
       && (uvicorn ai_app.main:app --host 0.0.0.0 --port 8001 &)
       && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
     expose:
       - "8000"
       - "8001"
+      - "8002"
 
   frontend:
     build:
