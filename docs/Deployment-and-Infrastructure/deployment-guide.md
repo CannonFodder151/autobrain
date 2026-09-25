@@ -392,6 +392,32 @@ First boot runs `python -m app.db.bootstrap` (Alembic, falling back to
 > upgrade head` from a workstation against a clone of the hosted DB
 > (redacted secrets) before shipping a fix.
 
+### Alembic runbook (AUT-2065)
+
+**Canonical flow: always `alembic upgrade head` first.** `alembic stamp` is a
+recovery tool only — it marks a revision as applied WITHOUT running DDL. Using
+`stamp` to "skip" a broken migration masks missing columns/tables and causes
+runtime `UndefinedColumnError` (e.g. AUT-2046: `vehicles.fuel_type` and
+`vehicles.rego_state` were missing after a bad stamp).
+
+**Checklist before any `alembic stamp`:**
+
+1. Run `alembic upgrade head` and confirm it succeeds (or fails on a specific
+   migration you intend to fix).
+2. If you must stamp (e.g. after manually applying DDL to fix a broken
+   migration), verify the schema FIRST:
+   ```bash
+   docker compose exec backend psql -U $POSTGRES_USER -d $POSTGRES_DB \
+     -c "SELECT column_name FROM information_schema.columns WHERE table_name='<target_table>'"
+   ```
+   Confirm all required columns exist.
+3. Only then: `alembic stamp <revision>` to align the version table.
+4. After stamping, run `alembic upgrade head` again to confirm no further
+   migrations are pending.
+
+**Never stamp to "fix" a failed upgrade.** Fix the migration code, then
+`alembic upgrade head`.
+
 ```bash
 docker compose exec backend alembic revision --autogenerate -m "change"
 docker compose exec backend alembic upgrade head
