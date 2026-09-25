@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-3005)
+- feat(alembic): add migration for fuel_price_snapshots table — explicit migration creates the table with columns matching the FuelPriceSnapshot model (id, state, station_code, station_name, brand, address, latitude, longitude, fuel_type, price, currency, updated_at, fetched_at, previous_price, previous_price_at) and unique constraint uq_fuel_price_snapshot_station_fuel on (state, station_code, fuel_type); guarded with _has_table for idempotency on databases where the table was created by the bootstrap create_all fallback
+
 ## [0.3.275] - 2026-09-21
 
 ### Added (AUT-3661)
