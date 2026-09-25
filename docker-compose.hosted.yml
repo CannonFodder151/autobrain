@@ -169,8 +169,8 @@ services:
       AI_ROUTER_TIMEOUT_SECONDS: 120
       REGO_LOOKUP_URL: ${REGO_LOOKUP_URL:-}
       REGO_LOOKUP_API_KEY_FILE: /run/secrets/rego_lookup_api_key
-      MARKET_DATA_URL: ${MARKET_DATA_URL:-http://ai:8000}
-      MARKET_DATA_API_KEY_FILE: /run/secrets/market_data_api_key
+      # AUT-3810 Phase 1a: market-data scraper now runs as local Celery tasks.
+      # MARKET_DATA_URL is intentionally not set so the local fallback is used.
       # AUT-1858: petrol price map (NSW Fuel API, AUT-1813) — Hosted/Default only.
       # Keys arrive via secret files (AUT-1533, see scripts/seed-secrets.sh);
       # enabled for the managed tiers. WA FuelWatch = no key; QLD/VIC planned.
@@ -271,20 +271,9 @@ services:
     networks:
       default:
         ipv4_address: 172.18.0.15
-
-  # Market-data scraper only (AI gateway moved to backend container)
-  market-data:
-    image: ghcr.io/cannonfodder151/autobrain-ai:hosted@sha256:c58a7c3d5817fd98d29055c5e9daeff6fca0c374fae0912c8c6761f298f1a3ca
-    restart: unless-stopped
-    # AUT-1739: adequate /dev/shm for Chromium (market-data scraper).
+    # AUT-3810 Phase 1a: market-data scraper moved into backend Celery tasks;
+    # shm_size needed for Chromium (Playwright) in scraper tasks.
     shm_size: "256m"
-    command: ["sh", "-c", "cd /app/market-data && exec uvicorn main:app --host 0.0.0.0 --port 8000"]
-    environment:
-      <<: *router-env
-      API_KEY_FILE: /run/secrets/market_data_api_key
-    <<: *secrets
-    expose:
-      - "8000"
 
   # AUT-3153: the standalone `worker` service has been merged into `backend`
   # (see the backend command above — Celery worker+beat now run as a
@@ -366,7 +355,6 @@ services:
       start_period: 30s
     depends_on:
       - backend
-      - ai
 
   hub:
     # Community Garage federation hub (AUT-333) — deploy config only.
