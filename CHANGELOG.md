@@ -11,6 +11,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-3208)
+- fix(ci): grant docker socket access on Oracle VM arm64 runner so buildx can build multi-arch images. The arm64 runner (gh-runner-autobrain-arm64) lacked permission to connect to the docker daemon, causing `permission denied while trying to connect to the docker API` failures. Added a conditional step to `sudo chmod 666 /var/run/docker.sock` for arm64 builds in `build-hosted.yml`.
+
+### Added (AUT-2203)
+- test(backend): unit tests for cost_per_km and avg_fill_cost annotation in app/services/fuel_servo.py. Five deterministic cases covering normal calculation, missing vehicle stats, missing fuel logs, missing L/100km, and rounding consistency. Pure Python, no DB or AI dependencies.
+
+### Fixed (AUT-3189)
+- fix(env): declare `FUEL_SA_API_KEY` and `FUEL_SA_ENABLED` in `.env.example` so hosted operators can provision the SA SAFPIS feed referenced by `docker-compose.hosted.yml` and `docker-compose.prod.yml`. Previously these keys were referenced by compose but missing from the operator-facing env inventory, causing the AUT-2390 compose-config-diff gate to silently miss them.
+
+
 ### Added (AUT-2203)
 - test(backend): unit tests for cost_per_km and avg_fill_cost annotation in app/services/fuel_servo.py. Five deterministic cases covering normal calculation, missing vehicle stats, missing fuel logs, missing L/100km, and rounding consistency. Pure Python, no DB or AI dependencies.
 
