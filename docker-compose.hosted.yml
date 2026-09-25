@@ -169,7 +169,7 @@ services:
       AI_ROUTER_TIMEOUT_SECONDS: 120
       REGO_LOOKUP_URL: ${REGO_LOOKUP_URL:-}
       REGO_LOOKUP_API_KEY_FILE: /run/secrets/rego_lookup_api_key
-      MARKET_DATA_URL: ${MARKET_DATA_URL:-http://ai:8000}
+      MARKET_DATA_URL: ${MARKET_DATA_URL:-http://market-data:8000}
       MARKET_DATA_API_KEY_FILE: /run/secrets/market_data_api_key
       # AUT-1858: petrol price map (NSW Fuel API, AUT-1813) — Hosted/Default only.
       # Keys arrive via secret files (AUT-1533, see scripts/seed-secrets.sh);
@@ -366,7 +366,6 @@ services:
       start_period: 30s
     depends_on:
       - backend
-      - ai
 
   hub:
     # Community Garage federation hub (AUT-333) — deploy config only.
