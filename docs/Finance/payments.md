@@ -36,7 +36,7 @@ Two paid tiers plus a free tier. Prices in AUD (AUT-523); source of truth is `sc
 - `/billing/pricing` exposes `trial_days: {monthly: 7, yearly: 0}` per plan;
   `/auth/me` exposes `trial_days` and `trial_available` (true until the trial
   is consumed). Access during the trial comes from Stripe status `trialing`,
-   already in `ACTIVE_STATUSES`.
+  already in `ACTIVE_STATUSES`.
 - Enforcement lives in `backend/app/services/billing.py` (trial applied/blocked
   at checkout start) and `backend/app/api/v1/auth.py` (`/auth/me` fields).
 
@@ -69,7 +69,17 @@ The store builds of the mobile app sell the same licences through Apple App Stor
 
 IAP env (empty = disabled): `IAP_GOOGLE_SERVICE_ACCOUNT_JSON`, `IAP_GOOGLE_PACKAGE_NAME`, `IAP_APPLE_ISSUER_ID`, `IAP_APPLE_KEY_ID`, `IAP_APPLE_PRIVATE_KEY`, `IAP_APPLE_BUNDLE_ID`, `IAP_REFRESH_WINDOW_DAYS`, `IAP_GOOGLE_PUBSUB_AUDIENCE`. Credentials are secrets — set them on the deployment env, never commit.
 
+## Related Finance Docs
+
+- **[Budget Tracking](budget-tracking.md)** — monthly budget allocation, revenue vs. cost, variance analysis
+- **[Infrastructure Costs](infrastructure-costs.md)** — Oracle Cloud + on-prem spend, cost optimization
+- **[Migration Budget](migration-budget.md)** — Phase 3 Oracle Cloud migration cost case
+
 ## References
 
 - `scripts/stripe-setup.py`, `backend/app/services/billing.py`, `backend/app/services/iap.py`, `backend/app/api/v1/billing.py`
 - `docker-compose.hosted.yml` (Stripe env), `.env.example` (Stripe + IAP blocks)
+
+---
+
+*Last updated: 2026-09-26 | Owner: CFO | Sanitised public mirror — no secrets, no internal links*

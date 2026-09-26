@@ -225,6 +225,10 @@ _SCHEMAS: dict[str, dict[str, tuple]] = {
     "resale": {
         "rrp": (int, float, type(None)),
         "used_price": (int, float, type(None)),
+        "estimated_value": (int, float, type(None)),
+        "low": (int, float, type(None)),
+        "high": (int, float, type(None)),
+        "currency": (str,),
         "factors": (dict,),
         "recommendations": (list,),
         "trend": (list,),
@@ -271,6 +275,7 @@ _SCHEMAS: dict[str, dict[str, tuple]] = {
         "summary": (str,),
         "red_flags": (list,),
         "green_flags": (list,),
+        "deal_score": (int, float, type(None)),
         "confidence": (int, float),
     },
 }
