@@ -6,8 +6,7 @@ is tried first and a rule-based fallback keeps the service available offline.
 Security: /v1/* requires the shared gateway key (AI_GATEWAY_API_KEY, the same
 value the backend sends as a Bearer token) and bodies are capped at
 AI_GATEWAY_MAX_BODY_BYTES. Auth FAILS CLOSED: when the key is unset the
-gateway rejects /v1 calls with 401 unless the explicit development opt-out is
-set (AI_GATEWAY_AUTH_DISABLED=1).
+gateway rejects /v1 calls with 401. No environment variable may bypass auth.
 
 Cost control: an in-memory fixed-window limiter (per client IP + global)
 rejects with 429 when authenticated traffic exceeds
@@ -53,10 +52,6 @@ def _gateway_key() -> str:
     return os.environ.get("AI_GATEWAY_API_KEY", "")
 
 
-def _auth_disabled() -> bool:
-    return os.environ.get("AI_GATEWAY_AUTH_DISABLED") == "1"
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
@@ -90,8 +85,6 @@ async def enforce_payload_size(request: Request, call_next):
 
 
 def require_gateway_key(authorization: str | None = Header(default=None)) -> None:
-    if _auth_disabled():
-        return
     expected = _gateway_key()
     if not expected:
         raise HTTPException(
