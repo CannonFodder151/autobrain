@@ -21,6 +21,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../community_garage/widgets/premium_gate.dart';
 import '../../core/api_client.dart';
 import '../../core/auth_state.dart';
+import '../../core/config.dart';
 import '../../core/fuel_types.dart';
 import '../../core/geoloc.dart';
 import '../../core/models.dart';
@@ -474,9 +475,10 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
                 ),
                 children: [
                   TileLayer(
-                    urlTemplate: isDark
+                    urlTemplate: (isDark
                         ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-                        : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+                        : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png') +
+                        cartoKeyParam(AppConfig.cartoApiKey),
                     subdomains: const ['a', 'b', 'c', 'd'],
                     userAgentPackageName: 'com.autobrain',
                   ),

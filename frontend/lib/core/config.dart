@@ -20,6 +20,9 @@ class AppConfig {
     defaultValue: 'wss://hosted.autobrainservice.app/ws',
   );
 
+  /// CARTO basemap API key injected via --dart-define=CARTO_API_KEY.
+  static const String cartoApiKey = String.fromEnvironment('CARTO_API_KEY');
+
   static const String _prefsKey = 'server_config';
 
   /// Whether a server has been resolved yet (picker only runs on mobile).
