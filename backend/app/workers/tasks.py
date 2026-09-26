@@ -432,7 +432,7 @@ def backup_offsite_hourly() -> None:
     """
     from app.services.backup_offsite import run_backup_offsite
 
-    run_backup_offsite()
+    _run(run_backup_offsite())
 
 
 @shared_task
