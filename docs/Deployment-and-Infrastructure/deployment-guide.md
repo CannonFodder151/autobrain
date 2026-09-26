@@ -397,6 +397,20 @@ docker compose exec backend alembic revision --autogenerate -m "change"
 docker compose exec backend alembic upgrade head
 ```
 
+### ⚠️ Never `alembic stamp` to mask missing columns (AUT-2046 / AUT-2065)
+
+**Root cause:** A previous deploy applied `alembic stamp aut1819_fuel_type` without verifying the actual schema. The stamp masked that `vehicles.fuel_type` and `vehicles.rego_state` columns were missing. `/vehicles` returned 500 until the missing columns were `ALTER TABLE`ed in.
+
+**Checklist before using `alembic stamp`:**
+- [ ] Run `alembic upgrade head` first; only stamp if the schema is already correct.
+- [ ] Verify required columns exist:
+  ```bash
+  docker compose exec postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+    -c "SELECT column_name FROM information_schema.columns WHERE table_name='vehicles';"
+  ```
+  Confirm every column the app expects is present before stamping.
+- [ ] Never stamp a revision that adds columns/tables as a substitute for running the migration.
+
 ## Rollback
 
 ```bash
