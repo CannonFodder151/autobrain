@@ -169,6 +169,8 @@ async def upload_fuel_receipt(
             receipt.vendor = parsed.get("vendor")
             receipt.total = parsed.get("total_cost")
             receipt.invoice_date = parsed.get("date")
+        else:
+            logger.warning("fuel_ocr_empty_result", vehicle_id=vehicle_id, filename=filename)
     else:
         receipt.ocr_status = "done"
     await db.commit()
