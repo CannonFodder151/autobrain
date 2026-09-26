@@ -3,9 +3,11 @@
 All settings are read from environment variables (see .env.example).
 """
 
+import ipaddress
 import secrets
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import urlparse
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -13,6 +15,79 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Known-insecure SECRET_KEY values (AUT-1181): the historic default and the
 # .env.example placeholder — both public in the repo, so forgeable.
 _INSECURE_SECRET_KEYS = ("", "change-me", "change-me-to-a-long-random-string")
+
+# AUT-3977: SSRF guard on BACKUP_OFFSITE_URL. The off-site backup task
+# concatenates this value straight into HTTP request URLs, so an unvalidated
+# env var is a full SSRF primitive out of the backend container (cloud
+# metadata at 169.254.169.254, internal services, external exfil endpoints).
+# Fail closed: only autobrain-backup* hosts or an explicit allowlist pass.
+_OFFSITE_HOST_PREFIX = "autobrain-backup"
+_LOOPBACK_HOSTS = ("localhost", "ip6-localhost", "ip6-loopback")
+
+
+def _validate_offsite_url(url: str, allowlist: list[str]) -> None:
+    """Raise ValueError unless `url` points at an authorised internal host.
+
+    Empty URLs are the caller's business ("disabled") and are not validated.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(
+            f"BACKUP_OFFSITE_URL must be an http:// or https:// URL, "
+            f"got scheme {parsed.scheme!r}"
+        )
+    host = (parsed.hostname or "").lower()
+    if not host:
+        raise ValueError("BACKUP_OFFSITE_URL has no host")
+
+    allowed = {h.lower() for h in allowlist}
+
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        ip = None  # DNS name, not an IP literal
+
+    if ip is not None:
+        # IP literal: reject loopback, link-local (cloud metadata) and public
+        # ranges outright. RFC1918 literals need an explicit allowlist entry
+        # (a hostname prefix match is meaningless for an IP).
+        if ip.is_loopback or ip.is_link_local:
+            raise ValueError(
+                f"BACKUP_OFFSITE_URL host {host} is loopback/link-local "
+                f"(SSRF risk: metadata or local probe)"
+            )
+        if ip.is_global:
+            raise ValueError(
+                f"BACKUP_OFFSITE_URL host {host} is a public IP (SSRF risk); "
+                f"only RFC1918 private addresses are allowed"
+            )
+        if host not in allowed:
+            raise ValueError(
+                f"BACKUP_OFFSITE_URL host {host} is a private IP literal not "
+                f"present in BACKUP_OFFSITE_HOST_ALLOWLIST (SSRF risk)"
+            )
+        return
+
+    # DNS name: reject the obvious loopback aliases, then require the
+    # autobrain-backup* prefix or an explicit allowlist entry. The match is
+    # anchored on a label boundary ("-", "." or exact) so that
+    # "attacker-autobrain-backupx.evil.com" cannot slip through.
+    if host in _LOOPBACK_HOSTS:
+        raise ValueError(
+            f"BACKUP_OFFSITE_URL host {host} is loopback (SSRF risk)"
+        )
+    if (
+        host in allowed
+        or host == _OFFSITE_HOST_PREFIX
+        or host.startswith(_OFFSITE_HOST_PREFIX + ".")
+        or host.startswith(_OFFSITE_HOST_PREFIX + "-")
+    ):
+        return
+    raise ValueError(
+        f"BACKUP_OFFSITE_URL host {host!r} is not authorised; only "
+        f"{_OFFSITE_HOST_PREFIX}* hostnames or BACKUP_OFFSITE_HOST_ALLOWLIST "
+        f"entries are permitted (SSRF risk)"
+    )
 
 
 class Settings(BaseSettings):
@@ -183,6 +258,10 @@ class Settings(BaseSettings):
     BACKUP_OFFSITE_INGEST_KEY: str = ""       # X-Ingest-Key for /api/backup/ingest
     BACKUP_OFFSITE_INGEST_KEY_FILE: str = ""  # secret-file fallback
     BACKUP_OFFSITE_INSTANCE: str = ""         # instance id appended as ?instance= to all calls
+    # AUT-3977: SSRF allowlist for BACKUP_OFFSITE_URL hosts beyond the
+    # autobrain-backup* prefix. JSON list in env (same convention as
+    # CORS_ALLOWED_ORIGINS), e.g. '["backup.example.internal","10.0.0.5"]'.
+    BACKUP_OFFSITE_HOST_ALLOWLIST: list[str] = []
 
     # Admin API key: enables machine-to-machine user management via X-Admin-API-Key.
     ADMIN_API_KEY: str = ""  # leave empty to disable the /admin-api endpoints
@@ -358,6 +437,21 @@ class Settings(BaseSettings):
             raise ValueError(
                 "STRIPE_WEBHOOK_SECRET is required when STRIPE_SECRET_KEY is set "
                 "(whsec_... from the Stripe Dashboard) — unsigned webhooks are refused"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_backup_offsite_url(self) -> "Settings":
+        """AUT-3977: SSRF guard — reject unauthorised BACKUP_OFFSITE_URL hosts.
+
+        Fails closed at startup. An empty URL means "off-site backup disabled"
+        and is left alone; anything non-empty must resolve to an authorised
+        host. This is a model validator rather than a field validator because
+        the check needs BACKUP_OFFSITE_HOST_ALLOWLIST, which is a sibling field.
+        """
+        if self.BACKUP_OFFSITE_URL:
+            _validate_offsite_url(
+                self.BACKUP_OFFSITE_URL, self.BACKUP_OFFSITE_HOST_ALLOWLIST
             )
         return self
 
