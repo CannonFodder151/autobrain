@@ -203,7 +203,7 @@ async def metrics() -> PlainTextResponse:
             lines.append(f'autobrain_ai_confidence_bucket{{module="{module}",le="{(idx + 1) / 10:.1f}"}} {cumulative}')
         lines.append(f'autobrain_ai_confidence_bucket{{module="{module}",le="+Inf"}} {cumulative}')
         lines.append(f'autobrain_ai_confidence_count{{module="{module}"}} {cumulative}')
-        lines.append(f'autobrain_ai_confidence_sum{{module="{module}"}} {total_sum}')
+        lines.append(f'autobrain_ai_confidence_sum{{module="{module}"}} {round(total_sum, 4)}')
 
     cost = ai_cost_snapshot()
     counter("autobrain_router_requests_total", "9Router requests that returned token usage.", "counter", cost, "requests")
