@@ -1,101 +1,96 @@
-# Community Garage (AUT-294 / AUT-332)
+# Social Media Strategy
 
-Federated, privacy-preserving social layer. Every AutoBrain instance keeps its
-own data (Postgres + MinIO); servers that opt in register with a central
-federation hub and exchange build posts. Display identity: `<Display name> from
-<Server Name>`.
+## Overview
 
-**Status:** backend only. No publish until the P3 QA/security gate is green.
+AutoBrain's social presence focuses on **LinkedIn and Facebook** as primary channels. Twitter/X is used for engineering threads. Instagram Reels are experimental. Discord is the community hub (not a marketing channel). All publishing routes through **Buffer** (MCP integration) with human CMO approval in Discord `#marketing`.
 
-## Admin toggles (`/api/v1/admin/social`)
+## Channels & Configuration
 
-| Toggle | Off behaviour |
-|---|---|
-| `feature_enabled` | All `/social/*` routes return `403 "Disabled by your admin"` |
-| `federation_enabled` | Feed still works, local builds only; no hub register/outbox/inbox |
+| Platform | Channel | Buffer Channel ID | Page/Handle | Status |
+|----------|---------|-------------------|-------------|--------|
+| LinkedIn | Company Page | `6a78595bb2d9d57743445c3c` | autobrainservice ("AutoBrain") | Active |
+| Facebook | Page | `6a7859acb2d9d57743445d31` | AutoBrain | Active |
+| Twitter/X | Profile | Not in Buffer | @autobrainservice | Manual only |
+| Instagram | Profile | Not in Buffer | @autobrainservice | Experimental (Reels) |
+| Threads | Profile | Not in Buffer | @autobrainservice | Not used |
+| Bluesky | Profile | Not in Buffer | — | Not used |
+| YouTube | Channel | Not in Buffer | AutoBrain | Not used |
 
-Toggles persist in the singleton `social_server_config` row (seeded from env
-`SOCIAL_FEATURE_ENABLED` / `SOCIAL_FEDERATION_ENABLED` on first run). The admin
-API (`GET/PATCH /admin/social`, `POST /admin/social/register`,
-`POST /admin/social/unregister`) flips them at runtime.
+**Buffer org:** "My Organization" (auto-detected via MCP).
 
-Registration needs `SOCIAL_FEDERATION_HUB_URL` on the backend (default
-`https://hub.autobrainservice.app`; wired in all three compose files, AUT-532).
-AutoBrain's own stacks set `SOCIAL_FEDERATION_HOSTED=true` (free bundled
-license, docs R5a); self-hosted servers leave it unset/false and pay $20/yr at
-join. With no hub URL the register route returns `502 hub not configured`.
+## Publishing Rules (Buffer MCP)
 
-## Entitlement (rev 4)
+Verified in AUT-163:
 
-Every social route requires premium (`free_account == False`). Demo accounts
-keep read-only access (curated demo feed); write routes reject the demo role.
+- **Scheduling type:** `automatic` (required — `notification` rejected: "Notification scheduling is not supported").
+- **Facebook posts:** Require `metadata.facebook.type` (`post` | `story` | `reel`).
+- **Draft-first:** Always `saveToDraft: true` until human CMO approves. Never auto-publish without sign-off.
+- **Queue mode:** `mode: addToQueue` (draft = queue slot + approval).
+- **Image assets:** `assets[].image.url` (public URL); `altText` in `image.metadata.altText`.
+- **LinkedIn:** Supports link preview via `metadata.linkedin.linkAttachment`.
+- **Facebook:** Supports link preview via `metadata.facebook.linkAttachment`.
 
-## API
+## Content Pillars
 
-- `GET /social/feed` — published builds (local + remote, desc).
-- `GET /social/my-posts` — the caller's own published builds (My Builds tab).
-- `POST /social/posts` — share a vehicle as a build: `{vehicle_id, caption?,
-  share_scope?, photo_ids?}`. Snapshot is built deterministically from the
-  vehicle + mods (no AI). Outbox push happens when federation is on.
-- `GET/DELETE /social/posts/{id}` — detail / unshare (takedown). Authors may
-  unshare their own builds; admins may remove any build on their server (local
-  or federated copy) straight from the community pages. Deleting a
-  locally-hosted build fans a `remove` event out via the hub, so federated
-  copies disappear from every server's community hub (AUT-902).
-- `PATCH /social/posts/{id}` — edit the build's caption `{caption?}` (owner-only).
-- `POST/GET /social/posts/{id}/comments`, `POST/GET /social/posts/{id}/likes`.
-- `POST /social/posts/{id}/share-link` → `{token, url}`;
-  `GET /social/share/{token}` resolves it.
-- `POST /social/posts/{id}/report` `{reason}` — report a build (AUT-896).
-  Records a `social_build_flags` row locally and pushes a hub-local `report`
-  event (AUT-896) so the federation-hub operator sees it in the Reported posts
-  queue. Idempotent per user per post; hub failures never fail the report.
-- `POST /social/uploads` — multipart image; webp-compressed on upload
-  (`app/social/media.py`), stored in MinIO, returned as a signed short-lived URL.
-- `GET/POST /social/issues...` — the Issues Blog (`app/api/v1/issues.py`).
-  Posts, replies and answers federate like builds (AUT-756): outbox payloads
-  carry `type: "issue"` and the sync loop routes them into `social_issue_posts`
-  with `origin="remote"` + the origin's signed photo URLs.
-  - `GET /social/issues?mine=true` — the caller's own posts (My Issues, AUT-832).
-  - `POST /social/issues/{id}/flag` — report a post; deduped per user per post.
-  - `POST /social/issues/{id}/comments/{cid}/flag` — report a comment (AUT-832);
-    deduped per user per comment.
-- `GET /admin/issues/review` — **moderation hub (AUT-832)**: every flagged post
-  and comment with reporting reason + author, newest first.
-- `DELETE /admin/issues/posts/{id}` / `DELETE /admin/issues/comments/{cid}` —
-  admin deletes a reported entry (cascades flags/photos).
-- `POST /admin/users/{id}/social-ban` / `social-unban` — suspend a user from
-  posting in Community Garage (hides/restores their posts; write routes reject
-  the ban via `require_premium_write`).
+| Pillar | Description | Channels | Frequency |
+|--------|-------------|----------|-----------|
+| **Product education** | How-to, feature spotlights, FAQ | LinkedIn, Facebook, Blog | 2–3×/week |
+| **Engineering transparency** | Architecture decisions, deterministic-first AI, container consolidation | LinkedIn, Twitter/X, Blog | 1–2×/week |
+| **Self-host advocacy** | Docker, MIT license, data ownership, VPS guides | LinkedIn, Facebook, Reddit, Blog | 1×/week |
+| **Customer stories** | User garages, fuel savings, rego wins | LinkedIn, Facebook, Instagram | 1×/week |
+| **Changelog / releases** | Version announcements, bug fixes | Discord #changelog, LinkedIn | Per release |
+| **Community Garage teaser** | "Coming soon" federation, waitlist | LinkedIn, Facebook, Discord #updates | Monthly until launch |
 
-## Share scope (req 11)
+## Approval Gates (MANDATORY)
 
-Per-build opt-in (`social_share_scopes`). Default minimal: photos + specs +
-mods. `allow_odometer` and `allow_notes` are opt-in. Redaction is applied when
-the snapshot is built/served — never stored without consent.
+Per company policy (AGENTS.md):
 
-## Federation client (`app/social/federation.py`)
+1. **Every asset is draft only** until the human CMO approves in Discord `#marketing` via the n8n Reporter embed.
+2. **Full publishable content must be inline in the approval embed:** headline, body text, captions, hashtags, CTAs, target channel + timing.
+3. **Human CMO has no Paperclip access** — never point them at an issue link.
+4. **No auto-post, no auto-schedule.** Only schedule/publish after approval.
+5. **Record approval on the issue** and report back what shipped.
 
-Origin-server side only, matching the hub service contract (private repo
-`autobrain-federation-hub`, AUT-333):
+## Content Creation Workflow
 
-- `POST {hub}/v1/register` `{server_name, email, public_key, hosted}` →
-  `{server_id, api_key}`. `public_key` is a hex ed25519 key the client
-  generates at registration; `api_key` is shown once and stored. `hosted`
-  (`SOCIAL_FEDERATION_HOSTED`) marks AutoBrain-hosted servers (licensed free).
-- Signed federation requests carry `X-Server-Id`, `X-Timestamp`,
-  `X-Signature` (ed25519 over `<method>\n<path>\n<timestamp>\n<sha256(body)>`)
-  and `X-Api-Key` — the same scheme the hub verifies (see the private repo).
-- `POST {hub}/v1/outbox` build metadata + signed photo URLs; `GET {hub}/v1/inbox`
-  → `{builds: [...]}` (remote builds stored as `origin="remote"` with their
-  snapshot JSON; media fetched on demand). Hub write ops require a valid license.
+```
+1. Social Media Manager drafts copy + art direction      → Outline "Social Queue" doc
+2. Generate image (deterministic card or AI fallback)     → AI gateway /v1/social-image
+3. Host PNG at public URL                                 → MinIO public / GitHub raw
+4. Create draft post in Buffer                            → Buffer MCP create_post (saveToDraft=true)
+5. Post approval embed to Discord #marketing              → n8n Reporter
+6. Human CMO approves (👍 reaction or reply "approved")   → Discord
+7. CMO agent switches Buffer post to scheduled/published  → Buffer MCP edit_post
+8. Report shipped to Discord #updates / #changelog        → n8n Reporter
+```
 
-Every hub call is resilient — failures are logged and never break the local
-feed. Remote builds are never re-federated (no loops). **Zero billing code on
-end servers** (rev 7); Stripe lives on the hub only.
+## Image Generation
 
-## Tests
+See [Social Image Generation](./social-image-generation.md) for the deterministic-first pipeline (Pillow card generator + Pollinations AI fallback). Module: `ai/app/modules/social_image.py` → `POST /v1/social-image`.
 
-`backend/tests_social/test_social.py` — self-contained (own sqlite engine +
-`get_db` override; no Postgres/MinIO needed): run with
-`docker compose exec backend pytest tests_social`.
+## n8n Automation
+
+- **WF-4 (Social Queue):** Reads Outline "Social Queue" doc → generates images → posts to Buffer. **Blocked:** n8n has no Buffer credential/node installed. Current path is agent-driven (CMO agent uses Buffer MCP tools).
+- **Lead capture:** `lead.js` on website → n8n webhook → Discord `#support` thread + Outline log.
+- **Weekly digest:** n8n cron (Mondays) → compiles changelog + metrics → Discord `#roadmap` embed.
+
+## Metrics & Reporting
+
+- **Buffer analytics:** Per-post (reactions, comments, impressions) + aggregated (date range, channel filter) via `get_aggregated_post_metrics`.
+- **Weekly digest** → Discord `#roadmap`: top posts, engagement rate, follower delta.
+- **Monthly review** → Discord `#updates`: funnel (impressions → clicks → demo signups → hosted activations).
+
+## Crisis / Incident Comms
+
+- Deployment team owns triage (Discord `#incidents`).
+- CMO reports **customer-facing impact only** in `#incidents` + `#support`.
+- No speculative posts. Approved holding statement template in Outline "Incident Comms".
+
+## Related Docs
+
+- [Social Image Generation](./social-image-generation.md) — image pipeline
+- [Content Calendar](./content-calendar.md) — scheduled campaigns
+- [Growth Metrics](./growth-metrics.md) — KPIs, funnel, Buffer analytics
+- [Website Documentation](./website.md) — site pages, lead capture
+
+Source: Buffer MCP verified channels (AUT-163), Phase 1 content calendar (AUT-3972), AGENTS.md approval policy.
