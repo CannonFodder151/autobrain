@@ -234,7 +234,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ? 'Enable two-factor authentication'
                         : _mfaStep
                             ? 'Enter your verification code'
-                            : 'Your garage, your data, AI-powered.',
+                            : 'Your garage, your data — deterministic-first AI.',
                     style: const TextStyle(color: Colors.white70, fontSize: 15),
                   ),
                   const SizedBox(height: 32),
@@ -258,6 +258,29 @@ class _LoginScreenState extends State<LoginScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
+                            if (_isDemo)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 10, horizontal: 14),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .primary
+                                      .withOpacity(0.08),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  'Demo account is pre-filled and read-only. Try diagnostics, valuations and receipt scanning — every feature still works with the AI router disabled.',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onPrimaryContainer,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            const SizedBox(height: 4),
                           if (_mfaSetupStep) ...[
                             if (_mfaQr != null)
                               Center(
