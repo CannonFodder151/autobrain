@@ -86,3 +86,112 @@ def _clamp_horizon(months: int | None) -> int:
     except (TypeError, ValueError):
         return REPLACE_DEFAULT_HORIZON_MONTHS
     return max(REPLACE_HORIZON_MIN_MONTHS, min(REPLACE_HORIZON_MAX_MONTHS, m))
+
+
+async def compute_replace(
+    db: AsyncSession,
+    vehicle: Vehicle,
+    odometer_km: int | None = None,
+    horizon_months: int | None = None,
+) -> dict:
+    """Deterministic Replace plan: used/new cost + funding gap.
+
+    Anchored on the same cached market median the Value module uses —
+    no AI, no 9Router, no extra network calls. Used replacement cost ==
+    current private-sale mid (a buyer for your car is a buyer for a
+    similar used car of the same vintage/condition). New replacement
+    cost applies the documented ``new_used_premium(age)`` curve to the
+    same anchor.
+
+    Funding gap, per the AC:
+
+        gap = replacement_cost - current_value - trade_in_mid
+
+    where ``trade_in_mid`` is the same industry-standard 82% of private
+    mid surfaced by ``trade_in_band``. ``monthly_target`` = ``gap /
+    horizon_months``; a negative gap (cheaper to replace than your
+    current car + trade-in is worth) is surfaced as ``surplus=True``
+    with a zero monthly target and an explanatory note.
+
+    Returns a dict that matches ``AdvisorReplaceData`` in
+    ``schemas/advisor.py``. When market data is unavailable the response
+    still ships with ``current_value=None`` and the gap fields ``None``
+    so the UI can render the same "no market data" state the Value
+    module already uses.
+    """
+    value = await compute_market_value(db, vehicle, odometer_km=odometer_km)
+    current_value = value.get("mid")
+    trade_in = trade_in_band(current_value)
+    trade_in_mid = trade_in.get("mid")
+
+    horizon = _clamp_horizon(horizon_months)
+    age = age_years(vehicle)
+    premium = new_used_premium(age)
+
+    if current_value is None:
+        return {
+            "currency": CURRENCY,
+            "current_value": None,
+            "trade_in": trade_in,
+            "used_replacement_cost": None,
+            "new_replacement_cost": None,
+            "age_years": age,
+            "new_used_premium": premium,
+            "horizon_months": horizon,
+            "funding_gap": {
+                "currency": CURRENCY,
+                "horizon_months": horizon,
+                "gap": None,
+                "monthly_target": None,
+                "surplus": False,
+                "note": value.get("note") or "no market listings available for this vehicle",
+            },
+            "note": value.get("note") or "no market listings available for this vehicle",
+        }
+
+    used_cost = current_value
+    new_cost = round(current_value * premium, 2)
+
+    def _gap(replace_cost: float) -> dict:
+        if trade_in_mid is None:
+            return {
+                "currency": CURRENCY,
+                "horizon_months": horizon,
+                "gap": None,
+                "monthly_target": None,
+                "surplus": False,
+                "note": "trade-in band unavailable",
+            }
+        raw_gap = replace_cost - current_value - trade_in_mid
+        if raw_gap <= 0:
+            return {
+                "currency": CURRENCY,
+                "horizon_months": horizon,
+                "gap": round(raw_gap, 2),
+                "monthly_target": 0.0,
+                "surplus": True,
+                "note": "replacement cost is below current value + trade-in — no saving target needed",
+            }
+        gap = round(raw_gap, 2)
+        monthly = round(gap / horizon, 2)
+        return {
+            "currency": CURRENCY,
+            "horizon_months": horizon,
+            "gap": gap,
+            "monthly_target": monthly,
+            "surplus": False,
+            "note": None,
+        }
+
+    return {
+        "currency": CURRENCY,
+        "current_value": current_value,
+        "trade_in": trade_in,
+        "used_replacement_cost": used_cost,
+        "new_replacement_cost": new_cost,
+        "age_years": age,
+        "new_used_premium": premium,
+        "horizon_months": horizon,
+        "funding_gap": _gap(new_cost),
+        "note": None,
+    }
