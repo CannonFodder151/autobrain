@@ -945,6 +945,166 @@ def _amortization_schedule(
     return schedule
 
 
+# --- Loan time-left calculation (AUT-3589) -----------------------------------
+#
+# Given remaining principal, interest rate, repayment frequency, repayment
+# amount, and per-period fees, iterate forward until the balance reaches zero.
+# Returns the number of periods remaining and a summary of total interest/fees.
+# When the repayment is insufficient to cover interest + fees, the loan never
+# pays off — the response surfaces ``periods=None`` with an explanatory note.
+
+_REPAYMENT_FREQUENCY_PERIODS_PER_YEAR: dict[str, int] = {
+    "weekly": 52,
+    "fortnightly": 26,
+    "monthly": 12,
+    "quarterly": 4,
+    "annually": 1,
+}
+
+
+def compute_loan_time_left(
+    *,
+    remaining_amount: float,
+    annual_rate_pct: float,
+    repayment_frequency: str,
+    repayment_amount: float,
+    fees_per_period: float = 0.0,
+    max_periods: int = 1200,
+) -> dict:
+    """Compute time left on a loan given current balance and repayment terms.
+
+    Pure function — no DB, no AI, no 9Router. Iterates period-by-period
+    until the balance reaches zero or falls below the per-period interest
+    charge (final period absorbs rounding).
+
+    Args:
+        remaining_amount: Outstanding principal (AUD, >0).
+        annual_rate_pct: Nominal annual interest rate in percentage points.
+        repayment_frequency: One of ``weekly | fortnightly | quarterly | annually``.
+        repayment_amount: Cash paid per period (AUD, >0).
+        fees_per_period: Fixed fees per period (AUD, >=0). Defaults to 0.
+        max_periods: Safety cap to prevent infinite loops. Defaults to 1200 (100y weekly).
+
+    Returns:
+        dict with keys: ``periods`` (int | None), ``periods_per_year``,
+        ``repayment_frequency``, ``total_interest`` (float), ``total_fees``
+        (float), ``total_paid`` (float), ``note`` (str | None).
+    """
+    frequency = (repayment_frequency or "monthly").strip().lower()
+    periods_per_year = _REPAYMENT_FREQUENCY_PERIODS_PER_YEAR.get(frequency, 12)
+    periods_per_year_float = float(periods_per_year)
+
+    # Clamp inputs.
+    amount = max(0.0, float(remaining_amount or 0.0))
+    rate = max(0.0, float(annual_rate_pct or 0.0))
+    pay = max(0.0, float(repayment_amount or 0.0))
+    fee = max(0.0, float(fees_per_period or 0.0))
+    cap = max(1, int(max_periods))
+
+    note: str | None = None
+
+    if amount <= 0:
+        return {
+            "periods": 0,
+            "periods_per_year": periods_per_year,
+            "repayment_frequency": frequency,
+            "total_interest": 0.0,
+            "total_fees": 0.0,
+            "total_paid": 0.0,
+            "note": "remaining_amount is zero or negative — loan already paid off",
+        }
+
+    if pay <= 0:
+        return {
+            "periods": None,
+            "periods_per_year": periods_per_year,
+            "repayment_frequency": frequency,
+            "total_interest": 0.0,
+            "total_fees": 0.0,
+            "total_paid": 0.0,
+            "note": "repayment_amount must be greater than zero",
+        }
+
+    # Per-period interest rate derived from the annual rate and frequency.
+    period_rate = (rate / 100.0) / periods_per_year_float
+
+    # First-period interest — if repayment can't cover interest + fee, loan
+    # never pays off.
+    first_interest = round(amount * period_rate, 2) if period_rate > 0 else 0.0
+    if pay < first_interest + fee:
+        note = (
+            f"repayment of ${pay:,.2f}/period is less than the per-period "
+            f"interest of ${first_interest:,.2f} + fees of ${fee:,.2f} — "
+            f"loan balance will never decrease"
+        )
+        return {
+            "periods": None,
+            "periods_per_year": periods_per_year,
+            "repayment_frequency": frequency,
+            "total_interest": 0.0,
+            "total_fees": 0.0,
+            "total_paid": 0.0,
+            "note": note,
+        }
+
+    balance = round(amount, 2)
+    total_interest = 0.0
+    total_fees = 0.0
+    total_paid = 0.0
+
+    for period in range(1, cap + 1):
+        interest = round(balance * period_rate, 2) if period_rate > 0 else 0.0
+        # Last period: pay off remaining balance + interest + fee.
+        if balance + interest + fee <= pay:
+            final_payment = round(balance + interest + fee, 2)
+            total_interest += interest
+            total_fees += fee
+            total_paid += final_payment
+            balance = 0.0
+            return {
+                "periods": period,
+                "periods_per_year": periods_per_year,
+                "repayment_frequency": frequency,
+                "total_interest": round(total_interest, 2),
+                "total_fees": round(total_fees, 2),
+                "total_paid": round(total_paid, 2),
+                "note": None,
+            }
+
+        # Regular period: apply payment, deduct interest + fee from payment.
+        total_interest += interest
+        total_fees += fee
+        total_paid += pay
+        principal_paid = round(pay - interest - fee, 2)
+        balance = round(balance - principal_paid, 2)
+        if balance <= 0:
+            balance = 0.0
+            return {
+                "periods": period,
+                "periods_per_year": periods_per_year,
+                "repayment_frequency": frequency,
+                "total_interest": round(total_interest, 2),
+                "total_fees": round(total_fees, 2),
+                "total_paid": round(total_paid, 2),
+                "note": None,
+            }
+
+    # Safety cap hit — loan not paid off within cap.
+    note = (
+        f"loan not paid off within {cap} periods — "
+        f"remaining balance: ${balance:,.2f}"
+    )
+    return {
+        "periods": None,
+        "periods_per_year": periods_per_year,
+        "repayment_frequency": frequency,
+        "total_interest": round(total_interest, 2),
+        "total_fees": round(total_fees, 2),
+        "total_paid": round(total_paid, 2),
+        "note": note,
+    }
+
+
 def _lease_residual_pct(term_months: int) -> float:
     """Residual value as a fraction of the original price at end of lease.
 
