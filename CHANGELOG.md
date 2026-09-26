@@ -11,6 +11,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed (AUT-3173)
+- infra(docker): consolidate MinIO bucket init into the `minio` service entrypoint for `docker-compose.prod.yml` and `docker-compose.yml` (AUT-3153 follow-up). Both now start MinIO in the background, wait for readiness via `mc alias set`/`mc ready`, create/privatise the bucket idempotently, then block on the server — the same pattern already used in `docker-compose.hosted.yml` (AUT-1242-C2). The one-shot `/init-minio.sh` call was removed from the prod backend command, dropping a redundant init step; dev gains the bucket-init behaviour it previously lacked.
+
+### Fixed (AUT-3189)
+- infra(env): declare `FUEL_SA_API_KEY` and `FUEL_SA_ENABLED` in `.env.example` (with a comment noting the Informed Sources/SA SAFPIS feed) so hosted operators can provision the SA SAFPIS feed referenced by `docker-compose.hosted.yml`.
+
 ## [0.3.277] - 2026-09-25
 ### Added (AUT-2631)
 - feat(ios): define Fastlane release pipeline for TestFlight beta uploads and App Store releases. New `beta` and `release` lanes in `frontend/ios/fastlane/Fastfile` with `match` for cert/profile sync via S3, API key authentication, build number increment, and changelog integration.
