@@ -24,12 +24,19 @@ import time
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel
 
 from app.logging import get_logger, setup_logging
 from app.modules import MODULES
-from app.router_client import ai_telemetry_reset, ai_telemetry_snapshot, router_enabled, router_url
+from app.router_client import (
+    ai_confidence_snapshot,
+    ai_cost_snapshot,
+    ai_telemetry_reset,
+    ai_telemetry_snapshot,
+    router_enabled,
+    router_url,
+)
 
 logger = get_logger(__name__)
 
@@ -141,7 +148,11 @@ async def health() -> dict:
 @app.get("/v1/telemetry")
 async def telemetry(_: None = Depends(require_gateway_key)) -> dict:
     """Return AI vs deterministic usage counters per module (AUT-3813)."""
-    return {"telemetry": ai_telemetry_snapshot()}
+    return {
+        "telemetry": ai_telemetry_snapshot(),
+        "confidence": ai_confidence_snapshot(),
+        "cost": ai_cost_snapshot(),
+    }
 
 
 @app.post("/v1/telemetry/reset")
@@ -149,6 +160,58 @@ async def telemetry_reset(_: None = Depends(require_gateway_key)) -> dict:
     """Reset AI telemetry counters (admin only)."""
     ai_telemetry_reset()
     return {"status": "reset"}
+
+
+@app.get("/metrics")
+async def metrics() -> PlainTextResponse:
+    """Prometheus text-format metrics for AI vs deterministic usage (AUT-3947).
+
+    Per-module counters so operators can see the deterministic/AI split without a
+    separate metrics store. Unauthenticated, read-only. Hand-rolled exposition
+    (no prometheus_client dependency) — the counters are already in-process dicts.
+
+    Metrics:
+      autobrain_deterministic_only_total{module}   rule engine only, no AI contribution
+      autobrain_ai_enhanced_total{module}          AI response merged into the baseline
+      autobrain_ai_failed_fallback_total{module}  AI call failed, deterministic result kept
+      autobrain_ai_confidence_bucket{module,le}    histogram of AI confidence values
+      autobrain_router_requests_total{module}      9Router requests that returned usage
+      autobrain_router_{prompt,completion,total}_tokens_total{module}
+    """
+    lines: list[str] = []
+
+    def counter(name: str, help_text: str, metric_type: str, snapshot: dict, key: str) -> None:
+        lines.append(f"# HELP {name} {help_text}")
+        lines.append(f"# TYPE {name} {metric_type}")
+        for module, values in sorted(snapshot.items()):
+            lines.append(f'{name}{{module="{module}"}} {int(values.get(key, 0))}')
+
+    telemetry = ai_telemetry_snapshot()
+    counter("autobrain_deterministic_only_total", "Inference resolved by the rule engine alone.", "counter", telemetry, "deterministic_only")
+    counter("autobrain_ai_enhanced_total", "Inference where the AI response enriched the rule baseline.", "counter", telemetry, "ai_enhanced")
+    counter("autobrain_ai_failed_fallback_total", "AI calls that failed and fell back to the deterministic result.", "counter", telemetry, "ai_failed_fallback")
+
+    confidence = ai_confidence_snapshot()
+    lines.append("# HELP autobrain_ai_confidence_bucket Histogram of AI-reported confidence values.")
+    lines.append("# TYPE autobrain_ai_confidence_bucket histogram")
+    for module, data in sorted(confidence.items()):
+        buckets = data.get("buckets", [0] * 10)
+        total_sum = data.get("sum", 0.0)
+        cumulative = 0
+        for idx, count in enumerate(buckets):
+            cumulative += count
+            lines.append(f'autobrain_ai_confidence_bucket{{module="{module}",le="{(idx + 1) / 10:.1f}"}} {cumulative}')
+        lines.append(f'autobrain_ai_confidence_bucket{{module="{module}",le="+Inf"}} {cumulative}')
+        lines.append(f'autobrain_ai_confidence_count{{module="{module}"}} {cumulative}')
+        lines.append(f'autobrain_ai_confidence_sum{{module="{module}"}} {total_sum}')
+
+    cost = ai_cost_snapshot()
+    counter("autobrain_router_requests_total", "9Router requests that returned token usage.", "counter", cost, "requests")
+    counter("autobrain_router_prompt_tokens_total", "Prompt tokens billed by 9Router.", "counter", cost, "prompt_tokens")
+    counter("autobrain_router_completion_tokens_total", "Completion tokens billed by 9Router.", "counter", cost, "completion_tokens")
+    counter("autobrain_router_total_tokens_total", "Total tokens billed by 9Router.", "counter", cost, "total_tokens")
+
+    return PlainTextResponse("\n".join(lines) + "\n")
 
 
 @app.get("/v1/modules")
