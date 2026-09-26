@@ -483,7 +483,6 @@ services:
     volumes:
       - /data/autobrain-backup/config:/config
       - /data/autobrain-backup/data:/backups
-      - /data/autobrain-backup/agent-data:/backups
 
   # AUT-3827: the standalone `backup-agent` service is REMOVED. Its job
   # (hourly snapshot push to autobrain-backup) now runs as a Celery beat task
