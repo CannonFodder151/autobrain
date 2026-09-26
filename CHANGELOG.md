@@ -60,6 +60,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed (AUT-3189)
 - infra(env): declare `FUEL_SA_API_KEY` and `FUEL_SA_ENABLED` in `.env.example` so hosted operators can provision the SA SAFPIS feed referenced by `docker-compose.hosted.yml`.
 
+### Fixed (AUT-3495)
+- fix(frontend): prevent indefinite loading spinner on Flutter web by wrapping `getCachedDecoded` calls in try-catch in `HomeScreen._load()` and `_AdvisorDeepLink._load()`. On web, `OfflineCache` backed by `sqflite` can throw (no web DB driver registered), which crashed `_load()` before `_loading = false` could run. Also make `ConnectivityService.init()` non-blocking: race the first probe against a 3-second timeout so a hung `connectivity_plus` plugin never blocks `main()` past `runApp()`.
+
 ## [0.3.270] - 2026-09-17
 
 ### Fixed (AUT-1805)
