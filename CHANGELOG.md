@@ -11,6 +11,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-3668)
+- feat(frontend): VASS Flutter models + API client
+  - `frontend/lib/core/models/vass.dart` — VASS models matching the AUT-3667 backend schemas:
+    `VassJurisdiction`, `ComplianceStatus`, `PrecheckStatus`, `EngineerType`, `PrecheckCreate`,
+    `PrecheckUpdate`, `PrecheckOut`, `ModificationSelection`, `ComplianceResultOut`,
+    `EngineerCreate`, `EngineerUpdate`, `EngineerOut`, `EngineerSearchParams`,
+    `EngineerSearchResponse`, `EngineerRequestCreate`, `EngineerRequestOut`,
+    `ImportPathwayRequest`, `ImportPathwayOut`, `ImportPathwayDetailOut`,
+    `DocumentChecklistItem`, `CompliancePackOut`, `CompliancePackGenerateRequest`,
+    `VassSettingsOut`, `VassSettingsUpdate`, `VehicleLookupRequest`, `VehicleLookupItem`,
+    `VehicleLookupResponse`, `VinValidationRequest`, `VinValidationResponse`,
+    `ModificationItem`, `ModificationChecklistRequest`, `ChecklistItemOut`,
+    `ModificationChecklistResponse`, `ComplianceResultDetail`, `ComplianceAggregationRequest`,
+    `ComplianceAggregationResponse`, `ModificationCreate`, `ModificationOut`
+  - `frontend/lib/services/vass_api.dart` — `VassApi` client wrapping every AUT-3667 route
+    (pre-checks, compliance results, aggregation, compliance packs, engineer marketplace,
+    engineer requests, import pathway, settings, vehicle lookup, VIN validation, checklist)
+  - `frontend/test/vass_api_test.dart` — 19 unit tests covering model parsing/serialisation
+    and the client wire format
+
 ## [0.3.278] - 2026-09-26
 
 ### Fixed (AUT-3979)
