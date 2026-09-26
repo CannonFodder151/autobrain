@@ -10,12 +10,37 @@ Define how AutoBrain is tested across the backend, AI gateway and frontend, what
 
 | Environment | Where | Purpose |
 |-------------|-------|---------|
-| Dev box | `192.168.1.100` (Portainer endpoint 6, PaperClip-AutoBrain-Dev-Box) | Primary test target for agent test passes |
-| Demo | `demo.autobrainservice.app` (demo@autobrainservice.app / demo) | Promotion tier 1 |
-| Default | Default deployment tier | Promotion tier 2 |
-| Hosted | `hosted.autobrainservice.app` (Oracle VM, Portainer endpoint 5) | Production |
+| Dev box | `10.0.3.39` (Portainer endpoint 6, PaperClip-AutoBrain-Dev-Box) | Primary test target for agent test passes |
+| Demo | `demo.autobrainservice.app` (demo@autobrainservice.app / demo, Portainer endpoint 2) | Promotion tier 1 |
+| Default | Default deployment tier (Portainer endpoint 2) | Promotion tier 2 |
+| Hosted | `hosted.autobrainservice.app` (Oracle VM 152.69.188.133, Portainer endpoint 5) | Production |
 
 Mandatory promotion order **Demo → Default → Hosted** (per AUT-107). No tier is skipped when shipping.
+
+### Dev Box Access
+SSH: `ssh administrator@10.0.3.39` (password via `devbox_ssh_password` secret)
+- Runs Paperclip control plane + dev stack
+- Use for: local pytest, Docker commands, manual validation
+
+### Demo Tier
+- URL: https://demo.autobrainservice.app
+- Credentials: demo@autobrainservice.app / demo
+- Portainer endpoint 2 (10.0.3.17)
+- Separate compose file from Default
+- Reset via `DEMO_RESET=true` on boot
+
+### Default Tier
+- Portainer endpoint 2 (10.0.3.17)
+- Separate compose file from Demo
+- No Stripe billing (Hosted only)
+
+### Hosted (Production)
+- URL: https://hosted.autobrainservice.app
+- Oracle Cloud VM: 152.69.188.133
+- Portainer endpoint 5 (AutoBrain-Hosted)
+- ARM cloud server, public, federation hub, highly available
+- Has own API, rego-lookup, and 9Router instance
+- Stripe billing active
 
 ## Automated tests
 
