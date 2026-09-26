@@ -362,6 +362,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - fix(docker): remove orphaned top-level `volumes:` block left in `docker-compose.hosted.yml` by the AUT-3827 backup-agent removal, so the file has a single valid top-level `volumes:` key (duplicate keys are rejected by the Docker Compose strict YAML parser).
 - fix(docker): drop the now-unused `/data/autobrain-backup/agent-data` bind mount. Merging it into `autobrain-backup` would have duplicated the `/backups` container path already served by `/data/autobrain-backup/data`, and the `backup-agent` service that owned that directory was removed.
 
+### Fixed (AUT-3978)
+- fix(backend): `backup_offsite_hourly` now wraps `run_backup_offsite()` in the persistent-loop `_run()` wrapper. Before the fix the async function was passed bare, so the coroutine was never executed and the hourly off-site backup never ran.
+
 ## [0.3.277] - 2026-09-25
 ### Added (AUT-2631)
 - feat(ios): define Fastlane release pipeline for TestFlight beta uploads and App Store releases. New `beta` and `release` lanes in `frontend/ios/fastlane/Fastfile` with `match` for cert/profile sync via S3, API key authentication, build number increment, and changelog integration.
