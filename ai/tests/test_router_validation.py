@@ -139,3 +139,31 @@ def test_cap_payload_passes_through_short_input() -> None:
     """No truncation when everything is within caps."""
     payload = {"symptoms": "engine misfire", "make": "Toyota"}
     assert _cap_payload(payload) == payload
+
+
+def test_every_immutable_key_has_a_schema_entry() -> None:
+    """AUT-3914: every immutable key must also be whitelisted in _SCHEMAS.
+
+    ``enhance`` drops a key that is absent from the schema, so an immutable key
+    without a schema entry is dead config: the type gate that would reject a
+    malformed router value never runs. Keeping the two sets in sync means the
+    schema documents the full contract (including the ground-truth numbers) and
+    the immutability layer is not the only thing standing between a bad router
+    response and a mutated valuation.
+    """
+    from app.router_utils import _AI_IMMUTABLE, _SCHEMAS
+
+    for module, keys in _AI_IMMUTABLE.items():
+        schema = _SCHEMAS.get(module, {})
+        missing = sorted(keys - set(schema))
+        assert not missing, f"{module} immutable keys missing from _SCHEMAS: {missing}"
+
+
+def test_immutable_schema_entries_reject_wrong_types() -> None:
+    """AUT-3914: schema entries added for immutable keys must type-gate too."""
+    from app.router_utils import _matches_type
+
+    assert _matches_type(30000.0, (int, float, type(None)))
+    assert not _matches_type("30000", (int, float, type(None)))
+    assert _matches_type("AUD", (str,))
+    assert not _matches_type(50.0, (str,))
