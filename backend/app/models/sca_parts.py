@@ -17,7 +17,7 @@ class SCAPartsCache(Base):
     __tablename__ = "sca_parts_cache"
     __table_args__ = (UniqueConstraint("cache_key", name="uq_sca_cache_key"),)
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, auto_increment=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
     cache_key: Mapped[str] = mapped_column(String(255), index=True)  # make|model|year
     parts_json: Mapped[str] = mapped_column(Text)  # JSON list of Inventory-shaped parts
     category_count: Mapped[int] = mapped_column(Integer, default=0)

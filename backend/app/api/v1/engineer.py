@@ -14,10 +14,10 @@ from app.schemas.engineer import (
     EngineerSearchFilters,
     EngineerSearchResponse,
     EngineerSortBy,
+    EngineerResponse,
 )
 from app.services.engineer import (
     EngineerSearchResult,
-    EngineerSearchResponse as SearchResponse,
     add_review,
     backfill_engineer_embeddings,
     create_engineer,
@@ -63,8 +63,8 @@ async def search_engineers(
     available_to: str | None = Query(
         default=None, description="Latest end time (HH:MM:SS 24h).",
     ),
-    sort: str = Query("rating", regex="^(rating|distance|price)$", description="Sort field."),
-    order: str = Query("desc", regex="^(asc|desc)$", description="Sort order."),
+    sort: str = Query("rating", pattern="^(rating|distance|price)$", description="Sort field."),
+    order: str = Query("desc", pattern="^(asc|desc)$", description="Sort order."),
     page: int = Query(default=1, ge=1, description="Page number (1-indexed)."),
     limit: int = Query(default=20, ge=1, le=100, description="Page size."),
     db: AsyncSession = Depends(get_db),
