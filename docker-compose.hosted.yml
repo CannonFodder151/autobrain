@@ -483,14 +483,12 @@ services:
     volumes:
       - /data/autobrain-backup/config:/config
       - /data/autobrain-backup/data:/backups
+      - /data/autobrain-backup/agent-data:/backups
 
   # AUT-3827: the standalone `backup-agent` service is REMOVED. Its job
   # (hourly snapshot push to autobrain-backup) now runs as a Celery beat task
   # inside `backend` (app.workers.tasks.backup_offsite_hourly). The hosted stack
   # drops from 8 to 7 containers. See backend/app/services/backup_offsite.py.
-
-volumes:
-      - /data/autobrain-backup/agent-data:/backups
 
 volumes:
    postgres-data:
