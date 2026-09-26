@@ -35,6 +35,12 @@ celery_app.conf.update(
             "task": "app.workers.tasks.scheduled_backup",
             "schedule": 60 * 60 * 24,
         },
+        # AUT-3827: hourly off-site push to autobrain-backup (replaces the
+        # standalone backup-agent container). Deterministic, no AI, no spend.
+        "offsite-backup-hourly": {
+            "task": "app.workers.tasks.backup_offsite_hourly",
+            "schedule": crontab(minute=0),
+        },
         "embedding-backfill": {
             "task": "app.workers.tasks.backfill_entity_embeddings",
             "schedule": 60 * 60 * 24,

@@ -174,6 +174,16 @@ class Settings(BaseSettings):
     BACKUP_ENABLED: bool = True
     BACKUP_RETENTION_DAYS: int = 14
 
+    # Off-site backup (hourly) — replaces the standalone backup-agent container (AUT-3827).
+    # Pushes full-DB snapshots to autobrain-backup /ingest with tiered retention.
+    BACKUP_OFFSITE_ENABLED: bool = False
+    BACKUP_OFFSITE_URL: str = ""              # e.g. http://autobrain-backup:8080
+    BACKUP_OFFSITE_GUI_KEY: str = ""          # X-Gui-Key for /api/backups + /api/backup/delete
+    BACKUP_OFFSITE_GUI_KEY_FILE: str = ""     # secret-file fallback
+    BACKUP_OFFSITE_INGEST_KEY: str = ""       # X-Ingest-Key for /api/backup/ingest
+    BACKUP_OFFSITE_INGEST_KEY_FILE: str = ""  # secret-file fallback
+    BACKUP_OFFSITE_INSTANCE: str = ""         # instance id appended as ?instance= to all calls
+
     # Admin API key: enables machine-to-machine user management via X-Admin-API-Key.
     ADMIN_API_KEY: str = ""  # leave empty to disable the /admin-api endpoints
 
@@ -312,6 +322,14 @@ class Settings(BaseSettings):
             p = Path(self.ADMIN_INITIAL_PASSWORD_FILE)
             if p.is_file():
                 self.ADMIN_INITIAL_PASSWORD = p.read_text(encoding="utf-8").strip()
+        if not self.BACKUP_OFFSITE_GUI_KEY and self.BACKUP_OFFSITE_GUI_KEY_FILE:
+            p = Path(self.BACKUP_OFFSITE_GUI_KEY_FILE)
+            if p.is_file():
+                self.BACKUP_OFFSITE_GUI_KEY = p.read_text(encoding="utf-8").strip()
+        if not self.BACKUP_OFFSITE_INGEST_KEY and self.BACKUP_OFFSITE_INGEST_KEY_FILE:
+            p = Path(self.BACKUP_OFFSITE_INGEST_KEY_FILE)
+            if p.is_file():
+                self.BACKUP_OFFSITE_INGEST_KEY = p.read_text(encoding="utf-8").strip()
         return self
 
     @model_validator(mode="after")
