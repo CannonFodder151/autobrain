@@ -397,6 +397,35 @@ docker compose exec backend alembic revision --autogenerate -m "change"
 docker compose exec backend alembic upgrade head
 ```
 
+### Alembic stamp — never mask missing columns (AUT-2065)
+
+`alembic stamp` only writes the revision marker into `alembic_version`; it runs
+**no DDL**. Using it to "fix" an out-of-sync database hides the drift and the
+next deploy fails at runtime with `UndefinedColumnError`, not at boot.
+
+Canonical order:
+
+1. **Run `alembic upgrade head` first** — that is what actually applies DDL.
+2. Stamp **only** after `upgrade head` has succeeded, or after a manual hotfix
+   already applied the exact DDL the revision would have applied.
+3. **Before any `stamp`, verify the columns are actually present:**
+
+   ```bash
+   docker compose exec backend psql -U autobrain -d autobrain -c \
+     "SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'vehicles'
+      ORDER BY ordinal_position;"
+   ```
+
+   Confirm every column the revision adds exists. If any are missing, do **not**
+   stamp — fix the migration or apply the missing `ALTER TABLE`, then
+   `upgrade head`.
+
+Origin: on AUT-2046 a run stamped `aut1819_fuel_type` against demo, default and
+hosted without checking the schema. `vehicles.fuel_type` and
+`vehicles.rego_state` were in fact missing, and `GET /vehicles` returned 500 on
+all three tiers until the columns were added by hand.
+
 ## Rollback
 
 ```bash
