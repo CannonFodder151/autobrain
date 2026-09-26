@@ -283,6 +283,51 @@ def test_ingest_fuel_prices_no_typeerror_when_source_in_result(monkeypatch) -> N
         assert kwargs["source"] in ("wa", "qld")
 
 
+def test_backup_offsite_hourly_runs_coro_via_run(monkeypatch) -> None:
+    """AUT-3978: backup_offsite_hourly must drive run_backup_offsite() through
+    the persistent-loop `_run` wrapper. Before the fix the body was
+    `run_backup_offsite()` — passing the coroutine function itself (not the
+    awaited coroutine), so the async backup never executed and the hourly task
+    was a no-op."""
+    import app.services.backup_offsite as svc
+
+    ran: list[bool] = []
+
+    async def fake_run() -> None:
+        ran.append(True)
+
+    monkeypatch.setattr(svc, "run_backup_offsite", fake_run)
+
+    calls: list = []
+
+    def fake_run_wrapper(coro):
+        calls.append(coro)
+        import asyncio
+
+        return asyncio.new_event_loop().run_until_complete(coro)
+
+    monkeypatch.setattr(tasks, "_run", fake_run_wrapper)
+
+    tasks.backup_offsite_hourly()
+
+    assert calls, "_run() must be invoked"
+    assert ran, "run_backup_offsite() coroutine must be executed via _run()"
+
+
+def test_backup_offsite_hourly_skips_when_disabled(monkeypatch) -> None:
+    """AUT-3827: BACKUP_OFFSITE_ENABLED False → skip-with-loud-log, never Celery FAIL.
+
+    Drives the real run_backup_offsite() coroutine through _run(); the config
+    guard lives at the top of the coroutine so the skip log fires only when the
+    coroutine actually executes (i.e. after the _run fix)."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "BACKUP_OFFSITE_ENABLED", False)
+
+    # Must not raise — a missing config is a skip, not a Celery FAIL.
+    tasks.backup_offsite_hourly()
+
+
 def test_run_due_checks_runs_inner_coro_via_run(monkeypatch) -> None:
     """AUT-2467: run_due_checks must schedule the inner coroutine through
     `notify._run` (which owns the persistent loop). Before the fix the body
