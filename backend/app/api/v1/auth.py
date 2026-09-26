@@ -192,16 +192,11 @@ async def logout(payload: RefreshRequest, db: AsyncSession = Depends(get_db)) ->
 
 @router.get("/config")
 async def auth_config() -> dict:
-    """Public client config (no auth). Frontend hides self-signup when disabled.
-
-    `app_version` lets the mobile app detect when it is behind the server and
-    prompt the user to update (see autobrain-mobile).
-    """
+    """Public client config (no auth). Frontend hides self-signup when disabled."""
     return {
         "signup_enabled": settings.SELF_SIGNUP_ENABLED,
         "mfa_enforced": settings.MFA_ENFORCED,
         "license_enabled": settings.LICENSE_ENABLED,
-        "app_version": settings.APP_VERSION,
     }
 
 
