@@ -44,7 +44,7 @@ SSH: `ssh administrator@10.0.3.39` (password via `devbox_ssh_password` secret)
 
 ## Automated tests
 
-There is **no CI/CD pipeline** at this time — GitHub Actions were removed. Tests run manually in the running stack:
+CI/CD runs via GitHub Actions (20 workflows in `.github/workflows/`): pytest smoke, security gates, code review, docker builds, ARM64 builds, docs sync, Trivy scans, visual regression. Tests also run manually in the running stack:
 
 ```bash
 docker compose -f docker-compose.prod.yml exec backend pytest
