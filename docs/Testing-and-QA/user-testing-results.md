@@ -1,6 +1,6 @@
 # User Testing Results
 
-**Owner:** QA & User Testing. **Section:** Testing & QA. **Last reviewed:** 2026-08-10 (AUT-182).
+**Owner:** QA & User Testing. **Section:** Testing & QA. **Last reviewed:** 2026-09-26 (AUT-4049).
 
 Verified results from user-facing testing and bug intake triage. Real state only — mirrors repo `docs/user-testing-results.md`. Newest first.
 
