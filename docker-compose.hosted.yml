@@ -245,6 +245,14 @@ services:
       # calls the backend's /devices/verify to check paid status at the edge.
       DONGLE_SERVER_API_KEY_FILE: /run/secrets/dongle_server_api_key
       DONGLE_SERVER_URL: http://dongle-server:8000
+      # AUT-3827: off-site backup push (replaces the standalone backup-agent
+      # container). The backend's Celery beat runs backup_offsite_hourly at
+      # :00 and pushes snapshots to autobrain-backup /api/backup/ingest.
+      BACKUP_OFFSITE_ENABLED: "true"
+      BACKUP_OFFSITE_URL: ${BACKUP_OFFSITE_URL:-http://autobrain-backup:8080}
+      BACKUP_OFFSITE_GUI_KEY_FILE: /run/secrets/backup_offsite_gui_key
+      BACKUP_OFFSITE_INGEST_KEY_FILE: /run/secrets/backup_offsite_ingest_key
+      BACKUP_OFFSITE_INSTANCE: ${BACKUP_OFFSITE_INSTANCE:-hosted}
       # Store-native IAP (AUT-610/617): empty = disabled (mobile falls back to
       # the Stripe browser path). Credentials are Paperclip secrets.
       IAP_GOOGLE_SERVICE_ACCOUNT_JSON_FILE: /run/secrets/iap_google_service_account_json
@@ -476,19 +484,10 @@ services:
       - /data/autobrain-backup/config:/config
       - /data/autobrain-backup/data:/backups
 
-  # AUT-2367: backup-agent — hourly poller, pulls DB snapshots from hosted backend.
-  backup-agent:
-    image: ghcr.io/cannonfodder151/autobrain-backup-agent:hosted@sha256:59f26bf04d48874754ed99cd8b133cd8eb433bde149d5d7babc27e8e9a849092
-    restart: unless-stopped
-    environment:
-      AUTOBRAIN_URL: "http://backend:8000"
-      AUTOBRAIN_API_KEY: "${ADMIN_API_KEY}"
-      BACKUP_ENDPOINT: "/api/v1/admin-api/backup"
-      OUT_DIR: "/backups"
-      KEEP: "30"
-      TARGET_URL: "http://autobrain-backup:8080/ingest"
-    volumes:
-      - /data/autobrain-backup/agent-data:/backups
+  # AUT-3827: the standalone `backup-agent` service is REMOVED. Its job
+  # (hourly snapshot push to autobrain-backup) now runs as a Celery beat task
+  # inside `backend` (app.workers.tasks.backup_offsite_hourly). The hosted stack
+  # drops from 8 to 7 containers. See backend/app/services/backup_offsite.py.
 
 volumes:
    postgres-data:
