@@ -123,10 +123,28 @@ services:
       - ALL
     tmpfs:
       - /tmp
-    command: server /data --console-address ":9001"
+    # AUT-3173: bucket init folded into the server entrypoint to drop the
+    # one-shot /init-minio.sh call from the backend command (matches the
+    # hosted AUT-1242-C2 pattern). Start minio in the background, wait for it
+    # to accept connections (mc alias set retries until healthy), create the
+    # bucket idempotently, then block on the server. Env-var creds (not the
+    # secret-file pattern used on hosted).
+    entrypoint: >
+      /bin/sh -c "
+      minio server /data --console-address ':9001' &
+      MINIO_PID=$$!;
+      trap 'kill -TERM $${MINIO_PID} 2>/dev/null' TERM INT;
+      until mc alias set local http://localhost:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\" >/dev/null 2>&1 && mc ready local >/dev/null 2>&1; do sleep 2; done;
+      mc mb -p local/${MINIO_BUCKET:-autobrain-assets} 2>/dev/null || true;
+      mc anonymous set none local/${MINIO_BUCKET:-autobrain-assets} 2>/dev/null || true;
+      echo '[minio] bucket init complete';
+      trap - TERM INT;
+      wait $${MINIO_PID}
+      "
     environment:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+      MINIO_BUCKET: ${MINIO_BUCKET:-autobrain-assets}
     volumes:
       - minio-data:/data
     healthcheck:
@@ -150,8 +168,7 @@ services:
       - /tmp
       - /app/tmp
     command: >-
-      sh -c "/init-minio.sh
-      && alembic upgrade head
+      sh -c "alembic upgrade head
       && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &)
       && (uvicorn ai_app.main:app --host 0.0.0.0 --port 8001 &)
       && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
