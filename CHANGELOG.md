@@ -11,6 +11,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-3947)
+- feat(ai): Prometheus `/metrics` endpoint exposing AI vs deterministic inference split with per-module counters (deterministic_only, ai_enhanced, ai_fallback), confidence histogram, and 9Router token usage counters
+- feat(ai): telemetry recording now tracks deterministic vs AI path per module; `/v1/telemetry` now includes confidence distribution and cost snapshots
+- feat(ai): confidence histogram buckets (0.1 increments) and sum for Prometheus exposition
+
+### Changed (AUT-3947)
+- refactor(ai): centralize telemetry recording in `enhance()` to avoid double-counting; `route()` no longer records path decisions
+
+### Fixed (AUT-3947)
+- fix(ai): test helpers `_record_router_cost` and `ai_cost_snapshot` implemented for AUT-3828 parity
+
 ## [0.3.277] - 2026-09-25
 ### Added (AUT-2631)
 - feat(ios): define Fastlane release pipeline for TestFlight beta uploads and App Store releases. New `beta` and `release` lanes in `frontend/ios/fastlane/Fastfile` with `match` for cert/profile sync via S3, API key authentication, build number increment, and changelog integration.

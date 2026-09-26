@@ -46,12 +46,21 @@ _matches_type = _matches_type
 _validate_nested = _validate_nested
 
 
-# --- AI vs deterministic telemetry (AUT-3813) -------------------------------
-# In-process counters so operators can grep the logs for ai_path events and
-# compute the hybrid/deterministic split per module without a separate
-# metrics store. Reset on process start; for long-lived services, restart or
-# read the cumulative log lines.
+# --- AI vs deterministic telemetry (AUT-3813, AUT-3828, AUT-3947) -------------
+# In-process counters for AI vs deterministic path usage per module.
+# Keys: deterministic_only, ai_enhanced, ai_failed_fallback.
+# Reset on process start; for long-lived services, restart or read cumulative log lines.
 _AI_TELEMETRY: dict[str, dict[str, int]] = {}
+
+# Confidence histogram buckets for AI responses (AUT-3947).
+# 10 buckets: [0.0-0.1, 0.1-0.2, ..., 0.9-1.0]
+_AI_CONFIDENCE_BUCKETS: dict[str, list[int]] = {}
+
+# Running sum of recorded confidences, for the Prometheus _sum series.
+_AI_CONFIDENCE_SUM: dict[str, float] = {}
+
+# 9Router token usage & request count per module (AUT-3828).
+_AI_COST: dict[str, dict[str, int]] = {}
 
 
 def _telemetry_record(module: str, path: str, **extra) -> None:
@@ -61,9 +70,42 @@ def _telemetry_record(module: str, path: str, **extra) -> None:
     enrichable fields), ``hybrid`` (router enriched the baseline), or
     ``router_error`` (router returned an error and we fell back).
     """
-    bucket = _AI_TELEMETRY.setdefault(module, {"deterministic": 0, "hybrid": 0, "router_error": 0})
-    bucket[path] = bucket.get(path, 0) + 1
+    # Map internal path names to snapshot/reporting names
+    path_map = {
+        "deterministic": "deterministic_only",
+        "hybrid": "ai_enhanced",
+        "router_error": "ai_failed_fallback",
+    }
+    snap_key = path_map.get(path, path)
+    bucket = _AI_TELEMETRY.setdefault(module, {"deterministic_only": 0, "ai_enhanced": 0, "ai_failed_fallback": 0})
+    bucket[snap_key] = bucket.get(snap_key, 0) + 1
     logger.info("ai_path", module=module, path=path, **extra)
+
+
+def _record_confidence(module: str, confidence: float) -> None:
+    """Record AI confidence into histogram buckets (AUT-3947)."""
+    if not isinstance(confidence, (int, float)) or confidence < 0 or confidence > 1:
+        return
+    bucket_idx = min(int(confidence * 10), 9)
+    buckets = _AI_CONFIDENCE_BUCKETS.setdefault(module, [0] * 10)
+    buckets[bucket_idx] += 1
+    _AI_CONFIDENCE_SUM[module] = _AI_CONFIDENCE_SUM.get(module, 0.0) + confidence
+
+
+def _record_router_cost(module: str, usage: dict | None) -> None:
+    """Record 9Router token usage from a successful response (AUT-3828)."""
+    if not usage or not isinstance(usage, dict):
+        return
+    prompt = int(usage.get("prompt_tokens", 0))
+    completion = int(usage.get("completion_tokens", 0))
+    total = int(usage.get("total_tokens", 0))
+    if prompt == 0 and completion == 0 and total == 0:
+        return
+    cost = _AI_COST.setdefault(module, {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "requests": 0})
+    cost["prompt_tokens"] += prompt
+    cost["completion_tokens"] += completion
+    cost["total_tokens"] += total
+    cost["requests"] += 1
 
 
 def ai_telemetry_snapshot() -> dict[str, dict[str, int]]:
@@ -71,9 +113,22 @@ def ai_telemetry_snapshot() -> dict[str, dict[str, int]]:
     return {m: dict(c) for m, c in _AI_TELEMETRY.items()}
 
 
+def ai_cost_snapshot() -> dict[str, dict[str, int]]:
+    """Return a copy of the 9Router token-usage counters."""
+    return {m: dict(c) for m, c in _AI_COST.items()}
+
+
+def ai_confidence_snapshot() -> dict[str, dict[str, object]]:
+    """Return a copy of the AI confidence histogram buckets + sum per module."""
+    return {m: {"buckets": list(b), "sum": _AI_CONFIDENCE_SUM.get(m, 0.0)} for m, b in _AI_CONFIDENCE_BUCKETS.items()}
+
+
 def ai_telemetry_reset() -> None:
     """Clear all telemetry counters (admin endpoint)."""
     _AI_TELEMETRY.clear()
+    _AI_CONFIDENCE_BUCKETS.clear()
+    _AI_CONFIDENCE_SUM.clear()
+    _AI_COST.clear()
 
 
 def router_url() -> str:
@@ -104,10 +159,10 @@ async def route(module: str, payload: dict) -> dict | None:
     """POST an OpenAI-style chat completion to 9Router.
 
     Returns the parsed result dict, or None on any failure (callers fall back).
+    Telemetry is recorded by the caller (enhance) so each inference is counted once.
     """
     if not router_enabled():
         logger.info("router_disabled_using_fallback", module=module)
-        _telemetry_record(module, "deterministic", reason="router_disabled")
         return None
 
     url = f"{router_url()}/chat/completions"
@@ -139,15 +194,16 @@ async def route(module: str, payload: dict) -> dict | None:
             content = data["choices"][0]["message"]["content"]
             result = _clean_json(content)
             result.setdefault("model", router_model())
+            usage = data.get("usage")
+            if usage:
+                _record_router_cost(module, usage)
             logger.info("router_response", module=module, model=router_model(), status=resp.status_code)
             return result
     except httpx.HTTPStatusError as exc:
         logger.warning("router_http_error", module=module, status=exc.response.status_code)
-        _telemetry_record(module, "router_error", status=exc.response.status_code)
         return None
     except Exception as exc:
         logger.warning("router_unreachable_using_fallback", module=module, error=str(exc))
-        _telemetry_record(module, "router_error", error=str(exc))
         return None
 
 
@@ -165,7 +221,7 @@ async def enhance(module: str, payload: dict, baseline: dict) -> dict:
     min_confidence = float(os.getenv("MIN_AI_CONFIDENCE", "0.75"))
     result = await route(module, payload)
     if not isinstance(result, dict):
-        logger.info("ai_path", module=module, path="deterministic", reason="router_unavailable")
+        _telemetry_record(module, "deterministic", reason="router_unavailable")
         return baseline
 
     confidence = result.get("confidence")
@@ -174,8 +230,10 @@ async def enhance(module: str, payload: dict, baseline: dict) -> dict:
     except (TypeError, ValueError):
         conf_val = 0.0
 
+    _record_confidence(module, conf_val)
+
     if conf_val < min_confidence:
-        logger.info("ai_path", module=module, path="deterministic", reason="low_confidence", confidence=conf_val, threshold=min_confidence)
+        _telemetry_record(module, "deterministic", reason="low_confidence", confidence=conf_val, threshold=min_confidence)
         return baseline
 
     immutable = _AI_IMMUTABLE.get(module, frozenset())
@@ -195,7 +253,7 @@ async def enhance(module: str, payload: dict, baseline: dict) -> dict:
         enriched = True
     if enriched:
         merged["model"] = "rule-based+ai"
-        logger.info("ai_path", module=module, path="hybrid", confidence=conf_val)
+        _telemetry_record(module, "hybrid", confidence=conf_val)
     else:
-        logger.info("ai_path", module=module, path="deterministic", reason="no_enrichable_fields")
+        _telemetry_record(module, "deterministic", reason="no_enrichable_fields", confidence=conf_val)
     return merged
