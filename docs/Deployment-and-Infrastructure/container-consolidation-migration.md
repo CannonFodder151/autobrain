@@ -88,8 +88,8 @@ If the merged backend fails health or task execution:
   `worker` pin. The `docker/worker/Dockerfile` remains on disk solely as a
   reference for the security-scan workflows.
 - **Consolidate MinIO init into the `minio` entrypoint for `docker-compose.prod.yml`
-  and `docker-compose.yml`** (they still run the one-shot `/init-minio.sh` from
-  the backend command).
+  and `docker-compose.yml`** (minio bucket init is now handled in the minio container
+  entrypoint; `/init-minio.sh` removed from backend command and Dockerfile).
 - **Align the dev `ai` service** to run the full `docker/ai/entrypoint.sh`
   (market-data + AI gateway) instead of the gateway-only command override,
   so dev parity matches prod/hosted.
