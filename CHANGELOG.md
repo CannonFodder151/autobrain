@@ -11,6 +11,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-3947)
+- feat(ai): Prometheus metrics for AI vs deterministic path tracking
+  - New `/metrics` endpoint exposing AI vs deterministic split per module
+  - Counters: `autobrain_ai_deterministic_calls_total`, `autobrain_ai_path_total`, `autobrain_ai_router_errors_total`
+  - Histogram: `autobrain_ai_confidence_distribution` for AI confidence values
+  - Reason-tagged fallback counter: `autobrain_ai_fallback_reasons_total` (router_error, router_disabled, low_confidence, no_enrichable_fields, router_unavailable, no_usable_result)
+  - Extends AUT-3813 telemetry with Prometheus exposition format
+
 ## [0.3.276] - 2026-09-25
 
 ### Fixed (AUT-3049)

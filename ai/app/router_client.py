@@ -23,6 +23,13 @@ import os
 import httpx
 
 from app.logging import get_logger
+from app.metrics import (
+    AI_FALLBACK_REASONS,
+    record_confidence,
+    record_deterministic,
+    record_hybrid,
+    record_router_error,
+)
 from app.router_utils import (
     _AI_IMMUTABLE,
     _MAX_ROUTER_RESPONSE_BYTES,
@@ -64,6 +71,17 @@ def _telemetry_record(module: str, path: str, **extra) -> None:
     bucket = _AI_TELEMETRY.setdefault(module, {"deterministic": 0, "hybrid": 0, "router_error": 0})
     bucket[path] = bucket.get(path, 0) + 1
     logger.info("ai_path", module=module, path=path, **extra)
+    # Mirror into Prometheus (AUT-3947).
+    if path == "hybrid":
+        record_hybrid(module)
+    elif path == "router_error":
+        record_router_error(module, str(extra.get("status", "unknown")))
+    else:
+        record_deterministic(module)
+    if "confidence" in extra:
+        record_confidence(module, extra["confidence"])
+    if "reason" in extra:
+        AI_FALLBACK_REASONS.labels(module=module, reason=extra["reason"]).inc()
 
 
 def ai_telemetry_snapshot() -> dict[str, dict[str, int]]:
@@ -165,7 +183,7 @@ async def enhance(module: str, payload: dict, baseline: dict) -> dict:
     min_confidence = float(os.getenv("MIN_AI_CONFIDENCE", "0.75"))
     result = await route(module, payload)
     if not isinstance(result, dict):
-        logger.info("ai_path", module=module, path="deterministic", reason="router_unavailable")
+        _telemetry_record(module, "deterministic", reason="router_unavailable")
         return baseline
 
     confidence = result.get("confidence")
@@ -175,7 +193,7 @@ async def enhance(module: str, payload: dict, baseline: dict) -> dict:
         conf_val = 0.0
 
     if conf_val < min_confidence:
-        logger.info("ai_path", module=module, path="deterministic", reason="low_confidence", confidence=conf_val, threshold=min_confidence)
+        _telemetry_record(module, "deterministic", reason="low_confidence", confidence=conf_val, threshold=min_confidence)
         return baseline
 
     immutable = _AI_IMMUTABLE.get(module, frozenset())
@@ -195,7 +213,7 @@ async def enhance(module: str, payload: dict, baseline: dict) -> dict:
         enriched = True
     if enriched:
         merged["model"] = "rule-based+ai"
-        logger.info("ai_path", module=module, path="hybrid", confidence=conf_val)
+        _telemetry_record(module, "hybrid", confidence=conf_val)
     else:
-        logger.info("ai_path", module=module, path="deterministic", reason="no_enrichable_fields")
+        _telemetry_record(module, "deterministic", reason="no_enrichable_fields")
     return merged

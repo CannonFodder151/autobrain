@@ -23,11 +23,12 @@ import os
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.logging import get_logger, setup_logging
+from app.metrics import metrics_bytes, metrics_content_type
 from app.modules import MODULES
 from app.router_client import ai_telemetry_reset, ai_telemetry_snapshot, router_enabled, router_url
 
@@ -142,6 +143,20 @@ async def health() -> dict:
 async def telemetry(_: None = Depends(require_gateway_key)) -> dict:
     """Return AI vs deterministic usage counters per module (AUT-3813)."""
     return {"telemetry": ai_telemetry_snapshot()}
+
+
+@app.get("/metrics", include_in_schema=False)
+async def metrics() -> Response:
+    """Prometheus scrape endpoint (AUT-3947).
+
+    AI vs deterministic split per module:
+      autobrain_ai_deterministic_calls_total{module}
+      autobrain_ai_fallback_reasons_total{module,reason}
+      autobrain_ai_path_total{module,path}          (path=deterministic|hybrid|router_error)
+      autobrain_ai_router_errors_total{module,status}
+      autobrain_ai_confidence_distribution{module}  (histogram: _bucket/_sum/_count)
+    """
+    return Response(content=metrics_bytes(), media_type=metrics_content_type())
 
 
 @app.post("/v1/telemetry/reset")
