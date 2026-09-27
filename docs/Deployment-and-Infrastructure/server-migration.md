@@ -148,5 +148,11 @@ nothing else changes.
 `AI_ROUTER_URL` · `AI_ROUTER_API_KEY` · `AI_ROUTER_MODEL` · `SMTP_HOST/USERNAME/PASSWORD` ·
 `MINIO_ACCESS_KEY/SECRET_KEY` · `ADMIN_API_KEY` · `REGO_LOOKUP_API_KEY`
 
+**AUT-1853 / AUT-1533 (hosted stacks):** Secret-class values live in
+`/data/autobrain/secrets/` (NOT `/opt/autobrain/secrets/`) as `_FILE` vars.
+See `docs/security.md` "Secret-file pattern & broker auth" and
+`scripts/seed-secrets.sh`. The Oracle VM snap dockerd masks `/opt` read-only;
+`/data` is on the daemon-visible rootfs.
+
 Per-instance secret values are recorded in Outline (internal-only), never in
 this repo.

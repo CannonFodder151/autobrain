@@ -6,8 +6,8 @@ How code gets from a branch to running production services.
 
 | Pipeline | Trigger | Output |
 |----------|---------|--------|
-| `dockerhub-publish.yml` | push to `main` (or manual dispatch) | `cannonfodder151/autobrain-{backend,ai,frontend}:latest` + `:hosted` images on Docker Hub; CHANGELOG sync to the marketing site |
-| `build-hosted.yml` | manual (`workflow_dispatch`) | `ghcr.io/cannonfodder151/autobrain-{backend,ai,frontend}:<tag>` multi-arch images |
+| `dockerhub-publish.yml` | push to `main` (or manual dispatch) | `cannonfodder151/autobrain-{backend,ai,frontend}:latest` + `:default` frontend on Docker Hub; CHANGELOG sync to the marketing site |
+| `build-hosted.yml` | on every merge to `main` (or manual `workflow_dispatch`) | `ghcr.io/cannonfodder151/autobrain-{backend,ai,frontend}:hosted` multi-arch images (amd64 + arm64) built on the Oracle VM self-hosted runner |
 | `sync-mobile.yml` | push to `main` touching `frontend/`, `CHANGELOG.md`, `bump-version.sh`, `sync-mobile.sh` (or manual) | `autobrain-mobile` lineage + version sync, dispatches the mobile release pipeline |
 | `release-mobile.yml` *(in `autobrain-mobile`)* | manual dispatch with a `version` input | Signed `.aab` + draft GitHub Release + Discord `#changelog`/`#updates` |
 
@@ -42,9 +42,11 @@ Runs on every push to `main`, every pull request, and manual dispatch:
 4. **sync-changelog** — copies `CHANGELOG.md` into the
    `autobrainservice-website` repo and pushes if changed.
 
-Image tags: `latest` tracks every main merge; `hosted` is the tag the hosted
-Portainer stack pulls. There is no per-release tag — releases pin by checking
-the version/changelog match *before* deploy (see below).
+Image tags: `latest` tracks every main merge. The hosted stack pulls from
+**GHCR** (`ghcr.io/cannonfodder151/autobrain-*:hosted`, multi-arch
+amd64 + arm64) via the `build-hosted.yml` workflow — it does **not** pull from
+Docker Hub. There is no per-release tag — releases pin by checking the
+version/changelog match *before* deploy (see below).
 
 ## 2. Hosted image build (`build-hosted.yml`)
 
@@ -122,15 +124,23 @@ current compose (no drift) and treats a reverse-proxy `504` on the PUT as
 
 ## 6. Deploy flow
 
-Deploys are promotion-gated — **Demo → Default → Hosted**, in that order, and a
-release is only complete when the **Hosted** tier is verified last (board
-directive AUT-78; see `docs/deployment-guide.md` for the full checklist).
+Deploys are promotion-gated per AUT-107 — **Demo → Default → Hosted**, in that
+order, and a release is only complete when the **Hosted** tier is verified last.
+(Board directive AUT-78; see `docs/deployment-guide.md` for the full checklist.)
+
+**AUT-2409 override (current):** the three-tier promotion chain is **PAUSED**.
+All deploys are **hosted-only** (Oracle Cloud `152.69.188.133`, Portainer
+endpoint 5) in the nightly 03:00–04:00 AEST window. Demo and Default redeploys
+are suspended. When the override is lifted, revert to the three-tier order with
+per-tier health gating per `docs/deployment-guide.md`.
 
 - **Demo / Default** — `docker compose ... up -d --build` on the dev box from
-  source mounts.
-- **Hosted** — `./scripts/publish-images.sh hosted` builds + pushes the images,
-  then the Portainer stack (endpoint 5, Oracle Cloud) is updated to pull the
-  new `:hosted` tag. `sync-changelog` keeps the marketing site in step.
+  source mounts (when promotion chain is active).
+- **Hosted** — CI `build-hosted.yml` builds multi-arch images on the Oracle VM
+  self-hosted runner and pushes to **GHCR** (`:hosted` tag). The Deployment Lead
+  then triggers `deploy-instances.yml` (`workflow_dispatch`), which runs
+  `scripts/upgrade-instances.sh` to redeploy the Portainer stack (EP5) with
+  `pullImage=true`. `sync-changelog` keeps the marketing site in step.
 - DB migrations run inside the backend container on boot (Alembic `upgrade
   head`); `scripts/deploy.sh` drives remote deploys over SSH.
 
