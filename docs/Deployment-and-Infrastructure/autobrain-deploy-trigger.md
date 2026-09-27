@@ -8,7 +8,7 @@ success).
 
 ## Webhook
 
-`POST https://n8n.nathanmartina.com/webhook/autobrain-deploy-trigger`
+`POST <INTERNAL_N8N_BASE_URL>/webhook/autobrain-deploy-trigger`
 
 ### Request body (from deploy-instances.yml)
 

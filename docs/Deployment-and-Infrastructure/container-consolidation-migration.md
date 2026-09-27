@@ -5,7 +5,7 @@ Phase 1(a): reduce the number of containers in the AutoBrain stack.
 ## Scope
 
 - **Target:** `docker-compose.hosted.yml` (Portainer stack `autobrain-hosted`,
-  endpoint 5, Oracle Cloud VM 152.69.188.133).
+  endpoint 5, Oracle Cloud VM <HOSTED_VM_IP>).
 - **Change:** merge the standalone Celery `worker` service into `backend`.
   The backend image already carries the worker dependencies and its default
   CMD runs API + Celery worker+beat in one container (see

@@ -6,14 +6,14 @@ Infrastructure spend tracking for AutoBrain environments, separate from agent LL
 
 | Environment | Host / IP | Portainer Endpoint | Purpose |
 |-------------|-----------|-------------------|---------|
-| **Dev** | 10.0.3.39 | 6 = PaperClip-AutoBrain-Dev-Box | Dev box; Paperclip control plane + dev stack |
-| **Demo** | 10.0.3.17 | 2 = Portainer-Host | Demo stack; separate compose file |
-| **Default** | 10.0.3.17 | 2 = Portainer-Host | Default stack; separate compose file |
-| **Hosted (Production)** | 152.69.188.133 | 5 = AutoBrain-Hosted | ARM cloud VM; public server; federation hub; highly available |
+| **Dev** | <DEV_BOX_IP> | 6 = PaperClip-AutoBrain-Dev-Box | Dev box; Paperclip control plane + dev stack |
+| **Demo** | <PORTENER_HOST_IP> | 2 = Portainer-Host | Demo stack; separate compose file |
+| **Default** | <PORTENER_HOST_IP> | 2 = Portainer-Host | Default stack; separate compose file |
+| **Hosted (Production)** | <HOSTED_VM_IP> | 5 = AutoBrain-Hosted | ARM cloud VM; public server; federation hub; highly available |
 
 ## Hosted Production (Oracle Cloud) — Current Spend
 
-Production stack runs on Oracle Cloud VM `152.69.188.133` (Portainer endpoint 5). Services on this VM:
+Production stack runs on Oracle Cloud VM `<HOSTED_VM_IP>` (Portainer endpoint 5). Services on this VM:
 
 - AutoBrain API (FastAPI) + Celery workers
 - PostgreSQL database
@@ -36,7 +36,7 @@ Production stack runs on Oracle Cloud VM `152.69.188.133` (Portainer endpoint 5)
 
 ## On-Prem Development (Hidden Costs)
 
-The dev box at `10.0.3.39` runs on local hardware — no cloud bill, but real cost:
+The dev box at `<DEV_BOX_IP>` runs on local hardware — no cloud bill, but real cost:
 
 | Resource | Est. Monthly | Notes |
 |----------|--------------|-------|
@@ -46,7 +46,7 @@ The dev box at `10.0.3.39` runs on local hardware — no cloud bill, but real co
 | Engineer time / maintenance | Unquantified | Reinstalls, upgrades, hardware failure |
 | **Total** | **~$30–60 AUD + intangibles** | Not on any invoice |
 
-**Note:** the same box also runs Demo/Default stacks (10.0.3.17, Portainer endpoint 2) — those marginal costs are lower (no incremental hardware).
+**Note:** the same box also runs Demo/Default stacks (<PORTENER_HOST_IP>, Portainer endpoint 2) — those marginal costs are lower (no incremental hardware).
 
 ## Stack Components and Cost Drivers
 

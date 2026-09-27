@@ -4,7 +4,7 @@ Phase 3 moves hosted AutoBrain services to Oracle Cloud. This document captures 
 
 ## Executive Summary
 
-**Key Finding:** Production (AutoBrain-Hosted) is **already running on Oracle Cloud** at `152.69.188.133`. The migration scope is narrower than initially assumed:
+**Key Finding:** Production (AutoBrain-Hosted) is **already running on Oracle Cloud** at `<HOSTED_VM_IP>`. The migration scope is narrower than initially assumed:
 
 1. Consolidate dev environment (decide: hybrid vs. full cloud)
 2. Move marketing website (`autobrainservice-website`) to cloud
@@ -19,14 +19,14 @@ Phase 3 moves hosted AutoBrain services to Oracle Cloud. This document captures 
 | 9Router (Hosted) | Oracle Cloud VM | ✅ Running |
 | Rego Lookup API | Unknown | 🔍 Audit needed |
 | Marketing Website | Unknown | 🔍 Audit needed |
-| Development Environment | On-prem (10.0.3.39) | ✅ Running |
-| Demo / Default Stacks | On-prem (10.0.3.17) | ✅ Running |
+| Development Environment | On-prem (<DEV_BOX_IP>) | ✅ Running |
+| Demo / Default Stacks | On-prem (<PORTENER_HOST_IP>) | ✅ Running |
 
 ## Cost Scenarios
 
 ### Option A: Hybrid (Recommended)
 - **Production:** Stays on current Oracle Cloud VM
-- **Development:** Stays on-prem (10.0.3.39)
+- **Development:** Stays on-prem (<DEV_BOX_IP>)
 - **Marketing + Rego-Lookup:** Move to hosted VM (if capacity allows)
 
 | Cost Item | Monthly | Notes |
