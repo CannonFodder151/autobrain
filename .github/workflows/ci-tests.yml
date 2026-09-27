@@ -88,3 +88,4 @@ jobs:
             }
         env:
           SLACK_WEBHOOK_URL: https://n8n.nathanmartina.com/webhook/discord-report
+# trigger
