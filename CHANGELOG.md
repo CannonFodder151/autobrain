@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-4259)
+- fix(backend): merge alembic heads `a3661engineers` (engineer marketplace) and `aut3447_passkey_credentials` (WebAuthn) via new merge revision `m3rge07`; restores single-head guarantee so `alembic upgrade head` works and pytest-smoke gate passes
+
 ## [0.3.280] - 2026-09-27
 
 ### Added (AUT-4120)
