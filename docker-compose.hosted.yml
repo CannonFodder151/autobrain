@@ -6,13 +6,22 @@
 # values come from ${SECRETS_DIR:-/data/autobrain/secrets} via the *_FILE pattern
 # (AUT-1533). Env must stay applied via the stack so redeploys never revert
 # SMTP2GO/SMTP_* (see AUT-97/AUT-101).
-# AUT-3153 (Phase 1a): the standalone `worker` service is merged into `backend`
+# AUT-3153 Phase 1a: the standalone `worker` service is merged into `backend`
 # (the backend image already runs Celery worker+beat — see docker/backend/Dockerfile
 # CMD and docker-compose.prod.yml). The hosted stack drops from 9 to 8 containers.
 # The separate autobrain-worker image is no longer referenced here; its build is
 # retired from CI (AUT-3172).
 # The fuel-poll tasks that used to live in the worker now run in the backend
 # container, so FUEL_*_FILE secrets moved from the worker block to backend env.
+# AUT-3153 Phase 2 / AUT-3824: the standalone `ai` service (AI gateway + market-data)
+# is merged into `backend`. The backend image now runs API (:8000), AI gateway
+# (:8001), and Celery worker+beat, with market-data as Celery tasks. The separate
+# autobrain-ai image is no longer referenced here. This drops the stack from
+# 10 to 9 containers (worker merge: 9→8; ai merge: 8→9 — total 12→9 with
+# backup-agent removal AUT-3827).
+# AUT-3827: the standalone `backup-agent` service is removed; its job (hourly
+# snapshot push to autobrain-backup) now runs as a Celery beat task inside
+# `backend` (app.workers.tasks.backup_offsite_hourly).
 
 # Secret-file pattern (AUT-1533): secret-class values are bind-mounted from
 # ${SECRETS_DIR:-/data/autobrain/secrets} (root:1000, 0640) and loaded into

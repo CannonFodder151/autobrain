@@ -5,28 +5,31 @@
 │  Flutter   │──────────────────▶│  nginx (reverse proxy :80)    │
 │ iOS/Android│◀──────────────────│  /api -> backend:8000         │
 └────────────┘                   │  /ws   -> backend:8000        │
-                                 │  /ai   -> ai:8001             │
+                                 │  /ai   -> backend:8001        │
                                  └──────────────┬────────────────┘
                                                 │
-                     ┌──────────────────────────┼──────────────────────────┐
-                     ▼                          ▼                          ▼
-             ┌──────────────┐          ┌──────────────┐           ┌──────────────┐
-             │  backend     │          │  ai          │           │  frontend    │
-             │  FastAPI     │          │  gateway     │           │  nginx static│
-             └──────┬───────┘          │  :8001       │           └──────────────┘
-                    │  REST/WS          │  + market-   │
-         ┌──────────┼──────────┐        │  data :8000  │
-         ▼          ▼          ▼        └──────┬───────┘
-     PostgreSQL   Redis      MinIO      AI_ROUTER_URL|EMBEDDING
-     (pgvector)  (cache/     (S3)             ▼
-                 broker)                 ┌──────────────┐
-         ▲          ▲                    │  9Router     │
-         │          │                    └──────────────┘
-         └──────────┴──────────────┐
-                          ┌──────────────┐
-                          │  worker      │  Celery worker + beat
-                          │  (hosted)    │
-                          └──────────────┘
+                          ┌─────────────────────┼─────────────────────┐
+                          ▼                     ▼                     ▼
+                 ┌──────────────┐       ┌──────────────┐      ┌──────────────┐
+                 │  backend     │       │  hub         │      │  frontend    │
+                 │  FastAPI     │       │  federation  │      │  nginx static│
+                 │  :8000       │       │  :8000       │      └──────────────┘
+                 │  AI gateway  │       └──────────────┘
+                 │  :8001       │
+                 │  Celery      │
+                 │  worker+beat │
+                 └──────┬───────┘
+                        │  REST/WS
+          ┌─────────────┼─────────────┐
+          ▼             ▼             ▼
+    PostgreSQL      Redis         MinIO
+    (pgvector)      (cache/       (S3)
+                    broker)
+                          ▲
+                          │
+                  ┌──────────────┐
+                  │  9Router     │
+                  └──────────────┘
 ```
 
 ## Deployment topologies

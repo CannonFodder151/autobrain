@@ -60,7 +60,7 @@ curl http://localhost:8001/health        # AI gateway
 
 `docker-compose.prod.yml` runs: **postgres, redis, minio, backend (API + AI gateway + Celery worker+beat in-container), frontend** — 5 containers. The frontend nginx container serves the Flutter web app at `/` and proxies `/api/*`, `/ws/*`, `/ai/*` to backend/AI — same-origin, no CORS needed. The AI gateway runs as a subprocess on `:8001` inside the backend container.
 
-`docker-compose.hosted.yml` runs the same stack plus Stripe billing and self-service signup, with prebuilt Docker Hub images (`cannonfodder151/autobrain-*:hosted`). Hosted uses 8 containers: postgres, redis, minio, backend, ai, frontend, hub, 9router — with a separate `ai` container (AI gateway + market-data) and dedicated `9router` instance.
+`docker-compose.hosted.yml` runs the same stack plus Stripe billing and self-service signup, with prebuilt Docker Hub images (`cannonfodder151/autobrain-*:hosted`). Hosted uses 10 containers: postgres, redis, minio, backend (API + AI gateway + Celery worker+beat in-container), frontend, hub, 9router, autobrain-backup, gh-runner — with a dedicated `9router` instance and an ARM64 CI runner.
 
 ## Documentation
 

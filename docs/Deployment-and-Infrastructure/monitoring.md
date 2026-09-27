@@ -32,7 +32,7 @@ uptime monitor:
 | Uptime / restarts | `docker ps`, Portainer container list |
 | Health | Portainer healthcheck badges; `curl /health` per tier |
 | API errors | backend JSON logs (grep `"level":"error"`) |
-| Router status | `GET http://ai:8001/health` → `router_enabled` |
+| Router status | `GET http://backend:8001/health` → `router_enabled` |
 | OCR failures | `ocr_status=failed` in receipts |
 | Queue depth | Celery `inspect active`, Redis `llen` on broker queues |
 | Disk | `df -h` (backups + MinIO grow fastest) |

@@ -16,6 +16,8 @@ SECRET_FILES = {
     "admin_api_key", "smtp_username", "smtp_password", "stripe_secret_key",
     "stripe_webhook_secret", "iap_google_service_account_json",
     "iap_apple_private_key", "hub_hosted_registration_key",
+    # AUT-3827 off-site backup (AUT-3827)
+    "backup_offsite_gui_key", "backup_offsite_ingest_key",
     # AUT-1858 fuel feeds (AUT-1813/AUT-1932/AUT-2218/AUT-2610) + dongle backchannel (AUT-1673).
     "fuel_nsw_api_key", "fuel_nsw_api_secret", "fuel_vic_api_key",
     "fuel_vic_api_secret", "fuel_qld_api_key", "fuel_sa_api_key",
@@ -64,15 +66,15 @@ def main():
     hc = hc if isinstance(hc, str) else " ".join(hc)
     assert "/run/secrets/redis_password" in hc, f"redis healthcheck not authed: {hc!r}"
 
-    # F2: no secret-class plain env left on backend/ai. The worker service was
-    # merged into backend (AUT-3153), so there is no separate worker service.
-    for svc_name in ("backend", "ai"):
-        plain = PLAIN_FORBIDDEN & set(env_of(svcs[svc_name]))
-        if plain:
-            errors.append(f"{svc_name} still carries plain secret env: {sorted(plain)}")
+    # F2: no secret-class plain env left on backend. The worker and ai services
+    # were merged into backend (AUT-3153 Phase 1a/2), so there are no separate
+    # worker/ai services.
+    plain = PLAIN_FORBIDDEN & set(env_of(svcs["backend"]))
+    if plain:
+        errors.append(f"backend still carries plain secret env: {sorted(plain)}")
 
     # F2: *_FILE references point at seeded files.
-    for svc_name in ("postgres", "backend", "ai"):
+    for svc_name in ("postgres", "backend"):
         for k, v in env_of(svcs[svc_name]).items():
             if k.endswith("_FILE"):
                 fname = v.rsplit("/", 1)[-1]

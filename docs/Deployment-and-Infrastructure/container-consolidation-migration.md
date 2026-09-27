@@ -16,11 +16,12 @@ Phase 1(a): reduce the number of containers in the AutoBrain stack.
 
 ## What is already consolidated
 
-- Market-data scraper runs inside the `ai` image (`docker/ai/Dockerfile`,
-  `docker-compose.hosted.yml` `ai` service) — AUT-1242/C3.
+- Market-data scraper runs as Celery tasks in the `backend` container (no
+  separate `ai` service) — AUT-3153 Phase 2 / AUT-3824.
 - MinIO bucket initialization runs inside the `minio` service entrypoint —
   AUT-1242/C2. There is no separate `minio-init` sidecar in the hosted stack.
 - Celery beat runs inside the worker (`-B`) — AUT-1242/C1.
+- Celery worker+beat merged into `backend` container (AUT-3153 Phase 1a).
 
 ## Pre-deploy
 
@@ -59,12 +60,12 @@ The compose re-apply removes the standalone `worker` container and recreates
       `alembic_migrations_applied` after `python -m app.db.bootstrap`.
 - [ ] Celery tasks still run: trigger a fuel-poll task or inspect the beat
       schedule; confirm no duplicate worker processes.
-- [ ] AI gateway still serves on `http://ai:8001` (the `ai` service is
-      unchanged).
+- [ ] AI gateway serves on `http://backend:8001` (merged into backend).
 - [ ] MinIO bucket `autobrain-assets` exists and is private (`mc anonymous
       get` → `none`).
 - [ ] `worker` container no longer exists in the hosted stack.
 - [ ] `docker-compose.hosted.yml` service list has no `worker` service.
+- [ ] `docker-compose.hosted.yml` service list has no `ai` service.
 
 ## Rollback
 

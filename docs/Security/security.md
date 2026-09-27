@@ -264,7 +264,7 @@ See [SECURITY.md](../../SECURITY.md) for the reporting policy.
 - [x] Redis `requirepass` on every stack incl. hosted + dev (AB-INFRA-004, AUT-1533).
 - [x] Secret-class env migrated to `_FILE` files (AUT-1533) — hub/rego-lookup pending.
 - [ ] Set a real `AI_ROUTER_URL` and key in prod.
-- [ ] Set a real `AI_GATEWAY_API_KEY` (same value for backend + ai services).
+- [ ] Set a real `AI_GATEWAY_API_KEY` (used by backend to call internal AI gateway on :8001).
 - [ ] Restrict CORS origins.
 - [ ] Enable HTTPS (TLS termination on nginx or a load balancer).
 - [ ] Restrict SSH (key-only auth).

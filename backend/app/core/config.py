@@ -64,7 +64,7 @@ class Settings(BaseSettings):
     AI_ROUTER_API_KEY: str = ""
     AI_ROUTER_API_KEY_FILE: str = ""  # AUT-1533: secret-file pattern
     AI_ROUTER_TIMEOUT_SECONDS: int = 60
-    AI_LOCAL_BASE_URL: str = "http://ai:8001"
+    AI_LOCAL_BASE_URL: str = "http://localhost:8001"
     AI_GATEWAY_API_KEY: str = ""  # shared secret backend->AI gateway (Bearer)
     AI_ENABLED: bool = True  # AUT-3470: global toggle for deterministic-first mode
     EMBEDDING_MODEL: str = "text-embedding-3-small"

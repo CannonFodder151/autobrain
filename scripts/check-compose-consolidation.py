@@ -8,9 +8,7 @@ import sys
 
 import yaml
 
-
 COMPOSE = "docker-compose.hosted.yml"
-
 
 def main():
     with open(COMPOSE) as f:
@@ -39,18 +37,24 @@ def main():
         if key not in backend_env:
             errors.append(f"backend env missing {key}")
 
-    # C4: ai service (gateway + market-data) remains intact.
-    if "ai" not in svcs:
-        errors.append("`ai` service missing")
-    ai_env = svcs.get("ai", {}).get("environment") or {}
-    if "API_KEY_FILE" not in ai_env:
-        errors.append("ai env missing market-data API_KEY_FILE")
+    # C4: AI gateway merged into backend (runs on :8001 alongside API :8000 + Celery).
+    if "ai" in svcs:
+        errors.append("standalone `ai` service still present (should be merged into backend)")
+    if "ai_app.main:app" not in backend_cmd or "8001" not in backend_cmd:
+        errors.append("backend command missing AI gateway (uvicorn ai_app.main:app on 8001)")
+    if "AI_GATEWAY_API_KEY_FILE" not in backend_env:
+        errors.append("backend env missing AI_GATEWAY_API_KEY_FILE")
+    if "8001" not in (svcs["backend"].get("expose") or []):
+        errors.append("backend expose missing port 8001 (AI gateway)")
+
+    # C5: market-data scraper moved to Celery tasks; no separate service.
+    if "market-data" in svcs:
+        errors.append("standalone `market-data` service still present")
 
     if errors:
         print("\n".join(f"FAIL: {e}" for e in errors))
         sys.exit(1)
     print(f"OK: {COMPOSE} satisfies AUT-3153 consolidation invariants")
-
 
 if __name__ == "__main__":
     main()
