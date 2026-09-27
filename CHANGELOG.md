@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed (AUT-1029)
+- ci(dockerhub-publish, build-hosted): add superseded-check job to drop queued main-branch runs when a newer main commit has already published, eliminating 6+ redundant 5-image rebuild queues while never cancelling in-flight runs (AUT-967/AUT-1756)
+
 ## [0.3.279] - 2026-09-26
 
 ### Fixed (AUT-3570)
