@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.280] - 2026-09-27
+
 ### Added (AUT-4120)
 - feat(backend): Redis cache (TTL 1h) for query embeddings in `vector_search.py`; repeated searches return cached vector without 9Router call
 - fix(backend): cached vectors are re-validated against `EMBEDDING_DIMENSION` on read; a poisoned/wrong-dimension cache entry is rejected and the router path re-derives the vector instead of binding it to SQL (22P02)
