@@ -48,26 +48,44 @@ async def lookup_vehicle(rego: str | None, state: str | None,
 
 
 async def _fetch_sca_categories(vehicle: dict) -> dict | None:
-    """POST /sca-parts to the self-hosted market-data container."""
-    if not settings.MARKET_DATA_URL:
-        return None
-    url = settings.MARKET_DATA_URL.rstrip("/") + "/sca-parts"
-    payload = {
-        "rego": vehicle.get("rego") or "",
-        "state": vehicle.get("state") or "",
-        "make": vehicle.get("make") or "",
-        "model": vehicle.get("model") or "",
-        "year": vehicle.get("year"),
-    }
-    headers = {"X-API-Key": settings.MARKET_DATA_API_KEY} if settings.MARKET_DATA_API_KEY else {}
+    """Fetch SCA parts categories — self-hosted API first, then in-process scraper.
+
+    The self-hosted market-data container was retired in AUT-3810 (Phase 1a).
+    When MARKET_DATA_URL is unset the backend scrapes SCA parts-guide itself
+    via app.services.market_scraper (deterministic HTTP, no browser).
+    """
+    if settings.MARKET_DATA_URL:
+        url = settings.MARKET_DATA_URL.rstrip("/") + "/sca-parts"
+        payload = {
+            "rego": vehicle.get("rego") or "",
+            "state": vehicle.get("state") or "",
+            "make": vehicle.get("make") or "",
+            "model": vehicle.get("model") or "",
+            "year": vehicle.get("year"),
+        }
+        headers = {"X-API-Key": settings.MARKET_DATA_API_KEY} if settings.MARKET_DATA_API_KEY else {}
+        try:
+            async with httpx.AsyncClient(timeout=60) as client:
+                resp = await client.post(url, json=payload, headers=headers)
+                resp.raise_for_status()
+                data = resp.json()
+                if isinstance(data, dict) and data.get("ok") is False:
+                    logger.warning("market_data_sca_degraded", note=data.get("note"))
+                return data
+        except Exception as exc:
+            logger.warning("market_data_sca_failed", error=str(exc))
+            return None
+
+    # AUT-3810: in-process deterministic scraper (no container, no AI).
+    from app.services.market_scraper import fetch_sca_parts
     try:
-        async with httpx.AsyncClient(timeout=60) as client:
-            resp = await client.post(url, json=payload, headers=headers)
-            resp.raise_for_status()
-            data = resp.json()
-            if isinstance(data, dict) and data.get("ok") is False:
-                logger.warning("market_data_sca_degraded", note=data.get("note"))
-            return data
+        return await fetch_sca_parts(
+            rego=vehicle.get("rego"),
+            state=vehicle.get("state"),
+            make=vehicle.get("make") or "",
+            model=vehicle.get("model") or "",
+            year=vehicle.get("year"),
+        )
     except Exception as exc:
         logger.warning("market_data_sca_failed", error=str(exc))
         return None

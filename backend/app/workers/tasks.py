@@ -627,6 +627,54 @@ def refresh_sca_parts_cache() -> dict:
     return _run(_prewarm())
 
 
+@shared_task
+def refresh_market_data_cache() -> dict:
+    """Daily market-data cache prewarm (AUT-3810 Phase 1a).
+
+    Walks every distinct (make, model, year) in the vehicles table and forces
+    a fresh market-data lookup so the next valuation returns from cache.
+    Failures on individual vehicles are logged and skipped.
+    """
+    from app.services import market_data
+
+    async def _prewarm() -> dict:
+        async with SessionLocal() as db:
+            sigs = await market_data.list_vehicle_signatures(db)
+        if not sigs:
+            logger.info("market_data_cache_prewarm_done", vehicles=0, ok=0, failed=0,
+                        duration_s=0.0)
+            return {"vehicles": 0, "ok": 0, "failed": 0, "duration_s": 0.0}
+
+        sem = asyncio.Semaphore(4)
+
+        async def _one(sig: dict) -> str:
+            async with sem:
+                try:
+                    async with SessionLocal() as db:
+                        await market_data.get_market_data(
+                            db, make=sig["make"] or "", model=sig["model"] or "",
+                            year=sig["year"], refresh=True,
+                        )
+                    return "ok"
+                except Exception:
+                    logger.exception("market_data_cache_prewarm_vehicle_failed",
+                                     make=sig["make"], model=sig["model"],
+                                     year=sig["year"])
+                    return "failed"
+
+        started = time.monotonic()
+        outcomes = await asyncio.gather(*(_one(s) for s in sigs))
+        duration = time.monotonic() - started
+        ok = sum(1 for o in outcomes if o == "ok")
+        failed = len(outcomes) - ok
+        summary = {"vehicles": len(sigs), "ok": ok, "failed": failed,
+                   "duration_s": round(duration, 2)}
+        logger.info("market_data_cache_prewarm_done", **summary)
+        return summary
+
+    return _run(_prewarm())
+
+
 def _pdf_text(data: bytes) -> str:
     """Extract text from a PDF for downstream OCR/AI extraction."""
     try:

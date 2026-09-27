@@ -129,20 +129,36 @@ def _aggregate(listings: list[dict]) -> dict:
 
 
 async def _fetch_provider(query: str, make: str, model: str, year: int | None, vehicle_type: str = "car") -> dict | None:
-    """POST /search to the self-hosted market-data API. None on any failure."""
-    if not settings.MARKET_DATA_URL:
-        return None
-    url = settings.MARKET_DATA_URL.rstrip("/") + "/search"
+    """Fetch market listings — self-hosted API first, then in-process scraper.
+
+    The self-hosted market-data container (market-data/) was retired in
+    AUT-3810 (Phase 1a container consolidation). When MARKET_DATA_URL is set
+    the backend still calls it (legacy path, kept for dev/demo stacks that
+    still run the container); when it is unset the backend scrapes CarsGuide
+    itself via app.services.market_scraper (deterministic HTTP, no browser).
+    """
+    if settings.MARKET_DATA_URL:
+        url = settings.MARKET_DATA_URL.rstrip("/") + "/search"
+        try:
+            async with httpx.AsyncClient(timeout=60) as client:
+                resp = await client.post(
+                    url,
+                    json={"query": query, "make": make, "model": model, "year": year,
+                          "vehicle_type": vehicle_type},
+                    headers={"X-API-Key": settings.MARKET_DATA_API_KEY} if settings.MARKET_DATA_API_KEY else {},
+                )
+                resp.raise_for_status()
+                return _parse_provider_response(resp.json())
+        except Exception as exc:
+            logger.warning("market_provider_failed_falling_back", error=str(exc), query=query)
+            return None
+
+    # AUT-3810: in-process deterministic scraper (no container, no AI).
+    from app.services.market_scraper import search_carsguide
     try:
-        async with httpx.AsyncClient(timeout=60) as client:
-            resp = await client.post(
-                url,
-                json={"query": query, "make": make, "model": model, "year": year,
-                      "vehicle_type": vehicle_type},
-                headers={"X-API-Key": settings.MARKET_DATA_API_KEY} if settings.MARKET_DATA_API_KEY else {},
-            )
-            resp.raise_for_status()
-            return _parse_provider_response(resp.json())
+        if vehicle_type in ("motorcycle", "bike", "motorbike"):
+            return {"source": "bikesguide", "listings": []}
+        return await search_carsguide(query, year)
     except Exception as exc:
         logger.warning("market_provider_failed_falling_back", error=str(exc), query=query)
         return None
@@ -268,3 +284,27 @@ async def clear_market_cache(db: AsyncSession, make: str, model: str, year: int 
         MarketListingCache.year == year,
     ))
     await db.commit()
+
+
+async def list_vehicle_signatures(db: AsyncSession) -> list[dict]:
+    """Return distinct (make, model, year) tuples from the vehicles table.
+
+    Used by the daily prewarm task — empty fields are dropped so we only
+    request meaningful market data lookups. Capped at 1000 to keep the daily
+    run bounded (the fleet is in the low hundreds today).
+    """
+    from app.models.vehicle import Vehicle
+    from sqlalchemy import func, select
+
+    rows = (await db.execute(
+        select(
+            Vehicle.make, Vehicle.model, Vehicle.year, func.count(Vehicle.id)
+        )
+        .where(Vehicle.make.isnot(None), Vehicle.model.isnot(None))
+        .group_by(Vehicle.make, Vehicle.model, Vehicle.year)
+        .limit(1000)
+    )).all()
+    return [
+        {"make": m, "model": md, "year": y, "vehicle_count": int(c)}
+        for m, md, y, c in rows
+    ]
