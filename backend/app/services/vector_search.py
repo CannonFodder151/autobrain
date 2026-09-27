@@ -1,8 +1,10 @@
 """Vector embedding service — generates and stores embeddings for searchable text."""
 
+import hashlib
 import json
 
 import httpx
+from redis.asyncio import Redis
 
 from app.core.config import settings
 from app.core.logging import get_logger
@@ -10,6 +12,23 @@ from app.core.logging import get_logger
 logger = get_logger(__name__)
 
 _EMBEDDING_DIM = settings.EMBEDDING_DIMENSION
+_QUERY_CACHE_TTL = 3600  # 1 hour
+_QUERY_CACHE_PREFIX = "embedding:query:"
+
+
+def _redis_client() -> Redis:
+    return Redis.from_url(settings.REDIS_URL, decode_responses=True)
+
+
+def _normalize_query(text: str) -> str:
+    """Normalize query text for cache key: lowercase, collapse whitespace, trim."""
+    return " ".join(text.lower().split())
+
+
+def _query_cache_key(normalized_text: str) -> str:
+    """Generate cache key from normalized query text using SHA256."""
+    digest = hashlib.sha256(normalized_text.encode("utf-8")).hexdigest()
+    return f"{_QUERY_CACHE_PREFIX}{digest}"
 
 
 def _to_text(entity_type: str, data: dict) -> str:
@@ -142,8 +161,49 @@ async def _call_embedding_api(text: str) -> list[float] | None:
 
 
 async def generate_embedding(entity_type: str, data: dict) -> list[float] | None:
-    """Generate embedding vector for an entity. Returns None if router disabled."""
+    """Generate embedding vector for an entity. Returns None if router disabled.
+
+    For entity_type="query", checks Redis cache first (TTL 1h). Cache hit returns
+    the stored vector without a 9Router call; cache miss stores and returns.
+    """
     text = _to_text(entity_type, data)
     if not text.strip():
         return None
-    return await _call_embedding_api(text)
+
+    if entity_type == "query":
+        normalized = _normalize_query(text)
+        cache_key = _query_cache_key(normalized)
+
+        r = _redis_client()
+        try:
+            cached = await r.get(cache_key)
+            if cached is not None:
+                try:
+                    valid = _valid_embedding(json.loads(cached))
+                except (ValueError, TypeError):
+                    valid = None
+                if valid is not None:
+                    logger.info("embedding_cache_hit", entity_type=entity_type)
+                    return valid
+                # Stale/corrupt entry (wrong dimension or non-numeric) — fall
+                # through to the router path rather than bind a bad vector to SQL.
+                logger.warning("embedding_cache_invalid", entity_type=entity_type)
+        except Exception as exc:
+            logger.warning("embedding_cache_get_failed", error=str(exc))
+        finally:
+            await r.aclose()
+
+    embedding = await _call_embedding_api(text)
+
+    if entity_type == "query" and embedding is not None:
+        normalized = _normalize_query(text)
+        cache_key = _query_cache_key(normalized)
+        r = _redis_client()
+        try:
+            await r.setex(cache_key, _QUERY_CACHE_TTL, json.dumps(embedding))
+        except Exception as exc:
+            logger.warning("embedding_cache_set_failed", error=str(exc))
+        finally:
+            await r.aclose()
+
+    return embedding
