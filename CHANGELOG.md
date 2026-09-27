@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed (AUT-4289)
+- fix(frontend): remove the "Petrol Prices" feature tile from the home screen feature grid; `PetrolPriceMapScreen` itself is unchanged and still reachable from `frontend/lib/screens/fuel/petrol_price_map_screen.dart`
+
 ## [0.3.281] - 2026-09-27
 
 ### Fixed (AUT-4259)
