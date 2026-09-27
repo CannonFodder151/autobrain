@@ -11,17 +11,58 @@ on:
   workflow_dispatch:
 
 # Only one publish pipeline per branch at a time, but do NOT cancel an
-# in-flight run. The publish/buildx steps take many minutes; a newer push to
-# main (PR merge or auto-bump) arriving mid-publish would otherwise cancel it
-# and starve the latest commit (AUT-967, AUT-1756). Queue the newer run behind
-# the in-flight one so every push to main still publishes. The auto-bump commit
-# is tagged [skip ci] (scripts/auto-bump.sh) so it never re-triggers this
+# in-flight run. The publish/buildx steps take many minutes and push service
+# images one at a time; cancelling mid-loop would leave `:latest` mixed across
+# services (AUT-967, AUT-1756, root cause AUT-1762). Stale queued runs are
+# dropped by the superseded-check job below instead, so only the newest main
+# head rebuilds while no in-flight publish is ever interrupted. The auto-bump
+# commit is tagged [skip ci] (scripts/auto-bump.sh) so it never re-triggers this
 # workflow and the in-flight publish is never cancelled by its own version cut.
 concurrency:
   group: dockerhub-publish-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
+  superseded-check:
+    # AUT-1029: drop queued main-branch runs whose SHA is an ancestor of a
+    # newer main commit. The concurrency group keeps only one run active at a
+    # time; this job makes the queued ones exit cheaply instead of rebuilding
+    # the same images. Never cancels an in-flight run (AUT-967/AUT-1756).
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      superseded: ${{ steps.check.outputs.superseded }}
+    steps:
+      - name: Check for newer main run
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          current_sha="${{ github.sha }}"
+          # Find newer runs on main for this workflow that are not cancelled/skipped.
+          newer_sha=$(gh api \
+            "repos/${{ github.repository }}/actions/workflows/dockerhub-publish.yml/runs?branch=main&per_page=30" \
+            --jq "
+              .workflow_runs[]
+              | select(.head_sha != \"${current_sha}\" and .conclusion != \"cancelled\" and .conclusion != \"skipped\")
+              | .head_sha
+            " | head -1)
+          if [ -z "$newer_sha" ]; then
+            echo "no newer run — proceed"
+            echo "superseded=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          status=$(gh api "repos/${{ github.repository }}/compare/${current_sha}...${newer_sha}" --jq .status 2>/dev/null || echo "error")
+          if [ "$status" = "ahead" ]; then
+            echo "superseded: newer run $newer_sha is ahead of $current_sha — skipping"
+            echo "superseded=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "newer run exists but not a descendant ($status) — proceed"
+            echo "superseded=false" >> "$GITHUB_OUTPUT"
+          fi
+
   changelog-gate:
     # AUT-1785: route the lightweight (git/jq, ~seconds) merge-gating gate to
     # bare [self-hosted, linux, x64] instead of the `vm2` label, so GitHub can
@@ -115,8 +156,9 @@ jobs:
           rm -f "$TMPREQ"
 
   auto-bump:
-    needs: changelog-gate
+    needs: [changelog-gate, superseded-check]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+      && needs.superseded-check.outputs.superseded != 'true'
     runs-on: [self-hosted, linux, x64, vm2]
     permissions:
       contents: write
@@ -147,8 +189,9 @@ jobs:
           exit 1
 
   publish:
-    needs: auto-bump
+    needs: [auto-bump, superseded-check]
     if: github.event_name != 'pull_request'
+      && needs.superseded-check.outputs.superseded != 'true'
     runs-on: [self-hosted, linux, x64, vm2]
     permissions:
       contents: read
@@ -224,8 +267,9 @@ jobs:
     # Tag the amd64 images as the default platform manifest (AUT-967).
     # Multi-arch manifests (amd64+arm64) are built by build-hosted.yml when
     # the arm64 runner is available.
-    needs: publish
+    needs: [publish, superseded-check]
     if: github.event_name != 'pull_request'
+      && needs.superseded-check.outputs.superseded != 'true'
     runs-on: [self-hosted, linux, x64, vm2]
     permissions:
       contents: read
@@ -278,8 +322,9 @@ jobs:
             "cannonfodder151/autobrain-frontend:default-amd64"
 
   sync-changelog:
-    needs: publish-manifest
+    needs: [publish-manifest, superseded-check]
     if: github.event_name != 'pull_request'
+      && needs.superseded-check.outputs.superseded != 'true'
     runs-on: [self-hosted, linux, x64, vm2]
     permissions:
       contents: write

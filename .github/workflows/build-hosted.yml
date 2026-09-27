@@ -31,13 +31,54 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  superseded-check:
+    # AUT-1029: drop queued main-branch runs whose SHA is an ancestor of a
+    # newer main commit. The concurrency group keeps only one run active at a
+    # time; this job makes the queued ones exit cheaply instead of rebuilding
+    # the same images. Never cancels an in-flight run (AUT-1756/AUT-1762).
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      superseded: ${{ steps.check.outputs.superseded }}
+    steps:
+      - name: Check for newer main run
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          current_sha="${{ github.sha }}"
+          newer_sha=$(gh api \
+            "repos/${{ github.repository }}/actions/workflows/build-hosted.yml/runs?branch=main&per_page=30" \
+            --jq "
+              .workflow_runs[]
+              | select(.head_sha != \"${current_sha}\" and .conclusion != \"cancelled\" and .conclusion != \"skipped\")
+              | .head_sha
+            " | head -1)
+          if [ -z "$newer_sha" ]; then
+            echo "no newer run — proceed"
+            echo "superseded=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          status=$(gh api "repos/${{ github.repository }}/compare/${current_sha}...${newer_sha}" --jq .status 2>/dev/null || echo "error")
+          if [ "$status" = "ahead" ]; then
+            echo "superseded: newer run $newer_sha is ahead of $current_sha — skipping"
+            echo "superseded=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "newer run exists but not a descendant ($status) — proceed"
+            echo "superseded=false" >> "$GITHUB_OUTPUT"
+          fi
+
   auto-bump:
     # x64 jobs run on the new vm2 runner (gh-runner-autobrain-2). The legacy
     # x64 runner (gh-runner-autobrain) is currently degraded (AUT-1781); routing
     # on `vm2` guarantees dispatch to the healthy new runner. Re-balance across
     # legacy+new again by dropping `vm2` once AUT-1781 is repaired. ARM builds
     # stay pinned to the Oracle VM arm64 runner below.
+    needs: superseded-check
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+      && needs.superseded-check.outputs.superseded != 'true'
     runs-on: [self-hosted, linux, x64, vm2]
     permissions:
       contents: write
@@ -71,8 +112,9 @@ jobs:
           echo "==> auto-bump done"
 
   build:
-    needs: auto-bump
+    needs: [auto-bump, superseded-check]
     if: github.event_name != 'pull_request'
+      && needs.superseded-check.outputs.superseded != 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -203,13 +245,14 @@ jobs:
           echo "==> all ${ARCH} images verified"
 
   build-manifest:
-    needs: build
+    needs: [build, superseded-check]
+    if: github.event_name != 'pull_request'
+      && needs.superseded-check.outputs.superseded != 'true'
     outputs:
       backend_digest: ${{ steps.digest.outputs.backend_digest }}
       worker_digest: ${{ steps.digest.outputs.worker_digest }}
       ai_digest: ${{ steps.digest.outputs.ai_digest }}
       frontend_digest: ${{ steps.digest.outputs.frontend_digest }}
-    if: github.event_name != 'pull_request'
     runs-on: [self-hosted, linux, x64, vm2]
     permissions:
       contents: read
@@ -270,8 +313,9 @@ jobs:
           done
 
   compose-pin:
-    needs: build-manifest
+    needs: [build-manifest, superseded-check]
     if: github.event_name != 'pull_request'
+      && needs.superseded-check.outputs.superseded != 'true'
     runs-on: [self-hosted, linux, x64, vm2]
     permissions:
       contents: write
@@ -336,10 +380,11 @@ jobs:
             --file docker-compose.hosted.yml
 
   k8s-pin:
-    needs: build-manifest
+    needs: [build-manifest, superseded-check]
     # AUT-2175: pin k8s manifests to the freshly published SHA digests so
     # a redeploy without a digest bump leaves the pod image unchanged.
     if: github.event_name != 'pull_request'
+      && needs.superseded-check.outputs.superseded != 'true'
     runs-on: [self-hosted, linux, x64, vm2]
     permissions:
       contents: write
