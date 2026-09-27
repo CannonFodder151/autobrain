@@ -6,6 +6,8 @@
 # `exec /bin/sh: exec format error` (exit 255), so the arm64 build job never
 # reached flutter/dart2js. Pin the MULTI-ARCH index tag+digest instead:
 # 3.13.15-slim-trixie resolves to aarch64 on arm64 runners.
+# AUT-4113: install Playwright Chromium for local market-data scraping
+# (CarsGuide/BikesGuide/SCA) — replaces the separate market-data container.
 FROM python:3.13.15-slim-trixie@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285 AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -17,6 +19,11 @@ WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl minio-client \
     && ln -s /usr/bin/minio-client /usr/local/bin/mc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Playwright chromium for market-data scraper (AUT-4113)
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN python -m playwright install --with-deps chromium \
     && rm -rf /var/lib/apt/lists/*
 
 # Backend dependencies
@@ -35,7 +42,7 @@ COPY ai/app ./ai_app
 COPY ai/requirements.txt ./ai_requirements.txt
 
 # Non-root user
-RUN useradd -m -u 1000 autobrain && chown -R autobrain:autobrain /app
+RUN useradd -m -u 1000 autobrain && chown -R autobrain:autobrain /app /ms-playwright
 
 # MinIO init entrypoint (before dropping privileges)
 COPY scripts/init-minio.sh /init-minio.sh
@@ -46,6 +53,33 @@ RUN chmod +x /init-minio.sh
 COPY docker/entrypoint.sh docker/lib-load-secrets.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/lib-load-secrets.sh
 
+# AUT-1739 (CWE-250) + AUT-2258: the image already runs as non-root `autobrain`.
+# Re-own Chromium's SUID sandbox helper to root + setuid so the market-data
+# scraper can sandbox untrusted third-party content as that non-root user; the
+# scraper falls back to --no-sandbox only if a host can't initialise the sandbox.
+# Run as the FINAL root RUN (not chained with the autobrain chowns above) so
+# the chown/chmod cannot be masked by any later layer change. AUT-2258
+# root-cause: the previous chained RUN with `&&` could be invalidated by any
+# upstream layer change, leaving chrome-sandbox autobrain:autobrain 0755 at
+# runtime (CTO verification 2026-09-03). This RUN runs as root (USER switched
+# back to root) so chown root:root succeeds regardless of build-host uid.
+# AUT-2582 fix: Playwright 1.62+ ships chrome_sandbox (underscore); also match
+# chrome-sandbox (hyphen) for older Playwright versions so the SUID sandbox
+# helper is always root-owned + setuid regardless of naming convention.
+USER root
+RUN set -eux; \
+    sb_count=0; \
+    for sb in $(find /ms-playwright -type f \( -name chrome-sandbox -o -name chrome_sandbox \)); do \
+        chown root:root "$sb"; \
+        chmod 4755 "$sb"; \
+        sb_count=$((sb_count+1)); \
+    done; \
+    if [ "$sb_count" -gt 0 ]; then \
+        echo "AUT-1739: re-SUID $sb_count chrome-sandbox binary(ies) under /ms-playwright"; \
+    else \
+        echo "AUT-1739: no chrome-sandbox found under /ms-playwright (Playwright 1.62+ kernel sandbox)" >&2; \
+        ls -la /ms-playwright >&2; \
+    fi
 USER autobrain
 
 EXPOSE 8000

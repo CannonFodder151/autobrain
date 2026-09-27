@@ -18,8 +18,12 @@ now the ground truth, cached, and the AI only supplies advice/trend.
 ```
 backend valuation route
   └─ app/services/market_data.py        (provider → cache → fallback)
-       ├─ POST {MARKET_DATA_URL}/search  (self-hosted scraper, X-API-Key)
-       ├─ market_listing_cache table     (24h TTL, keyed make|model|year)
+       ├─ app/services/market_scraper/   (local CarsGuide/BikesGuide/SCA)
+       │    ├─ carsguide.py             (Nuxt SSR __NUXT_DATA__ over plain HTTP)
+       │    ├─ bikesguide.py            (same Nuxt parser + parked/gate detection)
+       │    ├─ sca.py                   (SCA parts-guide taxonomy + browser flow)
+       │    └─ browser.py               (Playwright subprocess for gated portals)
+       ├─ market_listing_cache table   (24h TTL, keyed make|model|year)
        └─ fallback (source=fallback, sample_size=0) — pipeline never 404s
   └─ payload["market"]  →  ai resale module
        ├─ sample_size >= 3  → median_price anchors the estimate
@@ -31,35 +35,22 @@ backend valuation route
 The median is **cached for 24h**, so consecutive valuations return identical
 market numbers → identical estimates. No more call-to-call wobble.
 
-## Provider protocol (same pattern as rego-lookup)
+## Provider protocol (local market_scraper)
 
-Self-hosted scraper (e.g. `carguide-api`/`carsales-api`), configured via
-`MARKET_DATA_URL` + `MARKET_DATA_API_KEY` in the backend `.env`. It is never
-called directly from AutoBrain — the backend POSTs:
+The market-data scraper now runs **locally inside the backend container** (no separate
+`MARKET_DATA_URL` service). Celery tasks call `app.services.market_scraper` directly:
 
-```
-POST {MARKET_DATA_URL}/search
-X-API-Key: <key>
-{ "query": "toyota crown", "make": "toyota", "model": "crown", "year": 1997,
-  "vehicle_type": "car" }
-```
+- `search_carsguide(query, year)` — Nuxt SSR `__NUXT_DATA__` extraction (plain HTTP)
+- `search_bikesguide(query, year)` — reuses CarsGuide parser; detects FingerprintJS
+  gate and parked page; optional Playwright channel (`browser.py`) for live gates
+- `search_sca(rego, state, make, model, year)` — SSR parts-guide taxonomy +
+  optional Playwright rego→vehicle resolution
 
-`vehicle_type` (`car` | `motorcycle`) routes the scraper to the right portal
-(CarsGuide for cars, BikeGuide for motorcycles). The backend sends its
-`vehicle.vehicle_type` field. Expected response (alias-resilient parsing —
-field names may vary):
-
-```json
-{
-  "source": "carsguide|carsales|combined",
-  "listings": [
-    {"title": "1997 Toyota Crown Royal", "price": 15000,
-     "year": 1997, "odometer_km": 120000, "source": "carsguide", "url": "..."}
-  ]
-}
-```
-
-Aggregates (median / low / high / sample_size) are computed server-side.
+The backend no longer requires `MARKET_DATA_URL` / `MARKET_DATA_API_KEY`. If set,
+they are ignored in favour of the local scrapers. The local scrapers are
+deterministic-first: plain HTTP first, Playwright subprocess only for gated
+portals, and graceful degradation (empty listings + `note`) when gates don't
+clear.
 
 ## Providers & scraping status
 
@@ -119,27 +110,24 @@ endpoint. Market data is best-effort — never blocks the estimate.
 + AI advice). Everything still works; the search UI shows "provider not
 configured".
 
-## Deploying the scraper (AUT-290)
+## Deploying the scraper (AUT-4113)
 
-The scraper source lives in the monorepo as `market-data/` (FastAPI + `carsguide.py`) and is
-bundled into the AI image (AUT-1242-C3). The `ai` container runs **two uvicorn processes**:
-- **:8001** — the AI inference gateway (`app.main:app`).
-- **:8000** — the CarsGuide/BikeGuide market-data scraper (`market-data/main:app`).
+The scraper source lives in the monorepo under `app/services/market_scraper/` and is
+bundled into the **backend image** (not the AI image). The backend Dockerfile
+installs Playwright + Chromium system deps and sets `PLAYWRIGHT_BROWSERS_PATH`.
 
-- **Hosted:** the `autobrain-hosted` stack (EP5) has no separate `market-data` service.
-  The backend is wired via `MARKET_DATA_URL: http://ai:8000` / `MARKET_DATA_API_KEY` (stack env).
-- **Prod/Dev compose:** uses the same image; `MARKET_DATA_URL` defaults to `http://ai:8000`
-  when the env var is set in the deployment env file.
-- **Dev box mirror:** Portainer stack `market-data` on EP6 (`:8003`) is legacy and
-  should be removed when convenient.
-- **Gotcha:** the current backend config refuses *default* credentials in
-  `production` (`POSTGRES_PASSWORD`/`MINIO_SECRET_KEY` = `autobrain`,
-  `SECRET_KEY` = `change-me`). Before the hosted backend can boot on the
-  current image the stack's postgres role and MinIO root password must be
-  rotated to real values AND reflected in the stack env — rotate the Postgres
-  role with `ALTER USER ... PASSWORD '...'` and MinIO with
-  `mc admin user set-password`, then redeploy. The demo/default tiers have the
-  same latent debt.
+- **Hosted:** the `autobrain-hosted` stack (EP5) has **no separate `market-data` service**.
+  The backend Celery worker+beat runs the scrapers locally; `MARKET_DATA_URL` is
+  intentionally unset in the stack env so the local fallback is used.
+- **Prod/Dev compose:** same — the backend image carries the scrapers; no
+  separate market-data container.
+- **Resource:** the backend service declares `shm_size: "256m"` so the Chromium
+  sandbox has enough shared memory.
+- **Gotcha:** the backend runs as non-root user `autobrain` (CWE-250 hardening).
+  The Chromium SUID sandbox helper (`chrome-sandbox` / `chrome_sandbox`) is
+  re-owned to `root:root 4755` at build time (AUT-1739 / AUT-2258) so the
+  scraper can sandbox untrusted third-party content; it falls back to
+  `--no-sandbox` only if the sandboxed launch fails.
 
 ## Supercheap Auto parts-guide scraper (AUT-1792)
 
@@ -164,6 +152,9 @@ so AutoBrain can suggest real parts for a vehicle. Source: `market-data/sca.py`.
   - `GET /vehicles/{id}/parts/sca-lookup` → Inventory-formatted SCA parts.
   - `POST /vehicles/{id}/parts/suggest-for-service` → parts prefill for an
     AI-suggested service, **inventory-first then SCA**.
-- **Config:** no new env var — it reuses `MARKET_DATA_URL` / `MARKET_DATA_API_KEY`.
+- **Config:** no new env var. The SCA scraper now lives in `app/services/market_scraper/sca.py`
+  and is called directly by `app/services/parts_guide.py` (no `MARKET_DATA_URL` needed).
+  Playwright + Chromium are installed in the backend image (`docker/backend/Dockerfile`),
+  and the backend service runs with `shm_size: "256m"` (needed for the Chromium sandbox).
 - **Caching:** results are cached in `sca_parts_cache` (keyed by
   `make|model|year`, 24h TTL) so repeat lookups are stable and cheap.

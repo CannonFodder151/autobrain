@@ -16,11 +16,13 @@ Phase 1(a): reduce the number of containers in the AutoBrain stack.
 
 ## What is already consolidated
 
-- Market-data scraper runs inside the `ai` image (`docker/ai/Dockerfile`,
-  `docker-compose.hosted.yml` `ai` service) — AUT-1242/C3.
+- **Market-data scraper** runs inside the **backend** image (`docker/backend/Dockerfile`,
+  no separate service) — AUT-4113 / AUT-3843. Playwright + Chromium installed in
+  the backend image; `shm_size: "256m"` declared on the backend service for
+  Chromium sandbox shared memory.
 - MinIO bucket initialization runs inside the `minio` service entrypoint —
   AUT-1242/C2. There is no separate `minio-init` sidecar in the hosted stack.
-- Celery beat runs inside the worker (`-B`) — AUT-1242/C1.
+- Celery beat runs inside the backend (`-B`) — AUT-1242/C1 / AUT-3153.
 
 ## Pre-deploy
 
@@ -91,5 +93,5 @@ If the merged backend fails health or task execution:
   and `docker-compose.yml`** (they still run the one-shot `/init-minio.sh` from
   the backend command).
 - **Align the dev `ai` service** to run the full `docker/ai/entrypoint.sh`
-  (market-data + AI gateway) instead of the gateway-only command override,
-  so dev parity matches prod/hosted.
+  (AI gateway only; market-data moved to backend) — dev parity with prod/hosted
+  where the `ai` service is gateway-only.

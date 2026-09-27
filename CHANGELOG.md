@@ -11,6 +11,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-3843 / AUT-4113)
+- feat(backend): merge market-data Chromium scraper into backend Celery tasks
+  (removes standalone market-data container; hosted stack −1 container)
+  - New `app/services/market_scraper/` package: CarsGuide, BikesGuide, SCA
+    parts-guide scrapers (deterministic HTTP + Playwright subprocess for gated portals)
+  - New Celery beat task `refresh_market_data` (daily 03:00 AEST) refreshes
+    market cache for every vehicle in fleet
+  - Backend Dockerfile installs Playwright + Chromium; `shm_size: "256m"` added
+    to backend service for Chromium shared memory
+
+### Fixed (AUT-4113)
+- fix(browser): hoist `carsguide`/`sca` imports to module top so script-mode
+  invocation (`python browser.py ...`) resolves without ImportError
+- fix(docs): update market-data architecture doc and container-consolidation
+  migration checklist to reflect local scraping in backend
+
 ## [0.3.279] - 2026-09-26
 
 ### Fixed (AUT-3570)

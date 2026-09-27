@@ -627,6 +627,59 @@ def refresh_sca_parts_cache() -> dict:
     return _run(_prewarm())
 
 
+@shared_task
+def refresh_market_data() -> dict:
+    """AUT-4113: daily market-data cache refresh (replaces the market-data container).
+
+    Walks every distinct (make, model, year) in the vehicles table and forces a
+    fresh CarsGuide/BikesGuide scrape so valuations stay current. Failures on
+    individual vehicles are logged and skipped — one bad vehicle never aborts
+    the rest. The return dict is logged as ``market_data_refresh_done`` so ops
+    can graph duration/success over the first few runs.
+    """
+    from app.services.market_data import get_market_data
+
+    async def _refresh() -> dict:
+        from sqlalchemy import select
+
+        from app.models.vehicle import Vehicle
+
+        async with SessionLocal() as db:
+            sigs = list((await db.scalars(
+                select(Vehicle.make, Vehicle.model, Vehicle.year, Vehicle.vehicle_type)
+                .where(Vehicle.make.isnot(None), Vehicle.model.isnot(None))
+                .limit(1000)
+            )).all())
+
+        sem = asyncio.Semaphore(4)
+
+        async def _one(make, model, year, vehicle_type):
+            async with sem:
+                try:
+                    async with SessionLocal() as db:
+                        await get_market_data(
+                            db, make=make, model=model, year=year,
+                            vehicle_type=vehicle_type or "car", refresh=True,
+                        )
+                    return "ok"
+                except Exception:
+                    logger.exception("market_data_refresh_vehicle_failed",
+                                     make=make, model=model, year=year)
+                    return "failed"
+
+        started = time.monotonic()
+        outcomes = await asyncio.gather(*(_one(*s) for s in sigs))
+        duration = time.monotonic() - started
+        ok = sum(1 for o in outcomes if o == "ok")
+        failed = len(outcomes) - ok
+        summary = {"vehicles": len(sigs), "ok": ok, "failed": failed,
+                   "duration_s": round(duration, 2)}
+        logger.info("market_data_refresh_done", **summary)
+        return summary
+
+    return _run(_refresh())
+
+
 def _pdf_text(data: bytes) -> str:
     """Extract text from a PDF for downstream OCR/AI extraction."""
     try:
