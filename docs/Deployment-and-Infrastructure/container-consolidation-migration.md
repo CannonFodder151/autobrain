@@ -12,8 +12,9 @@ Phase 1(a): reduce the number of containers in the AutoBrain stack.
   - Merge `market-data` scraper into `backend` Celery tasks (AUT-3810).
   - Remove standalone `backup-agent` service; hourly snapshot push runs as Celery beat task in `backend` (AUT-3827).
   - MinIO bucket init folded into `minio` entrypoint (AUT-1242/C2).
-- **Result:** hosted stack reduced from 12 → **10 long-running containers**.
-  Remaining: postgres, redis, minio, backend (API:8000 + AI:8001 + Celery), dongle-server, frontend, hub, gh-runner, 9router, autobrain-backup.
+- **Result:** hosted stack reduced from 12 → **9 long-running containers**.
+  Remaining: postgres, redis, minio, backend (API:8000 + AI:8001 + Celery), dongle-server, frontend, hub, 9router, autobrain-backup.
+  (gh-runner runs as a separate Portainer stack `gh-runner-autobrain-arm64` on EP5.)
 
 ## What is consolidated
 
@@ -69,7 +70,7 @@ The compose re-apply removes the standalone `worker`, `ai`, `market-data`, `back
       get` → `none`).
 - [ ] No `worker`, `ai`, `market-data`, or `backup-agent` containers exist in the hosted stack.
 - [ ] `docker-compose.hosted.yml` service list has no `worker`, `ai`, `market-data`, or `backup-agent` service.
-- [ ] Container count is 10 (postgres, redis, minio, backend, dongle-server, frontend, hub, gh-runner, 9router, autobrain-backup).
+- [ ] Container count is 9 (postgres, redis, minio, backend, dongle-server, frontend, hub, 9router, autobrain-backup). gh-runner is a separate Portainer stack.
 
 ## Rollback
 
@@ -83,7 +84,7 @@ If the merged backend fails health or task execution:
 
 ## Follow-ups (child issues)
 
-- **Consolidate `autobrain-backup` GUI + internal cron** into a single backup service (target: -1 container, total 9).
+- **Consolidate `autobrain-backup` GUI + internal cron** into a single backup service (target: -1 container, total 8).
 - **Consolidate MinIO init into the `minio` entrypoint for `docker-compose.prod.yml`
   and `docker-compose.yml`** (they still run the one-shot `/init-minio.sh` from
   the backend command).

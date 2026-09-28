@@ -8,7 +8,8 @@
 # SMTP2GO/SMTP_* (see AUT-97/AUT-101).
 # AUT-3153 (Phase 1a): the standalone `worker` service is merged into `backend`
 # (the backend image already runs Celery worker+beat — see docker/backend/Dockerfile
-# CMD and docker-compose.prod.yml). The hosted stack drops from 9 to 8 containers.
+# CMD and docker-compose.prod.yml). The hosted stack drops from 10 to 9 containers.
+# (gh-runner runs as a separate Portainer stack `gh-runner-autobrain-arm64` on EP5.)
 # The separate autobrain-worker image is no longer referenced here; its build is
 # retired from CI (AUT-3172).
 # The fuel-poll tasks that used to live in the worker now run in the backend
@@ -484,10 +485,11 @@ services:
       - /data/autobrain-backup/config:/config
       - /data/autobrain-backup/data:/backups
 
-  # AUT-3827: the standalone `backup-agent` service is REMOVED. Its job
-  # (hourly snapshot push to autobrain-backup) now runs as a Celery beat task
-  # inside `backend` (app.workers.tasks.backup_offsite_hourly). The hosted stack
-  # drops from 8 to 7 containers. See backend/app/services/backup_offsite.py.
+# AUT-3827: the standalone `backup-agent` service is REMOVED. Its job
+# (hourly snapshot push to autobrain-backup) now runs as a Celery beat task
+# inside `backend` (app.workers.tasks.backup_offsite_hourly). The hosted stack
+# drops from 9 to 8 containers (excluding gh-runner which is a separate stack).
+# See backend/app/services/backup_offsite.py.
 
 volumes:
    postgres-data:
