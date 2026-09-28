@@ -98,12 +98,12 @@ class _ServerSetupScreenState extends State<ServerSetupScreen> {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: Colors.black,
                           shape: BoxShape.circle,
                         ),
                         child: ClipOval(
                           child: Image.asset('assets/logo.png',
-                              width: 72, height: 72, fit: BoxFit.cover),
+                              width: 72, height: 72, fit: BoxFit.contain),
                         ),
                       ),
                       const SizedBox(height: 20),

@@ -200,11 +200,11 @@ class _LoginScreenState extends State<LoginScreen> {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: Colors.black,
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.15),
+                              color: Colors.black.withOpacity(0.30),
                               blurRadius: 24,
                               offset: const Offset(0, 8),
                             ),
@@ -215,7 +215,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             'assets/logo.png',
                             width: 72,
                             height: 72,
-                            fit: BoxFit.cover,
+                            fit: BoxFit.contain,
                           ),
                         ),
                       ),

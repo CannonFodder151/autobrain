@@ -11,6 +11,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-4327, AUT-4357)
+- fix(frontend): login, signup and server-setup logo is no longer stretched (`BoxFit.cover` → `BoxFit.contain`) and sits in a black circle instead of a white one, on all three auth screens (AUD-427 user report)
+- fix(frontend): `ApiClient.getCachedDecoded` no longer throws when the local cache backend is unavailable (web/sqflite); the vehicle manage screen, timeline, and every other cache-first screen fall through to the network path instead of failing to load
+
 ## [0.3.282] - 2026-09-27
 
 ### Changed (AUT-4289)
