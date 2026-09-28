@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-4112, AUT-4106)
+- fix(docker): add TCP keepalive sysctls to EP5 gh-runner service in `docker-compose.hosted.yml` (`net.ipv4.tcp_keepalive_time=60`, `intvl=10`, `probes=6`) so the ARM64 runner on Oracle VM maintains its long-lived TLS connection to `broker.actions.githubusercontent.com` instead of dropping with `SocketException (125): Operation canceled` / `IOException: Operation canceled`; unblocks multi-arch builds (AUT-4106)
+
 ### Fixed (AUT-4317)
 - fix(frontend): match both MinIO bucket prefixes (`autobrain-assets` on
   dev/hosted, `autobrainservice-assets` on demo/default) in nginx so
