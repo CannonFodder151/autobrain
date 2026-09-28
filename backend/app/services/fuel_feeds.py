@@ -261,6 +261,11 @@ async def ingest_vic_fuel_saver(db: AsyncSession, *, client: httpx.AsyncClient |
     Calls ``FUEL_VIC_URL`` (``https://api.servosaver.com.au/v1/prices``) with
     Bearer auth using ``FUEL_VIC_API_KEY`` / ``FUEL_VIC_API_SECRET``.
     Skipped when either credential is missing or ``FUEL_VIC_ENABLED`` is False.
+
+    AUT-4143: the endpoint is NXDOMAIN — the feed is dead. When enabled but the
+    host does not resolve, this raises ``FuelFeedError`` instead of silently
+    returning 0 stations, so the 6h beat logs the failure and the operator
+    sees it rather than a stale/empty map.
     """
     if not settings.FUEL_VIC_ENABLED:
         logger.info("fuel_vic_skipped_disabled")
