@@ -1,6 +1,6 @@
 # Testing & QA
 
-Test strategy, QA run logs, user testing results.
+Test strategy, QA run logs, user testing results. **Last reviewed:** 2026-09-28 (AUT-4395).
 
 ## Document List
 

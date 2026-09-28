@@ -1,8 +1,24 @@
 # QA Run Logs
 
-**Owner:** QA & User Testing. **Section:** Testing & QA. **Last reviewed:** 2026-09-06 (AUT-2632).
+**Owner:** QA & User Testing. **Section:** Testing & QA. **Last reviewed:** 2026-09-28 (AUT-4395).
 
 Chronological log of verified test passes and verification runs. Real state only — mirrors repo `docs/qa-run-logs.md`. Newest first.
+
+## 2026-09-28 — QA Documentation Refresh: AUT-4395
+
+Refreshed Testing & QA section (test-strategy.md, qa-run-logs.md, user-testing-results.md, index.md) to reflect current stack state:
+- PostgreSQL 17 + pgvector extension
+- Non-root containers with read-only filesystems, cap_drop: ALL, tmpfs
+- AI gateway co-located in backend container on :8001 (AUT-2000)
+- 9Router at http://9router:20128/v1 (Hosted) / http://10.0.3.17:20128/v1 (Dev/Default/Demo)
+- Community Garage federation hub deployed on Hosted (AUT-333, AUT-532)
+- Worker merged into backend (AUT-3153); backup as Celery beat task (AUT-3827)
+- Dev box IP corrected to 10.0.3.39 (was 192.168.1.100)
+- Added Graft usage instructions and cross-links to related docs
+- Verified no secrets or internal-only content in repo docs/ mirror
+- Added GitHub Actions CI/CD workflow table (ci-tests.yml, security-pr-gate.yml, build-hosted.yml, etc.)
+
+**Findings:** None. Repo docs/ mirror sanitised. Outline sync pending (AUT-3815 workstream E).
 
 ## 2026-09-06 — Location Services verification: AUT-2632 (iOS + Android)
 
