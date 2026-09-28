@@ -103,7 +103,8 @@ def _externalize_url(url: str) -> str:
     The presigned URL is signed against the host the client connected to
     (``MINIO_ENDPOINT``, e.g. ``minio:9000``), so the external proxy must
     preserve that Host header for the signature to validate — see the
-    ``/autobrain-assets/`` location in ``docker/frontend/nginx.conf``.
+    ``/(autobrain-assets|autobrainservice-assets)/`` regex location in
+    ``docker/frontend/nginx.conf``.
     """
     scheme = "https" if settings.MINIO_SECURE else "http"
     internal = f"{scheme}://{settings.MINIO_ENDPOINT}"

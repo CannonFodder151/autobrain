@@ -11,6 +11,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-4317)
+- fix(frontend): match both MinIO bucket prefixes (`autobrain-assets` on
+  dev/hosted, `autobrainservice-assets` on demo/default) in nginx so
+  community-hub photos load instead of serving the SPA shell; the regex
+  location forwards the original URI (with its bucket prefix) to MinIO
+
 ## [0.3.283] - 2026-09-28
 
 ### Fixed (AUT-4327, AUT-4357)
