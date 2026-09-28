@@ -11,6 +11,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-3503)
+- feat(backend): WebAuthn passkey sign-in is functional end-to-end (the route
+  skeleton shipped in AUT-3447 but could never complete a ceremony)
+- fix(backend): passkey registration verification now parses the real
+  `AuthenticatorAttestationResponse`; it previously passed `response=None`, so
+  every registration attempt failed
+- fix(backend): `/auth/passkey/authenticate/complete` now returns
+  `access_token` + `refresh_token`; it minted both tokens and then discarded
+  them, so a successful passkey assertion could not sign the user in
+- fix(backend): expected origin and RP ID are derived from `APP_BASE_URL`
+  instead of the client-supplied `Origin` header, which made the origin check a
+  no-op (an attacker could echo any origin)
+- fix(backend): WebAuthn challenges live in Redis with a 5-minute TTL so they
+  survive across workers and restart; the in-process dict was shared by
+  nothing when the API scaled past one worker
+- feat(backend): alembic `f7e8d9c0b1a2` adds a unique constraint on
+  `passkey_credentials (user_id, credential_id)` so one authenticator cannot
+  be registered twice for an account
+
+### Fixed (AUT-3661)
+- fix(backend): `EngineerSortBy` no longer inherits from `list`, which raised
+  `TypeError: multiple bases have instance lay-out conflict` on Python 3.13
+  and broke app import
+- fix(backend): `/api/v1/engineers` imported `EngineerSearchResult` and
+  `EngineerSearchResponse` from the service module, which does not export
+  them; both now import from `app.schemas.engineer` (also fixes
+  `EngineerResponse` being undefined)
+
 ## [0.3.285] - 2026-09-28
 
 ### Fixed (AUT-4143)

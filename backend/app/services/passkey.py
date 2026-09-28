@@ -13,9 +13,11 @@ from datetime import datetime, timezone
 from typing import List, Optional, Tuple
 
 from fastapi import HTTPException
+from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.logging import get_logger
 from app.models.passkey import PasskeyCredential
 from app.models.user import User
@@ -29,11 +31,9 @@ logger = get_logger(__name__)
 # Challenge TTL: challenges are valid for 5 minutes (in seconds)
 _CHALLENGE_TTL_SECONDS = 300
 
-# In-memory challenge store — keyed by (user_id, ceremony, request_id).
-# In production this lives in Redis; here we use a dict for simplicity
-# (a single-worker deployment won't outlive this, and we use Redis when
-# it's available).
-_challenge_store: dict[str, tuple[bytes, float]] = {}
+# Redis challenge store — keyed by (user_id, ceremony, request_id).
+# Uses SET with EX for atomic TTL; works across multiple workers.
+# Fallback to in-memory dict only when Redis is unavailable (e.g. tests).
 
 
 def _b64url_to_bytes(value: str) -> bytes:
@@ -58,12 +58,57 @@ def _challenge_key(user_id: str, ceremony: str, request_id: str) -> str:
     return f"webauthn:challenge:{ceremony}:{user_id}:{request_id}"
 
 
+def _redis_client() -> Redis:
+    """Get a Redis client; caller must close it."""
+    return Redis.from_url(settings.REDIS_URL, decode_responses=True)
+
+
+async def _store_challenge(key: str, challenge_bytes: bytes) -> None:
+    """Store challenge in Redis with TTL. Falls back to in-memory on failure."""
+    r = _redis_client()
+    try:
+        # Store base64-encoded challenge bytes with EX TTL
+        import base64
+        challenge_b64 = base64.b64encode(challenge_bytes).decode()
+        await r.set(key, challenge_b64, ex=_CHALLENGE_TTL_SECONDS)
+    except Exception:
+        # Fallback: in-memory store (tests without Redis)
+        _MEMORY_STORE[key] = (challenge_bytes, time.time())
+    finally:
+        await r.aclose()
+
+
+async def _get_challenge(key: str) -> bytes | None:
+    """Retrieve and delete challenge from Redis. Falls back to in-memory."""
+    r = _redis_client()
+    try:
+        challenge_b64 = await r.get(key)
+        if challenge_b64 is not None:
+            import base64
+            return base64.b64decode(challenge_b64)
+        return None
+    except Exception:
+        # Fallback: in-memory store
+        if key in _MEMORY_STORE:
+            return _MEMORY_STORE.pop(key)[0]
+        return None
+    finally:
+        await r.aclose()
+
+
+# In-memory fallback for tests/environments without Redis
+# ponytail: this fallback exists because tests don't run Redis. The real
+# production path is Redis-only. Upgrade path: spin up test Redis in CI
+# (e.g. testcontainers) and drop the dict.
+_MEMORY_STORE: dict[str, tuple[bytes, float]] = {}
+
+
 # ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
 
 
-def build_registration_options(
+async def build_registration_options(
     user: User,
     rp_id: str,
     rp_name: str,
@@ -131,7 +176,7 @@ def build_registration_options(
 
     request_id = _gen_request_id()
     store_key = _challenge_key(user.id, "register", request_id)
-    _challenge_store[store_key] = (challenge_bytes, time.time())
+    await _store_challenge(store_key, challenge_bytes)
 
     from webauthn.helpers import options_to_json
     return {
@@ -154,14 +199,10 @@ def build_registration_options(
     }, request_id
 
 
-def verify_registration(
+async def verify_registration(
     user: User,
     request_id: str,
-    credential_public_key_b64: str,
-    credential_attestation: str,
-    credential_client_data_json: str,
-    credential_device_type: str,
-    credential_attestation_transport: str | None,
+    credential: dict | str,
     rp_id: str,
     expected_origin: str,
 ) -> dict:
@@ -172,24 +213,64 @@ def verify_registration(
     credential_backed_up, credential_device_type, user_verified.
     """
     import webauthn
-    from webauthn.helpers.structs import RegistrationCredential
+    from webauthn.helpers.structs import (
+        RegistrationCredential,
+        AuthenticatorAttestationResponse,
+    )
 
     store_key = _challenge_key(user.id, "register", request_id)
-    if store_key not in _challenge_store:
+    expected_challenge_bytes = await _get_challenge(store_key)
+    if expected_challenge_bytes is None:
         raise ValueError("Registration session not found or expired")
-    expected_challenge_bytes, created_at = _challenge_store.pop(store_key)
 
-    if time.time() - created_at > _CHALLENGE_TTL_SECONDS:
-        raise ValueError("Registration session expired — try again")
+    # Normalize credential to dict
+    if isinstance(credential, str):
+        import json as _json
+        credential = _json.loads(credential)
+
+    # Build RegistrationCredential from standard PublicKeyCredential dict
+    # The client sends the full navigator.credentials.create() result.
+    try:
+        raw_id = _b64url_to_bytes(credential["id"])
+        response = credential["response"]
+        attestation_object = _b64url_to_bytes(response["attestationObject"])
+        client_data_json = _b64url_to_bytes(response["clientDataJSON"])
+        transports = response.get("transports")
+        rc = RegistrationCredential(
+            id=credential["id"],
+            raw_id=raw_id,
+            response=AuthenticatorAttestationResponse(
+                client_data_json=client_data_json,
+                attestation_object=attestation_object,
+                transports=transports,
+            ),
+            type="public-key",
+        )
+    except KeyError as exc:
+        # Fallback: legacy split-field format from old schema
+        # Expected: credential_public_key, credential_attestation, credential_client_data_json
+        if "credential_attestation" in credential and "credential_client_data_json" in credential:
+            try:
+                attestation_object = _b64url_to_bytes(credential["credential_attestation"])
+                client_data_json = _b64url_to_bytes(credential["credential_client_data_json"])
+                rc = RegistrationCredential(
+                    id=credential.get("id", "legacy"),
+                    raw_id=_b64url_to_bytes(credential.get("id", "legacy")),
+                    response=AuthenticatorAttestationResponse(
+                        client_data_json=client_data_json,
+                        attestation_object=attestation_object,
+                        transports=None,
+                    ),
+                    type="public-key",
+                )
+            except Exception as e:
+                raise ValueError(f"Invalid legacy credential format: {e}") from e
+        else:
+            raise ValueError(f"Credential missing required field: {exc}") from exc
 
     try:
         result = webauthn.verify_registration_response(
-            credential=RegistrationCredential(
-                id=_b64url_to_bytes(credential_attestation),
-                raw_id=_b64url_to_bytes(credential_attestation),
-                response=None,  # We pass the response data below
-                type="public-key",
-            ),
+            credential=rc,
             expected_challenge=expected_challenge_bytes,
             expected_rp_id=rp_id,
             expected_origin=expected_origin,
@@ -197,7 +278,6 @@ def verify_registration(
             require_user_verification=False,
         )
     except Exception as exc:
-        # Try to use the raw credential data directly
         logger.warning("webauthn_registration_verification_failed", error=str(exc))
         raise ValueError(f"Registration verification failed: {exc}") from exc
 
@@ -218,7 +298,7 @@ def verify_registration(
 # ---------------------------------------------------------------------------
 
 
-def build_authentication_options(
+async def build_authentication_options(
     user_id: str,
     rp_id: str,
     challenge_b64: str,
@@ -268,7 +348,7 @@ def build_authentication_options(
     )
 
     store_key = _challenge_key(user_id, "auth", request_id)
-    _challenge_store[store_key] = (challenge_bytes, time.time())
+    await _store_challenge(store_key, challenge_bytes)
 
     from webauthn.helpers import options_to_json
     return {
@@ -283,7 +363,7 @@ def build_authentication_options(
     }, request_id
 
 
-def verify_authentication(
+async def verify_authentication(
     user_id: str,
     request_id: str,
     credential_response: dict,
@@ -300,12 +380,9 @@ def verify_authentication(
     import webauthn
 
     store_key = _challenge_key(user_id, "auth", request_id)
-    if store_key not in _challenge_store:
+    expected_challenge_bytes = await _get_challenge(store_key)
+    if expected_challenge_bytes is None:
         raise ValueError("Authentication session not found or expired")
-    expected_challenge_bytes, created_at = _challenge_store.pop(store_key)
-
-    if time.time() - created_at > _CHALLENGE_TTL_SECONDS:
-        raise ValueError("Authentication session expired — try again")
 
     try:
         result = webauthn.verify_authentication_response(

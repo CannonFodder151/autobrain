@@ -11,13 +11,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_db, get_current_user
 from app.models.user import User
 from app.schemas.engineer import (
+    EngineerResponse,
     EngineerSearchFilters,
     EngineerSearchResponse,
+    EngineerSearchResult,
     EngineerSortBy,
 )
 from app.services.engineer import (
-    EngineerSearchResult,
-    EngineerSearchResponse as SearchResponse,
     add_review,
     backfill_engineer_embeddings,
     create_engineer,
