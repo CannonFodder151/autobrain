@@ -5,28 +5,26 @@
 │  Flutter   │──────────────────▶│  nginx (reverse proxy :80)    │
 │ iOS/Android│◀──────────────────│  /api -> backend:8000         │
 └────────────┘                   │  /ws   -> backend:8000        │
-                                 │  /ai   -> ai:8001             │
+                                 │  /ai   -> backend:8001        │
                                  └──────────────┬────────────────┘
                                                 │
                      ┌──────────────────────────┼──────────────────────────┐
                      ▼                          ▼                          ▼
              ┌──────────────┐          ┌──────────────┐           ┌──────────────┐
-             │  backend     │          │  ai          │           │  frontend    │
-             │  FastAPI     │          │  gateway     │           │  nginx static│
-             └──────┬───────┘          │  :8001       │           └──────────────┘
-                    │  REST/WS          │  + market-   │
-         ┌──────────┼──────────┐        │  data :8000  │
-         ▼          ▼          ▼        └──────┬───────┘
-     PostgreSQL   Redis      MinIO      AI_ROUTER_URL|EMBEDDING
-     (pgvector)  (cache/     (S3)             ▼
-                 broker)                 ┌──────────────┐
-         ▲          ▲                    │  9Router     │
-         │          │                    └──────────────┘
-         └──────────┴──────────────┐
-                          ┌──────────────┐
-                          │  worker      │  Celery worker + beat
-                          │  (hosted)    │
-                          └──────────────┘
+             │  backend     │          │  9Router     │           │  frontend    │
+             │  FastAPI     │          │  LLM router  │           │  nginx static│
+             │  :8000 API   │          │  + embedding │           └──────────────┘
+             │  :8001 AI    │          │  :20128      │
+             │  + worker    │          └──────────────┘
+             └──────┬───────┘
+                    │  REST/WS
+         ┌──────────┼──────────┐
+         ▼          ▼          ▼
+     PostgreSQL   Redis      MinIO
+     (pgvector)  (cache/     (S3)
+                 broker)
+         ▲          ▲
+         └──────────┘
 ```
 
 ## Deployment topologies
@@ -37,10 +35,12 @@
 - **Prod:** `docker-compose.prod.yml` behind nginx frontend container. Backend
   image runs API + AI gateway + Celery worker+beat in one container (see
   `docker/backend/Dockerfile`).
-- **Hosted:** `docker-compose.hosted.yml` — 8 containers (postgres, redis, minio,
-  backend, ai, frontend, hub, 9router). Prebuilt Docker Hub images, Stripe
-  billing, self-service signup, Portainer-managed on Oracle Cloud. The `ai`
-  container runs AI gateway + market-data scraper (AUT-1242/C3).
+- **Hosted:** `docker-compose.hosted.yml` — 10 containers (postgres, redis, minio,
+  backend, dongle-server, frontend, hub, 9router, autobrain-backup, gh-runner).
+  Prebuilt GHCR images (multi-arch amd64+arm64), Stripe billing, self-service
+  signup, Portainer-managed on Oracle Cloud ARM64. The AI gateway runs inside
+  the `backend` container on :8001 (AUT-3153); market-data scraper runs as Celery
+  tasks in backend (AUT-3810). All services run as non-root (uid 1000).
 - **Kubernetes:** `infra/k8s/*` deployments + services + secrets.
 - **Bare metal:** `infra/systemd/*` units (container-backed).
 
@@ -49,34 +49,29 @@
 OCR receipt extraction runs in a Celery worker. The backend stores the file in
 MinIO, enqueues `process_receipt`, and the worker calls the AI gateway's OCR
 module, then persists extracted items and notifies the client over WebSocket
-(`receipt.processed`). In dev/prod the worker runs inside the backend
-container; in the hosted stack it is the separate `worker` service.
-Scheduled tasks (valuations, reorder suggestions) come from the embedded beat
-scheduler, started with `worker -B`.
+(`receipt.processed`). In dev/prod/hosted the worker runs inside the backend
+container (AUT-3153). Scheduled tasks (valuations, reorder suggestions, off-site
+backup push) come from the embedded beat scheduler, started with `worker -B`.
 
 ## High-level architecture (Mermaid)
 
 ```mermaid
 graph TD
     Client[Flutter iOS/Android/Web] -->|HTTPS/WSS| Nginx[nginx :80]
-    Nginx -->|/api /ws| Backend[backend :8000]
-    Nginx -->|/ai| AI[ai gateway :8001]
+    Nginx -->|/api /ws /ai| Backend[backend :8000/8001]
     Backend --> Postgres[(PostgreSQL pgvector)]
     Backend --> Redis[(Redis)]
     Backend --> MinIO[(MinIO S3)]
     Backend --> Queen[Celery broker queue in Redis]
-    AI -->|AI_ROUTER_URL + /embeddings| Router[9Router]
-    AI -->|market-data scraper :8000| MD[(external feeds)]
-    Worker[Celery worker + beat -- hosted: separate container / dev+prod: in backend] --> Queen
-    Worker --> AI
+    Backend -->|AI_ROUTER_URL + /embeddings| Router[9Router]
+    Worker[Celery worker + beat (in backend container)] --> Queen
     Worker --> Postgres
-Search[App search: hybrid keyword + vector] --> Postgres
-Search --> Router
-Hub[hub - Federation Hub, deploy-only, hosted stack] -.-> Backend
+    Search[App search: hybrid keyword + vector] --> Postgres
+    Search --> Router
+    Hub[hub - Federation Hub, deploy-only, hosted stack] -.-> Backend
 ```
 
 ## Vectorisation (pgvector)
 
 Semantic search is backed by pgvector. The hosted PostgreSQL image is
-`pgvector/pgvector:pg17`. See `docs/Engineering/ai/vector.md` for the schema and embedding
-pipeline.
+`pgvector/pgvector:pg17@sha256:cf134a76...`. See `docs/Engineering/ai/vector.md` for the schema and embedding pipeline.

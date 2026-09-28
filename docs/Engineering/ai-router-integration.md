@@ -57,10 +57,13 @@ backend (ai_client.py)
             └─ validated, clamped result
 ```
 
-Note: In dev and prod stacks, the AI gateway runs inside the backend container
-on :8001 (alongside the API on :8000 and Celery worker+beat). In the hosted
-stack, the AI gateway runs in a separate `ai` container (AUT-1242/C3) because
-it also hosts the market-data scraper.
+Note: In dev, prod, and hosted stacks, the AI gateway runs inside the backend
+container on :8001 (alongside the API on :8000 and Celery worker+beat). The
+market-data scraper runs as Celery tasks in the backend (AUT-3810); no separate
+`ai` service exists. The hosted stack overrides `AI_ROUTER_URL` to its
+stack-local `9router` service (`http://9router:20128/v1`) because the corporate
+9Router at `http://10.0.3.17:20128/v1` is on the on-prem LAN and is NOT
+reachable from Oracle Cloud.
 
 ## Failure behaviour
 
