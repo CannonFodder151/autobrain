@@ -321,7 +321,7 @@ services:
       - "8000"
 
   frontend:
-    image: ghcr.io/cannonfodder151/autobrain-frontend:hosted@sha256:02ed10e3b1a5f70f3f17253e60f7c6dc1825dcd2e1d79687dfce7ed2ff57554e
+    image: ghcr.io/cannonfodder151/autobrain-frontend:hosted@sha256:1ffcdb2b84b365e7f780bc6f0e3b51fad7eb9faf3c1c3ec4f9f3bb9ec2f73a76
     # AUT-2087: pinned to the verified arm64 child manifest digest of the
     # autobrain-frontend :hosted OCI image index. Earlier pin
     # (`@sha256:8937c2bb…`) targeted an arm64 image whose nginx + busybox
