@@ -29,7 +29,7 @@ Five tables carry `embedding vector(1536)` columns (dimension from `EMBEDDING_DI
 
 The `embedding` columns exist at the **database layer only** — the SQLAlchemy models do not map them. Writes go through raw SQL in `backend/app/services/search.py` (`backfill_entity_embedding`).
 
-**Alembic head:** single head at `m3rge06`, verified by `backend/tests/test_alembic_heads.py`. Migrations run inside the backend container on boot (`alembic upgrade head` in dev/prod, `python -m app.db.bootstrap` in hosted), so a redeploy is a complete upgrade — no separate migration step.
+**Alembic head:** single head at `m3rge07`, verified by `backend/tests/test_alembic_heads.py`. Migrations run inside the backend container on boot (`alembic upgrade head` in dev/prod, `python -m app.db.bootstrap` in hosted), so a redeploy is a complete upgrade — no separate migration step.
 
 ## Non-root container
 
