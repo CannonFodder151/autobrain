@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.284] - 2026-09-28
+
 ### Fixed (AUT-4317)
 - fix(frontend): match both MinIO bucket prefixes (`autobrain-assets` on
   dev/hosted, `autobrainservice-assets` on demo/default) in nginx so
