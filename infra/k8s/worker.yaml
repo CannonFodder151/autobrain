@@ -21,7 +21,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: worker
-          image: ghcr.io/cannonfodder151/autobrain-backend:hosted
+          image: ghcr.io/cannonfodder151/autobrain-backend@sha256:426245723387c17c68281749360a8e77c4003b29177e4ee706d5780e424798dd
           imagePullPolicy: IfNotPresent
           envFrom:
             - secretRef:
@@ -98,7 +98,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: beat
-          image: ghcr.io/cannonfodder151/autobrain-backend:hosted
+          image: ghcr.io/cannonfodder151/autobrain-backend@sha256:426245723387c17c68281749360a8e77c4003b29177e4ee706d5780e424798dd
           imagePullPolicy: IfNotPresent
           envFrom:
             - secretRef:

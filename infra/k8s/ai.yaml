@@ -21,7 +21,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: ai
-          image: ghcr.io/cannonfodder151/autobrain-ai:hosted
+          image: ghcr.io/cannonfodder151/autobrain-ai@sha256:63c018be1c699178cb0900afdce09dda61a6ad6914c3f20871b35d443ada679b
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8001
