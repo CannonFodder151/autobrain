@@ -35,7 +35,7 @@ The stack uses 8 long-running containers. The standalone Celery worker+beat
 service was merged into `backend` (AUT-3153): the backend image already carries
 the worker dependencies and its default CMD runs API + Celery worker+beat in
 one container, matching `docker-compose.prod.yml`. The dedicated
-`autobrain-worker` image is no longer referenced by this stack.
+`autobrain-worker` image is no longer built or published.
 
 ## Image layout
 
@@ -48,12 +48,6 @@ reads configuration exclusively from environment variables.
   then `uvicorn app.main:app` (AUT-3153).
 - **ai** (`docker/ai/Dockerfile`): entrypoint runs two uvicorn processes —
   market-data scraper on :8000 and AI gateway on :8001 (AUT-1242/C3).
-- **worker** (`docker/worker/Dockerfile`): standalone production image from
-  `backend/app`. Retained on disk only for k8s/legacy reference; CI no longer
-  builds or publishes it (AUT-3153 + AUT-3172). The hosted stack and k8s
-  `infra/k8s/worker.yaml` both run the Celery worker+beat from the
-  `autobrain-backend` image (`autobrain-backend:latest`), not the standalone
-  worker image.
 
 ## Healthchecks
 

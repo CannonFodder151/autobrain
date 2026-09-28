@@ -84,9 +84,11 @@ If the merged backend fails health or task execution:
   `autobrain-backend:latest`). **Done (AUT-3172):** the `worker` leg was
   removed from every `for svc in backend worker ai frontend` loop in both
   workflows (build, verify, manifest assembly, digest capture, and the
-  compose-pin env), and `scripts/update-compose-pins.py` no longer carries a
-  `worker` pin. The `docker/worker/Dockerfile` remains on disk solely as a
-  reference for the security-scan workflows.
+   compose-pin env), and `scripts/update-compose-pins.py` no longer carries a
+   `worker` pin. **Done (AUT-3826):** `docker/worker/` was deleted along with its
+   last references in `security-pr-gate.yml` and `trivy-image-scan.yml`. Both
+   security workflows now cover `backend/ai/market-data` only, which is where
+   every Python base image is actually built.
 - **Consolidate MinIO init into the `minio` entrypoint for `docker-compose.prod.yml`
   and `docker-compose.yml`** (they still run the one-shot `/init-minio.sh` from
   the backend command).

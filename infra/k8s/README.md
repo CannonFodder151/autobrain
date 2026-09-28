@@ -13,6 +13,6 @@ sleep 30
 kubectl apply -f infra/k8s/networkpolicy.yaml -f infra/k8s/ai.yaml -f infra/k8s/backend.yaml -f infra/k8s/worker.yaml -f infra/k8s/frontend.yaml
 ```
 
-`redis-password` is alphanumeric so `REDIS_URL=redis://:$(REDIS_PASSWORD)@host:6379/0` needs no encoding. Re-creating `autobrain-secrets` requires restarting `autobrain-redis` (cmdline arg), `autobrain-backend`, `autobrain-worker`, `autobrain-beat`.
+`redis-password` is alphanumeric so `REDIS_URL=redis://:$(REDIS_PASSWORD)@host:6379/0` needs no encoding. Re-creating `autobrain-secrets` requires restarting `autobrain-redis` (cmdline arg), `autobrain-backend`, `autobrain-ai`, `autobrain-frontend`.
 
 For GitOps use SealedSecrets or external-secrets.

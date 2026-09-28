@@ -49,6 +49,4 @@ graph LR
     B2 --> PG[(autobrain-postgres)]
     B2 --> RD[(autobrain-redis)]
     B2 --> MN[(autobrain-minio)]
-    WorkerK[autobrain-worker] --> RD
-    WorkerK --> PG
 ```
