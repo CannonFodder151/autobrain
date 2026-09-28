@@ -56,6 +56,21 @@ class _DeniedGeo extends GeolocatorPlatform {
       throw Exception('location denied');
 }
 
+class _PermissionDeniedForeverGeo extends GeolocatorPlatform {
+  @override
+  Future<bool> isLocationServiceEnabled() async => true;
+
+  @override
+  Future<LocationPermission> checkPermission() async => LocationPermission.deniedForever;
+
+  @override
+  Future<LocationPermission> requestPermission() async => LocationPermission.deniedForever;
+
+  @override
+  Future<Position> getCurrentPosition({LocationSettings? locationSettings}) async =>
+      throw Exception('permission denied forever');
+}
+
 class _FakeApi extends ApiClient {
   _FakeApi() : super(null);
 
@@ -98,11 +113,53 @@ class _FakeApi extends ApiClient {
   }
 }
 
+class _Stations500Api extends ApiClient {
+  _Stations500Api() : super(null);
+  @override
+  Future<dynamic> get(String path, {Map<String, String>? query}) async {
+    if (path == '/vehicles') return [];
+    if (path == '/fuel/types') return ['91'];
+    throw ApiException(500, 'boom');
+  }
+}
+
+class _EmptyStationsApi extends ApiClient {
+  _EmptyStationsApi() : super(null);
+  @override
+  Future<dynamic> get(String path, {Map<String, String>? query}) async {
+    if (path == '/vehicles') {
+      return [
+        {
+          'id': 'v1',
+          'nickname': 'Daily',
+          'is_primary': true,
+          'fuel_type': '91',
+          'make': 'Holden',
+          'model': 'Commodore',
+          'year': 2018,
+        }
+      ];
+    }
+    if (path == '/fuel/types') return ['91', '95'];
+    if (path.startsWith('/fuel/stations')) return [];
+    return [];
+  }
+}
+
 class _FakePaidAuth extends AuthState {
   @override
   bool get freeAccount => false;
   @override
   ApiClient get api => _FakeApi();
+}
+
+class _PaidAuthWith extends AuthState {
+  _PaidAuthWith(this._api);
+  final ApiClient _api;
+  @override
+  bool get freeAccount => false;
+  @override
+  ApiClient get api => _api;
 }
 
 Widget _app(AuthState auth) => ChangeNotifierProvider<AuthState>(
@@ -237,46 +294,51 @@ void main() {
     expect(find.byIcon(Icons.my_location), findsNothing,
         reason: 'recenter FAB stays hidden when there is no user location');
   });
-}
 
-class _Stations500Api extends ApiClient {
-  _Stations500Api() : super(null);
-  @override
-  Future<dynamic> get(String path, {Map<String, String>? query}) async {
-    if (path == '/vehicles') return [];
-    if (path == '/fuel/types') return ['91'];
-    throw ApiException(500, 'boom');
-  }
-}
+  testWidgets(
+      'map view renders stations around map center when location is denied '
+      '(AUT-4489: fallback to AU center, no blank screen)',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1.0
+    ;
+    addTearDown(tester.view.reset);
 
-class _EmptyStationsApi extends ApiClient {
-  _EmptyStationsApi() : super(null);
-  @override
-  Future<dynamic> get(String path, {Map<String, String>? query}) async {
-    if (path == '/vehicles') {
-      return [
-        {
-          'id': 'v1',
-          'nickname': 'Daily',
-          'is_primary': true,
-          'fuel_type': '91',
-          'make': 'Holden',
-          'model': 'Commodore',
-          'year': 2018,
-        }
-      ];
+    GeolocatorPlatform.instance = _DeniedGeo();
+    await tester.pumpWidget(_app(_FakePaidAuth()));
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
     }
-    if (path == '/fuel/types') return ['91', '95'];
-    if (path.startsWith('/fuel/stations')) return [];
-    return [];
-  }
-}
 
-class _PaidAuthWith extends AuthState {
-  _PaidAuthWith(this._api);
-  final ApiClient _api;
-  @override
-  bool get freeAccount => false;
-  @override
-  ApiClient get api => _api;
+    // Map should still render and fetch stations around the AU center
+    expect(find.byType(FlutterMap), findsOneWidget,
+        reason: 'map widget must mount even when location is denied');
+    expect(find.byType(CircularProgressIndicator), findsNothing,
+        reason: 'loading spinner must clear after stations load');
+    // Location banner should be visible
+    expect(find.textContaining('Location services are turned off'), findsOneWidget,
+        reason: 'location-denied banner must show appropriate message');
+  });
+
+  testWidgets(
+      'map view shows "permanently denied" banner with Settings button '
+      'when permission is denied forever (AUT-4489)',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    GeolocatorPlatform.instance = _PermissionDeniedForeverGeo();
+    await tester.pumpWidget(_app(_FakePaidAuth()));
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    expect(find.byType(FlutterMap), findsOneWidget,
+        reason: 'map widget must mount even when permission denied forever');
+    expect(find.textContaining('permanently denied'), findsOneWidget,
+        reason: 'banner must explain permanent denial');
+    expect(find.widgetWithText(TextButton, 'Settings'), findsOneWidget,
+        reason: 'Settings button must appear to open app settings');
+  });
 }

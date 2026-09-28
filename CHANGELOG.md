@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+- fix(frontend): Servo Spy map/list no longer bails out of station loading when there is no GPS fix — the map still renders, centres on the AU default (or the current map centre) and fetches `/fuel/stations` around it, so fuel stations appear even with location off instead of a blank map with an error
+- fix(frontend): Servo Spy no longer shows the misleading "Enable location to find nearby stations." error for every GPS failure — `getCurrentPosition()` now returns a typed `LocationResult` (`serviceDisabled` / `permissionDenied` / `permissionDeniedForever` / `timeout` / `unexpectedError`) and the UI shows the accurate reason, plus an **Open settings** button when permission was permanently denied
 
 ## [0.3.296] - 2026-10-02
 

@@ -1,6 +1,7 @@
-// Tests for the native GPS helper (AUT-539): the permission/service gates and
-// coordinate mapping, driven by a fake GeolocatorPlatform. Pure Dart, no channels.
-
+/// Tests for the native GPS helper (AUT-539, AUT-4489): the permission/service
+/// gates and coordinate mapping, driven by a fake GeolocatorPlatform.
+/// Returns a typed [LocationResult] instead of a nullable map so callers can
+/// distinguish "services off" from "permission denied" from "timeout".
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator_platform_interface/geolocator_platform_interface.dart';
 
@@ -28,7 +29,7 @@ class _FakeGeo extends GeolocatorPlatform {
   @override
   Future<Position> getCurrentPosition({LocationSettings? locationSettings}) {
     if (failFix) {
-      throw Exception('no fix within time limit');
+      throw TimeoutException('no fix within time limit', 'geolocator');
     }
     return Future.value(Position(
       latitude: -37.8136,
@@ -53,30 +54,36 @@ void main() {
   });
 
   test('returns coordinates when service, permission and fix are OK', () async {
-    final pos = await getCurrentPosition();
-    expect(pos, {'latitude': -37.8136, 'longitude': 144.9631});
+    final result = await getCurrentPosition();
+    expect(result.isSuccess, isTrue);
+    expect(result.coordinates, {'latitude': -37.8136, 'longitude': 144.9631});
   });
 
   test('requests permission once when previously denied', () async {
     geo.permission = LocationPermission.denied;
-    final pos = await getCurrentPosition();
+    final result = await getCurrentPosition();
     expect(geo.permissionRequests, 1);
-    expect(pos, {'latitude': -37.8136, 'longitude': 144.9631});
+    expect(result.isSuccess, isTrue);
   });
 
-  test('returns null when location services are off', () async {
+  test('returns serviceDisabled when location services are off', () async {
     geo.serviceEnabled = false;
-    expect(await getCurrentPosition(), isNull);
+    final result = await getCurrentPosition();
+    expect(result, isA<LocationResult>());
+    expect(result.errorMessage, contains('Location services are turned off'));
     expect(geo.permissionRequests, 0);
   });
 
-  test('returns null when permission is denied after request', () async {
+  test('returns permissionDeniedForever when permanently denied', () async {
     geo.permission = LocationPermission.deniedForever;
-    expect(await getCurrentPosition(), isNull);
+    final result = await getCurrentPosition();
+    expect(result.errorMessage, contains('permanently denied'));
+    expect(result.canOpenSettings, isTrue);
   });
 
-  test('returns null when no fix arrives in time', () async {
+  test('returns timeout when no fix arrives in time', () async {
     geo.failFix = true;
-    expect(await getCurrentPosition(), isNull);
+    final result = await getCurrentPosition();
+    expect(result.errorMessage, contains('GPS fix in time'));
   });
 }
