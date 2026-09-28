@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Added/Changed (AUT-3340)
+- fix: login screen UI bugs (PR #680)
 
 ## [0.3.282] - 2026-09-27
 

@@ -112,46 +112,51 @@ class _LoginScreenState extends State<LoginScreen> {
       }
       return;
     }
-    final outcome = await auth.login(_email.text, _password.text);
-    if (!mounted) return;
-    if (outcome == LoginOutcome.mfaSetupRequired) {
-      _mfaToken = auth.mfaTokenHint;
-      final setup = await auth.startMfaSetup(_mfaToken!);
+    try {
+      final outcome = await auth.login(_email.text, _password.text);
       if (!mounted) return;
-      if (setup == null) {
+      if (outcome == LoginOutcome.mfaSetupRequired) {
+        _mfaToken = auth.mfaTokenHint;
+        final setup = await auth.startMfaSetup(_mfaToken!);
+        if (!mounted) return;
+        if (setup == null) {
+          setState(() {
+            _busy = false;
+            _error = 'Could not start MFA setup. Contact your administrator.';
+          });
+          return;
+        }
+        setState(() {
+          _mfaSetupStep = true;
+          _mfaQr = setup['qr_data_url'] as String?;
+          _mfaSecret = setup['secret'] as String?;
+          _busy = false;
+        });
+        _focusCode();
+      } else if (outcome == LoginOutcome.mfaRequired) {
+        setState(() {
+          _mfaStep = true;
+          _mfaToken = auth.mfaTokenHint;
+          _busy = false;
+        });
+        _focusCode();
+      } else if (outcome == LoginOutcome.serverOffline) {
         setState(() {
           _busy = false;
-          _error = 'Could not start MFA setup. Contact your administrator.';
+          _serverOffline = true;
+          _error = 'Backend server offline. Please check your connection and try again.';
         });
-        return;
+      } else if (outcome == LoginOutcome.failed) {
+        setState(() {
+          _busy = false;
+          _error = 'Invalid email or password';
+        });
+      } else if (outcome == LoginOutcome.ok) {
+        await _afterAuth();
       }
-      setState(() {
-        _mfaSetupStep = true;
-        _mfaQr = setup['qr_data_url'] as String?;
-        _mfaSecret = setup['secret'] as String?;
-        _busy = false;
-      });
-      _focusCode();
-    } else if (outcome == LoginOutcome.mfaRequired) {
-      setState(() {
-        _mfaStep = true;
-        _mfaToken = auth.mfaTokenHint;
-        _busy = false;
-      });
-      _focusCode();
-    } else if (outcome == LoginOutcome.serverOffline) {
-      setState(() {
-        _busy = false;
-        _serverOffline = true;
-        _error = 'Backend server offline. Please check your connection and try again.';
-      });
-    } else if (outcome == LoginOutcome.failed) {
-      setState(() {
-        _busy = false;
-        _error = 'Invalid email or password';
-      });
-    } else if (outcome == LoginOutcome.ok) {
-      await _afterAuth();
+    } catch (_) {
+      // Safety net: always un-spin the button even on unexpected errors.
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -198,9 +203,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(10),
+                        padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: Colors.black,
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
@@ -213,8 +218,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         child: ClipOval(
                           child: Image.asset(
                             'assets/logo.png',
-                            width: 72,
-                            height: 72,
+                            width: 96,
+                            height: 96,
                             fit: BoxFit.cover,
                           ),
                         ),
