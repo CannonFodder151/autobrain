@@ -11,6 +11,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-4143)
+- fix(backend): disable VIC Servo Saver fuel feed — endpoint `api.servosaver.com.au` returns NXDOMAIN and would raise `FuelFeedError` instead of returning 0 stations; set `FUEL_VIC_ENABLED="false"` in `docker-compose.prod.yml` and commented out unused secret seeds in `scripts/seed-secrets.sh` until a paid VIC aggregator is available
+
+
 ## [0.3.284] - 2026-09-28
 
 ### Fixed (AUT-4317)
