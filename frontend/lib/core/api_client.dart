@@ -79,15 +79,20 @@ class ApiClient {
       OfflineCache.instance.invalidateByPrefix(prefix);
 
   /// Read a previously-cached response for [path]+[query] and decode it.
-  /// Returns null when nothing is cached or the cached entry is stale.
+  /// Returns null when nothing is cached, the cached entry is stale, or the
+  /// cache backend is unavailable (e.g. web where sqflite is not supported).
   /// Exposed so screens can render cache-first without waiting for a round-trip.
   Future<dynamic>? getCachedDecoded(String path, Map<String, String>? query) {
     final cacheKey = _cacheKey(path, query);
     final ttl = _ttlFor(path, query);
     if (ttl == null) return null;
-    return OfflineCache.instance
-        .get(cacheKey, allowStale: true)
-        .then((e) => e == null ? null : _decodeBody(e.body));
+    try {
+      return OfflineCache.instance
+          .get(cacheKey, allowStale: true)
+          .then((e) => e == null ? null : _decodeBody(e.body));
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Per-endpoint cache TTLs. Anything not listed here is not cached. The
