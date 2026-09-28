@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Fixed (AUT-4317)
+- fix(frontend): nginx regex matches both `autobrain-assets` and `autobrainservice-assets` bucket prefixes so community-hub images load on demo/default (PR #784)
 ### Added (AUT-2631)
 - feat(ios): define Fastlane release pipeline for TestFlight beta uploads and App Store releases. New `beta` and `release` lanes in `frontend/ios/fastlane/Fastfile` with `match` for cert/profile sync via S3, API key authentication, build number increment, and changelog integration.
 
