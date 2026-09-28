@@ -286,8 +286,8 @@ services:
   # AUT-3153: the standalone `worker` service has been merged into `backend`
   # (see the backend command above — Celery worker+beat now run as a
   # background process in the same container, matching docker-compose.prod.yml).
-  # The dedicated autobrain-worker image is no longer built by CI (AUT-3172);
-  # docker/worker/Dockerfile is retained on disk only for reference.
+  # The dedicated autobrain-worker image is no longer built by CI (AUT-3172).
+  # docker/worker/Dockerfile was deleted (AUT-3826); no references remain.
 
   # AUT-1673: firmware release + distribution service for OBD ESP32 dongles.
   # Owns firmware manifests, MinIO signed blob URLs, the serial-number
