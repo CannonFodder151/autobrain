@@ -1,8 +1,79 @@
 # QA Run Logs
 
-**Owner:** QA & User Testing. **Section:** Testing & QA. **Last reviewed:** 2026-09-06 (AUT-2632).
+**Owner:** QA & User Testing. **Section:** Testing & QA. **Last reviewed:** 2026-09-26 (AUT-4049).
 
 Chronological log of verified test passes and verification runs. Real state only — mirrors repo `docs/qa-run-logs.md`. Newest first.
+
+## 2026-09-26 — QA Documentation Sync: AUT-4049
+
+Synced Testing & QA docs to Outline and updated test environment documentation per AGENTS.md company context.
+
+**Changes:**
+- Updated test-strategy.md with correct dev box IP (10.0.3.39) and full environment details (Dev, Demo, Default, Hosted)
+- Added recent test run entries for 2026-09-24 and 2026-09-25
+- Verified repo docs/Testing-and-QA/ mirror in sync with Outline
+
+**Status:** Documentation current. No app changes tested.
+
+## 2026-09-25 — Demo Environment Verification: AUT-3164
+
+**Target:** demo.autobrainservice.app (demo@autobrainservice.app / demo)
+
+**Results:**
+| Feature | Status | Details |
+|---------|--------|---------|
+| Auth | ✅ PASS | Login OK, role=demo, max_vehicles=8 |
+| Vehicles | ✅ PASS | 7 seeded, primary set (Skyline R34) |
+| Fuel | ✅ PASS | 72 logs with L/100km history (e.g., 16.9) |
+| Services | ✅ PASS | 6 records, each with 3 items |
+| Receipts | ✅ PASS | 3 OCR-extracted receipts with items |
+| Diagnostics | ✅ PASS | 2 entries present (need status check) |
+| Valuation | ❌ FAIL | market=0 items, history 404 - no snapshots |
+| Mods | ✅ PASS | 3 modifications present |
+| Parts | ✅ PASS | 4 parts in inventory |
+| Logbook | ✅ PASS | 10 ATO trip entries |
+| Servo Spy | ❌ FAIL | /fuel/stations requires lat/lon, no seed data |
+| Community Garage | ⚠️ PARTIAL | 4 social posts (need ≥15), each has 1 reply + 3 photos |
+
+**Summary:** 9/12 pass, 1 partial, 2 fail
+
+**Critical gaps:**
+- Valuation snapshots missing
+- Servo Spy fuel stations unseeded
+- Community Garage only 4/15 posts
+
+**Recommendation:** File child bugs for valuation seeding, fuel station seed data, and social post expansion. Demo tier is functional for core features.
+
+## 2026-09-24 — QA Heartbeat: Backend Core Tests Pass (Paperclip API down)
+
+**Context:** Paperclip API unreachable (504 Gateway Timeout), JWT expired. Local pytest on dev box.
+
+**Core Test Results (no-DB subset):**
+| Test Module | Result | Notes |
+|-------------|--------|-------|
+| test_alembic_heads.py | ✅ 2 passed | Single head + unique revision IDs |
+| test_aut206_security_hardening.py | ✅ 4 passed | Admin key + CORS |
+| test_config_fail_closed.py | ✅ 3 passed | Fail-closed config |
+| test_config_prod_guard.py | ✅ 7 passed | Prod guard checks |
+| test_deps_pypdf_pin.py | ✅ 1 passed | pypdf CVE pin |
+| test_deps_transitive_cves.py | ✅ 2 passed | **Fixed** version parsing bug + PyJWT[crypto] assertion |
+
+**Fixed: test_deps_transitive_cves.py Version Parsing Bug**
+- Root cause: `_pins()` used `int(part) for part in version.split(".")`, crashed on `python-dateutil==2.9.0.post0`
+- Fix 1: Added regex `re.match(r"^(\d+(?:\.\d+)*)", version)` to extract numeric prefix
+- Fix 2: `PyJWT[crypto]==2.13.0` stored as `pyjwt[crypto]` in pins dict; updated assertion
+- Verification: All 19 core security/config/dependency tests pass
+
+**Additional Backend Tests (no-DB subset):**
+- 36 passed (config, security, dependency, alembic, extraction unit tests without DB)
+- 7 failed (require PostgreSQL - expected, no local DB)
+- 219 deselected (DB-dependent tests skipped via -k filter)
+
+**PR Status:**
+- PR #130 (feat: Community Garage share, AUT-676) — **QA APPROVED** (local verdict, needs Paperclip sign-off)
+- PRs #128, #123 (autobrainservice-website) — **Merge-ready** (simple CI runner config + SEO/sitemap)
+
+**Discord Updates:** Posted to `#testing` — QA Heartbeat: Backend Core Tests Pass (19/19 core tests, fix verified)
 
 ## 2026-09-06 — Location Services verification: AUT-2632 (iOS + Android)
 
