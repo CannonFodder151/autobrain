@@ -17,6 +17,9 @@ Architecture, API, database, AI modules, OBD, mobile, developer onboarding, vers
 | [developer-onboarding.md](./developer-onboarding.md) | Getting started for devs |
 | [versioning.md](./versioning.md) | Versioning strategy |
 | [task-pipeline.md](./task-pipeline.md) | Sub-task & follow-up creation pattern, curl examples |
+| [system-overview.md](./system-overview.md) | End-to-end system overview + component table |
+| [postgresql-17-upgrade.md](./postgresql-17-upgrade.md) | PG17 + pgvector upgrade notes + digest pin rationale |
+| [safpis-sa-fuel-api-research.md](./safpis-sa-fuel-api-research.md) | SA FPIS fuel API research + integration plan |
 
 ### AI & Modules
 

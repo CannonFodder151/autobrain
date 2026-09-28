@@ -10,32 +10,39 @@ reducing the dev stack from 7 to 5 containers (AI gateway merged into backend).
 ## Compose (prod)
 
 `docker-compose.prod.yml`: same core, ENVIRONMENT=production, no source
-mounts, nginx reverse proxy published on :80, backend/ai only exposed
-internally. Backend runs the API + Celery worker+beat in one container;
-market-data merged into the ai image (AUT-1242/C3).
+mounts, nginx reverse proxy published on :80, backend only exposed
+internally. Backend runs the API + AI gateway + Celery worker+beat in one
+container (AUT-3461). Market-data scraper runs as Celery tasks in backend
+(AUT-3810). The separate `ai` image/service was removed (AUT-3461).
 
-## Compose (hosted) — 8 containers
+## Compose (hosted) — 10 containers
 
 `docker-compose.hosted.yml`: prebuilt tagged images
 (`ghcr.io/cannonfodder151/autobrain-*:hosted`), Stripe billing env vars,
-self-signup + MFA enforced. Deployed via Portainer on the Oracle Cloud VM.
+self-signup + MFA enforced. Deployed via Portainer on the Oracle Cloud VM (ARM64).
 
 | Service | Image | Role |
 |---------|-------|------|
-| postgres | `pgvector/pgvector:pg17` | Datastore + `vector` extension (pgvector) |
-| redis | `redis:7-alpine` | Cache + Celery broker/result backend |
-| minio | `minio/minio` | Receipts/photos S3 storage |
-| backend | `autobrain-backend:hosted` | API + WebSocket on :8000 **+ Celery worker+beat** (AUT-3153) |
-| ai | `autobrain-ai:hosted` | AI gateway :8001 + market-data scraper :8000 in one container (AUT-1242/C3) |
-| frontend | `autobrain-frontend:hosted` | Static nginx, localhost-bound :8086 behind Cloudflare/npm |
-| hub | `autobrain-federation-hub:hosted` | Federation hub, deploy-only; code in private repo |
-| 9router | `decolua/9router:latest` | LLM router + embeddings; localhost-bound :20128, external `9router-data` volume |
+| postgres | `pgvector/pgvector:pg17@sha256:cf134a76...` | Datastore + `vector` extension (pgvector), digest-pinned |
+| redis | `redis:7.2.5-alpine@sha256:6aaf3f5e...` | Cache + Celery broker/result backend, auth required |
+| minio | `minio/minio@sha256:14cea493...` | Receipts/photos S3 storage, digest-pinned |
+| backend | `autobrain-backend:hosted@sha256:14543848...` | API :8000 + AI gateway :8001 + Celery worker+beat (AUT-3153), non-root |
+| dongle-server | `autobrain-dongle-server:hosted@sha256:c5768948...` | OBD ESP32 dongle firmware + serial whitelist (AUT-1673), non-root |
+| frontend | `autobrain-frontend:hosted@sha256:02ed10e3...` | Static nginx-unprivileged :8080, localhost-bound, non-root |
+| hub | `autobrain-federation-hub:hosted@sha256:d1d9bde1...` | Federation hub (Community Garage), deploy-only; private repo |
+| 9router | `decolua/9router:0.5.55@sha256:f00fe389...` | LLM router + embeddings on 0.0.0.0:20128, host-firewalled, external `9router-data` volume |
+| autobrain-backup | `autobrain-backup:hosted@sha256:e76fac3c...` | Backup web GUI, localhost-bound :8080, non-root |
+| gh-runner | `autobrain-gh-runner:arm64-latest` | ARM64 GitHub Actions self-hosted runner (privileged, AUT-2469) |
 
-The stack uses 8 long-running containers. The standalone Celery worker+beat
+The stack uses 10 long-running containers. The standalone Celery worker+beat
 service was merged into `backend` (AUT-3153): the backend image already carries
 the worker dependencies and its default CMD runs API + Celery worker+beat in
 one container, matching `docker-compose.prod.yml`. The dedicated
-`autobrain-worker` image is no longer referenced by this stack.
+`autobrain-worker` image is no longer referenced by this stack; its build is
+retired from CI (AUT-3172). The `ai` gateway service was consolidated into
+`backend` (AUT-3461): the backend container runs the AI gateway as a
+co-process on :8001. All application services run as non-root (`autobrain` uid
+1000) with `read_only`, `cap_drop: ALL`, and `tmpfs` mounts.
 
 ## Image layout
 

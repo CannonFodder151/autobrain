@@ -40,22 +40,25 @@
               "Engineering/index"
             ]
           },
-          {
-            "group": "Core",
-            "pages": [
-              "Engineering/architecture",
-              "Engineering/api-spec",
-              "Engineering/integrating-autobrain",
-              "Engineering/database-schema",
-              "Engineering/container-architecture",
-              "Engineering/developer-onboarding",
-              "Engineering/versioning",
-              "Engineering/task-pipeline",
-              "Engineering/change-validation-gate",
-              "Engineering/module-graph",
-              "Engineering/product-rules"
-            ]
-          },
+{
+              "group": "Core",
+              "pages": [
+                "Engineering/architecture",
+                "Engineering/api-spec",
+                "Engineering/integrating-autobrain",
+                "Engineering/database-schema",
+                "Engineering/container-architecture",
+                "Engineering/developer-onboarding",
+                "Engineering/versioning",
+                "Engineering/task-pipeline",
+                "Engineering/change-validation-gate",
+                "Engineering/module-graph",
+                "Engineering/product-rules",
+                "Engineering/system-overview",
+                "Engineering/postgresql-17-upgrade",
+                "Engineering/safpis-sa-fuel-api-research"
+              ]
+            },
           {
             "group": "AI",
             "pages": [
