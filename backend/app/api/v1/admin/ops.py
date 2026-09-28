@@ -1,28 +1,26 @@
-"""Admin user management routes (admin role only)."""
+"""Server ops + moderation routes (admin role only)."""
 
-import secrets
+import json as _json
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
-from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_admin
 from app.core.config import settings
 from app.core.logging import get_logger
-from app.core.security import create_invite_token, hash_password
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.auth import AdminUserUpdate, UserAdminOut, UserCreate, UserPage
 from app.services import email as mail
 from app.services.backup import dump_backup, load_backup, restore_all, serialize_all
 
+from app.api.v1.admin.helpers import _best_effort_delete_media
+from app.api.v1.admin.schemas import _IssueModerationUpdate, _SocialConfigUpdate
+
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/admin/users", tags=["admin"], dependencies=[Depends(require_admin)])
-
-# --- server ops (version, backups) ---
 admin_ops = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
 
 
@@ -37,7 +35,6 @@ async def download_backup(db: AsyncSession = Depends(get_db)) -> Response:
     """Full database snapshot (JSON). Download and keep off-box."""
     data = await serialize_all(db)
     content = dump_backup(data)
-    from datetime import datetime, timezone
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     return Response(
         content=content,
@@ -63,196 +60,7 @@ async def restore_backup(
     return {"message": "Restore complete", "restored_at": data.get("created_at")}
 
 
-
-def _escape_ilike(value: str) -> str:
-    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
-
-@router.get("", response_model=UserPage)
-async def list_users(
-    q: str | None = Query(default=None, max_length=255),
-    page: int = Query(default=1, ge=1),
-    db: AsyncSession = Depends(get_db),
-) -> UserPage:
-    """Search users by display name or email, alphabetical, 15 per page."""
-    stmt = select(User)
-    if q:
-        like = f"%{_escape_ilike(q.lower())}%"
-        stmt = stmt.where(User.email.ilike(like, escape="\\") | User.display_name.ilike(like, escape="\\"))
-    total = (await db.scalar(
-        select(func.count()).select_from(stmt.subquery())
-    )) or 0
-    rows = list((await db.scalars(
-        stmt.order_by(User.display_name.asc()).offset((page - 1) * 15).limit(15)
-    )).all())
-    return UserPage(
-        items=rows, total=total, page=page,
-        pages=max((total + 14) // 15, 1),
-    )
-
-
-@router.post("", response_model=UserAdminOut, status_code=201)
-async def create_user(
-    payload: UserCreate,
-    db: AsyncSession = Depends(get_db),
-) -> User:
-    existing = await db.scalar(select(User).where(User.email == payload.email.lower()))
-    if existing:
-        raise HTTPException(status_code=409, detail="Email already registered")
-    name_taken = await db.scalar(
-        select(User).where(func.lower(User.display_name) == payload.display_name.lower())
-    )
-    if name_taken:
-        raise HTTPException(status_code=409, detail="Display name already in use")
-    if not payload.send_invite and not payload.password:
-        raise HTTPException(status_code=422, detail="Password required (or enable email invite)")
-    hashed = hash_password(payload.password) if payload.password else hash_password(secrets.token_urlsafe(32))
-    user = User(
-        email=payload.email.lower(),
-        display_name=payload.display_name,
-        hashed_password=hashed,
-        role=payload.role,
-        max_vehicles=payload.max_vehicles,
-        free_account=payload.free_account,
-        obd_enabled=payload.obd_enabled,
-        pending=payload.send_invite,
-    )
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
-    if payload.send_invite:
-        token = create_invite_token(user.id, days=7)
-        await mail.send_account_invite(user.email, user.display_name, token, settings.APP_BASE_URL, expiry_days=7)
-    else:
-        await mail.send_welcome(user.email, user.display_name, settings.APP_BASE_URL)
-    return user
-
-
-@router.patch("/{user_id}", response_model=UserAdminOut)
-async def update_user(
-    user_id: str,
-    payload: AdminUserUpdate,
-    db: AsyncSession = Depends(get_db),
-) -> User:
-    user = await db.get(User, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    updates = payload.model_dump(exclude_unset=True)
-    if "password" in updates:
-        updates["hashed_password"] = hash_password(updates.pop("password"))
-        updates["pending"] = False  # admin-set credential completes provisioning
-        # Password change revokes every outstanding access + refresh token.
-        user.token_version += 1
-    for key, value in updates.items():
-        setattr(user, key, value)
-    await db.commit()
-    await db.refresh(user)
-    return user
-
-
-@router.post("/{user_id}/re-upgrade", response_model=UserAdminOut)
-async def re_upgrade_user(
-    user_id: str,
-    enabled: bool = Query(default=True),
-    db: AsyncSession = Depends(get_db),
-) -> User:
-    """Grant (or revoke, with enabled=false) the $19/month Enthusiast benefits
-    without a Stripe subscription. Re-upgraded accounts are blocked from
-    buying a licence (see billing.create_checkout_session)."""
-    user = await db.get(User, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    if enabled:
-        user.free_account = False
-        user.max_vehicles = 1
-    else:
-        user.free_account = True
-        user.max_vehicles = 1
-    await db.commit()
-    await db.refresh(user)
-    return user
-
-
-@router.delete("/{user_id}", status_code=204)
-async def delete_user(
-    user_id: str,
-    db: AsyncSession = Depends(get_db),
-    _admin: User = Depends(require_admin),
-) -> None:
-    user = await db.get(User, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    if user.id == _admin.id:
-        raise HTTPException(status_code=400, detail="Cannot delete your own account")
-    admin_count = await db.scalar(
-        select(func.count()).select_from(User).where(User.role == "admin")
-    )
-    if user.role == "admin" and admin_count <= 1:
-        raise HTTPException(status_code=400, detail="Cannot delete the last admin")
-    from app.services.backup import delete_user_complete
-
-    await delete_user_complete(db, user.id)
-
-
-@router.get("/{user_id}/backup")
-async def backup_user(
-    user_id: str,
-    db: AsyncSession = Depends(get_db),
-) -> Response:
-    """Download a single user's profile (all their vehicles + records)."""
-    from app.services.backup import dump_backup, serialize_user
-
-    user = await db.get(User, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    data = await serialize_user(db, user_id)
-    content = dump_backup(data)
-    stamp = user.email.split("@")[0].replace(".", "-")
-    return Response(
-        content=content,
-        media_type="application/json",
-        headers={"Content-Disposition": f'attachment; filename="autobrain-user-{stamp}.json"'},
-    )
-
-
-@router.post("/{user_id}/restore")
-async def restore_user(
-    user_id: str,
-    file: UploadFile = File(...),
-    db: AsyncSession = Depends(get_db),
-) -> dict:
-    """Restore/override a user's data from an uploaded profile export."""
-    import json as _json
-
-    from app.services.backup import restore_user_data
-
-    user = await db.get(User, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    raw = await file.read()
-    if len(raw) > 100 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="File too large")
-    try:
-        data = _json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, _json.JSONDecodeError):
-        raise HTTPException(status_code=400, detail="Not a valid AutoBrain export file")
-    if data.get("app") != "autobrain" or data.get("kind") != "profile":
-        raise HTTPException(status_code=400, detail="Not an AutoBrain profile export file")
-    try:
-        await restore_user_data(db, user_id, data)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    return {"message": f"User {user.email} restored"}
-
-
 # --- Community Garage admin toggles (AUT-332) ---
-
-
-class _SocialConfigUpdate(BaseModel):
-    feature_enabled: bool | None = None
-    federation_enabled: bool | None = None
-    server_name: str | None = None
-    server_email: str | None = None
 
 
 @admin_ops.get("/social")
@@ -340,11 +148,6 @@ async def unregister_social_server(db: AsyncSession = Depends(get_db)) -> dict:
 
 
 # --- Issues Blog moderation (AUT-627) ---
-
-
-class _IssueModerationUpdate(BaseModel):
-    status_hidden: bool | None = None
-    status: str | None = None
 
 
 @admin_ops.get("/issues/flagged")
@@ -490,8 +293,6 @@ async def delete_comment_admin(
     _admin: User = Depends(require_admin),
 ) -> None:
     """Admin deletes a single issue comment (moderation hub, AUT-832)."""
-    from sqlalchemy import delete
-
     from app.social.models import SocialIssueComment, SocialIssueFlag, SocialIssuePost, SocialPhoto
 
     comment = await db.get(SocialIssueComment, comment_id)
@@ -526,8 +327,6 @@ async def delete_issue_admin(
     federated copies are owned by their origin server (AUT-935). A local admin
     moderating an abusive remote post hides it via PATCH /admin/issues/{id}
     instead of deleting the origin's copy."""
-    from sqlalchemy import delete
-
     from app.social import federation
     from app.social.federation import FederationUnavailable
     from app.social.models import (
@@ -584,8 +383,6 @@ async def delete_build_comment_admin(
     _admin: User = Depends(require_admin),
 ) -> None:
     """Admin deletes a single build comment (moderation hub, AUT-883)."""
-    from sqlalchemy import delete
-
     from app.social.models import SocialBuildFlag, SocialComment
 
     comment = await db.get(SocialComment, comment_id)
@@ -604,8 +401,7 @@ async def delete_build_admin(
 ) -> None:
     """Admin deletes a build post outright (moderation hub, AUT-883):
     cascades comments, likes, share scope and flags, best-effort MinIO purge."""
-    from sqlalchemy import delete
-
+    from app.api.v1.social import _tombstone_removed_build
     from app.social.models import (
         SocialBuild,
         SocialBuildFlag,
@@ -614,14 +410,13 @@ async def delete_build_admin(
         SocialPhoto,
         SocialShareScope,
     )
+    from sqlalchemy import delete
 
     build = await db.get(SocialBuild, build_id)
     if not build:
         raise HTTPException(status_code=404, detail="Post not found")
     # AUT-997: tombstone deleted builds (local + remote) so a later federation
     # sync cannot re-add them to the feed while the hub still routes them.
-    from app.api.v1.social import _tombstone_removed_build
-
     await _tombstone_removed_build(db, build)
     media_keys = list(await db.scalars(
         select(SocialPhoto.file_key).where(SocialPhoto.build_id == build.id)
@@ -634,20 +429,6 @@ async def delete_build_admin(
     await db.delete(build)
     await db.commit()
     await _best_effort_delete_media(media_keys)
-
-
-async def _best_effort_delete_media(file_keys: list[str]) -> None:
-    """Best-effort MinIO cleanup on admin takedowns (AUT-832 F4). Object removal
-    must never fail a moderation delete, so any storage error is swallowed."""
-    if not file_keys:
-        return
-    try:
-        from app.core.storage import delete_object
-
-        for key in file_keys:
-            await delete_object(key)
-    except Exception:
-        return
 
 
 @admin_ops.post("/users/{user_id}/social-ban")
@@ -663,8 +444,6 @@ async def social_ban_user(
     Scope note: the ban gates every social write (incl. replies/builds) but
     only *hides* issue posts; comments and build posts are removed via the
     hub's per-item delete actions instead (intended, AUT-832 F5)."""
-    from sqlalchemy import update
-
     from app.social.models import SocialIssuePost
 
     user = await db.get(User, user_id)
@@ -692,8 +471,6 @@ async def social_unban_user(
     _admin: User = Depends(require_admin),
 ) -> dict:
     """Reverse a social ban, restoring only the posts the ban itself hid."""
-    from sqlalchemy import update
-
     from app.social.models import SocialIssuePost
 
     user = await db.get(User, user_id)

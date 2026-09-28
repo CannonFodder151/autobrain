@@ -11,6 +11,41 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.285] - 2026-09-28
+
+### Fixed (AUT-4143)
+- fix(backend): disable VIC Servo Saver fuel feed — endpoint `api.servosaver.com.au` returns NXDOMAIN and would raise `FuelFeedError` instead of returning 0 stations; set `FUEL_VIC_ENABLED="false"` in `docker-compose.prod.yml` and commented out unused secret seeds in `scripts/seed-secrets.sh` until a paid VIC aggregator is available
+
+## [0.3.284] - 2026-09-28
+
+### Fixed (AUT-4317)
+- fix(frontend): match both MinIO bucket prefixes (`autobrain-assets` on
+  dev/hosted, `autobrainservice-assets` on demo/default) in nginx so
+  community-hub photos load instead of serving the SPA shell; the regex
+  location forwards the original URI (with its bucket prefix) to MinIO
+
+## [0.3.283] - 2026-09-28
+
+### Fixed (AUT-4327, AUT-4357)
+- fix(frontend): login, signup and server-setup logo is no longer stretched (`BoxFit.cover` → `BoxFit.contain`) and sits in a black circle instead of a white one, on all three auth screens (AUD-427 user report)
+- fix(frontend): `ApiClient.getCachedDecoded` no longer throws when the local cache backend is unavailable (web/sqflite); the vehicle manage screen, timeline, and every other cache-first screen fall through to the network path instead of failing to load
+
+## [0.3.282] - 2026-09-27
+
+### Changed (AUT-4289)
+- fix(frontend): remove the "Petrol Prices" feature tile from the home screen feature grid; `PetrolPriceMapScreen` itself is unchanged and still reachable from `frontend/lib/screens/fuel/petrol_price_map_screen.dart`
+
+## [0.3.281] - 2026-09-27
+
+### Fixed (AUT-4259)
+- fix(backend): merge alembic heads `a3661engineers` (engineer marketplace) and `aut3447_passkey_credentials` (WebAuthn) via new merge revision `m3rge07`; restores single-head guarantee so `alembic upgrade head` works and pytest-smoke gate passes
+
+## [0.3.280] - 2026-09-27
+
+### Added (AUT-4120)
+- feat(backend): Redis cache (TTL 1h) for query embeddings in `vector_search.py`; repeated searches return cached vector without 9Router call
+- fix(backend): cached vectors are re-validated against `EMBEDDING_DIMENSION` on read; a poisoned/wrong-dimension cache entry is rejected and the router path re-derives the vector instead of binding it to SQL (22P02)
+
 ## [0.3.279] - 2026-09-26
 
 ### Fixed (AUT-3570)

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The demo instance is a **public, read/write AutoBrain environment** at `demo.autobrainservice.app` running on the **Demo stack** (Portainer endpoint 2 = Portainer-Host, 10.0.3.17). It is separate from the Default and Hosted stacks.
+The demo instance is a **public, read/write AutoBrain environment** at `demo.autobrainservice.app` running on the **Demo stack** (Portainer endpoint 2 = Portainer-Host). It is separate from the Default and Hosted stacks.
 
 **Credentials:** `demo@autobrainservice.app` / `demo` (configurable via `DEMO_EMAIL`/`DEMO_PASSWORD`/`DEMO_DISPLAY_NAME` env vars).
 
@@ -12,13 +12,13 @@ The demo instance is a **public, read/write AutoBrain environment** at `demo.aut
 
 | Component | Detail |
 |-----------|--------|
-| **Host** | 10.0.3.17 (same as Default stack) |
+| **Host** | `<PORTENER_HOST_IP>` (same as Default stack) |
 | **Portainer endpoint** | 2 = Portainer-Host |
 | **Stack name** | `demo` (separate from `default`) |
 | **Compose file** | `docker-compose.yml` (not `.hosted.yml` or `.prod.yml`) |
 | **Backend** | Runs with `DEMO_MODE=true` |
 | **Frontend** | Flutter web build (same as other stacks) |
-| **AI router** | 9Router on 10.0.3.17:20128/v1 (shared with Default) |
+| **AI router** | 9Router on `<INTERNAL_9ROUTER_URL>` (shared with Default) |
 | **Database** | Postgres (shared instance with Default stack, separate DB) |
 | **MinIO** | Shared instance, separate bucket prefix |
 | **Public URL** | `https://demo.autobrainservice.app` |

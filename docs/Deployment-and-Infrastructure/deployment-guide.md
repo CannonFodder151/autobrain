@@ -276,7 +276,7 @@ recreate, site 200, npm untouched).
 Rules:
 - Do **not** remove the `networks` / `ipv4_address` block from the hosted
   compose.
-- Do **not** point the npm proxy host at `152.69.188.133:8086` or the docker
+- Do **not** point the npm proxy host at `<HOSTED_VM_IP>:8086` or the docker
   gateway IP: the Oracle host firewall drops hairpin/gateway traffic from npm
   (`EHOSTUNREACH`), so container-name forwarding to the static IP is the only
   stable target.
@@ -286,13 +286,13 @@ Rules:
 
 ## Security: management surface lockdown (AUT-473)
 
-The AutoBrain-Hosted VM (152.69.188.133) exposed several management/origin
+The AutoBrain-Hosted VM (<HOSTED_VM_IP>) exposed several management/origin
 surfaces directly to the internet. Fixed and enforced via compose:
 
 - **`9router` (`:20128`)** — published on `0.0.0.0:20128` so it is reachable
   from the host's public interface. It is locked down by the host firewall
   (`fw-keeper`, see docs/security.md): ingress on `:20128` is allowed only from
-  the allow-listed dev egress IP (`122.199.30.128`) and the internal docker
+  the allow-listed dev egress IP (`<DEV_EGRESS_IP>`) and the internal docker
   subnet (`172.18.0.0/16`); everything else is dropped. Backend/ai call it over
   the docker network (`http://9router:20128/v1`), which is unaffected by the host
   binding. The internal-subnet allow is required because backend consumes this

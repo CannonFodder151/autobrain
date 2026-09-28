@@ -14,7 +14,7 @@ How code gets from a branch to running production services.
 All workflows run on `ubuntu-latest`. Builds are multi-arch (`linux/amd64`,
 `linux/arm64`). Since AUT-987 each platform is built **natively** on its own
 self-hosted runner — amd64 on the x64 dev-box runner, arm64 on the ARM hosted
-server (152.69.188.133, Portainer EP5, `arm64`-labeled runner) — and combined
+server (<HOSTED_VM_IP>, Portainer EP5, `arm64`-labeled runner) — and combined
 into multi-arch manifests by a `*-manifest` job. No QEMU emulation.
 
 ## 1. Docker Hub publish (`dockerhub-publish.yml`)
@@ -110,8 +110,8 @@ release version everywhere in one shot (see `docs/versioning.md`).
 3. **Deploy** — a `deploy` job then calls Portainer with `PullImage: true` on
    **both** tiers (no manual step, order irrelevant here since the image is
    immutable once pushed):
-   - On-prem: Portainer stack `plate-api-scraper` (EP2, `10.0.3.17:8011`), stack id **75**.
-   - Hosted: Portainer stack `rego-lookup` (EP5, `152.69.188.133:8011`), stack id **85** —
+   - On-prem: Portainer stack `plate-api-scraper` (EP2, `<PORTENER_HOST_IP>:8011`), stack id **<STACK_ID>**.
+   - Hosted: Portainer stack `rego-lookup` (EP5, `<HOSTED_VM_IP>:8011`), stack id **<STACK_ID>** —
      port is bound to `127.0.0.1` only (loopback, AUT-316), never a public IP.
 
 Secrets live on the `rego-lookup-api` repo: `PORTAINER_URL`, `PORTAINER_API_KEY`,

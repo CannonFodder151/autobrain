@@ -19,7 +19,7 @@ provides hourly/daily/weekly backups:
   (`/api/v1/admin-api/backup`) with the per-instance admin API key, combines to
   hourly/daily/weekly, stores under `/srv/autobrain-backup/agent-data`, retention 30.
 
-### AutoBrain-Hosted / EP5 (Endpoint 5 — Oracle Cloud VM 152.69.188.133)
+### AutoBrain-Hosted / EP5 (Endpoint 5 — Oracle Cloud VM <HOSTED_VM_IP>)
 
 The hosted stack (`autobrain-hosted`, Portainer stack #122) includes its own
 dedicated backup stack running on EP5, separate from the on-prem backup

@@ -31,12 +31,12 @@ Monthly budget allocation, spend tracking, and variance analysis for AutoBrain o
 | Category | Monthly Budget | Actual (Current) | Variance | Notes |
 |----------|----------------|------------------|----------|-------|
 | **Infrastructure** | | | | |
-| Oracle Cloud VM (Production) | $75 AUD | $0 | - | AutoBrain-Hosted at 152.69.188.133 |
+| Oracle Cloud VM (Production) | $75 AUD | $0 | - | AutoBrain-Hosted at <HOSTED_VM_IP> |
 | Oracle Cloud Block Storage | $15 AUD | $0 | - | Database + MinIO |
 | Oracle Cloud Network Egress | $20 AUD | $0 | - | Variable by traffic |
 | On-Prem Dev Box | $60 AUD | $0 | - | Hidden costs (electricity, hardware) |
 | **Operations** | | | | |
-| 9Router AI Routing | $200 AUD | $0 | - | http://10.0.3.17:20128/v1 |
+| 9Router AI Routing | $200 AUD | $0 | - | <INTERNAL_9ROUTER_URL> |
 | Domain & SSL | $15 AUD | $0 | - | Cloudflare (managed) |
 | Monitoring & Alerting | $50 AUD | $0 | - | Portainer, health checks |
 | **Development** | | | | |
