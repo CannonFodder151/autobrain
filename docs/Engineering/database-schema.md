@@ -125,3 +125,66 @@ ATO logbook trips for non-club-reg vehicles only (rule [PR-1](product-rules.md#p
 id, vehicle_id (FK), code, description, source (obd/manual), is_resolved, created_at.
 
 Fault codes captured from a Bluetooth OBD2 adapter; pushed into the diagnostic AI tool.
+
+## devices (dongle devices — AUT-918)
+
+id, user_id (FK), name, api_key_hash (sha256), api_key_prefix (index), vehicle_id (FK, nullable),
+last_seen_at, created_at, updated_at.
+
+ESP32 DIY dongle upload devices. Each device presents an opaque per-device API key
+(`X-Device-API-Key`) — never a JWT (short-lived tokens would expire mid-offline queue).
+The key is stored as a sha256 digest + 10-char prefix index only; the raw key is shown
+once at creation. Device-scoped batch upload endpoint: `POST /devices/{id}/trips`.
+
+## dongle_firmware (AUT-1673)
+
+id, version, file_key (MinIO), sha256, size_bytes, release_notes, published_at,
+is_latest (bool, partial index).
+
+Firmware manifests for the AutoBrain OBD2 ESP32 dongle. Distributed via the
+dongle-server's signed MinIO URLs.
+
+## fuel_prices (Servo Spy — AUT-1813)
+
+id, station_id, fuel_type, price_per_litre, currency, source, recorded_at.
+
+Aggregated fuel price rows from the WA FuelWatch / NSW Fuel API / QLD FuelPricesQLD /
+SA SAFPIS / VIC Servo Saver feeds. Ingested by the `ingest_fuel_prices` Celery task.
+
+## fuel_stations (Servo Spy — AUT-1813)
+
+id, name, brand, address, lat, lng, source, source_id, last_updated_at.
+
+Station catalogue for the Servo Spy fuel map. Sourced from the state feed APIs
+(WA FuelWatch, NSW Fuel API, QLD DirectAPI, SA SAFPIS).
+
+## obd (admin-gated OBD-II access)
+
+User-level: `obd_enabled`, `obd_auto_connect` (admin-managed). No separate table —
+access is gated on the `users` record (see `users`).
+
+## refresh_tokens
+
+id, user_id (FK), token_hash, expires_at, created_at, revoked_at.
+
+Rotating refresh tokens. Presented one is revoked immediately on use
+(`/auth/refresh`). Revoked tokens are retained for expiry cleanup.
+
+## sca_parts_cache
+
+id, key (make|model|year), parts (JSON), category_count, fetched_at. UNIQUE(key).
+24h cache of Supercheap Auto parts-guide lookups feeding inventory + AI
+suggested-service prefill (AUT-1792).
+
+## valuation_snapshots
+
+id, vehicle_id (FK), estimated_value, low, high, currency, factors (JSON),
+recommendations (JSON), created_at.
+
+## ha_integrations (Home Assistant — AUT-2541)
+
+id, user_id (FK users), label, api_key_hash (sha256 hex), api_key_prefix (index),
+vehicle_id (FK vehicles, nullable scope), last_used_at, created_at.
+
+Per-user HA integration tokens (`abha_<64-hex>`), shown once at creation, stored as
+sha256 digest only. Mirrors the `devices` table pattern.

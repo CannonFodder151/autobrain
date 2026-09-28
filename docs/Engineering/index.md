@@ -13,10 +13,13 @@ Architecture, API, database, AI modules, OBD, mobile, developer onboarding, vers
 | [integrating-autobrain.md](./integrating-autobrain.md) | Human-readable integration guide (users + auth) |
 | [database-schema.md](./database-schema.md) | PostgreSQL schema |
 | [container-architecture.md](./container-architecture.md) | Container image layout, healthchecks, upgrade path |
-| [infrastructure-diagrams.md](./infrastructure-diagrams.md) | Network / container diagrams |
+| [infrastructure-diagrams.md](../Deployment-and-Infrastructure/infrastructure-diagrams.md) | Network / container diagrams |
 | [developer-onboarding.md](./developer-onboarding.md) | Getting started for devs |
 | [versioning.md](./versioning.md) | Versioning strategy |
 | [task-pipeline.md](./task-pipeline.md) | Sub-task & follow-up creation pattern, curl examples |
+| [system-overview.md](./system-overview.md) | Full system overview (components, topologies, data flow, security) |
+| [postgresql-17-upgrade.md](./postgresql-17-upgrade.md) | PostgreSQL 17 + pgvector upgrade procedure |
+| [safpis-sa-fuel-api-research.md](./safpis-sa-fuel-api-research.md) | SA SAFPIS fuel API research & integration plan |
 
 ### AI & Modules
 

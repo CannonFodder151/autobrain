@@ -6,7 +6,7 @@ rule-based engine that always produces a valid result, then optionally lets
 9Router enrich it. The platform never depends on the router being up — see
 `docs/module-breakdown.md` for the per-module breakdown.
 
-## Modules
+## Modules (12)
 
 | Module | Endpoint | Baseline engine | Router's role |
 |--------|----------|-----------------|---------------|
@@ -19,6 +19,8 @@ rule-based engine that always produces a valid result, then optionally lets
 | Fuel receipt | `/v1/fuel-ocr` | line-scan for vendor, date, litres, price-per-litre, total | Fills only missing optional fields |
 | Odometer | `/v1/odometer` | local Tesseract + regex digit scan on the dashboard photo | **None — deterministic-only** |
 | Parts guide | `/v1/parts-guide` | SCA category taxonomy normalisation + service-type inventory prefill | Tidy descriptions, brands, categories (never overrides SKU/service_group) |
+| Advisor | `/v1/advisor` | composes Value/Replace/Upgrade/Finance/Dream sub-modules into a decision (keep/upgrade/delay/strategy) with confidence | Richer rationale, sharper next_actions (never overrides `decision`) |
+| Car check | `/v1/car-check` | structured listing fields + deterministic deal score into summary, red/green flags | Refine narrative only |
 | Social image | `/v1/social-image` | Pillow on-brand card renderer (title/hook/CTA, 1200x630) | Optional prompt → free Pollinations photo (falls back to deterministic card) |
 
 ## Deterministic-first flow
@@ -47,8 +49,10 @@ The response includes a `model` field so callers know which path produced it:
 ## Fallback engines
 
 `ai/app/fallbacks/` implements the deterministic engines, one module per
-feature (`condition.py`, `diagnose.py`, `service_prediction.py`, `ocr.py`,
-`resale.py`, `mod_impact.py`, `fuel_ocr.py`, `odometer.py`).
+feature (`advisor.py`, `car_check.py`, `condition.py`, `diagnose.py`,
+`service_prediction.py`, `ocr.py`, `resale.py`, `mod_impact.py`,
+`fuel_ocr.py`, `odometer.py`, `parts_guide.py`). `social_image.py` uses
+Pillow (always available) and is deterministic-first; it is self-contained.
 
 - **Diagnostics:** keyword rules for symptoms (brakes, vibration, leaks,
   noises…) + OBD code table mapped to parts/costs.
@@ -63,6 +67,10 @@ feature (`condition.py`, `diagnose.py`, `service_prediction.py`, `ocr.py`,
   (excellent/good/fair/poor) + confidence + evidence signals.
 - **Mod impact:** per-category performance/value/reliability table.
 - **Fuel OCR / Odometer:** line-scan and Tesseract+regex respectively.
+- **Parts guide:** SCA taxonomy normalisation + service-type prefill.
+- **Advisor:** composes Value/Replace/Upgrade/Finance/Dream sub-modules.
+- **Car check:** structured listing fields + deterministic deal score.
+- **Social image:** Pillow renderer + optional Pollinations.
 
 ## Contract
 

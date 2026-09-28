@@ -16,13 +16,14 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-The dev stack runs **5 containers**: postgres, redis, minio, backend (API + AI gateway + Celery worker+beat), frontend. The AI gateway runs as a subprocess on `:8001` inside the backend container (AUT-3461).
+The dev stack runs **5 containers**: postgres, redis, minio, backend (API + AI gateway + Celery worker+beat), frontend. The AI gateway runs as a subprocess on `:8001` inside the backend container (AUT-3461). All app containers run as non-root (`autobrain` uid 1000) with healthchecks.
 
 ## 3. Verify
 
 - `curl http://localhost:8000/health` → `{"status":"ok",...}`
 - `curl http://localhost:8001/health` → AI gateway status
-- Open http://localhost:8000/docs
+- `curl http://localhost:8000/docs` → OpenAPI spec
+- `curl http://localhost:20128/health` → 9Router status (requires 9Router running separately or via Docker)
 
 ## 4. Code layout
 
@@ -70,7 +71,8 @@ Every feature is built for **both** frontends at the same time:
 
 ```bash
 docker compose exec backend pytest
-docker compose exec ai pytest
+# ai/ tests run inside the same backend container (ai/ is packaged as ai_app):
+docker compose exec backend pytest /app/tests/ai
 # frontend:
 cd frontend && flutter test
 ```
@@ -82,3 +84,19 @@ Behaviour changes update BOTH the Outline wiki (AutoBrain collection) and `docs/
 ## 8. Rego / market data providers
 
 External lookups (`REGO_LOOKUP_URL`, `MARKET_DATA_URL`) are optional; see `.env.example`. Without them the app uses deterministic offline heuristics.
+
+## 9. AI routing
+
+Every AI feature is optionally routed through 9Router (`AI_ROUTER_URL`). AutoBrain is
+**deterministic-first**: the rule-based engine always runs and produces the result;
+9Router only enriches it when reachable, and can never override measured ground-truth
+values. Set `AI_ROUTER_URL=http://10.0.3.17:20128/v1` for the on-prem 9Router, or
+`http://9router:20128/v1` for the hosted stack's local router. If left unset, the
+gateway always uses the local fallback so the platform runs end-to-end.
+
+## 10. Federation hub
+
+The Community Garage federation hub (`SOCIAL_FEDERATION_HUB_URL`) is optional.
+Self-hosters default to `hosted=false` (pay $20/yr). The hosted stack registers
+`hosted=true` with its own hub instance. See `docs/Engineering/ai/vector.md` and
+the hub's private repo for details.
