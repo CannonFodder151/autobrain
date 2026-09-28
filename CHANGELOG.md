@@ -30,6 +30,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   plus `scripts/test_check_compose_config.py` on compose/script changes, so
   the guards can no longer rot unnoticed.
 
+
+### Fixed (AUT-4327)
+- test(frontend): add a regression test asserting the login logo renders inside a
+  circular, black-background container and uses `BoxFit.contain`, so a
+  non-square logo asset cannot silently stretch again. The layout fix itself
+  already landed; this guards it.
+
 ## [0.3.296] - 2026-10-02
 
 ### Fixed (AUT-5032)
