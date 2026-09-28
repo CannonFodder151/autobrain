@@ -2,326 +2,144 @@
 
 ## Deployment order (promotion policy) — MANDATORY
 
-When a new update is pushed out, roll it out in this exact order. Do not skip or
-reorder a tier:
+**OVERRIDE ACTIVE (AUT-2409 / AUT-2411):** The AUT-107 three-tier promotion chain (Demo → Default → Hosted) is **PAUSED**. As of AUT-2409, **all deploys are hosted-only (Oracle Cloud `152.69.188.133`, Portainer endpoint 5) in the nightly 03:00–04:00 AEST window**. Do NOT deploy to Demo (`demo.autobrainservice.app`, EP2 demo stack) or Default (`default.autobrainservice.app`, EP2 default stack). Image prune across EP2+EP5 is still permitted; redeploy on EP2 is not. Out-of-window hosted deploys require explicit board approval.
 
-1. **Demo** — `demo.autobrainservice.app` (public, low-risk, demo account).
-2. **Default** — `default.autobrainservice.app` (internal dev/default instance).
-3. **Hosted** — `hosted.autobrainservice.app` (Oracle Cloud, prebuilt images).
+This override re-scoped (AUT-2411): AUT-2407, AUT-2316, AUT-1001, AUT-2229, AUT-2152, AUT-2109. Cancelled: AUT-1783, AUT-2135. PRs in flight: autobrain#492, rego-lookup-api#50. When the override is lifted, revert to: 1) Demo, 2) Default, 3) Hosted with per-tier health gating per `docs/deployment-guide.md`.
 
-Only promote to the next tier once the current one is verified healthy (startup,
-health checks, key flows). A change never goes to Hosted without first passing
-Demo and Default. A release is **NOT complete** until Hosted is verified last.
-Source of truth: board directive AUT-107.
+### Release checklist (hosted-only)
 
-### Release checklist
+Every release runs the gates below. No gate may be skipped; a failed gate blocks the release.
 
-Every release runs the gates below, in order. No gate may be skipped; a failed
-gate blocks the release at that tier.
-
-- [ ] 0. **Code gate** — every feature/PR for this release is **merged to `main`
-      first**. Do NOT deploy, promote, or announce a feature whose PR is still
-      open or unmerged.
-- [ ] 1. **Demo** — deploy to `demo.autobrainservice.app`; verify startup +
-      `/health` + key flows.
-- [ ] 2. **Default** — deploy to `default.autobrainservice.app`; verify startup +
-      `/health` + key flows.
-- [ ] 3. **Hosted** — deploy to `hosted.autobrainservice.app` (Oracle Cloud VM,
-      Portainer); verify startup + `/health` + key flows. **Only when this
-      passes is the release complete.**
-- [ ] **Verify the feature is actually present** on each tier — exercise the
-      flow (open the new screen, hit the new endpoint), not just the version
-      banner.
-- [ ] **Post-deploy prune** — run `scripts/prune-images.sh` to drop dangling
-      build-layer images on EP2 (Portainer-Host) + EP5 (AutoBrain-Hosted).
-      Deploys are the main source of dangling images (AUT-350); prune every
-      release so ~30-70GB does not accumulate between weekly prunes.
-- [ ] Note promotion order + verification result in the issue / `#updates`
-      channel.
+- [ ] 0. **Code gate** — every feature/PR for this release is **merged to `main` first**. Do NOT deploy a feature whose PR is still open or unmerged.
+- [ ] 1. **Hosted build** — `build-hosted.yml` workflow completes on the Oracle VM self-hosted ARM64 runner, pushing multi-arch (`amd64` + `arm64`) images to `ghcr.io/cannonfodder151/autobrain-*:hosted`.
+- [ ] 2. **Hosted deploy** — trigger `deploy-instances.yml` (`workflow_dispatch`) which runs `scripts/upgrade-instances.sh` against Portainer EP5 (`pullImage:true`). Stack: `autobrain-hosted`.
+- [ ] 3. **Health verification** — `/health` on `https://hosted.autobrainservice.app/health` returns the new version; key flows verified.
+- [ ] 4. **Post-deploy prune** — run `scripts/prune-images.sh` to drop dangling build-layer images on EP5 (AutoBrain-Hosted).
+- [ ] 5. **Note verification result** in the issue / `#updates` channel via n8n Discord Reporter.
 
 ## Environment tiers
 
-| Tier | URL | Host | Images |
-|------|-----|------|--------|
-| Demo | `demo.autobrainservice.app` | Portainer-Host | `cannonfodder151/autobrain-*:latest`, frontend `:demo` |
-| Default | `default.autobrainservice.app` | Portainer-Host | `cannonfodder151/autobrain-*:latest`, frontend `:default` |
-| Hosted | `hosted.autobrainservice.app` | Oracle Cloud VM | `cannonfodder151/autobrain-*:hosted`, worker `:hosted` |
+| Tier | URL | Host | Portainer EP | Images |
+|------|-----|------|--------------|--------|
+| **Hosted (Production)** | `hosted.autobrainservice.app` | Oracle Cloud VM `152.69.188.133` | 5 = AutoBrain-Hosted | `ghcr.io/cannonfodder151/autobrain-*:hosted` (multi-arch) |
+| Demo | `demo.autobrainservice.app` | Portainer-Host `10.0.3.17` | 2 = Portainer-Host | **PAUSED** (AUT-2409) |
+| Default | `default.autobrainservice.app` | Portainer-Host `10.0.3.17` | 2 = Portainer-Host | **PAUSED** (AUT-2409) |
 
-All three tiers run as standalone Portainer stacks with prebuilt images pulled
-from Docker Hub / GHCR. Hosted is published behind Nginx Proxy Manager on the
-Oracle VM; the stack frontend nginx exposes `:8086`.
+Hosted runs as a standalone Portainer stack with prebuilt images pulled from GHCR. The stack sits behind Nginx Proxy Manager (`npm`) on the Oracle VM; the stack frontend nginx exposes `:8080` (container) → `127.0.0.1:8086` (host), proxied by npm on `:443` via Cloudflare.
 
-## Deployment log
+## Deployment log (hosted)
 
 | Date | Version | Change | Verified |
 |------|---------|--------|----------|
-| 2026-08-27 | d946fe9 (PR #300, AUT-1673 paid-account gate) | Promote Demo → Default → Hosted (AUT-78) + Dev box, per AUT-1753. Hosted (83 EP5) `ghcr.io/...:hosted` (d946fe9 build, build-hosted run unblocked via AUT-1756). Demo (73 EP2) + Default (68 EP2) **repointed `:0.3.141`→`:latest`** — the pinned `:0.3.141` Docker Hub tag was stale/pre-merge (last push 2026-08-27T02:22) so it would NOT have carried d946fe9; `:latest` (13:17) does. Dev box (109 EP6) compose repointed `0.3.139`/`hosted-sha-4141…`→`ghcr.io/...:hosted`. Hosted backend env wired to dongle-server backchannel: added `DONGLE_SERVER_API_KEY: <redacted>` + `DONGLE_SERVER_URL: http://dongle-server:8012` (was missing → 503 "backchannel not configured"). PullImage:false after pre-pulling fresh images (proxy 60s timeout blocks blocking PullImage:true); hosted app containers force-recreated. | Hosted `/health` → v0.3.144, Demo/Default → v0.3.145 (both include d946fe9). Paid gate `GET /api/v1/dongle/firmware/latest` unauth → **401** (require_premium enforced). Backchannel `POST /api/v1/devices/verify` unauth → **401 "Invalid or missing internal API key"** (was 503 — now wired). **Dev box (109 EP6) BLOCKED**: stack stopped; EP6 `/run/secrets` only has minio keys — full secret set (postgres/redis/backend/ai/admin/dongle) never seeded, so backend crash-loops (`MINIO_ACCESS_KEY must be set`). Needs SSH + `scripts/seed-secrets.sh` + secret values (no `devbox_ssh_password` granted). |
-| 2026-08-27 | v0.3.141 | Deploy order Demo → Default → Hosted (Portainer stacks 73/68 EP2, 83 EP5, `pullImage:true`). Docker Hub `cannonfodder151/autobrain-{backend,ai,frontend}:0.3.141` rebuilt on `ubuntu-latest` (self-hosted x64 runner busy with OCR review — temporary CI dispatch bypassed). ghcr.io `:hosted` manifest recreated from existing amd64+arm64 variants (build-hosted run cancelled mid-pipeline). Demo frontend ghcr `:demo` rebuilt. All redeploy guards verified: frontend `ipv4_address: 172.18.0.14`, `9router` bound to `127.0.0.1`, `9router-data` volume external, `SOCIAL_FEDERATION_HUB_URL` retained in backend env. | `/health` → 0.3.141 on all three tiers; pruned dangling images (EP2: 0.04GB reclaimed, EP5: 4.9GB reclaimed). |
-| 2026-08-13 | v0.3.56 | Post-merge deploy of AUT-531 license deep-link (PR #100) + AUT-597 bounded social upload reads (PR #110). Deploy order Demo → Default → Hosted (Portainer stacks 73/68 EP2, 83 EP5, `pullImage:true`, backend/ai/market-data/frontend → `0.3.56`). Demo frontend ghcr `:demo` rebuilt from current main (workflow_dispatch, tag=demo). Pruned dangling images (EP2 ~940MB/51, EP5 ~640MB/4). | `/health` → `0.3.56` on all three tiers; hosted `/#/license` logged-out → login form (headless render); hosted `/auth/config` `license_enabled:true` + `/billing/pricing` → AUD plans (auth'd). Deep-link routing (`fragment=="license"` → LicenseScreen) present in all three deployed bundles. Logged-in headless render raced the Flutter engine's URL-fragment normalization (fragment cleared before async session restore) — flagged for real-browser QA confirm. |
-| 2026-08-13 | v0.3.55 | Post-merge deploy of AUT-523 billing hardening (PR #107, merge `587b3e38`): `_apply_subscription` preserves entitlement for active subs on archived/unknown prices (no demote-to-free), `plan_for_user` infers plan from entitlement, `scripts/stripe-setup.py` refuses to archive prices with active subs. Merge conflict resolved (CHANGELOG only). Deploy order Demo → Default → Hosted (Portainer stacks 73/68 EP2, 83 EP5, `pullImage:true`); backend/ai/frontend/market-data `:0.3.55` (demo frontend ghcr `:demo`, default frontend `:default` rebuilt). No-orphan pre-check: live Stripe has 1 sub on the archived USD prices (status `canceled`), hosted DB has 0 users referencing archived USD ids. Pruned dangling images (EP2/EP5). | `/health` 0.3.55 on all three tiers; `/billing/pricing` → `currency: aud` (A$9 / A$19) on all three; license renders `A$` when `currency==aud` (`license_screen.dart`) |
-| 2026-08-13 | v0.3.51 | Post-merge deploy of AUT-523 AUD subscription (PR #99, merge `763938f`) + AUT-532/539/540 co-published images. Deploy order Demo → Default → Hosted (Portainer stacks 73/68 EP2, 83 EP5, `pullImage:true`). Demo frontend ghcr `:demo` rebuilt at v0.3.51. Ran `scripts/stripe-setup.py` (with `transfer_lookup_key=True`, PR #105, merge `82d35d38`) against the live account: archived the 4 USD prices, created 4 AUD prices under the same lookup keys. Hosted stack `STRIPE_PRICE_*` env updated to AUD IDs (<REDACTED_PRICE_ID> / <REDACTED_PRICE_ID> / <REDACTED_PRICE_ID> / <REDACTED_PRICE_ID>). | `/billing/pricing` → `currency: aud` on all three tiers (was `usd`); live Stripe Checkout Session created from the hosted env price → `currency: aud`, `amount_total: 900` (A$9), price `aud` recurring monthly |
-| 2026-08-13 | v0.3.41 | Post-merge deploy of AUT-501 My Builds (PR #87, merge `ea095d18`): `GET /social/my-posts` + `PATCH /social/posts/{id}` (owner-only edit, 404 for non-owners). Deploy order Demo → Default → Hosted. Backend/ai/market-data pinned to `:0.3.41` image tags (v0.3.42 was publishing concurrently — separate release, see AUT-508). Frontends: demo=ghcr `:demo` (v0.3.42 build, has My Builds), default=`:default`, hosted=`:0.3.41`. **Release-blocking schema drift fixed on the fly:** `social_server_config.last_event_sync` + `author_user_id` nullable on `social_likes`/`social_comments` were missing on ALL three DBs — `alembic upgrade head` fails on create_all-hybrid DBs (`n4p5q6r7s8t9` collides with pre-existing tables, bootstrap falls back to `create_all` which cannot add columns). Manual `ALTER TABLE` applied to all 3 DBs; proper migration-chain fix tracked in a follow-up issue. | `/health` 0.3.41 on all three tiers; My Builds verified on demo + hosted: `my-posts` returns caller-only posts, owner `PATCH` persists, non-owner `PATCH` → 404 `Post not found` |
-| 2026-08-13 | v0.3.36 | Post-merge deploy of AUT-461 (PR #78, merge `058c886`): GitHub token removed from the server entirely — mobile release check now reads the public `mobile/latest.json` manifest unauthenticated. `GITHUB_TOKEN` deleted from config, all 3 compose files, and all 3 stack envs (Demo/Default EP2, Hosted EP5). Deploy order Demo → Default → Hosted, `pullImage:true`. | `/health` 0.3.36 on all three tiers; `/api/v1/version/mobile` → `reachable:true`, latest v0.3.33+68 (manifest) on all; no stack env carries GITHUB_TOKEN |
-| 2026-08-13 | v0.3.34 | Post-merge deploy of AUT-442 security fix (PR #74, merge `79a6a851`): GitHub PAT dropped from public version checks. All tiers promoted Demo → Default → Hosted (Portainer stacks 73/68 EP2, 83 EP5, `pullImage:true`); `GITHUB_TOKEN` stack env untouched (classic PAT still in place until fine-grained token lands — see AUT-461). Pruned dangling images (EP2 5.2GB, EP5 8.5GB). | `/health` 0.3.34 on all three tiers; `/api/v1/version/mobile` → `reachable:true`, latest v0.3.33+68 (2026-08-13T04:05Z) |
-| 2026-08-13 | v0.3.32 | Post-merge deploy after AUT-441 merge drive: all tiers promoted Demo → Default → Hosted (AUT-450). Includes alembic migration-chain fix (PR #70) — gps_samples reparented onto `k2l3m4n5o6p7`. Mobile release surfaced: `/api/v1/version/mobile` → `reachable:true`, latest v0.3.31+66. | `/health` 0.3.32 on all three tiers; mobile endpoint live (2026-08-13T02:31Z) |
+| 2026-08-27 | d946fe9 (PR #300, AUT-1673 paid-account gate) | Hosted (EP5) `ghcr.io/...:hosted` (d946fe9 build). Backend env wired to dongle-server backchannel: added `DONGLE_SERVER_API_KEY` + `DONGLE_SERVER_URL: http://dongle-server:8000`. PullImage:false after pre-pulling fresh images (proxy 60s timeout blocks blocking PullImage:true); hosted app containers force-recreated. | Hosted `/health` → v0.3.144. Paid gate `GET /api/v1/dongle/firmware/latest` unauth → **401** (require_premium enforced). Backchannel `POST /api/v1/devices/verify` unauth → **401 "Invalid or missing internal API key"** (was 503). |
 
-## Stack services
+## Stack services (Hosted — `docker-compose.hosted.yml`)
 
 | Service | Image | Notes |
 |---------|-------|-------|
-| postgres | `pgvector/pgvector:pg17` (pinned by digest) | healthcheck `pg_isready`; volume `postgres-data` |
-| redis | `redis:7-alpine` | healthcheck `redis-cli ping`; volume `redis-data` |
-| minio | `minio/minio:RELEASE.2025-09-07T16-13-09Z` | pinned (AUT-322); healthcheck `mc ready local`; volume `minio-data`; bucket auto-created + forced private via entrypoint (AUT-1242-C2, was the one-shot `minio-init` container) |
-| backend | `autobrain-backend:<tag>` | API on `:8000` (internal); `/health` |
-| worker | `autobrain-worker:<tag>` | Celery worker + beat (`-B`); single container (AUT-1242/C1) |
-| ai | `autobrain-ai:<tag>` | AI gateway on `:8001` (internal); `/health` |
-| frontend | `autobrain-frontend:<tag>` | nginx serves Flutter web + proxies `/api/*`, `/ws/*`, `/ai/*` |
-| hub | `ghcr.io/cannonfodder151/autobrain-federation-hub:<tag>` | federation hub (Community Garage); built + pushed from the PRIVATE repo `autobrain-federation-hub` (board rev 8); deploy config only in this repo |
+| postgres | `pgvector/pgvector:pg17@sha256:cf134a7...` | healthcheck `pg_isready`; volume `postgres-data`; **non-root** (read_only, cap_drop ALL, tmpfs) |
+| redis | `redis:7.2.5-alpine@sha256:6aaf3f5...` | healthcheck authenticated; volume `redis-data`; **non-root**, `--requirepass` from secret file |
+| minio | `minio/minio@sha256:14cea49...` | pinned (AUT-322); bucket init in entrypoint (no `minio-init` sidecar); **non-root**; volume `minio-data` |
+| backend | `ghcr.io/.../autobrain-backend:hosted@sha256:145438...` | **Unified**: API `:8000` + Celery worker+beat (AUT-3153) + AI gateway **NOT** here (separate `ai` service); **non-root**; static IP `172.18.0.15` |
+| ai | `ghcr.io/.../autobrain-ai:hosted@sha256:c58a7c...` | AI gateway `:8001` + market-data `:8000`; **non-root**; `shm_size: 256m` for Chromium |
+| dongle-server | `ghcr.io/.../autobrain-dongle-server:hosted@sha256:c57689...` | Firmware/distribution for OBD ESP32 dongles (AUT-1673); shares MinIO/Postgres; **non-root** |
+| frontend | `ghcr.io/.../autobrain-frontend:hosted@sha256:02ed10...` | nginx-unprivileged `:8080` → `127.0.0.1:8086`; **non-root**; static IP `172.18.0.14`; healthcheck probes backend `/health` |
+| hub | `ghcr.io/.../autobrain-federation-hub:hosted@sha256:d1d9bd...` | Community Garage federation hub (AUT-333/532); private repo; volume `hub-data`; `SOCIAL_FEDERATION_HOSTED=true` (free bundled license) |
+| gh-runner | `ghcr.io/actions/actions-runner:latest` | GitHub Actions ARM64 self-hosted runner (AUT-2469); `privileged`, docker.sock bind; PAT from secret file |
+| 9router | `decolua/9router:0.5.55@sha256:f00fe38...` | **Stack-local 9Router** (Oracle VM has its own instance); published `0.0.0.0:20128` but firewalled to dev egress IP `122.199.30.128/32` + docker subnet `172.18.0.0/16`; volume `9router-data` **external** |
+| autobrain-backup | `ghcr.io/.../autobrain-backup:hosted@sha256:e76fac3...` | Web GUI for backup mgmt, restore, retention; `127.0.0.1:8080`; volumes `/data/autobrain-backup/{config,data}` |
+| backup-agent | `ghcr.io/.../autobrain-backup-agent:hosted@sha256:59f26b...` | Hourly poller pulling DB snapshots from backend `/api/v1/admin-api/backup`; pushes to autobrain-backup ingest |
 
-The backend registers with the hub via `SOCIAL_FEDERATION_HUB_URL` (default
-`https://hub.autobrainservice.app`; override per stack). `SOCIAL_FEDERATION_HOSTED`
-is `true` on the AutoBrain-Hosted stack (free bundled license, docs R5a) and
-`false` on self-hosted/prod stacks (pays the $20/yr license). If the hub URL is
-missing from the `backend` service env, Community Garage server registration
-fails with `502 hub not configured` (AUT-532) — make sure the env reaches the
-`backend` service on every redeploy.
+**Total containers: 12** (down from 9 pre-consolidation; worker merged into backend, dongle-server/gh-runner/hub/backup services added).
 
-Only the frontend publishes a port; all internal services stay on the Compose
-network.
+### Key architectural notes
 
-## Prerequisites
+- **PostgreSQL + pgvector**: `pgvector/pgvector:pg17` pinned by digest for multi-arch immutability across Demo/Default (x64) and Hosted (arm64).
+- **Non-root containers**: All app services run with `read_only: true`, `cap_drop: [ALL]`, `tmpfs` mounts — hardened per AUT-1533/CIS.
+- **Secret-file pattern (AUT-1533)**: Secret-class values live in `${SECRETS_DIR:-/data/autobrain/secrets}/<name>` on host (`root:1000`, `0640`), bind-mounted read-only at `/run/secrets`. At container start, `docker/lib-load-secrets.sh` exports `FOO_FILE` → `FOO` and derives authenticated `REDIS_URL`/`CELERY_*_URL`. Values never appear in `docker inspect` or `/proc/*/environ`. Redis uses `--requirepass` from secret; Postgres/MinIO use native `*_FILE` support.
+- **Federated hub**: Community Garage hub runs as sibling service `hub` in the same stack. Backend registers via `SOCIAL_FEDERATION_HUB_URL` (default `https://hub.autobrainservice.app`); `SOCIAL_FEDERATION_HOSTED=true` on this stack (free bundled license per docs R5a).
+- **Network pinning (AUT-372)**: Default network subnet `172.18.0.0/16` gateway `172.18.0.1`; frontend pinned to `172.18.0.14`, backend to `172.18.0.15`. Host-level npm caches frontend IP — static IP prevents 502 on frontend recreate.
+- **9router external volume**: `9router-data` is **external** (created by original standalone container) — keep external so provider/API-key config persists across recreates.
+- **No `worker` service**: Celery worker+beat run as background process in `backend` container (AUT-3153), matching `docker-compose.prod.yml`. Dedicated `autobrain-worker` image retired from CI (AUT-3172).
 
-- Linux host with Docker 24+ and Docker Compose v2.
-- 4 vCPU / 8 GB RAM minimum for the full stack.
-- `.env` populated from `.env.example`.
+## Prerequisites (Hosted)
 
-## One-time server setup
+- Oracle Cloud VM (ARM64) with Docker 24+ and Docker Compose v2.
+- 4 vCPU / 8 GB RAM minimum.
+- Portainer agent connected to central Portainer (`https://portainer.nathanmartina.com`, endpoint 5).
+- `/data/autobrain/secrets` provisioned with all secret files (see `scripts/seed-secrets.sh`).
+- Cloudflare DNS for `hosted.autobrainservice.app` / `hub.autobrainservice.app` managed by Deployment team (no API key stored — DNS changes posted to Discord for Nathan to apply).
 
-```bash
-sudo ./scripts/setup-server.sh <user>
-```
-
-## Deploy (dev, from source)
-
-```bash
-cp .env.example .env
-docker compose up -d --build
-```
-
-Services:
-- API docs: http://localhost:8000/docs
-- AI gateway: http://localhost:8001/docs
-- MinIO console: http://localhost:9001
-
-## Deploy (hosted) — the upgrade path (AUT-1847)
-
-**Always use the GitHub Actions runner on the Oracle VM** to build hosted
-images (do NOT build locally). The `build-hosted.yml` workflow (on every merge
-to `main`, or via `workflow_dispatch`) builds multi-arch images on the
-self-hosted runners (x64 + ARM64 on the Oracle VM) and pushes them to ghcr.io
-with the `:hosted` tag.
-
-Deployment is **owned by the Deployment Lead**, not automatic (board direction,
-AUT-1847): after `build-hosted.yml` (or `dockerhub-publish.yml` for Demo/Default)
-completes, CI posts a Discord `#ops` notification (author "Deployment Lead")
-that an image is published and ready to promote. The Deployment Lead then
-triggers the `deploy-instances.yml` workflow (`workflow_dispatch`), which runs
-the upgrade path:
-
-1. `scripts/upgrade-instances.sh` redeploys each Portainer stack in promotion
-   order (Demo → Default → Hosted) via
-   `PUT /api/stacks/{id}?endpointId={ep}&pullImage=true`, preserving the stack
-   env and volumes (`Prune: false`).
-2. Each tier is health-checked (`/health`) before the next is promoted; a failed
-   tier stops the rollout (AUT-107).
-3. DB migrations run on backend boot, so a redeploy is a full upgrade.
-4. `scripts/prune-images.sh` drops dangling images on EP2/EP5 after success.
+## One-time server setup (Oracle VM)
 
 ```bash
-# Manual run (any tier ordering / verification override):
-./scripts/upgrade-instances.sh                       # promote all tiers
-UPGRADE_DRY_RUN=1 ./scripts/upgrade-instances.sh     # resolve + health only
-UPGRADE_TIERS="autobrain-hosted|5|https://hosted.autobrainservice.app/health|" \
-  ./scripts/upgrade-instances.sh                     # Hosted only
-```
-Run it from the repo checkout on a host that can reach Portainer (the
-`deploy-instances.yml` `upgrade` job does exactly this, with the
-`PORTAINER_API_KEY`/`PORTAINER_URL` repo secrets injected by GitHub).
+# Provision secrets directory (AUT-1853: /data not /opt)
+sudo mkdir -p /data/autobrain/secrets
+sudo chmod 0750 /data/autobrain/secrets
+sudo chgrp 1000 /data/autobrain/secrets
 
-Defaults stay `127.0.0.1` — `EXPOSE_LAN=0` means nothing is reachable off-host.
-Never commit `BIND_ADDRESS=0.0.0.0` to a shared `.env`.
+# Seed secrets from stack env dump (obtained from Portainer stack env)
+sudo ./scripts/seed-secrets.sh /tmp/stack-env.txt /data/autobrain/secrets
+shred -u /tmp/stack-env.txt
 
-**Host-level firewall (required when `EXPOSE_LAN=1`):**
-
-Docker publishing to `0.0.0.0` exposes the port on every interface. Lock the host
-firewall to trusted LAN ranges only. Example with `ufw`:
-
-```bash
-# Allow LAN subnet only (adjust to your network)
-sudo ufw allow from 192.168.1.0/24 to any port 8000 proto tcp   # backend
-sudo ufw allow from 192.168.1.0/24 to any port 8001 proto tcp   # ai gateway
-sudo ufw allow from 192.168.1.0/24 to any port 8080 proto tcp   # frontend
-sudo ufw deny 8000                                                  # block WAN
-sudo ufw deny 8001
-sudo ufw deny 8080
-```
-
-Or with `iptables`:
-
-```bash
-sudo iptables -I INPUT -p tcp --dport 8000 -s 192.168.1.0/24 -j ACCEPT
-sudo iptables -I INPUT -p tcp --dport 8001 -s 192.168.1.0/24 -j ACCEPT
-sudo iptables -I INPUT -p tcp --dport 8080 -s 192.168.1.0/24 -j ACCEPT
-sudo iptables -A INPUT -p tcp --dport 8000 -j DROP
-sudo iptables -A INPUT -p tcp --dport 8001 -j DROP
-sudo iptables -A INPUT -p tcp --dport 8080 -j DROP
-```
-
-Verify after enabling:
-
-```bash
-# From a LAN device:
-curl http://<dev-host-ip>:8000/health
-# From WAN (should fail):
-curl --connect-timeout 5 http://<dev-host-ip>:8000/health
-```
-
-Restore the default (localhost-only) when LAN testing is done:
-
-```bash
-sed -i 's/^EXPOSE_LAN=1/EXPOSE_LAN=0/; s/^BIND_ADDRESS=0.0.0.0/BIND_ADDRESS=127.0.0.1/' .env
-docker compose up -d
+# Ensure Portainer stack env has SECRETS_DIR=/data/autobrain/secrets
+# Deploy stack via Portainer from docker-compose.hosted.yml
 ```
 
 ## Deploy (hosted) — the upgrade path (AUT-1847)
 
-**Always use the GitHub Actions runner on the Oracle VM** to build hosted
-images (do NOT build locally). The `build-hosted.yml` workflow (on every merge
-to `main`, or via `workflow_dispatch`) builds multi-arch images on the
-self-hosted runners (x64 + ARM64 on the Oracle VM) and pushes them to ghcr.io
-with the `:hosted` tag.
+**Always use the GitHub Actions runner on the Oracle VM** to build hosted images (do NOT build locally). The `build-hosted.yml` workflow (on every merge to `main`, or via `workflow_dispatch`) builds multi-arch images on the self-hosted runners (x64 + ARM64 on the Oracle VM) and pushes them to ghcr.io with the `:hosted` tag.
 
-Deployment is **owned by the Deployment Lead**, not automatic (board direction,
-AUT-1847): after `build-hosted.yml` (or `dockerhub-publish.yml` for Demo/Default)
-completes, CI posts a Discord `#ops` notification (author "Deployment Lead")
-that an image is published and ready to promote. The Deployment Lead then
-triggers the `deploy-instances.yml` workflow (`workflow_dispatch`), which runs
-the upgrade path:
+Deployment is **owned by the Deployment Lead**, not automatic (board direction, AUT-1847): after `build-hosted.yml` completes, CI posts a Discord `#ops` notification (author "Deployment Lead") that an image is published and ready to promote. The Deployment Lead then triggers the `deploy-instances.yml` workflow (`workflow_dispatch`), which runs the upgrade path:
 
-1. `scripts/upgrade-instances.sh` redeploys each Portainer stack in promotion
-   order (Demo → Default → Hosted) via
-   `PUT /api/stacks/{id}?endpointId={ep}&pullImage=true`, preserving the stack
-   env and volumes (`Prune: false`).
-2. Each tier is health-checked (`/health`) before the next is promoted; a failed
-   tier stops the rollout (AUT-107).
-3. DB migrations run on backend boot, so a redeploy is a full upgrade.
-4. `scripts/prune-images.sh` drops dangling images on EP2/EP5 after success.
+1. `scripts/upgrade-instances.sh` redeploys the Portainer stack via `PUT /api/stacks/{id}?endpointId=5&pullImage=true`, preserving stack env and volumes (`Prune: false`).
+2. Tier is health-checked (`/health`); a failed tier stops the rollout.
+3. DB migrations run on backend boot (`python -m app.db.bootstrap`), so a redeploy is a full upgrade.
+4. `scripts/prune-images.sh` drops dangling images on EP5 after success.
 
 ```bash
-# Manual run (any tier ordering / verification override):
-./scripts/upgrade-instances.sh                       # promote all tiers
-UPGRADE_DRY_RUN=1 ./scripts/upgrade-instances.sh     # resolve + health only
+# Manual run (hosted only):
 UPGRADE_TIERS="autobrain-hosted|5|https://hosted.autobrainservice.app/health|" \
-  ./scripts/upgrade-instances.sh                     # Hosted only
+  ./scripts/upgrade-instances.sh
 ```
-Run it from the repo checkout on a host that can reach Portainer (the
-`deploy-instances.yml` `upgrade` job does exactly this, with the
-`PORTAINER_API_KEY`/`PORTAINER_URL` repo secrets injected by GitHub).
+Run from the repo checkout on a host that can reach Portainer (the `deploy-instances.yml` `upgrade` job does exactly this, with `PORTAINER_API_KEY`/`PORTAINER_URL` repo secrets injected by GitHub).
 
-Portainer stack updates pull images (`pullImage=true`) and recreate changed
-services (AUT-372). This is intended so CI-published images reach the tier, and
-it is safe for the frontend because the stack pins a static IP.
+Portainer stack updates pull images (`pullImage=true`) and recreate changed services. This is intended so CI-published images reach the tier, and it is safe for the frontend because the stack pins a static IP.
 
-Prerequisites for the Portainer API path to work (verified before relying on the
-upgrade path):
+### Prerequisites for the Portainer API path (verified before relying on upgrade path)
 
-- The Portainer agent on each endpoint must accept container start operations
-  against the host Docker Engine. **HostED (EP5, Oracle VM) is currently blocked:
-  its agent (2.39.5) sends a request body to `POST /containers/{id}/start` that
-  Docker 29.6.1 rejects, and the agent's `/opt` bind is read-only, so redeploys
-  leave containers in `created` state.** Assign the HostED infra repair to the
-  Deployment team (agent upgrade to a 2.45-compatible version, or fall back to
-  SSH `docker compose up -d` on the Oracle VM) — see AUT-1847.
-- The HostED Portainer stack env must carry the required non-secret vars
-  (`POSTGRES_USER`, `POSTGRES_DB`) and the Paperclip identity
-  (`PAPERCLIP_API_KEY`, `CI_TRIAGE_WEBHOOK_SECRET`). `docker-compose.hosted.yml`
-  now defaults the DB vars so a redeploy never fails at interpolation even if
-  the env is incomplete.
-- Secret path (AUT-1853): `docker-compose.hosted.yml` defaults `SECRETS_DIR` to
-  `/data/autobrain/secrets`. The HostED Portainer stack env should set
-  `SECRETS_DIR=/data/autobrain/secrets` (or rely on the compose default); never
-  `/opt/autobrain/secrets` — the snap dockerd masks `/opt` read-only. Before
-  redeploying the HostED stack, provision + re-seed `/data/autobrain/secrets`
-  (see docs/security.md "Oracle VM path migration (AUT-1853)"), then remove the
-  legacy `autobrain-opt-guard.sh` `/opt` remount cron workaround.
+- The Portainer agent on EP5 must accept container start operations against the host Docker Engine. **Hosted (EP5, Oracle VM) was previously blocked**: its agent (2.39.5) sent a request body to `POST /containers/{id}/start` that Docker 29.6.1 rejected, and the agent's `/opt` bind was read-only. **Resolved**: agent upgraded to 2.45-compatible version.
+- The Hosted Portainer stack env must carry required non-secret vars (`POSTGRES_USER`, `POSTGRES_DB`) and Paperclip identity (`PAPERCLIP_API_KEY`, `CI_TRIAGE_WEBHOOK_SECRET`). `docker-compose.hosted.yml` defaults the DB vars so a redeploy never fails at interpolation even if the env is incomplete.
+- Secret path (AUT-1853): `docker-compose.hosted.yml` defaults `SECRETS_DIR` to `/data/autobrain/secrets`. The Hosted Portainer stack env should set `SECRETS_DIR=/data/autobrain/secrets` (or rely on the compose default); never `/opt/autobrain/secrets` — the snap dockerd masks `/opt` read-only. Before redeploying the Hosted stack, provision + re-seed `/data/autobrain/secrets` (see `docs/security.md` "Oracle VM path migration (AUT-1853)"), then remove the legacy `autobrain-opt-guard.sh` `/opt` remount cron workaround.
 
 ### Nginx Proxy Manager + the hosted frontend (AUT-372)
 
-Hosted sits behind a host-level Nginx Proxy Manager (`npm`) container that is
-**on the same Compose network** and forwards to the frontend service name. npm
-caches the resolved frontend container IP and does NOT re-resolve it (the
-`resolver valid=10s` does not help on this host), so a recreated frontend with
-a new IP returns 502 until npm is restarted.
+Hosted sits behind a host-level Nginx Proxy Manager (`npm`) container that is **on the same Compose network** and forwards to the frontend service name. npm caches the resolved frontend container IP and does NOT re-resolve it, so a recreated frontend with a new IP returns 502 until npm is restarted.
 
-Durable fix already applied to `docker-compose.hosted.yml` and the live
-`autobrain-hosted` stack:
+Durable fix applied to `docker-compose.hosted.yml` and the live `autobrain-hosted` stack:
+- Default network declares `subnet: 172.18.0.0/16` / `gateway: 172.18.0.1` (matches live network, so compose never recreates it).
+- `frontend` service pins `ipv4_address: 172.18.0.14`.
 
-- the default network declares `subnet: 172.18.0.0/16` / `gateway: 172.18.0.1`
-  (matches the live network, so compose never recreates it);
-- the `frontend` service pins `ipv4_address: 172.18.0.14`.
-
-Any frontend recreate keeps the same IP, so npm's cached value stays correct
-and the site stays up with **no npm restart** (verified: full frontend container
-recreate, site 200, npm untouched).
+Any frontend recreate keeps the same IP, so npm's cached value stays correct and the site stays up with **no npm restart** (verified: full frontend container recreate, site 200, npm untouched).
 
 Rules:
-- Do **not** remove the `networks` / `ipv4_address` block from the hosted
-  compose.
-- Do **not** point the npm proxy host at `152.69.188.133:8086` or the docker
-  gateway IP: the Oracle host firewall drops hairpin/gateway traffic from npm
-  (`EHOSTUNREACH`), so container-name forwarding to the static IP is the only
-  stable target.
-- npm, `9router`, and `rego-lookup` are attached to `autobrain-hosted_default`
-  as external containers; never let compose try to recreate that network
-  (marking it `external` or changing its IPAM fails or tears the stack down).
+- Do **not** remove the `networks` / `ipv4_address` block from the hosted compose.
+- Do **not** point the npm proxy host at `152.69.188.133:8086` or the docker gateway IP: the Oracle host firewall drops hairpin/gateway traffic from npm (`EHOSTUNREACH`), so container-name forwarding to the static IP is the only stable target.
+- npm, `9router`, and `rego-lookup` are attached to `autobrain-hosted_default` as external containers; never let compose try to recreate that network (marking it `external` or changing its IPAM fails or tears the stack down).
 
 ## Security: management surface lockdown (AUT-473)
 
-The AutoBrain-Hosted VM (152.69.188.133) exposed several management/origin
-surfaces directly to the internet. Fixed and enforced via compose:
+The AutoBrain-Hosted VM (`152.69.188.133`) exposed several management/origin surfaces directly to the internet. Fixed and enforced via compose:
 
-- **`9router` (`:20128`)** — published on `0.0.0.0:20128` so it is reachable
-  from the host's public interface. It is locked down by the host firewall
-  (`fw-keeper`, see docs/security.md): ingress on `:20128` is allowed only from
-  the allow-listed dev egress IP (`122.199.30.128`) and the internal docker
-  subnet (`172.18.0.0/16`); everything else is dropped. Backend/ai call it over
-  the docker network (`http://9router:20128/v1`), which is unaffected by the host
-  binding. The internal-subnet allow is required because backend consumes this
-  service directly. Data volume `9router-data` is **external** (created by the
-  original standalone container) — keep it external, never let compose create a
-  fresh prefixed volume or the provider/API-key config is lost.
-- **`frontend` origin (`:8086`)** — bound to `127.0.0.1` only. All client
-  traffic goes through Cloudflare → npm (`:443`), which proxies to the frontend
-  over the docker network. Never re-expose `8086` to `0.0.0.0`; that was a
-  plaintext origin bypassing Cloudflare's WAF/rate limiting.
-- **Port `:80`** — remediated (AUT-1744): a custom `default_server` block in
-  `/data/nginx/custom/http.conf` returns `301 https://$host$request_uri`, so ALL
-  plaintext `:80` traffic is redirected to HTTPS and the NPM "Default Site"
-  welcome page is no longer served (kills the NPM version/CVE fingerprint). Both
-  proxy hosts (`hosted.`, `hub.autobrainservice.app`) already have Force SSL, so
-  their `:80` requests 301 as well. The NPM admin UI (`:81`) stays locked down /
-  not internet-exposed, so the fix lives in the custom config, not the DB.
-- **TLS/HSTS** — confirmed: HSTS `max-age=31536000; includeSubDomains; preload`
-  at the Cloudflare edge; origin `:443` serves TLS.
-- **Residual (needs OCI security list)** — `:9001` Portainer agent must stay
-  reachable from the central Portainer host; restrict the OCI ingress rule for
-  `9001` to the Portainer host IP only. `22`/`443` remain open (SSH + TLS).
+- **`9router` (`:20128`)** — published on `0.0.0.0:20128` so it is reachable from the host's public interface. It is locked down by the host firewall (`fw-keeper`, see `docs/security.md`): ingress on `:20128` is allowed only from the allow-listed dev egress IP (`122.199.30.128`) and the internal docker subnet (`172.18.0.0/16`); everything else is dropped. Backend/ai call it over the docker network (`http://9router:20128/v1`), which is unaffected by the host binding. The internal-subnet allow is required because backend consumes this service directly. Data volume `9router-data` is **external** — keep it external, never let compose create a fresh prefixed volume or the provider/API-key config is lost.
+- **`frontend` origin (`:8086`)** — bound to `127.0.0.1` only. All client traffic goes through Cloudflare → npm (`:443`), which proxies to the frontend over the docker network. Never re-expose `8086` to `0.0.0.0`; that was a plaintext origin bypassing Cloudflare's WAF/rate limiting.
+- **Port `:80`** — remediated (AUT-1744): a custom `default_server` block in `/data/nginx/custom/http.conf` returns `301 https://$host$request_uri`, so ALL plaintext `:80` traffic is redirected to HTTPS and the NPM "Default Site" welcome page is no longer served (kills the NPM version/CVE fingerprint). Both proxy hosts (`hosted.`, `hub.autobrainservice.app`) already have Force SSL, so their `:80` requests 301 as well. The NPM admin UI (`:81`) stays locked down / not internet-exposed, so the fix lives in the custom config, not the DB.
+- **TLS/HSTS** — confirmed: HSTS `max-age=31536000; includeSubDomains; preload` at the Cloudflare edge; origin `:443` serves TLS.
+- **Residual (needs OCI security list)** — `:9001` Portainer agent must stay reachable from the central Portainer host; restrict the OCI ingress rule for `9001` to the Portainer host IP only. `22`/`443` remain open (SSH + TLS).
 
-Redeploy rule: keep these localhost bindings and the external `9router-data`
-volume in `docker-compose.hosted.yml` and the live stack; a stack deploy that
-reverts them re-opens the exposed surface.
+Redeploy rule: keep these localhost bindings and the external `9router-data` volume in `docker-compose.hosted.yml` and the live stack; a stack deploy that reverts them re-opens the exposed surface.
 
-## Deploy (production, from source)
+## Deploy (production, from source) — self-hosted reference
 
 ```bash
 cp .env.example .env   # fill real values, especially SECRET_KEY + AI_ROUTER_URL
@@ -347,46 +165,15 @@ docker rm ab-web
 docker compose -f docker-compose.prod.yml up -d nginx   # mounts ./web-dist
 ```
 
-## Over SSH
-
-```bash
-./scripts/deploy.sh <user>@<host>
-```
-
 ## Migrations
 
-First boot runs `python -m app.db.bootstrap` (Alembic, falling back to
-`create_all`). Afterwards use Alembic:
+First boot runs `python -m app.db.bootstrap` (Alembic, falling back to `create_all`). Afterwards use Alembic:
 
-> **Resolved (AUT-510) — create_all-hybrid DBs.** A DB that was ever bootstrapped
-> via the `create_all` fallback (Alembic failure) has tables Alembic has never
-> seen. From v0.3.43+ the social migrations are linear and idempotent:
-> `n4p5q6r7s8t9` was reparented onto `a5b6c7d8e9f0` (fixing the two-head fork that
-> made `alembic upgrade head` fail with "Multiple head revisions"), and every DDL
-> op in `n4p5q6r7s8t9` / `p6q7r8s9t0u1` is guarded so already-present tables and
-> columns are skipped. The v0.3.41 manual `ALTER TABLE`s are now no-ops.
+> **Resolved (AUT-510) — create_all-hybrid DBs.** A DB that was ever bootstrapped via the `create_all` fallback (Alembic failure) has tables Alembic has never seen. From v0.3.43+ the social migrations are linear and idempotent: `n4p5q6r7s8t9` was reparented onto `a5b6c7d8e9f0` (fixing the two-head fork that made `alembic upgrade head` fail with "Multiple head revisions"), and every DDL op in `n4p5q6r7s8t9` / `p6q7r8s9t0u1` is guarded so already-present tables and columns are skipped. The v0.3.41 manual `ALTER TABLE`s are now no-ops.
 >
-> New columns on existing tables still require a real Alembic migration (never
-> rely on `create_all` — it only creates missing *tables*).
+> New columns on existing tables still require a real Alembic migration (never rely on `create_all` — it only creates missing *tables*).
 >
-> **Production must NEVER fall back to `init_db()`.** The bootstrap at
-> `app/db/bootstrap.py` runs `alembic upgrade head`; if that fails (e.g. a
-> broken migration like AUT-2482's `op.get_inspector()` crash on
-> `aut1859_fuel_price_alerts.py`) it silently falls back to
-> `Base.metadata.create_all`, which only emits *missing tables* — it cannot
-> add new columns, partial unique indexes, or any DDL Alembic was meant to
-> apply. The first symptom is a runtime `UndefinedColumnError` (e.g.
-> `column notification_deliveries.user_id does not exist`) on a Celery task
-> that reads the table — not at boot. If you ever see
-> `alembic_failed_falling_back_to_create_all` in backend logs on a hosted
-> environment, the deploy is broken: stop, fix the migration, re-run
-> `alembic upgrade head` via the backend bootstrap path
-> (`python -m app.db.bootstrap`), and verify the worker log carries
-> `alembic_migrations_applied` on the next boot. Do not paper over it with
-> `create_all`. Reproduce the broken state with
-> `docker compose -f docker-compose.hosted.yml run --rm backend alembic
-> upgrade head` from a workstation against a clone of the hosted DB
-> (redacted secrets) before shipping a fix.
+> **Production must NEVER fall back to `init_db()`.** The bootstrap at `app/db/bootstrap.py` runs `alembic upgrade head`; if that fails (e.g. a broken migration like AUT-2482's `op.get_inspector()` crash on `aut1859_fuel_price_alerts.py`) it silently falls back to `Base.metadata.create_all`, which only emits *missing tables* — it cannot add new columns, partial unique indexes, or any DDL Alembic was meant to apply. The first symptom is a runtime `UndefinedColumnError` (e.g. `column notification_deliveries.user_id does not exist`) on a Celery task that reads the table — not at boot. If you ever see `alembic_failed_falling_back_to_create_all` in backend logs on a hosted environment, the deploy is broken: stop, fix the migration, re-run `alembic upgrade head` via the backend bootstrap path (`python -m app.db.bootstrap`), and verify the worker log carries `alembic_migrations_applied` on the next boot. Do not paper over it with `create_all`. Reproduce the broken state with `docker compose -f docker-compose.hosted.yml run --rm backend alembic upgrade head` from a workstation against a clone of the hosted DB (redacted secrets) before shipping a fix.
 
 ```bash
 docker compose exec backend alembic revision --autogenerate -m "change"
@@ -395,12 +182,10 @@ docker compose exec backend alembic upgrade head
 
 ## Rollback
 
-```bash
-docker compose -f docker-compose.prod.yml down
-docker compose -f docker-compose.prod.yml up -d --build   # pinned images
-```
+On Portainer: redeploy the previous stack definition / image tag (use `hosted-sha-<commit>` tags for precise rollback). In a migration, keep the old host running and flip DNS back to roll back — see `server-migration.md`.
 
-On Portainer: redeploy the previous stack definition / image tag. In a
-migration, keep the old host running and flip DNS back to roll back — see
-`server-migration.md`.
+---
 
+**Related docs:** [`ci-cd.md`](./ci-cd.md) | [`infrastructure-diagrams.md`](./infrastructure-diagrams.md) | [`server-migration.md`](./server-migration.md) | [`backup-strategy.md`](./backup-strategy.md) | [`monitoring.md`](./monitoring.md) | [`autobrain-deploy-trigger.md`](./autobrain-deploy-trigger.md) | [`security.md`](../Security/security.md)
+
+**Graft usage:** This repo is indexed with Graft (trailhq/Graft). Run `graft map` to orient, `graft ask "<task>"` to find code, `graft grep "<regex>"` for exhaustive search, `graft callers <symbol>` for call graphs, `graft blast --base origin/main` for diff blast radius. See `AGENTS.md` for agent integration.

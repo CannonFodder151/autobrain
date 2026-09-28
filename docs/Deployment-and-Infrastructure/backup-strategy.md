@@ -1,76 +1,122 @@
 # Backup Strategy
 
+Covers the **Hosted** production stack (Oracle Cloud VM `152.69.188.133`, Portainer
+EP5, stack `autobrain-hosted`). Demo/Default are **PAUSED** per AUT-2409 and share
+the same compose shape — see `deployment-guide.md` for the tier table.
+
 ## What to back up
 
-1. **PostgreSQL** — all app data.
-2. **MinIO bucket** — receipts, photos, uploads.
-3. **`.env`** — environment configuration (store separately, encrypted).
+1. **PostgreSQL** — all app data (users, vehicles, services/fuel/parts history,
+   subscriptions, federation). Volume `postgres-data`.
+2. **MinIO bucket** — receipts, photos, uploads, dongle firmware. Volume `minio-data`.
+3. **Hub data** — federation registry SQLite. Volume `hub-data`.
+4. **9Router config** — providers + API keys. Volume `9router-data` (**external**).
+5. **Secret files** — `${SECRETS_DIR:-/data/autobrain/secrets}` on the host
+   (`root:1000`, `0640`). Back these up separately, encrypted — a backup without
+   the secrets dir is not restorable on a fresh host.
+6. **Stack definition** — `docker-compose.hosted.yml` + the Portainer stack env.
 
-## autobrain-backup service (recommended)
+Redis (`redis-data`) is **not** backed up: it is a cache and Celery result
+backend, safe to start fresh.
 
-The `autobrain-backup` service runs on the Portainer-Host (port 8080) and
-provides hourly/daily/weekly backups:
+## autobrain-backup service (primary)
 
-- **`autobrain-backup`** — web GUI, restore feature, health/stats, email alerts
-  on failure/corruption, config on the docker host (`/srv/autobrain-backup/config`).
-- **`backup-agent`** — pulls backups hourly from the instance admin API
-  (`/api/v1/admin-api/backup`) with the per-instance admin API key, combines to
-  hourly/daily/weekly, stores under `/srv/autobrain-backup/agent-data`, retention 30.
+Two services run **inside the hosted stack** (not on a separate host):
 
-## Admin JSON backup (instant, in-app)
+| Service | Bind mounts | Role |
+|---------|-------------|------|
+| `autobrain-backup` | `/data/autobrain-backup/config` → `/config`, `/data/autobrain-backup/data` → `/backups` | Web GUI, restore, health/stats, email alerts on failure/corruption. Published on `127.0.0.1:8080` (loopback only). |
+| `backup-agent` | `/data/autobrain-backup/agent-data` → `/backups` | Hourly poller pulling DB snapshots from the hosted backend admin API. `KEEP=30`. |
 
-`GET /admin/backup` (admin-authenticated) downloads a full JSON snapshot of the
-database. `POST /admin/restore` wipes and restores from a backup file. The daily
-Celery beat task also writes a JSON backup to MinIO (`backups/`) with retention
-of `BACKUP_RETENTION_DAYS` (default 14).
+The agent calls `GET /api/v1/admin-api/backup` on `http://backend:8000` with
+`ADMIN_API_KEY`, then pushes to `http://autobrain-backup:8080/ingest`, which
+combines them into hourly/daily/weekly tiers.
 
-Recommended cron (on the server, legacy):
-
-```cron
-30 2 * * * /opt/autobrain/scripts/backup.sh /backups && \
-  find /backups -name "autobrain-backup-*" -mtime +14 -delete
+```bash
+# Health/stats (SSH tunnel from the VM, or curl on the host)
+curl -fsS http://127.0.0.1:8080/health
 ```
+
+Both images are digest-pinned in `docker-compose.hosted.yml`
+(`autobrain-backup@sha256:e76fac3…`, `autobrain-backup-agent@sha256:59f26b…`)
+so the `:hosted` tag cannot silently swap the backup tool under you.
+
+> **Path note (AUT-1853):** binds live under `/data`, never `/srv` or `/opt`. The
+> Oracle VM's snap dockerd mounts `/opt` and `/srv` from a read-only core24
+> squashfs, so a bind there fails with "read-only file system".
+
+## In-app admin JSON backup (instant)
+
+`GET /api/v1/admin/backup` (admin-authenticated) downloads a full JSON snapshot of
+the database. `POST /api/v1/admin/restore` wipes and restores from a backup file.
+The daily Celery beat task also writes a JSON backup to MinIO (`backups/`) with
+retention of `BACKUP_RETENTION_DAYS` (default 14).
+
+This is the same endpoint the `backup-agent` polls, so the agent's snapshots are
+restorable in-app without a pg_dump.
 
 ## Full-fidelity backup (volume copy / pg_dump)
 
-For a migration or full data fidelity (DB + files):
+For a migration or full data fidelity (DB + files + hub + 9router):
 
 ```bash
-docker run --rm -v autobrain_postgres-data:/from -v "$PWD/vol-postgres":/to \
+# PostgreSQL
+docker run --rm -v autobrain-hosted_postgres-data:/from -v "$PWD/vol-postgres":/to \
   alpine sh -c 'cp -a /from/. /to/'
-docker run --rm -v autobrain_minio-data:/from -v "$PWD/vol-minio":/to \
+# MinIO
+docker run --rm -v autobrain-hosted_minio-data:/from -v "$PWD/vol-minio":/to \
+  alpine sh -c 'cp -a /from/. /to/'
+# Hub
+docker run --rm -v autobrain-hosted_hub-data:/from -v "$PWD/vol-hub":/to \
+  alpine sh -c 'cp -a /from/. /to/'
+# 9Router (external volume — no project prefix)
+docker run --rm -v 9router-data:/from -v "$PWD/vol-9router":/to \
   alpine sh -c 'cp -a /from/. /to/'
 ```
 
-Or a clean Postgres dump:
+Or a clean Postgres dump (transfers/compresses better):
 
 ```bash
-docker compose -f docker-compose.prod.yml exec -T postgres \
+docker compose -f docker-compose.hosted.yml exec -T postgres \
   pg_dump -U "$POSTGRES_USER" -Fc "$POSTGRES_DB" > autobrain.dump
 ```
+
+Plus copy `${SECRETS_DIR:-/data/autobrain/secrets}` and the Portainer stack env
+separately — a database-only snapshot cannot rebuild the stack on a fresh host.
 
 ## Restore
 
 ```bash
 # Database (pg_dump)
-docker compose -f docker-compose.prod.yml up -d postgres
-docker compose -f docker-compose.prod.yml exec -T postgres \
+docker compose -f docker-compose.hosted.yml up -d postgres
+docker compose -f docker-compose.hosted.yml exec -T postgres \
   pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists < autobrain.dump
 
-# MinIO (AUT-1242-C2: bucket init is now in the minio entrypoint; mc ships in the minio image)
-docker compose -f docker-compose.prod.yml exec -T minio sh -c \
-  "mc alias set local http://localhost:9000 ${MINIO_ACCESS_KEY} ${MINIO_SECRET_KEY} && mc mirror /local-restore local/autobrain-assets"
+# MinIO (AUT-1242-C2: bucket init is in the minio entrypoint; mc ships in the image)
+docker compose -f docker-compose.hosted.yml exec -T minio sh -c \
+  "mc alias set local http://localhost:9000 \$(cat /run/secrets/minio_access_key) \$(cat /run/secrets/minio_secret_key) && mc mirror /local-restore local/autobrain-assets"
 ```
 
-JSON backup restore is done in-app: admin → Backup & restore → upload → confirm.
+JSON backup restore is done in-app: admin → **Backup & restore** → upload → confirm.
+
+Restore the secret files **before** the stack boots, otherwise every `*_FILE`
+read fails and the backend crash-loops (see `../Security/security.md` →
+"Secret-file pattern & broker auth").
 
 ## Recovery objectives
 
-- RPO: up to 24h (daily backup), down to hourly via the backup agent.
-- RTO: ~15–30 min (restore + `docker compose up`).
+- **RPO**: hourly via `backup-agent`; 24h worst case if the agent is down.
+- **RTO**: ~15–30 min (restore + `docker compose -f docker-compose.hosted.yml up -d`).
 
 ## Notes
 
-- Schedule valuation snapshots etc. are re-generated by Celery beat on restore.
-- Keep a backup of the first working deploy so you can roll the whole stack back.
+- Valuation snapshots and similar scheduled artefacts are regenerated by Celery beat on restore.
+- Backups contain PII (user emails, vehicle data, bcrypt hashes) — encrypt artifacts at rest and never commit them.
+- Keep the first working stack definition + image digests so the whole stack can be rolled back.
 - Test the restore path at least once per quarter on a non-production instance.
+
+---
+
+**Related docs:** [`deployment-guide.md`](./deployment-guide.md) | [`server-migration.md`](./server-migration.md) | [`monitoring.md`](./monitoring.md) | [`infrastructure-diagrams.md`](./infrastructure-diagrams.md) | [`security.md`](../Security/security.md)
+
+**Graft usage:** This repo is indexed with Graft (trailhq/Graft). Run `graft map` to orient, `graft ask "<task>"` to find code, `graft grep "<regex>"` for exhaustive search, `graft callers <symbol>` for call graphs, `graft blast --base origin/main` for diff blast radius. See `AGENTS.md` for agent integration.
