@@ -416,6 +416,10 @@ services:
     pull_policy: always
     restart: unless-stopped
     privileged: true
+    sysctls:
+      - net.ipv4.tcp_keepalive_time=60
+      - net.ipv4.tcp_keepalive_intvl=10
+      - net.ipv4.tcp_keepalive_probes=6
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - type: bind
