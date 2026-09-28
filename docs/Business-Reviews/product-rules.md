@@ -2,6 +2,8 @@
 
 
 > Mirror of the Outline doc *Business Reviews > Product Rules*. Outline is the source of truth; keep this file in sync when the process changes.
+>
+> See also: [Engineering > Product Rules](../Engineering/product-rules.md) (same content, different nav context)
 
 Product rules are board/user decisions that constrain app behaviour. Each rule has a stable id so code, tests, and docs can reference it across refactors.
 

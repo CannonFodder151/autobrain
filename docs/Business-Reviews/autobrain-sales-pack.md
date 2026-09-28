@@ -57,6 +57,9 @@ Upgrade path: Free / Enthusiast (1) → Garage (5) → Club (unlimited, dedicate
 * **Trustworthy** — open-source (MIT), self-hostable, no vendor lock-in.
 * **Australian-first** — real AU rego registry lookups and localised features.
 * **Modern brand** — dark-first futuristic automotive UI (Tesla × NVIDIA × enterprise SaaS), brand kit in the AutoBrain design system.
+* **Vector search (pgvector)** — PostgreSQL with pgvector extension for semantic search across vehicle data, parts, and diagnostics. Hosted on `pgvector/pgvector:pg17` image.
+* **Non-root containers** — all services run as non-root user (`autobrain` uid 1000) with healthchecks; built for security and compliance.
+* **Federated hub** — optional Community Garage social layer via `hub.autobrainservice.app`; servers opt in, Stripe billing runs on hub only; self-hosted instances pay $20/year/server to join.
 
 ## How to sell it
 
@@ -66,7 +69,7 @@ Walk the prospect through the live demo (5 vehicles, 6 years of data). Emphasise
 
 ### Self-hosted (lead generator)
 
-MIT-licensed Docker Compose stack. Four vCPUs + 8 GB RAM runs the full stack (backend, AI gateway, worker, Postgres, Redis, MinIO, nginx). Point them at the GitHub README / website self-host section. These leads convert to support, onboarding or a dedicated Club deployment.
+MIT-licensed Docker Compose stack. Four vCPUs + 8 GB RAM runs the full stack (backend, AI gateway, worker, Postgres with pgvector, Redis, MinIO, nginx). Point them at the GitHub README / website self-host section. These leads convert to support, onboarding or a dedicated Club deployment.
 
 ### Common objections
 

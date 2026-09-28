@@ -1,12 +1,12 @@
-# Monthly / Quarterly / Yearly Reviews
-
-
 > **Repo mirror:** a sanitised mirror of the Outline doc *Business Reviews > Monthly / Quarterly / Yearly Reviews*. The actual monthly/quarterly/yearly review documents live in the `weekly review` Outline collection and are **not** mirrored to the public repo — this repo file carries the cadence, templates, and reviews index only. Outline is the complete source of truth.
+
+---
+
+# Monthly / Quarterly / Yearly Reviews
 
 **Owner:** BDM. **Cadence:** monthly (1st 09:00 UTC), quarterly (1st of Jan/Apr/Jul/Oct 09:00 UTC), yearly (1 Jan 10:00 UTC). Saved in the `weekly review` Outline folder, named by period (`2026-06 Monthly Review`, `2026-Q2 Quarterly Review`, `2025 Yearly Review`).
 
 > Mirror of this file lives in the repo at `docs/Business-Reviews/monthly-quarterly-yearly-reviews.md`. Outline is the source of truth; update both in the same change.
-
 
 ---
 
@@ -15,7 +15,6 @@
 Longer-window business reviews. Same evidence rules as the weekly review, wider lens: trend over level, velocity vs commitments, reliability, funnel discipline, engagement trajectory, market signals.
 
 A monthly review aggregates 4–5 weekly reviews. A quarterly aggregates 3 months. A yearly aggregates 12 months and is the input to the next annual plan. Each wider review **rolls up the constituent weekly ratings** and calls out where the trend broke — the wider reviews exist to catch what weekly granularity misses.
-
 
 ---
 
@@ -38,22 +37,20 @@ Each run creates a review issue assigned to the BDM; the review is completed in 
 | Q3      | Jul, Aug, Sep | `YYYY-Q3 Quarterly Review` |
 | Q4      | Oct, Nov, Dec | `YYYY-Q4 Quarterly Review` |
 
-
 ---
 
 ## Reviews Index
 
 | Period | Type | Doc | Rating |
 |--------|------|-----|--------|
-| *(none yet — first monthly runs after the first full month from the ASAP start)* |      |     |        |
-
+| 2026-08 | Monthly | [2026-08 Monthly Review](/doc/2026-08-monthly-review-z9o5FM4vHL) | 6/10 |
+| *(prior months — first monthly runs after the first full month from the ASAP start)* |      |     |        |
 
 ---
 
 ## Shared 8-section structure
 
 All three cadences use the same 8 sections, with period-wide scope:
-
 
 1. Period + rating (X/10) + one-line rationale
 2. Issues raised vs fixed (raw numbers + still-open counts + per-week trend line)
@@ -65,7 +62,6 @@ All three cadences use the same 8 sections, with period-wide scope:
 8. Data gaps / next actions
 
 The only cadence-specific difference is **section 2 and 3 get a per-week breakdown table** rather than a single row, because the trend is the point of the wider review.
-
 
 ---
 
@@ -80,10 +76,9 @@ For a wider review the rating is **not** the mean of the constituent weekly rati
 | Score | Meaning |
 |-------|---------|
 | 8–10  | Delivering ahead of commitments, fix rate > 1.0, no unplanned downtime, traffic/sales growing |
-| 6–7   | Delivering on commitments, fix rate \~1.0, minor incidents, flat-to-growing traffic |
+| 6–7   | Delivering on commitments, fix rate ~1.0, minor incidents, flat-to-growing traffic |
 | 4–5   | Mixed — fix rate below 1.0, recurring incidents, or flat traffic. Most weeks here. |
 | 1–3   | Not delivering, backlog growing fast, repeated outages, or a major launch missed |
-
 
 ---
 
@@ -101,16 +96,13 @@ Same traceable sources as the weekly review — Paperclip issue queries, Deploym
 
 > ponytail: the "fixed in period" number is approximated by `status=done` on issues created in the period. When the API can filter by `updatedAt` between start/end, prefer that — it catches issues raised earlier and fixed this period. Until that filter exists, say "issues created in period that reached done" in the doc, not "issues fixed in period".
 
-
 ---
 
 ## Posting
 
-
 1. Publish markdown to Outline under `weekly review`, named by period.
 2. Post Discord embed to `bdm-review` (rating + headline numbers + doc link).
 3. Comment on the run issue with summary + link + key numbers; mark `done` with evidence.
-
 
 ---
 
@@ -140,10 +132,8 @@ Same traceable sources as the weekly review — Paperclip issue queries, Deploym
 | Week | Raised | Fixed | Fix rate | Still open |
 |------|--------|-------|----------|------------|
 | Wnn | N | N | N.NN | N |
-| Wnn | N | N | N.NN | N |
-| Wnn | N | N | N.NN | N |
-| Wnn | N | N | N.NN | N |
 
+  ... (3 duplicate lines)
 **Fix rate analysis:** <is the backlog growing or draining? what drove the movement — a launch wave, a fix wave, or a new intake source?>
 
 ## Service Downtime / Incidents
@@ -155,9 +145,8 @@ Same traceable sources as the weekly review — Paperclip issue queries, Deploym
 |------|-----------|----------------|---------------|
 | Wnn | N | N | AUT-XXXX |
 | Wnn | N | N | — |
-| Wnn | N | N | — |
-| Wnn | N | N | — |
 
+  ... (2 duplicate lines)
 **Website availability (spot check at review time):**
 
 * `autobrainservice.app` → 200 OK
@@ -387,7 +376,6 @@ Same traceable sources as the weekly review — Paperclip issue queries, Deploym
 |-----|-------|--------|-----|
 | <gap> | [@Agent] | <action> | <date> |
 ```
-
 
 ---
 

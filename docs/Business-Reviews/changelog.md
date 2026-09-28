@@ -27,4 +27,6 @@ How the AutoBrain changelog works, who maintains it, and how it reaches every su
 
 Keep entries concrete and user-visible: what the user can now do, or what was broken and is now fixed. Attribute large work to its ticket (e.g. `AUT-115`). Sensitive details (sample plates, internal IPs/hostnames, hosting specifics) never appear in changelog entries.
 
-> Mirror of the Outline doc *Engineering > Changelog*. Outline is the source of truth; keep this file in sync when the process changes.
+> Mirror of the Outline doc *Business Reviews > Changelog*. Outline is the source of truth; keep this file in sync when the process changes.
+>
+> See also: [Business Reviews > index](./index.md) (linked from Business Reviews section)
