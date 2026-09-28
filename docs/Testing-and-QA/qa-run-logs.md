@@ -1,8 +1,22 @@
 # QA Run Logs
 
-**Owner:** QA & User Testing. **Section:** Testing & QA. **Last reviewed:** 2026-09-06 (AUT-2632).
+**Owner:** QA & User Testing. **Section:** Testing & QA. **Last reviewed:** 2026-09-28 (AUT-4395).
 
 Chronological log of verified test passes and verification runs. Real state only — mirrors repo `docs/qa-run-logs.md`. Newest first.
+
+## 2026-09-28 — QA documentation refresh: AUT-4395
+
+Refreshed all Testing & QA docs (`test-strategy.md`, `qa-run-logs.md`, `user-testing-results.md`) and the section `index.md` to reflect current stack state:
+
+- Dev box IP corrected: `192.168.1.100` → `10.0.3.39` (Portainer endpoint 6).
+- Stack details added: pgvector/pgvector:pg17 (PostgreSQL + pgvector), non-root containers (nginx-unprivileged), Community Garage federation hub (AUT-333).
+- CI/CD status corrected: GitHub Actions are active (ci-tests.yml, ci-queue-guard.yml, ci-triage-webhook.yml, security-scan.yml, visual_regression.yml, docs-sync.yml, build-hosted.yml, dockerhub-publish.yml, deploy-instances.yml, code-review.yml).
+- Backend test table expanded from 6 files to full 87-file inventory reference; AI gateway test table added (10 files).
+- Graft usage instructions added to `test-strategy.md` and cross-linked from `AGENTS.md` (AUT-3169).
+- Cross-links added between QA docs, change-validation-gate.md, deployment-guide.md, and security.md.
+- Sanitised internal IPs/endpoints in repo mirror (already done in 072706ec, AUT-4272).
+
+**Findings:** No release-blocking issues. Documentation is now current. Verdict: **deliverable**.
 
 ## 2026-09-06 — Location Services verification: AUT-2632 (iOS + Android)
 
