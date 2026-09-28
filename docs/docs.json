@@ -155,6 +155,8 @@
             "group": "Finance",
             "pages": [
               "Finance/payments",
+              "Finance/budgets-and-costs",
+              "Finance/migration-budget",
               "Finance/fuel-pricing",
               "Finance/fuel-servo-spy",
               "Finance/market-data"

@@ -87,3 +87,13 @@ FUEL_WA_PRICES_URL=https://industryprd.fuelwatch.wa.gov.au/api/report/weekly-ret
 FUEL_QLD_API_URL=https://www.fuelpricesqld.com.au/
 FUEL_INGEST_USER_AGENT=AutoBrain Servo Spy (+https://autobrainservice.app)
 ```
+
+## Related docs
+
+- [7-Eleven Fuel Prices](./fuel-pricing.md) — cheapest/nearest store lookup (deterministic, no AI)
+- [Market data](./market-data.md) — CarsGuide/CarSales for vehicle valuations
+- [Payments & Subscription](./payments.md) — tier gating (free tier = fuel features disabled)
+
+---
+
+*Sanitised public mirror. Internal-only content (secrets, keys, private links) lives in Outline (AutoBrain collection). Keep in sync per Documentation Policy.*

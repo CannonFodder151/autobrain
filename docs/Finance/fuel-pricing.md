@@ -52,3 +52,13 @@ The frontend calls this when a user selects *fuel at 7-Eleven* and pre-fills
 - `backend/app/schemas/fuel.py` — `FuelPriceQuote`, `SevenElevenPricesOut`.
 - `backend/app/api/v1/fuel.py` — `/prices/7eleven` route.
 - `backend/tests/test_fuel_prices.py` — offline parse/geo tests (no network).
+
+## Related docs
+
+- [Servo Spy Fuel Price Map](./fuel-servo-spy.md) — WA/NSW/QLD open-data feeds (premium-gated)
+- [Market data](./market-data.md) — CarsGuide/CarSales for vehicle valuations
+- [Payments & Subscription](./payments.md) — tier gating (free tier = AI/rego disabled)
+
+---
+
+*Sanitised public mirror. Internal-only content (secrets, keys, private links) lives in Outline (AutoBrain collection). Keep in sync per Documentation Policy.*

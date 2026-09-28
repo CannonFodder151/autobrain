@@ -167,3 +167,14 @@ so AutoBrain can suggest real parts for a vehicle. Source: `market-data/sca.py`.
 - **Config:** no new env var — it reuses `MARKET_DATA_URL` / `MARKET_DATA_API_KEY`.
 - **Caching:** results are cached in `sca_parts_cache` (keyed by
   `make|model|year`, 24h TTL) so repeat lookups are stable and cheap.
+
+## Related docs
+
+- [Payments & Subscription](./payments.md) — tier gating (market data best-effort, never blocks valuation)
+- [Budgets & Costs](./budgets-and-costs.md) — 9Router spend attribution, cost optimisation
+- [7-Eleven Fuel Prices](./fuel-pricing.md), [Servo Spy](./fuel-servo-spy.md) — other deterministic-first data feeds
+- [AI vector store](../Engineering/ai/vector.md) — pgvector storage behind the cache tables
+
+---
+
+*Sanitised public mirror. Internal-only content (secrets, keys, private links) lives in Outline (AutoBrain collection). Keep in sync per Documentation Policy.*

@@ -69,7 +69,17 @@ The store builds of the mobile app sell the same licences through Apple App Stor
 
 IAP env (empty = disabled): `IAP_GOOGLE_SERVICE_ACCOUNT_JSON`, `IAP_GOOGLE_PACKAGE_NAME`, `IAP_APPLE_ISSUER_ID`, `IAP_APPLE_KEY_ID`, `IAP_APPLE_PRIVATE_KEY`, `IAP_APPLE_BUNDLE_ID`, `IAP_REFRESH_WINDOW_DAYS`, `IAP_GOOGLE_PUBSUB_AUDIENCE`. Credentials are secrets — set them on the deployment env, never commit.
 
+## Related docs
+
+- [Budgets & Costs](./budgets-and-costs.md) — company budget, agent caps, Stripe billing health checks
+- [Market data](./market-data.md) — CarsGuide/BikeGuide feeds (premium-gated via Stripe tier)
+- [Fuel pricing](./fuel-pricing.md), [Servo Spy](./fuel-servo-spy.md) — premium features gated on paid tiers
+
 ## References
 
 - `scripts/stripe-setup.py`, `backend/app/services/billing.py`, `backend/app/services/iap.py`, `backend/app/api/v1/billing.py`
 - `docker-compose.hosted.yml` (Stripe env), `.env.example` (Stripe + IAP blocks)
+
+---
+
+*Sanitised public mirror. Internal-only content (secrets, keys, private links) lives in Outline (AutoBrain collection). Keep in sync per Documentation Policy.*
