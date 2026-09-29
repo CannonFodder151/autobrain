@@ -110,13 +110,15 @@ reachable from the public internet (full Docker control = container escape /
 secrets exfiltration). It is restricted by source at the host firewall:
 
 - Allowed source for `tcp/9001`: the Portainer server egress IP
-  `<DEV_EGRESS_IP>/32` (dev box / Portainer-Host network). Everything else is
-  dropped.
+  `<DEV_EGRESS_IP>/32` (dev box / Portainer-Host network; currently
+  `122.199.30.128`). Everything else is dropped.
 - Enforced by the `fw-keeper` container (image `autobrain-fw-keeper:1`,
-  `network_mode: host`, `privileged`, `restart: unless-stopped`) on the hosted
-  host. It re-applies the rules every 60s at boot/restart because Ubuntu Core's
-  `/etc` is read-only (no iptables-persistent). The container's `cmd` is the
-  canonical rule source; the image has no other purpose.
+  `network_mode: host`, `privileged`, `restart: unless-stopped`) **deployed
+  directly on the hosted host via Portainer** (not defined in this repo's
+  `docker-compose.hosted.yml`). The container re-applies the rules every 60s at
+  boot/restart because Ubuntu Core's `/etc` is read-only (no
+  iptables-persistent). The container's `cmd` is the canonical rule source; the
+  image has no other purpose.
 - Rules applied: `iptables -I INPUT 1 -p tcp --dport 9001 ! -s <DEV_EGRESS_IP> -j DROP`
   (docker-proxy/local socket path) and
   `iptables -I DOCKER-USER 1 -p tcp --dport 9001 ! -s <DEV_EGRESS_IP> -j DROP`
@@ -127,19 +129,20 @@ secrets exfiltration). It is restricted by source at the host firewall:
 - Defense-in-depth pending: OCI security list rule to restrict `tcp/9001`
   ingress to `<DEV_EGRESS_IP>/32` at the VCN level (needs OCI console access).
 - If the Portainer server egress IP ever changes, update the source in the
-  `fw-keeper` container command and re-apply.
+  `fw-keeper` container command in Portainer and re-apply.
 
 ### `9Router` AI router `:20128` (AUT-473, AUT-1754) — NOT internet-exposed
 
 **Classification: source-restricted, NOT internet-accessible.** This port is
-reachable only from the dev egress IP `<DEV_EGRESS_IP>/32` and the internal
-docker subnet `172.18.0.0/16`. Every other source is dropped at the host
-firewall. Any security scan that reports `:20128` as "accessible from the
-internet" is a **false positive** — it is almost always because the scan was
-launched from `<DEV_EGRESS_IP>` (the allow-listed dev egress IP / Portainer
-server egress), which is *supposed* to reach the port. "Open from the scanning
-host's public IP" ≠ "open from the internet." Do not file or escalate this as an
-internet-exposure finding; treat it as the intended allow-listed egress path.
+reachable only from the dev egress IP `<DEV_EGRESS_IP>/32` (currently
+`122.199.30.128`) and the internal docker subnet `172.18.0.0/16`. Every other
+source is dropped at the host firewall. Any security scan that reports `:20128`
+as "accessible from the internet" is a **false positive** — it is almost always
+because the scan was launched from `<DEV_EGRESS_IP>` (the allow-listed dev
+egress IP / Portainer server egress), which is *supposed* to reach the port.
+"Open from the scanning host's public IP" ≠ "open from the internet." Do not
+file or escalate this as an internet-exposure finding; treat it as the intended
+allow-listed egress path.
 
 Unlike `:9001`, `:20128` is also consumed **internally** by the `backend`
 (`AI_ROUTER_URL=http://9router:20128/v1`), so the firewall must additionally
@@ -156,8 +159,9 @@ silently breaks `backend → 9router` (SYN times out across the bridge).
 - `INPUT` (docker-proxy/local path for the published port):
   `--dport 20128 ! -s <DEV_EGRESS_IP> -j DROP`.
 - All four rules live in the `fw-keeper` container command (canonical rule
-  source), re-asserted every 60s; they survive in kernel netfilter across a
-  `fw-keeper` restart and are re-applied on host boot.
+  source), **deployed on the hosted host via Portainer** (not in this repo's
+  `docker-compose.hosted.yml`), re-asserted every 60s; they survive in kernel
+  netfilter across a `fw-keeper` restart and are re-applied on host boot.
 - Verification: probe `:20128` from **multiple, non-allow-listed** external
   nodes (e.g. check-host.net probe nodes, like the `:9001` check below). They
   must time out / refuse — proving the port is not internet-reachable. A probe
