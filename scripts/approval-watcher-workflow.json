@@ -1,0 +1,84 @@
+{
+  "name": "approval-watcher-marketing",
+  "nodes": [
+    {
+      "parameters": {
+        "cronExpression": "*/2 * * * *",
+        "timezone": "Australia/Sydney"
+      },
+      "id": "cron",
+      "name": "Every 2 minutes",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const fs = require('fs');\nconst { execSync } = require('child_process');\n\nconst repoPath = '/tmp/autobrain-approval-watcher';\n\n// Clone or pull latest\nif (!fs.existsSync(repoPath)) {\n  execSync(`git clone https://github.com/CannonFodder151/autobrain.git ${repoPath}`);\n} else {\n  execSync(`cd ${repoPath} && git pull origin main`);\n}\n\n// Run approval watcher\nconst result = execSync('python3 scripts/approval_watcher.py', {\n  cwd: repoPath,\n  env: {\n    ...process.env,\n    DISCORD_BOT_TOKEN: $env.DISCORD_BOT_TOKEN,\n    DISCORD_CHANNEL_MARKETING: $env.DISCORD_CHANNEL_MARKETING,\n    NATHAN_DISCORD_ID: $env.NATHAN_DISCORD_ID,\n    PAPERCLIP_API_URL: $env.PAPERCLIP_API_URL,\n    PAPERCLIP_API_KEY: $env.PAPERCLIP_API_KEY,\n    PAPERCLIP_COMPANY_ID: $env.PAPERCLIP_COMPANY_ID,\n    PAPERCLIP_RUN_ID: 'n8n-approval-watcher-'+Date.now()\n  },\n  encoding: 'utf8',\n  maxBuffer: 10 * 1024 * 1024\n});\n\nreturn [{ json: { success: true, output: result.toString() } }];"
+      },
+      "id": "runWatcher",
+      "name": "Run Approval Watcher",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "success",
+      "name": "Success",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [750, 200]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "error",
+      "name": "Error",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [750, 400]
+    }
+  ],
+  "connections": {
+    "Every 2 minutes": {
+      "main": [
+        [
+          {
+            "node": "Run Approval Watcher",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Approval Watcher": {
+      "main": [
+        [
+          {
+            "node": "Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1",
+  "tags": ["approval", "marketing", "discord"],
+  "meta": {
+    "description": "Polls #marketing Discord channel every 2 minutes for human CMO (Nathan) text approvals/rejections. Detects keywords: approve/approved/yes/ship it (approve) and reject/no/block (reject). Also detects ✅/❌ reactions on approval embeds. Calls Paperclip API to resolve linked AUT-XXXX issues."
+  }
+}
