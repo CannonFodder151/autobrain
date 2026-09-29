@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.286] - 2026-09-29
+
 ### Added (AUT-3503)
 - feat(backend): WebAuthn passkey sign-in is functional end-to-end (the route
   skeleton shipped in AUT-3447 but could never complete a ceremony)
