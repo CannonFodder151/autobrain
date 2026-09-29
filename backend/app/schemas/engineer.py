@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import time
+from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -48,7 +49,7 @@ class EngineerSearchFilters(BaseModel):
     available_to: time | None = Field(default=None, description="Latest end time (HH:MM:SS).")
 
 
-class EngineerSortBy(str, list):
+class EngineerSortBy(str, Enum):
     """Sort key enumeration."""
     RATING = "rating"
     DISTANCE = "distance"
