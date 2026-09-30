@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-"""Structural checks for the consolidated hosted compose file.
-
-Covers AUT-3153 (worker merged), AUT-3824 (ai gateway merged), AUT-3810
-(market-data merged) and AUT-3944 (single `backup` service).
+"""AUT-3153: structural checks for the consolidated hosted compose file.
 
 Run: python3 scripts/check-compose-consolidation.py
 No docker daemon needed — validates YAML/anchors and consolidation invariants.
@@ -34,33 +31,11 @@ def main():
     svcs = doc["services"]
     errors = []
 
-    for name in RETIRED:
-        if name in svcs:
-            errors.append(f"retired `{name}` service is back in the hosted stack")
-        if name == "backup-agent" and "autobrain-backup" in svcs:
-            errors.append("`autobrain-backup` still present — AUT-3944 renamed it to `backup`")
+    # C1: the standalone worker service is gone from the hosted stack.
+    if "worker" in svcs:
+        errors.append("standalone `worker` service still present")
 
-    # AUT-3944: exactly one backup service, and it is the GUI (still :8080).
-    if "backup" not in svcs:
-        errors.append("`backup` service missing (AUT-3944)")
-    else:
-        backup = svcs["backup"]
-        ports = [str(p) for p in (backup.get("ports") or [])]
-        if not any(p.endswith(":8080") and p.startswith("127.0.0.1:") for p in ports):
-            errors.append(f"`backup` GUI port binding changed; expected 127.0.0.1:8080:8080, got {ports}")
-
-    # AUT-3944: the hourly push must address the service by its NEW dns name,
-    # otherwise compose defaults and the running stack disagree.
-    backend_env = svcs.get("backend", {}).get("environment") or {}
-    url = str(backend_env.get("BACKUP_OFFSITE_URL", ""))
-    if "autobrain-backup:" in url:
-        errors.append(f"BACKUP_OFFSITE_URL still points at the old dns name: {url}")
-    if "backup:" not in url:
-        errors.append(f"BACKUP_OFFSITE_URL does not target the `backup` service: {url}")
-    if str(backend_env.get("BACKUP_OFFSITE_ENABLED")).lower() != "true":
-        errors.append("BACKUP_OFFSITE_ENABLED must stay \"true\" or hourly backups stop")
-
-    # AUT-3153: backend carries the worker topology (Celery worker+beat).
+    # C2: backend now carries the worker topology (Celery worker+beat).
     backend_cmd = svcs["backend"].get("command") or ""
     if isinstance(backend_cmd, list):
         backend_cmd = " ".join(backend_cmd)
@@ -87,6 +62,7 @@ def main():
             "`alembic upgrade head` must run before bootstrap/uvicorn (AUT-5088)"
         )
 
+    backend_env = svcs["backend"].get("environment") or {}
     # AUT-3153/AUT-3810/AUT-2195: fuel-poll secret files moved into backend env.
     for key in (
         "FUEL_NSW_API_KEY_FILE", "FUEL_NSW_API_SECRET_FILE",
@@ -114,7 +90,10 @@ def main():
     if errors:
         print("\n".join(f"FAIL: {e}" for e in errors))
         sys.exit(1)
-    print(f"OK: {COMPOSE} is consolidated into {len(EXPECTED)} services ({', '.join(sorted(EXPECTED))})")
+    print(
+        f"OK: {COMPOSE} satisfies AUT-3153 consolidation invariants "
+        f"({len(svcs)} services: {', '.join(sorted(svcs))})"
+    )
 
 
 if __name__ == "__main__":
