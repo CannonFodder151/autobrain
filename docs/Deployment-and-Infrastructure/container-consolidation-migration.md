@@ -50,9 +50,10 @@ Rules:
   - Merge standalone `ai` gateway service into `backend` (AUT-3824).
   - Merge `market-data` scraper into `backend` Celery tasks (AUT-3810).
   - Remove standalone `backup-agent` service; hourly snapshot push runs as Celery beat task in `backend` (AUT-3827).
+  - Rename the `autobrain-backup` GUI service to `backup` so the compose service, docker DNS name and image repo agree (AUT-3944).
   - MinIO bucket init folded into `minio` entrypoint (AUT-1242/C2).
 - **Result:** hosted stack reduced from 12 → **10 long-running containers**.
-  Remaining: postgres, redis, minio, backend (API:8000 + AI:8001 + Celery), dongle-server, frontend, hub, gh-runner, 9router, autobrain-backup.
+  Remaining: postgres, redis, minio, backend (API:8000 + AI:8001 + Celery), dongle-server, frontend, hub, gh-runner, 9router, backup.
 
 ## What is consolidated
 
@@ -63,6 +64,7 @@ Rules:
 | `market-data` (fuel scraper) | **Merged** (AUT-3810) | Runs as local Celery beat tasks in `backend`. `shm_size: 256m` added for Chromium. |
 | `minio-init` | **Merged** (AUT-1242/C2) | Runs inside `minio` entrypoint; no sidecar. |
 | `backup-agent` | **Removed** (AUT-3827) | Hourly off-site backup push is a Celery beat task in `backend` (`app.workers.tasks.backup_offsite_hourly`). |
+| `autobrain-backup` | **Renamed → `backup`** (AUT-3944) | One backup container serves the GUI; the cron that used to live in the agent sidecar runs in `backend` beat. GUI still on `127.0.0.1:8080`. |
 
 ## Pre-deploy
 
@@ -108,7 +110,16 @@ The compose re-apply removes the standalone `worker`, `ai`, `market-data`, `back
       get` → `none`).
 - [ ] No `worker`, `ai`, `market-data`, or `backup-agent` containers exist in the hosted stack.
 - [ ] `docker-compose.hosted.yml` service list has no `worker`, `ai`, `market-data`, or `backup-agent` service.
-- [ ] Container count is 10 (postgres, redis, minio, backend, dongle-server, frontend, hub, gh-runner, 9router, autobrain-backup).
+- [ ] Container count is 10 (postgres, redis, minio, backend, dongle-server, frontend, hub, gh-runner, 9router, backup).
+- [ ] No container or network alias named `autobrain-backup` remains; the
+      GUI resolves at `http://backup:8080` from inside the stack.
+- [ ] `BACKUP_OFFSITE_URL` on the EP5 stack env is either unset (compose
+      default `http://backup:8080`) or explicitly `http://backup:8080` — a
+      stale `http://autobrain-backup:8080` override silently stops hourly
+      pushes (AUT-3944).
+- [ ] An hourly snapshot appears in the GUI backup list (task
+      `offsite-backup-hourly`, `crontab(minute=0)`).
+- [ ] `python3 scripts/check-compose-consolidation.py` passes.
 
 ## Rollback
 
@@ -122,7 +133,6 @@ If the merged backend fails health or task execution:
 
 ## Follow-ups (child issues)
 
-- **Consolidate `autobrain-backup` GUI + internal cron** into a single backup service (target: -1 container, total 9).
 - **Consolidate MinIO init into the `minio` entrypoint for `docker-compose.prod.yml`
   and `docker-compose.yml`** (they still run the one-shot `/init-minio.sh` from
   the backend command).

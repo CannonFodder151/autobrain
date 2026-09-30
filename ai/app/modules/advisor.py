@@ -14,8 +14,8 @@ produced by the deterministic Value/Replace/Upgrade/Finance/Dream modules
 and the AI only reasons over those.
 """
 
-from app.fallbacks.advisor import advisor_fallback, validate_advisor_response
-from app.router_client import enhance
+from ..fallbacks.advisor import advisor_fallback, validate_advisor_response
+from ..router_client import enhance
 
 
 async def run(payload: dict) -> dict:
