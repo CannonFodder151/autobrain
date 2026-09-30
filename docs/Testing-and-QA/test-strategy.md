@@ -24,8 +24,8 @@ Mandatory promotion order **Demo → Default → Hosted** (per AUT-107). No tier
 - **AI gateway**: Runs inside the backend container on port 8001 (AUT-2000); 9Router provides model routing at `http://9router:20128/v1` (Hosted) or `http://10.0.3.17:20128/v1` (Dev/Default/Demo)
 - **Federation hub**: Community Garage hub service deployed on Hosted (`hub.autobrainservice.app`), registered by backend via `SOCIAL_FEDERATION_HUB_URL` (AUT-333, AUT-532)
 - **Worker**: Merged into backend (AUT-3153) — Celery worker+beat run as background processes in the backend container
-- **Backup**: Off-site backup runs as Celery beat task in backend (AUT-3827); standalone `backup-agent` removed
-- **Container count (Hosted)**: 9 services (postgres, redis, minio, backend, frontend, hub, 9router, gh-runner, autobrain-backup)
+- **Backup**: Off-site backup runs as Celery beat task in backend (AUT-3827); standalone `backup-agent` removed; the GUI service is now named `backup` (AUT-3944)
+- **Container count (Hosted)**: 10 services (postgres, redis, minio, backend, dongle-server, frontend, hub, 9router, gh-runner, backup)
 
 ## Automated tests (CI/CD)
 

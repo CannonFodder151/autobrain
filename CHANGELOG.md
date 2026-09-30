@@ -11,6 +11,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed (AUT-3944)
+- chore(deploy): the hosted `autobrain-backup` service is renamed to `backup`
+  and is now the **single** backup container. `backup-agent` stays removed
+  (AUT-3827 — its hourly snapshot push is the `offsite-backup-hourly` Celery
+  beat task in `backend`), so the hosted stack runs one backup container
+  instead of a GUI container plus a poller sidecar. GUI endpoint is unchanged
+  (`127.0.0.1:8080` on the host, `/backups` bind mount preserved).
+  `BACKUP_OFFSITE_URL` now defaults to `http://backup:8080`; **any EP5 stack
+  env override of the old `http://autobrain-backup:8080` must be updated or
+  hourly pushes stop on DNS failure.**
+
+### Fixed (AUT-3944)
+- fix(ci): `scripts/check-compose-consolidation.py` and
+  `scripts/check-compose-config.py` no longer crash or pass vacuously on the
+  consolidated stack — both still asserted the `ai` service that AUT-3824
+  removed (`KeyError: 'ai'`), and neither allowed-listed the
+  `backup_offsite_*` secret files added by AUT-3827. Both now assert the exact
+  10-service set and the `backup` DNS name.
+
 ## [0.3.288] - 2026-09-30
 
 ### Security (AUT-4743)
