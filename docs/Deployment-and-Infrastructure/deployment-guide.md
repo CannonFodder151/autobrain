@@ -14,6 +14,21 @@ health checks, key flows). A change never goes to Hosted without first passing
 Demo and Default. A release is **NOT complete** until Hosted is verified last.
 Source of truth: board directive AUT-107.
 
+> **OVERRIDE (AUT-2409) — hosted-only, in force.** The three-tier chain above is
+> **PAUSED**. All deploys go to **Hosted only** (Oracle Cloud, Portainer endpoint
+> 5), in the nightly 03:00–04:00 AEST window. Do **not** deploy to Demo or
+> Default (both on EP2). Image-prune across EP2 + EP5 stays permitted; stack
+> redeploys on EP2 do not. Out-of-window hosted deploys need explicit board
+> approval. This override is lifted only by a new board directive — when it is,
+> the chain above applies again.
+>
+> **EP2 personal apps (AUT-4502) — do not touch.** EP2 (Portainer-Host) also
+> runs Nathan's personal services (immich, pterodactyl, media/*arr, unifi,
+> mealie, whoogle, draw.io, outline, n8n, grafana …). They are permanently in
+> place: no migration, no consolidation, no pruning of their images, no EP2
+> redeploy. Full inventory and rules:
+> `docs/Deployment-and-Infrastructure/container-consolidation-migration.md`.
+
 ### Release checklist
 
 Every release runs the gates below, in order. No gate may be skipped; a failed
@@ -22,13 +37,12 @@ gate blocks the release at that tier.
 - [ ] 0. **Code gate** — every feature/PR for this release is **merged to `main`
       first**. Do NOT deploy, promote, or announce a feature whose PR is still
       open or unmerged.
-- [ ] 1. **Demo** — deploy to `demo.autobrainservice.app`; verify startup +
-      `/health` + key flows.
-- [ ] 2. **Default** — deploy to `default.autobrainservice.app`; verify startup +
-      `/health` + key flows.
-- [ ] 3. **Hosted** — deploy to `hosted.autobrainservice.app` (Oracle Cloud VM,
-      Portainer); verify startup + `/health` + key flows. **Only when this
-      passes is the release complete.**
+- [ ] 1. **Hosted** (AUT-2409 override) — build via the `build-hosted.yml`
+      workflow_dispatch on the self-hosted ARM64 runner, then update the EP5
+      stack (`pullImage:true`); verify startup + `/health` + key flows.
+      **The release is complete when this passes.**
+- [ ] ~~**Demo**~~ — **SKIPPED** (EP2 deploys paused, AUT-2409).
+- [ ] ~~**Default**~~ — **SKIPPED** (EP2 deploys paused, AUT-2409).
 - [ ] **Verify the feature is actually present** on each tier — exercise the
       flow (open the new screen, hit the new endpoint), not just the version
       banner.
