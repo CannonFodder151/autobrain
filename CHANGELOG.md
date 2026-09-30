@@ -11,6 +11,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-3815)
+- docs: two `docs/docs.json` nav entries pointed at files that do not exist
+  (`Business-Reviews/sales-pack`, `Business-Reviews/weekly-template`), which
+  failed the **Sync docs to Outline wiki** workflow on every `docs/` push and
+  held the docs-sync merge gate at 4 failures — replaced with the real filenames
+- docs: 14 markdown files had no `docs.json` nav entry (Company section pages and
+  the OBD2 dongle build archive) — added, so all 81 files are reachable
+- docs(home-assistant): `docs/home-assistant-integration.md` documented `/ha/...`
+  shorthand paths; the router is mounted under `API_V1_PREFIX = /api/v1`, so the
+  real paths are `/api/v1/ha/...` — corrected in the auth section, both endpoint
+  tables, and the planned WebSocket path
+- test(backend): `tests/test_ha_docs.py` still read `docs/api-spec.md` after the
+  doc reorg moved it to `docs/Engineering/api-spec.md`, failing 2 tests on `main`
+  with `FileNotFoundError` — repointed
+
 ### Changed (AUT-4503)
 - chore(deploy): the EP2 9Router (`10.0.3.17:20128`) is a managed Portainer
   stack (`9router`, id 128) from `docker-compose.9router.yml` instead of a loose
