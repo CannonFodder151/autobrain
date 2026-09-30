@@ -13,7 +13,7 @@ minio==7.2.12
 python-multipart==0.0.32
 passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
-PyJWT[crypto]==2.13.0
+PyJWT[crypto]==2.14.0
 httpx==0.28.1
 reportlab==4.2.5
 pypdf==6.16.1
