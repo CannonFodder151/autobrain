@@ -7,8 +7,8 @@ Deterministic-first: the category lookup table produces the baseline and its
 scores are never overridden; 9Router only adds a narrative summary.
 """
 
-from app.fallbacks.mod_impact import mod_impact_fallback
-from app.router_client import enhance
+from ..fallbacks.mod_impact import mod_impact_fallback
+from ..router_client import enhance
 
 
 async def run(payload: dict) -> dict:

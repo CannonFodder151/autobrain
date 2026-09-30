@@ -9,16 +9,16 @@ schedules, depreciation curves). They are the *fallback*, not the primary
 model — the router path is used whenever it is available.
 """
 
-from app.fallbacks.car_check import car_check_fallback, validate_car_check_response
-from app.fallbacks.condition import estimate_condition
-from app.fallbacks.diagnose import diagnose_fallback
-from app.fallbacks.fuel_ocr import _fuel_receipt_fallback
-from app.fallbacks.mod_impact import mod_impact_fallback
-from app.fallbacks.ocr import extract_receipt_fallback
-from app.ocr_utils import _extract_date
-from app.fallbacks.odometer import _odometer_fallback
-from app.fallbacks.resale import estimate_value_fallback, rrp_for
-from app.fallbacks.service_prediction import predict_service_fallback
+from ..fallbacks.car_check import car_check_fallback, validate_car_check_response
+from ..fallbacks.condition import estimate_condition
+from ..fallbacks.diagnose import diagnose_fallback
+from ..fallbacks.fuel_ocr import _fuel_receipt_fallback
+from ..fallbacks.mod_impact import mod_impact_fallback
+from ..fallbacks.ocr import extract_receipt_fallback
+from ..ocr_utils import _extract_date
+from ..fallbacks.odometer import _odometer_fallback
+from ..fallbacks.resale import estimate_value_fallback, rrp_for
+from ..fallbacks.service_prediction import predict_service_fallback
 
 __all__ = [
     "car_check_fallback",
