@@ -8,9 +8,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > user-facing change ships with an entry here under `[Unreleased]` — see
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
-
 ## [Unreleased]
-- backend: `engineers.specialties` / `certifications` / `availability` are declared as
+
+### Fixed (AUT-4678)
+- `scripts/check-compose-config.py` crashed with `KeyError: 'ai'` on `main`
+  after the AUT-3153 merge removed the standalone `ai` service, so the hosted
+  compose structural guard had been dead. Optional services are now filtered
+  by presence (`SECRET_SERVICES` + `present()`), `BACKUP_OFFSITE_GUI_KEY_FILE`
+  / `BACKUP_OFFSITE_INGEST_KEY_FILE` (and gh-runner's `github_pat`) are known
+  secret files, and the corresponding plain-env keys are forbidden.
+- `scripts/check-compose-consolidation.py` asserted the standalone `ai`
+  service existed; it now asserts the merged gateway indirection
+  (`AI_GATEWAY_API_KEY_FILE` / `AI_ROUTER_API_KEY_FILE`) lives on `backend`.
+- `scripts/seed-secrets.sh` aborted immediately: a comment inside a `sed`
+  backslash continuation (`# -e 's/^FUEL_VIC_API_KEY$/…' \`) terminated the
+  pipeline, so `set -eu` killed the script and **no** secret file was ever
+  seeded. Comment moved above the pipeline; `BACKUP_OFFSITE_GUI_KEY` /
+  `BACKUP_OFFSITE_INGEST_KEY` are now mapped to secret files.
+- New `.github/workflows/compose-checks.yml` runs every `scripts/check-*.py`
+  plus `scripts/test_check_compose_config.py` on compose/script changes, so
+  the guards can no longer rot unnoticed.
 
 ## [0.3.296] - 2026-10-02
 

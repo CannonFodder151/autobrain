@@ -3,6 +3,10 @@
 
 Run: python3 scripts/check-compose-config.py
 No docker daemon needed — validates YAML/anchors and remediation invariants.
+
+AUT-4678: services referenced by the F2 loops are optional after the AUT-3153
+merge (there is no standalone `ai` service any more) — index them only when
+present so a service removal degrades coverage instead of crashing the guard.
 """
 import sys
 
@@ -20,9 +24,14 @@ SECRET_FILES = {
     "fuel_nsw_api_key", "fuel_nsw_api_secret", "fuel_vic_api_key",
     "fuel_vic_api_secret", "fuel_qld_api_key", "fuel_sa_api_key",
     "dongle_server_api_key", "dongle_web_basic_password",
-    # AUT-3827/AUT-3944 off-site backup push keys.
+    # AUT-4678: github_pat, seeded by scripts/seed-secrets.sh for gh-runner.
+    "github_pat",
+    # AUT-3827/AUT-3944 off-site backup push keys (backend -> autobrain-backup).
     "backup_offsite_gui_key", "backup_offsite_ingest_key",
 }
+# Services whose secret handling this check inspects. Any of these may be
+# absent after a consolidation merge — the loops filter by presence.
+SECRET_SERVICES = ("postgres", "backend", "ai")
 PLAIN_FORBIDDEN = {  # secret-class keys that must not appear as plain env in app services
     "POSTGRES_PASSWORD", "SECRET_KEY", "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY",
     "AI_GATEWAY_API_KEY", "AI_ROUTER_API_KEY", "REGO_LOOKUP_API_KEY",
@@ -30,11 +39,17 @@ PLAIN_FORBIDDEN = {  # secret-class keys that must not appear as plain env in ap
     "SMTP_USERNAME", "SMTP_PASSWORD", "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET",
     "IAP_GOOGLE_SERVICE_ACCOUNT_JSON", "IAP_APPLE_PRIVATE_KEY",
     "SOCIAL_FEDERATION_HOSTED_REGISTRATION_KEY",
+    "BACKUP_OFFSITE_GUI_KEY", "BACKUP_OFFSITE_INGEST_KEY",
 }
 
 
 def env_of(svc):
     return (svc or {}).get("environment") or {}
+
+
+def present(svcs, names):
+    """Names that actually exist in the compose file (AUT-4678)."""
+    return [n for n in names if n in svcs]
 
 
 def main():
@@ -76,16 +91,18 @@ def main():
         f"unix socket: {pg_hc!r}"
     )
 
-    # F2: no secret-class plain env left on backend. The worker service was
-    # merged into backend (AUT-3153) and the `ai` service into backend
-    # (AUT-3824), so neither exists separately any more.
-    for svc_name in ("backend",):
+    # AUT-4678: no secret-class plain env left on the app services. The worker
+    # service was merged into backend (AUT-3153) and the `ai` gateway/market-data
+    # service into backend (AUT-3824), so neither exists separately any more —
+    # hence the presence filter: the merged gateway keeps the secret-file
+    # indirection via backend's *_FILE entries.
+    for svc_name in present(svcs, ("backend",)):
         plain = PLAIN_FORBIDDEN & set(env_of(svcs[svc_name]))
         if plain:
             errors.append(f"{svc_name} still carries plain secret env: {sorted(plain)}")
 
     # F2: *_FILE references point at seeded files.
-    for svc_name in ("postgres", "backend"):
+    for svc_name in present(svcs, SECRET_SERVICES):
         for k, v in env_of(svcs[svc_name]).items():
             if k.endswith("_FILE"):
                 fname = v.rsplit("/", 1)[-1]
