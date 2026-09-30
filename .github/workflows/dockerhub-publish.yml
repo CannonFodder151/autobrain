@@ -22,7 +22,50 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  dedupe-main-queue:
+    # AUT-1029: `concurrency` above serialises main pushes but never drops the
+    # stale ones, so a burst of merges queues N full 5-image publish runs on
+    # the 3-runner fleet. Only the newest main head needs to publish. This job
+    # cancels every QUEUED run of this workflow on main that is older than this
+    # run, then the heavy jobs below start. Runs already `in_progress` are left
+    # alone on purpose — cancelling a live publish mid-buildx is exactly the
+    # starvation AUT-967/AUT-1756 fixed, and cancelling it would also skip the
+    # sync-changelog step for the commit it was publishing.
+    #
+    # No job-level `if:` on purpose: a skipped `needs` dependency skips every
+    # downstream job, so guarding here would silently skip changelog-gate and
+    # the whole publish chain on PRs and workflow_dispatch. The event check
+    # lives in the step body instead.
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel superseded queued publish runs on main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SELF_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" != "push" ] || [ "${{ github.ref }}" != "refs/heads/main" ]; then
+            echo "not a main push — nothing to dedupe"
+            exit 0
+          fi
+          # `status=queued` only: in_progress runs are never touched. `pending`
+          # is covered too — GitHub uses it for a run that has not been handed
+          # to a runner yet, which is exactly the pile-up being drained here.
+          gh api "repos/${{ github.repository }}/actions/workflows/dockerhub-publish.yml/runs?branch=main&per_page=100" \
+            --jq ".workflow_runs[] | select(.id < ${SELF_RUN_ID} and (.status == \"queued\" or .status == \"pending\")) | \"\(.id)\t\(.head_sha)\t\(.status)\"" \
+            > /tmp/stale || { echo "no stale queued runs"; exit 0; }
+          [ -s /tmp/stale ] || { echo "no stale queued runs"; exit 0; }
+          while IFS=$'\t' read -r id sha st; do
+            [ -z "$id" ] && continue
+            echo "cancelling superseded $st run $id ($sha)"
+            gh api -X POST "repos/${{ github.repository }}/actions/runs/$id/cancel" \
+              >/dev/null 2>&1 && echo "  cancelled" || echo "  cancel failed — leaving it queued"
+          done < /tmp/stale
+
   changelog-gate:
+    needs: [dedupe-main-queue]
     # AUT-1785: route the lightweight (git/jq, ~seconds) merge-gating gate to
     # bare [self-hosted, linux, x64] instead of the `vm2` label, so GitHub can
     # dispatch it to the idle legacy x64 runner (gh-runner-autobrain) instead of

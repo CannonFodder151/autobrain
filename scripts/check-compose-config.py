@@ -20,6 +20,8 @@ SECRET_FILES = {
     "fuel_nsw_api_key", "fuel_nsw_api_secret", "fuel_vic_api_key",
     "fuel_vic_api_secret", "fuel_qld_api_key", "fuel_sa_api_key",
     "dongle_server_api_key", "dongle_web_basic_password",
+    # AUT-3827/AUT-3944 off-site backup push keys.
+    "backup_offsite_gui_key", "backup_offsite_ingest_key",
 }
 PLAIN_FORBIDDEN = {  # secret-class keys that must not appear as plain env in app services
     "POSTGRES_PASSWORD", "SECRET_KEY", "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY",
@@ -64,15 +66,16 @@ def main():
     hc = hc if isinstance(hc, str) else " ".join(hc)
     assert "/run/secrets/redis_password" in hc, f"redis healthcheck not authed: {hc!r}"
 
-    # F2: no secret-class plain env left on backend/ai. The worker service was
-    # merged into backend (AUT-3153), so there is no separate worker service.
-    for svc_name in ("backend", "ai"):
+    # F2: no secret-class plain env left on backend. The worker service was
+    # merged into backend (AUT-3153) and the `ai` service into backend
+    # (AUT-3824), so neither exists separately any more.
+    for svc_name in ("backend",):
         plain = PLAIN_FORBIDDEN & set(env_of(svcs[svc_name]))
         if plain:
             errors.append(f"{svc_name} still carries plain secret env: {sorted(plain)}")
 
     # F2: *_FILE references point at seeded files.
-    for svc_name in ("postgres", "backend", "ai"):
+    for svc_name in ("postgres", "backend"):
         for k, v in env_of(svcs[svc_name]).items():
             if k.endswith("_FILE"):
                 fname = v.rsplit("/", 1)[-1]

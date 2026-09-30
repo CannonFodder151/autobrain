@@ -11,6 +11,72 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-2784)
+- fix(ai): the AI gateway now imports its own modules relatively, so it is
+  self-contained as `ai_app` in the shared backend image. `docker/backend/Dockerfile`
+  copies `ai/app` to `ai_app` and runs it as a co-process on `:8001` inside the
+  backend container, but every gateway module used an absolute `from app.…`
+  import. In that image `app` resolves to the **backend** package, which has no
+  `logging`, `modules`, `router_client` or `fallbacks`, so the gateway died at
+  startup with `ModuleNotFoundError: No module named 'app.logging'` and every
+  `/ai/` route 502'd. 48 import statements across 20 files converted; the
+  standalone `ai/` suite is unchanged (109 passed, same 3 pre-existing failures).
+- test(ai): `ai/tests/test_merged_image_layout.py` simulates the image layout
+  (backend `app` + gateway `ai_app` side by side) and asserts the gateway both
+  imports and serves `/health` + auth on `:8001`, plus an AST check that no
+  absolute `app.*` import reappears. The standalone AI suite imports `app.main`
+  and could never catch this class of breakage; the new file fails 3/4 on the
+  pre-fix tree and passes 4/4 after.
+
+## [0.3.289] - 2026-09-30
+
+### Changed (AUT-3944)
+- chore(deploy): the hosted `autobrain-backup` service is renamed to `backup`
+  and is now the **single** backup container. `backup-agent` stays removed
+  (AUT-3827 — its hourly snapshot push is the `offsite-backup-hourly` Celery
+  beat task in `backend`), so the hosted stack runs one backup container
+  instead of a GUI container plus a poller sidecar. GUI endpoint is unchanged
+  (`127.0.0.1:8080` on the host, `/backups` bind mount preserved).
+  `BACKUP_OFFSITE_URL` now defaults to `http://backup:8080`; **any EP5 stack
+  env override of the old `http://autobrain-backup:8080` must be updated or
+  hourly pushes stop on DNS failure.**
+
+### Fixed (AUT-3944)
+- fix(ci): `scripts/check-compose-consolidation.py` and
+  `scripts/check-compose-config.py` no longer crash or pass vacuously on the
+  consolidated stack — both still asserted the `ai` service that AUT-3824
+  removed (`KeyError: 'ai'`), and neither allowed-listed the
+  `backup_offsite_*` secret files added by AUT-3827. Both now assert the exact
+  10-service set and the `backup` DNS name.
+
+## [0.3.288] - 2026-09-30
+
+### Security (AUT-4743)
+- fix(backend): bump `PyJWT[crypto]` 2.13.0 -> 2.15.1. 2.13.0 carries 12 known
+  CVEs (CVE-2026-101917/101918/102265-102274), which made both `pip-audit-gate`
+  and the resolved-tree scan (AUT-1189) fail on every PR and on `main` — it was
+  blocking the hosted deploy pipeline, not just this PR. The API used by
+  `app/core/security.py` and `app/services/iap.py` (`encode`/`decode`/
+  `get_unverified_header`/`PyJWTError`/`InvalidTokenError`) is unchanged.
+
+## [0.3.287] - 2026-09-30
+
+- **CI (AUT-1029):** `dockerhub-publish.yml` gains a `dedupe-main-queue` job that cancels superseded `queued`/`pending` publish runs on `main` before the heavy jobs start, so a burst of merges no longer queues N full 5-image builds behind the 3-runner fleet. In-flight runs are never cancelled (AUT-967/AUT-1756 behaviour preserved).
+
+### Changed (AUT-4503)
+- chore(deploy): the EP2 9Router (`10.0.3.17:20128`) is a managed Portainer
+  stack (`9router`, id 128) from `docker-compose.9router.yml` instead of a loose
+  `docker run` container — it was invisible to Portainer's stack view, so it had
+  no consistent update path and no health signal
+- chore(deploy): the EP2 router image is pinned by digest
+  (`decolua/9router:0.5.91@sha256:efc6e88c…`) — the same image the floating
+  `:latest` tag was already resolving to, so no version change
+- feat(deploy): the EP2 router stack carries an `/api/health` healthcheck; the
+  loose container had none
+- docs(deploy): document all three 9Router instances (EP2 stack, EP5 inside
+  `autobrain-hosted`, EP6 has none and uses the EP2 one) and the two ways to
+  break the shared `:20128` route
+
 ## [0.3.286] - 2026-09-29
 
 ### Added (AUT-3503)

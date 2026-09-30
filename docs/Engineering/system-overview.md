@@ -17,7 +17,7 @@ AutoBrain is an AI-powered car enthusiast companion. Users manage multiple vehic
 | **Dongle server** | OBD ESP32 dongle firmware manifests + signed MinIO URLs + serial whitelist (AUT-1673). |
 | **Federation hub** | Community Garage federation hub — deploy-only config in this repo; code lives in the private `autobrain-federation-hub` repo. Hosted stack only. |
 | **9Router** | External LLM router that powers AI modules and embeddings when configured. Hosted stack runs a local instance on `0.0.0.0:20128` behind host firewall. |
-| **autobrain-backup** | Backup web GUI (restore + retention), localhost-bound :8080. |
+| **backup** | Backup web GUI (restore + retention), localhost-bound :8080. Hourly off-site push is a backend Celery beat task (AUT-3827); service renamed from `autobrain-backup` in AUT-3944. |
 | **gh-runner** | ARM64 GitHub Actions self-hosted runner (built locally, `privileged: true`). |
 
 ## Deployment topologies

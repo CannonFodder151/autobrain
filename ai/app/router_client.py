@@ -22,8 +22,8 @@ import os
 
 import httpx
 
-from app.logging import get_logger
-from app.router_utils import (
+from .logging import get_logger
+from .router_utils import (
     _AI_IMMUTABLE,
     _MAX_ROUTER_RESPONSE_BYTES,
     _SCHEMAS,

@@ -31,7 +31,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.fallbacks.utils import (
+from ..fallbacks.utils import (
     _f,
     _clip,
     _signal_strength,
