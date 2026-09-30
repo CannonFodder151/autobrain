@@ -11,6 +11,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security (AUT-4743)
+- fix(backend): bump `PyJWT[crypto]` 2.13.0 -> 2.15.1. 2.13.0 carries 12 known
+  CVEs (CVE-2026-101917/101918/102265-102274), which made both `pip-audit-gate`
+  and the resolved-tree scan (AUT-1189) fail on every PR and on `main` — it was
+  blocking the hosted deploy pipeline, not just this PR. The API used by
+  `app/core/security.py` and `app/services/iap.py` (`encode`/`decode`/
+  `get_unverified_header`/`PyJWTError`/`InvalidTokenError`) is unchanged.
+
 ## [0.3.287] - 2026-09-30
 
 - **CI (AUT-1029):** `dockerhub-publish.yml` gains a `dedupe-main-queue` job that cancels superseded `queued`/`pending` publish runs on `main` before the heavy jobs start, so a burst of merges no longer queues N full 5-image builds behind the 3-runner fleet. In-flight runs are never cancelled (AUT-967/AUT-1756 behaviour preserved).
