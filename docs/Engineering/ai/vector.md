@@ -2,6 +2,8 @@
 
 AutoBrain uses PostgreSQL with the pgvector extension for semantic search. This document describes the schema, embedding pipeline, and search implementation.
 
+For the operational runbook — `halfvec` migration, regulatory corpus backfill, and the embedding model upgrade procedure — see [vector-store-operations.md](./vector-store-operations.md).
+
 ## Extension
 
 ```sql
