@@ -2,7 +2,7 @@
 
 Managed by SQLAlchemy models (`backend/app/models/`) and Alembic migrations (`backend/alembic/`).
 
-> **Migration heads:** the chain has a **single head** at `m3rge06`
+> **Migration heads:** the chain has a **single head** at `m3rge07`
 > (verified by `backend/tests/test_alembic_heads.py`). No merge migration is
 > pending; `alembic upgrade head` applies cleanly.
 

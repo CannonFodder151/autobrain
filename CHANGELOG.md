@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-3154)
+- fix(docs): stale Alembic head reference corrected `m3rge06` → `m3rge07` in `docs/Engineering/ai/vector.md` and `docs/Engineering/database-schema.md`; single-head claim re-verified against `backend/tests/test_alembic_heads.py`
+
 ## [0.3.283] - 2026-09-28
 
 ### Fixed (AUT-4327, AUT-4357)
