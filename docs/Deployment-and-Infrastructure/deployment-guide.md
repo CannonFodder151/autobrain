@@ -53,8 +53,31 @@ gate blocks the release at that tier.
       AUT-4502: EP2 also hosts Nathan's personal services (immich, pterodactyl,
       media/*arr, unifi, mealie, whoogle, draw.io, outline, n8n, grafana).
       Dangling-only pruning is mandatory — never widen to `prune -a`.
+- [ ] **Post-deploy smoke** — run `scripts/post-deploy-smoke.sh <BASE_URL>
+      [EXPECTED_FRONTEND_SHA]` instead of hand-rolled curls. It checks
+      `/health`, `/flutter_bootstrap.js`, `POST /api/v1/auth/signup`, `/ready`
+      and exits non-zero on any failure. AUT-4687: the previous ad-hoc payload
+      omitted `display_name` and returned 422, which was misreported as a deploy
+      failure on healthy auth.
 - [ ] Note promotion order + verification result in the issue / `#updates`
       channel.
+
+### Post-deploy smoke test spec
+
+| Check | Endpoint | Pass |
+|-------|----------|------|
+| Backend health | `GET /health` | 200, `status:ok` |
+| Frontend bundle | `GET /flutter_bootstrap.js` | SHA256 == expected SHA published by the deploy run (skip if unknown) |
+| Signup round-trip | `POST /api/v1/auth/signup` | **201** with body `{"display_name":"QA Smoke","email":"qa.smoke.<epoch>@example.com"}` |
+| Ready probe | `GET /ready` | 200 |
+
+Signup contract (`docs/Engineering/api-spec.md`, `backend/app/schemas/auth.py`
+`SignupRequest`): exactly two fields — `email` and `display_name` (1–120 chars).
+**There is no `password` field**; the account is finished via the emailed setup
+link. A payload of `{email, password}` returns 422 `Field required:
+display_name` — that is a test-spec defect, not a deploy failure.
+`scripts/test_post_deploy_smoke.py` fails if the script payload and the schema
+ever drift apart again.
 
 ## Environment tiers
 
