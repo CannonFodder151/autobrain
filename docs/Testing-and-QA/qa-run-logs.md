@@ -1,8 +1,21 @@
 # QA Run Logs
 
-**Owner:** QA & User Testing. **Section:** Testing & QA. **Last reviewed:** 2026-09-28 (AUT-4395).
+**Owner:** QA & User Testing. **Section:** Testing & QA. **Last reviewed:** 2026-09-30 (AUT-4395).
 
-Chronological log of verified test passes and verification runs. Real state only — mirrors repo `docs/qa-run-logs.md`. Newest first.
+Chronological log of verified test passes and verification runs. Real state only. Mirrors the Outline page of the same name; this repo copy is the sanitised public mirror — internal host addresses are written as placeholders (see [Test Strategy → Sanitisation](./test-strategy.md#sanitisation-this-copy-is-public)). Newest first.
+
+## 2026-09-30 — QA Documentation Correction: AUT-4395 (second pass)
+
+Reviewed the Testing & QA section against the actual repository rather than against the previous doc, and corrected six factual errors introduced by the 2026-09-28 refresh:
+
+- **Internal IPs removed** from this public mirror — the previous refresh had put the dev-box and Hosted VM addresses back into `test-strategy.md` / `qa-run-logs.md`, undoing the AUT-4272 sanitisation pass. Replaced with `<DEV_BOX_IP>` / `<HOSTED_VM_IP>` placeholders, and a "Sanitisation" section now states the rule.
+- **CI table corrected against the real workflows**: `ci-tests.yml` runs the **backend** suite only, and its blocking gate is `test_health_demo.py` — the full suite is `|| true`, so it reports without failing the job. `ci-queue-guard.yml` is a 10-minute scheduled orphan-run canceller (AUT-1720), **not** a test gate. Added the missing `backend-pytest-smoke`, `security-scan`, `trivy-image-scan`, `visual_regression` and `code-review` workflows.
+- **AI gateway test command was wrong and is now flagged as a coverage gap**: `docker compose exec backend pytest ai/tests/` cannot work — `docker/backend/Dockerfile` copies `ai/app` → `ai_app` only, never `ai/tests`. No workflow runs `ai/tests` either. Corrected to `cd ai && pytest` and opened AUT-4586.
+- **Container hardening claim was too broad**: `read_only` + `cap_drop: ALL` + tmpfs applies to five services in `docker-compose.prod.yml` but only `frontend` in `docker-compose.hosted.yml` — Hosted `backend` runs with a writable rootfs. Non-root is image-level (`USER autobrain`).
+- **Hosted service count corrected** 9 → 10 (`dongle-server` was missing).
+- **Duplicate block removed**: `Manual test coverage areas`, `Bug triage flow`, `Reporting` and `Sign-off bar` were each present twice in `test-strategy.md`; the second copy was a stale truncation (10 coverage items instead of 15). Graft section rewritten to the full command set with no internal-control-plane link.
+
+No product code touched. Docs-only.
 
 ## 2026-09-28 — QA Documentation Refresh: AUT-4395
 
@@ -10,15 +23,13 @@ Refreshed Testing & QA section (test-strategy.md, qa-run-logs.md, user-testing-r
 - PostgreSQL 17 + pgvector extension
 - Non-root containers with read-only filesystems, cap_drop: ALL, tmpfs
 - AI gateway co-located in backend container on :8001 (AUT-2000)
-- 9Router at http://9router:20128/v1 (Hosted) / http://10.0.3.17:20128/v1 (Dev/Default/Demo)
+- 9Router at http://9router:20128/v1 (Hosted) / LAN 9Router host (Dev/Default/Demo)
 - Community Garage federation hub deployed on Hosted (AUT-333, AUT-532)
 - Worker merged into backend (AUT-3153); backup as Celery beat task (AUT-3827)
-- Dev box IP corrected to 10.0.3.39 (was 192.168.1.100)
 - Added Graft usage instructions and cross-links to related docs
-- Verified no secrets or internal-only content in repo docs/ mirror
-- Added GitHub Actions CI/CD workflow table (ci-tests.yml, security-pr-gate.yml, build-hosted.yml, etc.)
+- Added GitHub Actions CI/CD workflow table
 
-**Findings:** None. Repo docs/ mirror sanitised. Outline sync pending (AUT-3815 workstream E).
+**Findings (superseded by the 2026-09-30 pass above):** this pass recorded "verified no secrets or internal-only content in repo docs/ mirror" and a corrected dev-box IP — but the corrected IP was written in **literal** form into the public repo, which is itself a sanitisation failure. The CI table and the AI-test command were also inaccurate at the time of writing.
 
 ## 2026-09-06 — Location Services verification: AUT-2632 (iOS + Android)
 
