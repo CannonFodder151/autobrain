@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.289] - 2026-09-30
+
 ### Changed (AUT-3944)
 - chore(deploy): the hosted `autobrain-backup` service is renamed to `backup`
   and is now the **single** backup container. `backup-agent` stays removed
