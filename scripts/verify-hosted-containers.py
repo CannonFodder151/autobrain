@@ -27,8 +27,15 @@ def compose_services(path=COMPOSE):
         return set(yaml.safe_load(f)["services"])
 
 
-def running_services(containers, stack):
-    """Container names -> compose service names for one stack, running or exited."""
+def running_services(containers, stack, aliases=None):
+    """Container state keyed by DECLARED service name, running or exited.
+
+    `aliases` maps a declared service name to the sibling compose project that actually
+    hosts it. On EP5 `gh-runner` runs as the standalone `gh-runner-autobrain-arm64`
+    stack (single service, different label), so the project's only service is adopted
+    under the declared name.
+    """
+    aliases = aliases or {}
     services = {}
     for c in containers:
         labels = c.get("Labels") or {}
@@ -37,7 +44,23 @@ def running_services(containers, stack):
         svc = labels.get("com.docker.compose.service")
         if svc:
             services[svc] = c.get("State")
+    for declared, project in aliases.items():
+        # ponytail: adopts the sibling project's single service; a sibling stack
+        # hosting several of our services would need an explicit service mapping.
+        adopted = list(_by_project(containers).get(project, {}).values())
+        if len(adopted) == 1:
+            services[declared] = adopted[0]
     return services
+
+
+def _by_project(containers):
+    out = {}
+    for c in containers:
+        labels = c.get("Labels") or {}
+        project, svc = labels.get("com.docker.compose.project"), labels.get("com.docker.compose.service")
+        if project and svc:
+            out.setdefault(project, {})[svc] = c.get("State")
+    return out
 
 
 def compare(expected, actual):
@@ -52,7 +75,17 @@ def main():
     ap.add_argument("--file", default=COMPOSE)
     ap.add_argument("--portainer-url", default=os.environ.get(
         "PORTAINER_URL", "https://portainer.nathanmartina.com"))
+    ap.add_argument("--alias", action="append", default=[], metavar="SERVICE=PROJECT",
+                    help="declare SERVICE as hosted by sibling compose PROJECT (repeatable)")
     args = ap.parse_args()
+
+    aliases = {}
+    for item in args.alias:
+        svc, _, project = item.partition("=")
+        if not svc or not project:
+            print(f"ERROR: bad --alias {item!r}, expected SERVICE=PROJECT", file=sys.stderr)
+            return 2
+        aliases[svc] = project
 
     api_key = os.environ.get("PORTAINER_API_KEY")
     if not api_key:
@@ -70,7 +103,7 @@ def main():
         print(f"ERROR: Portainer query failed: {e}", file=sys.stderr)
         return 2
 
-    actual = running_services(containers, args.stack)
+    actual = running_services(containers, args.stack, aliases)
     expected = compose_services(args.file)
     missing, extra = compare(expected, actual)
 
