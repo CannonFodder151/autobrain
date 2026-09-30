@@ -4,9 +4,9 @@ Input:  PDF text (`content`) or base64 image (`content_base64`) + content type.
 Output: vendor, date, litres, price_per_litre, total_cost, currency.
 """
 
-from app.fallbacks.fuel_ocr import _fuel_receipt_fallback
-from app.ocr_utils import _IMAGE_TYPES, _tesseract_text
-from app.router_client import enhance
+from ..fallbacks.fuel_ocr import _fuel_receipt_fallback
+from ..ocr_utils import _IMAGE_TYPES, _tesseract_text
+from ..router_client import enhance
 
 
 async def run(payload: dict) -> dict:

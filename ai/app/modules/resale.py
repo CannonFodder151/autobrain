@@ -13,10 +13,10 @@ The output is validated and clamped so estimates stay sane and consistent:
 low <= estimated <= high, values bounded to a realistic AUD range.
 """
 
-from app.fallbacks.condition import estimate_condition
-from app.fallbacks.resale import estimate_value_fallback, rrp_for
-from app.fallbacks.utils import to_float, _f
-from app.router_client import enhance
+from ..fallbacks.condition import estimate_condition
+from ..fallbacks.resale import estimate_value_fallback, rrp_for
+from ..fallbacks.utils import to_float, _f
+from ..router_client import enhance
 
 _MIN_VAL, _MAX_VAL = 500.0, 5_000_000.0
 

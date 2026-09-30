@@ -8,6 +8,12 @@ set -euo pipefail
 # Usage: PORTAINER_API_KEY=... scripts/prune-images.sh
 # Only prunes dangling images (`docker image prune -f` equivalent); never
 # removes tagged or in-use images.
+#
+# AUT-4502: EP2 also hosts Nathan's personal services (immich, pterodactyl,
+# media/*arr, unifi, mealie, whoogle, draw.io, outline, n8n, grafana ...). The
+# dangling-only filter keeps them safe; do NOT widen this to `prune -a` or add
+# per-image deletion. See
+# docs/Deployment-and-Infrastructure/container-consolidation-migration.md.
 
 PORTAINER_URL="${PORTAINER_URL:-https://portainer.nathanmartina.com}"
 : "${PORTAINER_API_KEY:?set PORTAINER_API_KEY to the Portainer API key}"

@@ -1,0 +1,50 @@
+# Standalone 9Router stack (AUT-4503).
+#
+# Why this file exists: 9Router ran on the Portainer-Host (EP2, 10.0.3.17) as a
+# loose `docker run` container named `9Router`, outside every stack. It was
+# invisible to Portainer's stack view, so it had no consistent update path and
+# no health signal. This compose file makes it a managed stack: Portainer stack
+# name `9router` on endpoint 2, updateable with `pullImage:true` like every
+# other AutoBrain stack.
+#
+# Deploy / update (EP2, via the Portainer API — never over SSH):
+#   python3 scripts/sync-compose-to-portainer.py \
+#       --stack 9router --endpoint 2 --file docker-compose.9router.yml
+# Create it once with POST /api/stacks?endpointId=2 (StackFileContent = this
+# file, Name = "9router", EndpointId = 2).
+#
+# The hosted (Oracle VM, EP5) 9Router is a separate instance and stays in
+# `docker-compose.hosted.yml` as the `9router` service — do not merge the two.
+services:
+  9router:
+    # AUT-1533: pinned by digest, same as the hosted stack. The loose container
+    # ran the floating `:latest` tag; this pin is the image it was actually
+    # serving (0.5.91), so adopting the stack does not change the version.
+    # Bump deliberately — check the release notes first.
+    image: decolua/9router:0.5.91@sha256:efc6e88c963ddb035f8da26a74e156b927863cd05625b47f3587972bc865bd25
+    container_name: 9router
+    restart: unless-stopped
+    entrypoint: ["/entrypoint.sh"]
+    command: ["node", "custom-server.js"]
+    environment:
+      NODE_ENV: production
+      PORT: 20128
+      HOSTNAME: 0.0.0.0
+      NEXT_TELEMETRY_DISABLED: "1"
+      DATA_DIR: /app/data
+    # Same bind as the loose container, so provider config, API keys, the
+    # model catalog and the sqlite DB survive the move into the stack.
+    volumes:
+      - /home/administrator/9Router:/app/data
+    ports:
+      # 0.0.0.0 — every AutoBrain stack on the LAN points AI_ROUTER_URL at
+      # http://10.0.3.17:20128/v1. Do NOT rebind to 127.0.0.1.
+      - "0.0.0.0:20128:20128"
+    healthcheck:
+      # /api/health is the only unauthenticated JSON endpoint; wget is present
+      # in the image (no curl, no node http client needed).
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:20128/api/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

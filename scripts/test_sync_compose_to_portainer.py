@@ -81,6 +81,87 @@ class TestSyncComposeLogging(unittest.TestCase):
         self.assertNotIn("should-not-appear-in-logs", output)
         self.assertNotIn('{"Id": 42', output)
 
+    @patch("urllib.request.urlopen")
+    def test_env_read_from_stack_detail_not_file(self, mock_urlopen):
+        """AUT-4778: env must come from GET /api/stacks/{id}, not /file."""
+        stacks_response = MagicMock()
+        stacks_response.__enter__.return_value.read.return_value = json.dumps([
+            {"Id": 42, "Name": "autobrain-hosted"}
+        ]).encode()
+
+        # GET /api/stacks/42 — carries Env.
+        detail_response = MagicMock()
+        detail_response.__enter__.return_value.read.return_value = json.dumps({
+            "Id": 42,
+            "Env": [{"name": "POSTGRES_USER", "value": "autobrain"}],
+        }).encode()
+
+        put_response = MagicMock()
+        put_response.__enter__.return_value.read.return_value = b"{}"
+
+        mock_urlopen.side_effect = [stacks_response, detail_response, put_response]
+
+        captured = StringIO()
+        sys.stdout = captured
+        old_argv = sys.argv
+        try:
+            sys.argv = [
+                "sync-compose-to-portainer.py",
+                "--stack", "autobrain-hosted",
+                "--endpoint", "5",
+                "--file", self.compose_file,
+                "--portainer-url", "https://portainer.example.com",
+                "--api-key", "test-key",
+            ]
+            self.assertEqual(scp.main(), 0)
+        finally:
+            sys.stdout = sys.__stdout__
+            sys.argv = old_argv
+
+        urls = [c.args[0].full_url for c in mock_urlopen.call_args_list
+                if c.args and hasattr(c.args[0], "full_url")]
+        self.assertIn("https://portainer.example.com/api/stacks/42", urls)
+        self.assertNotIn("https://portainer.example.com/api/stacks/42/file", urls)
+
+        put_call = mock_urlopen.call_args_list[-1]
+        body = json.loads(put_call.args[0].data)
+        self.assertEqual(body["Env"], [{"name": "POSTGRES_USER",
+                                        "value": "autobrain"}])
+
+    @patch("urllib.request.urlopen")
+    def test_refuses_to_sync_when_env_empty(self, mock_urlopen):
+        """AUT-4778: an empty env read means we would wipe the stack — bail."""
+        stacks_response = MagicMock()
+        stacks_response.__enter__.return_value.read.return_value = json.dumps([
+            {"Id": 42, "Name": "autobrain-hosted"}
+        ]).encode()
+
+        detail_response = MagicMock()
+        detail_response.__enter__.return_value.read.return_value = json.dumps(
+            {"Id": 42, "Env": []}).encode()
+
+        mock_urlopen.side_effect = [stacks_response, detail_response]
+
+        err = StringIO()
+        old_argv, old_err = sys.argv, sys.stderr
+        try:
+            sys.argv = [
+                "sync-compose-to-portainer.py",
+                "--stack", "autobrain-hosted",
+                "--endpoint", "5",
+                "--file", self.compose_file,
+                "--portainer-url", "https://portainer.example.com",
+                "--api-key", "test-key",
+            ]
+            sys.stderr = err
+            self.assertEqual(scp.main(), 3)
+        finally:
+            sys.stderr = old_err
+            sys.argv = old_argv
+
+        self.assertIn("would wipe it", err.getvalue())
+        self.assertEqual(len(mock_urlopen.call_args_list), 2)  # no PUT
+
 
 if __name__ == "__main__":
     unittest.main()

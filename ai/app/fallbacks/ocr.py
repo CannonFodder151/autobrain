@@ -2,7 +2,7 @@
 
 import re
 
-from app.ocr_utils import _extract_date
+from ..ocr_utils import _extract_date
 
 _VENDOR_HINTS = ["autobarn", "supercheap", "repco", "bunnings", "kmart", "harley davidson",
                  "toyota", "ford", "nissan", "mitsubishi", "penrite", "castrol"]
