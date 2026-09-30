@@ -22,10 +22,10 @@ rest:
 
 ## Authentication
 
-- **User-managed endpoints** (`POST /ha/tokens`, `GET /ha/tokens`, `DELETE /ha/tokens/{id}`):
-  Bearer JWT (your normal AutoBrain login token).
-- **HA-polled endpoints** (`/ha/vehicles`, `/ha/vehicles/{id}/service-intervals`,
-  `/ha/vehicles/{id}/analytics`, `/ha/service-reminders`):
+- **User-managed endpoints** (`POST /api/v1/ha/tokens`, `GET /api/v1/ha/tokens`,
+  `DELETE /api/v1/ha/tokens/{id}`): Bearer JWT (your normal AutoBrain login token).
+- **HA-polled endpoints** (`/api/v1/ha/vehicles`, `/api/v1/ha/vehicles/{id}/service-intervals`,
+  `/api/v1/ha/vehicles/{id}/analytics`, `/api/v1/ha/service-reminders`):
   Header `X-HA-API-Key: abha_<64-hex>` (the token you created).
 - Tokens are opaque 256-bit random, shown **once** at creation.
 - Stored as sha256 digest only — DB leak cannot be replayed.
@@ -39,18 +39,18 @@ rest:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST   | `/ha/tokens` | Create token → returns `{id, label, api_key, vehicle_id, created_at}` (**api_key shown once**) |
-| GET    | `/ha/tokens` | List your tokens (never returns raw key) |
-| DELETE | `/ha/tokens/{id}` | Revoke a token |
+| POST   | `/api/v1/ha/tokens` | Create token → returns `{id, label, api_key, vehicle_id, created_at}` (**api_key shown once**) |
+| GET    | `/api/v1/ha/tokens` | List your tokens (never returns raw key) |
+| DELETE | `/api/v1/ha/tokens/{id}` | Revoke a token |
 
 ### HA-polled (X-HA-API-Key, read-only)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET    | `/ha/vehicles` | All accessible vehicles (owned + accepted-shared) |
-| GET    | `/ha/vehicles/{id}/service-intervals` | Upcoming service intervals for a vehicle |
-| GET    | `/ha/vehicles/{id}/analytics` | Analytics summary for a vehicle |
-| GET    | `/ha/service-reminders` | All upcoming services across all accessible vehicles |
+| GET    | `/api/v1/ha/vehicles` | All accessible vehicles (owned + accepted-shared) |
+| GET    | `/api/v1/ha/vehicles/{id}/service-intervals` | Upcoming service intervals for a vehicle |
+| GET    | `/api/v1/ha/vehicles/{id}/analytics` | Analytics summary for a vehicle |
+| GET    | `/api/v1/ha/service-reminders` | All upcoming services across all accessible vehicles |
 
 All HA endpoints enforce `get_accessible_vehicle` for vehicle-scoped reads, so
 shared vehicles are included but private vehicles are never leaked.
@@ -130,7 +130,7 @@ cadence is user-controlled on the HA side.
 
 ## Phase 2 (planned)
 
-- WebSocket push (`/ws/ha`) for real-time service-reminder updates.
+- WebSocket push (`/api/v1/ws/ha`) for real-time service-reminder updates.
 - HACS add-on with config flow (no YAML editing).
 - Entity auto-discovery from token scope.
 
