@@ -17,6 +17,14 @@ ARG WS_BASE_URL=ws://localhost:8000/ws
 # below) instead of silently shipping the watermapped public basemap.
 ARG CARTO_API_KEY=
 
+# AUT-4690: fail fast, before the multi-minute `flutter build web`, when the key
+# is unset/expired. Previously this only surfaced as a watermapped basemap in
+# production, caught weeks later by a human QA curl (AUT-4533, AUT-4649).
+RUN [ -n "${CARTO_API_KEY}" ] || { \
+      echo "ERROR: CARTO_API_KEY is empty. The --build-arg / GitHub Actions secret CARTO_API_KEY is unset or expired; refusing to build a key-less CARTO basemap." >&2; \
+      exit 1; \
+    }
+
 WORKDIR /build
 # Copy the lockfile too so `pub get` resolves the exact pinned dependency set
 # (hermetic builds, no surprise transitive upgrades on hosted builders).
@@ -28,19 +36,14 @@ RUN flutter build web \
     --dart-define=WS_BASE_URL=${WS_BASE_URL} \
     --dart-define=CARTO_API_KEY=${CARTO_API_KEY}
 
-# AUT-4690: the CARTO key is inlined into main.dart.js at compile time, so an
-# unset/expired repo secret produced a *green* build with a key-less basemap —
-# the Servo Spy map silently fell back to the CARTO watermark tile and was only
-# caught by a human QA curl weeks later (AUT-4533, AUT-4649). Assert the key is
-# actually in the bundle. Matches on the literal value, so any key format works.
+# AUT-4690: belt-and-braces. The key is inlined into main.dart.js at compile
+# time, so assert the value actually reached the shipped bundle (catches a
+# dropped --dart-define or a renamed const, which the fail-fast check above
+# cannot see). Matches on the literal value, so any key format works.
 RUN set -eu; \
     js=build/web/main.dart.js; \
-    if [ -z "${CARTO_API_KEY}" ]; then \
-      echo "ERROR: CARTO_API_KEY is empty. The build-arg/GitHub secret CARTO_API_KEY is unset or expired; refusing to ship a key-less CARTO basemap." >&2; \
-      exit 1; \
-    fi; \
     if ! grep -qF "${CARTO_API_KEY}" "$js"; then \
-      echo "ERROR: the CARTO_API_KEY value is not present in $js; the key was not baked into the bundle." >&2; \
+      echo "ERROR: CARTO_API_KEY value not found in $js — the key was not baked into the bundle." >&2; \
       exit 1; \
     fi; \
     grep -qF '?key=' "$js" || echo "WARN: '?key=' not found in $js; check the CARTO tile template in frontend/lib/screens/servo_spy." >&2

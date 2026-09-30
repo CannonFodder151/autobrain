@@ -60,6 +60,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   blocking the hosted deploy pipeline, not just this PR. The API used by
   `app/core/security.py` and `app/services/iap.py` (`encode`/`decode`/
   `get_unverified_header`/`PyJWTError`/`InvalidTokenError`) is unchanged.
+### Fixed (AUT-4690)
+- **CI:** `docker/frontend/Dockerfile` now hard-fails when `CARTO_API_KEY` is
+  unset/expired, and asserts the key value is actually present in the built
+  `main.dart.js`. Previously an empty secret produced a *green* build and the
+  Servo Spy map silently fell back to the watermapped public basemap, only
+  caught weeks later by a human QA curl (AUT-4533, AUT-4649). The empty-key
+  check runs before `flutter build web` so it fails fast.
 
 ## [0.3.287] - 2026-09-30
 
