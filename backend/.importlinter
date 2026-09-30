@@ -1,0 +1,81 @@
+[importlinter]
+root_package = app
+
+# ─── Contract layer boundaries ───────────────────────────────────────────
+# The domain modules enforce strict layer boundaries:
+#   models  → no imports from schemas, services, or api
+#   schemas → imports only from models
+#   services → imports from models and schemas
+#   api     → imports from models, schemas, and services
+#
+# This prevents circular dependencies and keeps each layer focused.
+
+# ─── vehicles domain module ──────────────────────────────────────────────
+
+[importlinter:contract:vehicles-models-no-upward]
+name = Vehicles models must not import from higher layers
+type = forbidden
+source_modules =
+    app.modules.vehicles.models
+forbidden_modules =
+    app.modules.vehicles.schemas
+    app.modules.vehicles.services
+    app.modules.vehicles.api
+
+[importlinter:contract:vehicles-schemas-no-services]
+name = Vehicles schemas must not import from services or api
+type = forbidden
+source_modules =
+    app.modules.vehicles.schemas
+forbidden_modules =
+    app.modules.vehicles.services
+    app.modules.vehicles.api
+
+[importlinter:contract:vehicles-services-no-api]
+name = Vehicles services must not import from api
+type = forbidden
+source_modules =
+    app.modules.vehicles.services
+forbidden_modules =
+    app.modules.vehicles.api
+
+# ─── Global layer boundaries ────────────────────────────────────────────
+#
+# The non-api layers (models/schemas/services) must not reach into app.api.
+# The domain `api` layer is exempt: it is the adapter edge and legitimately
+# imports app.api.deps for FastAPI dependency injection.
+
+[importlinter:contract:no-upward-to-api]
+name = Model and schema layers must not import app.api
+type = forbidden
+source_modules =
+    app.models
+    app.schemas
+    app.modules.vehicles.models
+    app.modules.vehicles.schemas
+forbidden_modules =
+    app.api
+
+# NOTE: app.services and the domain `api` layers are exempt. They legitimately
+# import app.api.deps to build FastAPI dependency signatures
+# (e.g. app/services/rate_limit.py -> get_current_user).
+
+[importlinter:contract:no-model-schema-upward]
+name = Service layer must not import app.api
+type = forbidden
+source_modules =
+    app.modules.vehicles.services
+forbidden_modules =
+    app.api
+
+# NOTE: extend source_modules as further domain modules land.
+# Currently only app.modules.vehicles exists.
+
+[importlinter:contract:no-circular-domains]
+name = Domain module non-api layers must not import each other
+type = forbidden
+source_modules =
+    app.modules.vehicles
+forbidden_modules =
+    app.modules.social
+    app.modules.ai_client
