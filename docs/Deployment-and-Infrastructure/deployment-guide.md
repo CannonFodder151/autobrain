@@ -36,6 +36,9 @@ gate blocks the release at that tier.
       build-layer images on EP2 (Portainer-Host) + EP5 (AutoBrain-Hosted).
       Deploys are the main source of dangling images (AUT-350); prune every
       release so ~30-70GB does not accumulate between weekly prunes.
+      AUT-4502: EP2 also hosts Nathan's personal services (immich, pterodactyl,
+      media/*arr, unifi, mealie, whoogle, draw.io, outline, n8n, grafana).
+      Dangling-only pruning is mandatory — never widen to `prune -a`.
 - [ ] Note promotion order + verification result in the issue / `#updates`
       channel.
 
