@@ -120,6 +120,11 @@ The compose re-apply removes the standalone `worker`, `ai`, `market-data`, `back
 - [ ] An hourly snapshot appears in the GUI backup list (task
       `offsite-backup-hourly`, `crontab(minute=0)`).
 - [ ] `python3 scripts/check-compose-consolidation.py` passes.
+- [ ] Automated check (live endpoint, needs `PORTAINER_API_KEY`):
+      `python3 scripts/verify-hosted-containers.py --endpoint 5 --stack autobrain-hosted`
+      → `OK: 10 containers match docker-compose.hosted.yml` (exit 0). It fails on any
+      missing, extra, or non-running container, so it also covers the three
+      `No worker/ai/market-data/backup-agent` lines above.
 
 ## Rollback
 
