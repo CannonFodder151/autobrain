@@ -8,11 +8,17 @@
 # SMTP2GO/SMTP_* (see AUT-97/AUT-101).
 # AUT-3153 (Phase 1a): the standalone `worker` service is merged into `backend`
 # (the backend image already runs Celery worker+beat — see docker/backend/Dockerfile
-# CMD and docker-compose.prod.yml). The hosted stack drops from 9 to 8 containers.
-# The separate autobrain-worker image is no longer referenced here; its build is
-# retired from CI (AUT-3172).
+# CMD and docker-compose.prod.yml). The hosted stack drops from 9 to 8 containers
+# after the worker merge (AUT-3153), then to 7 after backup-agent removal (AUT-3827),
+# then back to 9 with dongle-server (AUT-1673), 9router (AUT-473), and
+# autobrain-backup (AUT-2367). The separate autobrain-worker image is no longer
+# referenced here; its build is retired from CI (AUT-3172).
 # The fuel-poll tasks that used to live in the worker now run in the backend
 # container, so FUEL_*_FILE secrets moved from the worker block to backend env.
+# AUT-3827: the standalone `backup-agent` service is REMOVED; off-site backup
+# now runs as a Celery beat task inside `backend`. The GitHub Actions ARM64
+# runner lives in a SEPARATE standalone Portainer stack
+# (`gh-runner-autobrain-arm64`, EP5 stack #123) — it is NOT part of this stack.
 
 # Secret-file pattern (AUT-1533): secret-class values are bind-mounted from
 # ${SECRETS_DIR:-/data/autobrain/secrets} (root:1000, 0640) and loaded into
@@ -169,6 +175,7 @@ services:
       AI_ROUTER_TIMEOUT_SECONDS: 120
       REGO_LOOKUP_URL: ${REGO_LOOKUP_URL:-}
       REGO_LOOKUP_API_KEY_FILE: /run/secrets/rego_lookup_api_key
+      DONGLE_SERVER_API_KEY: ${DONGLE_SERVER_API_KEY:-}
       # AUT-3810 Phase 1a: market-data scraper now runs as local Celery tasks.
       # MARKET_DATA_URL is intentionally not set so the local fallback is used.
       # AUT-1858: petrol price map (NSW Fuel API, AUT-1813) — Hosted/Default only.
@@ -391,6 +398,13 @@ services:
       retries: 5
 
   # AUT-2469: GitHub Actions ARM64 self-hosted runner on EP5.
+  # NOTE: this runner is NOT part of this stack — it runs as a standalone
+  # Portainer stack `gh-runner-autobrain-arm64` (EP5 stack #123). Keeping it
+  # here would re-create it on every hosted redeploy and tear the network
+  # (the runner mounts /var/run/docker.sock and re-registers with a fresh
+  # short-lived token every boot). See the runner's own compose definition in
+  # the gh-runner-autobrain-arm64 Portainer stack.
+  #
   # Replaces the standalone `myoung34/github-runner:latest` container that was
   # restart-looping on EP5:
   #   `ldd: ./bin/libcoreclr.so: No such file or directory`
@@ -401,38 +415,6 @@ services:
   # Registration is re-derived every boot via the PAT in /run/secrets/github_pat
   # (AUT-1533 *_FILE pattern), so the short-lived runner token never needs to
   # be persisted across container recreates. ARM CI on Hosted is unblocked.
-  gh-runner:
-    # AUT-2469: the official image ships amd64 + arm64 binaries; on EP5 Docker
-    # pulls the arm64 variant. We build a thin wrapper that only adds the
-    # registration-token-refresh entrypoint; the build runs on the x64 runner,
-    # but buildx cross-builds the arm64 variant (the Oracle VM is aarch64).
-    # Pin the base by digest (AUT-1533); update this digest when rotating.
-    build:
-      context: .
-      dockerfile: docker/runner/Dockerfile
-      args:
-        RUNNER_BASE_IMAGE: ${GH_RUNNER_BASE_IMAGE:-ghcr.io/actions/actions-runner:latest}
-    image: ghcr.io/cannonfodder151/autobrain-gh-runner:arm64-latest
-    pull_policy: always
-    restart: unless-stopped
-    privileged: true
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - type: bind
-        source: ${SECRETS_DIR:-/data/autobrain/secrets}
-        target: /run/secrets
-        read_only: true
-    environment:
-      GITHUB_PAT_FILE: /run/secrets/github_pat
-      GITHUB_REPOSITORY: ${GITHUB_REPOSITORY:-CannonFodder151/autobrain}
-      RUNNER_NAME: ${RUNNER_NAME:-gh-runner-autobrain-arm64}
-      RUNNER_LABELS: ${RUNNER_LABELS:-self-hosted,Linux,ARM64}
-      RUNNER_GROUP: ${RUNNER_GROUP:-Default}
-      RUNNER_REPLACE: ${RUNNER_REPLACE:-true}
-      DISABLE_RUNNER_UPDATE: ${DISABLE_RUNNER_UPDATE:-false}
-    # CMD ["/entrypoint.sh", "run"] lives in the wrapper Dockerfile (docker/runner)
-    # so the runner entrypoint can refresh the registration token before
-    # delegating. No command override needed in compose.
 
   # 9Router AI router (AUT-473). Published on `0.0.0.0:20128` so it is reachable
   # on the host's public interface, but the host firewall (`fw-keeper`) restricts
