@@ -9,6 +9,11 @@ Run on a host with Portainer credentials:
   PORTAINER_API_KEY=<key> python3 scripts/verify-hosted-containers.py
   PORTAINER_API_KEY=<key> python3 scripts/verify-hosted-containers.py --endpoint 6 --stack autobrain-dev
 
+`gh-runner` is declared in docker-compose.hosted.yml but Portainer runs it as its
+own stack (AUT-4725), so companion stacks are scanned by default. Override with
+`--companion-stack <stack>/<service>=<declared>` (repeatable) or
+`--no-companion-stacks` to count only --stack.
+
 Exit codes: 0 match, 1 mismatch, 2 usage/auth error.
 """
 import argparse
@@ -27,40 +32,55 @@ def compose_services(path=COMPOSE):
         return set(yaml.safe_load(f)["services"])
 
 
-def running_services(containers, stack, aliases=None):
-    """Container state keyed by DECLARED service name, running or exited.
+# AUT-4725 moved `gh-runner` out of the hosted stack into its own Portainer stack
+# (the hosted stack project dir has no build context for the runner wrapper image).
+# It is still declared in docker-compose.hosted.yml, but the companion stack names
+# its service after the runner, so the two names have to be related explicitly.
+# Spec format: "<stack>/<actual_service>=<declared_service>".
+DEFAULT_COMPANION_STACKS = ("gh-runner-autobrain-arm64/gh-runner-autobrain-arm64=gh-runner",)
 
-    `aliases` maps a declared service name to the sibling compose project that actually
-    hosts it. On EP5 `gh-runner` runs as the standalone `gh-runner-autobrain-arm64`
-    stack (single service, different label), so the project's only service is adopted
-    under the declared name.
+
+def parse_companion(spec):
+    """-> (stack, actual_service, declared_service) or raise ValueError."""
+    try:
+        stack_part, declared = spec.split("=", 1)
+        stack, actual = stack_part.rsplit("/", 1)
+    except ValueError:
+        raise ValueError(
+            f"bad --companion-stack {spec!r}; expected <stack>/<service>=<declared>"
+        ) from None
+    if not (stack and actual and declared):
+        raise ValueError(f"bad --companion-stack {spec!r}; empty stack/service/declared")
+    return stack, actual, declared
+
+
+def running_services(containers, stack, companion_specs=()):
+    """Declared compose service name -> state, for `stack` plus companion stacks.
+
+    Containers are matched on their `com.docker.compose.service` label rather than
+    by project membership alone, so a declared service that Portainer deployed as a
+    separate stack is still seen as present. Companion entries rename the companion
+    stack's service to the name the compose file declares.
+
+    Precedence: the main stack wins, so a service running in both is not
+    double-counted and companion drift cannot mask a hosted-stack failure.
     """
-    aliases = aliases or {}
+    # declared name -> (project, actual service) for the lookups we accept.
+    lookup = {}
+    for spec in companion_specs:
+        cstack, actual, declared = parse_companion(spec)
+        lookup[(cstack, actual)] = declared
+
     services = {}
     for c in containers:
         labels = c.get("Labels") or {}
-        if labels.get("com.docker.compose.project") != stack:
-            continue
-        svc = labels.get("com.docker.compose.service")
-        if svc:
-            services[svc] = c.get("State")
-    for declared, project in aliases.items():
-        # ponytail: adopts the sibling project's single service; a sibling stack
-        # hosting several of our services would need an explicit service mapping.
-        adopted = list(_by_project(containers).get(project, {}).values())
-        if len(adopted) == 1:
-            services[declared] = adopted[0]
+        project = labels.get("com.docker.compose.project")
+        actual = labels.get("com.docker.compose.service")
+        if project == stack and actual:
+            services[actual] = c.get("State")          # main stack wins
+        elif (project, actual) in lookup:
+            services.setdefault(lookup[(project, actual)], c.get("State"))
     return services
-
-
-def _by_project(containers):
-    out = {}
-    for c in containers:
-        labels = c.get("Labels") or {}
-        project, svc = labels.get("com.docker.compose.project"), labels.get("com.docker.compose.service")
-        if project and svc:
-            out.setdefault(project, {})[svc] = c.get("State")
-    return out
 
 
 def compare(expected, actual):
@@ -73,19 +93,19 @@ def main():
     ap.add_argument("--stack", default="autobrain-hosted")
     ap.add_argument("--endpoint", type=int, default=5, help="Portainer endpoint id (5 = AutoBrain-Hosted)")
     ap.add_argument("--file", default=COMPOSE)
+    ap.add_argument(
+        "--companion-stack", action="append", dest="companion_stacks",
+        default=None, metavar="STACK/SERVICE=DECLARED",
+        help="Companion Portainer stack that also hosts a declared service, and "
+             "how its service name maps to the declared one "
+             f"(default: {', '.join(DEFAULT_COMPANION_STACKS)}); repeatable. "
+             "Pass --no-companion-stacks to count only --stack.")
+    ap.add_argument("--no-companion-stacks", action="store_true",
+                    help="Count only --stack; declare a service deployed as its "
+                         "own stack as MISSING.")
     ap.add_argument("--portainer-url", default=os.environ.get(
         "PORTAINER_URL", "https://portainer.nathanmartina.com"))
-    ap.add_argument("--alias", action="append", default=[], metavar="SERVICE=PROJECT",
-                    help="declare SERVICE as hosted by sibling compose PROJECT (repeatable)")
     args = ap.parse_args()
-
-    aliases = {}
-    for item in args.alias:
-        svc, _, project = item.partition("=")
-        if not svc or not project:
-            print(f"ERROR: bad --alias {item!r}, expected SERVICE=PROJECT", file=sys.stderr)
-            return 2
-        aliases[svc] = project
 
     api_key = os.environ.get("PORTAINER_API_KEY")
     if not api_key:
@@ -103,13 +123,21 @@ def main():
         print(f"ERROR: Portainer query failed: {e}", file=sys.stderr)
         return 2
 
-    actual = running_services(containers, args.stack, aliases)
+    companions = ([] if args.no_companion_stacks
+                  else (args.companion_stacks if args.companion_stacks is not None
+                        else list(DEFAULT_COMPANION_STACKS)))
+    try:
+        actual = running_services(containers, args.stack, companions)
+    except ValueError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 2
     expected = compose_services(args.file)
     missing, extra = compare(expected, actual)
 
     for svc in sorted(actual):
         print(f"  {svc:<18} {actual[svc]}")
-    print(f"stack={args.stack} endpoint={args.endpoint} "
+    print(f"stack={args.stack} companions={';'.join(companions) or 'none'} "
+          f"endpoint={args.endpoint} "
           f"compose={len(expected)} running={len(actual)}")
 
     not_running = [s for s, state in actual.items() if state != "running"]
