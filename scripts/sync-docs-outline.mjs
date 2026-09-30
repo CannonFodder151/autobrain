@@ -147,6 +147,11 @@ async function docsJsonToPages() {
       }
     }
   }
+  const missing = pages.filter((p) => !fs.existsSync(p.path));
+  if (missing.length) {
+    for (const p of missing) console.error(`ENOENT: ${p.path} (docs.json ref "${p.ref}")`);
+    throw new Error(`docs.json references ${missing.length} missing file(s); update docs/docs.json after any rename`);
+  }
   return pages;
 }
 
