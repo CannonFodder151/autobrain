@@ -16,11 +16,11 @@ prefill engine orders suggested parts inventory-first then SCA, and exposes
 them under ``suggested_parts``.
 """
 
-from app.fallbacks.parts_guide import (
+from ..fallbacks.parts_guide import (
     build_inventory_from_categories,
     suggest_parts_for_service,
 )
-from app.router_client import enhance
+from ..router_client import enhance
 
 
 async def run(payload: dict) -> dict:

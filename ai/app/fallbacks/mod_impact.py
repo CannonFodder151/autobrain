@@ -1,6 +1,6 @@
 """Deterministic modification-impact fallback."""
 
-from app.fallbacks.resale import _mod_value_impact
+from ..fallbacks.resale import _mod_value_impact
 
 _MOD_IMPACT: dict[str, tuple[str, float, str]] = {
     "performance": ("Performance-focused upgrade; typically improves power output but can increase running costs.", 8.0, "Minor"),

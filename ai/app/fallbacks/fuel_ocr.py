@@ -2,8 +2,8 @@
 
 import re
 
-from app.fallbacks.utils import to_float as _num
-from app.ocr_utils import _extract_date
+from ..fallbacks.utils import to_float as _num
+from ..ocr_utils import _extract_date
 
 
 def _fuel_receipt_fallback(text: str) -> dict:

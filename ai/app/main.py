@@ -27,9 +27,9 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from app.logging import get_logger, setup_logging
-from app.modules import MODULES
-from app.router_client import ai_telemetry_reset, ai_telemetry_snapshot, router_enabled, router_url
+from .logging import get_logger, setup_logging
+from .modules import MODULES
+from .router_client import ai_telemetry_reset, ai_telemetry_snapshot, router_enabled, router_url
 
 logger = get_logger(__name__)
 
