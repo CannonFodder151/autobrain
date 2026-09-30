@@ -7,8 +7,8 @@ Deterministic-only: local Tesseract + regex scan, no router call. Odometer
 reads are ~95% accurate with the deterministic engine, so AI adds nothing.
 """
 
-from app.fallbacks.odometer import _odometer_fallback
-from app.ocr_utils import _IMAGE_TYPES, _tesseract_text
+from ..fallbacks.odometer import _odometer_fallback
+from ..ocr_utils import _IMAGE_TYPES, _tesseract_text
 
 
 async def run(payload: dict) -> dict:

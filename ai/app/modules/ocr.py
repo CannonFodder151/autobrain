@@ -5,9 +5,9 @@ Output: vendor, date, total, tax, line items (parts/labour), warranty,
         next recommended service.
 """
 
-from app.fallbacks.ocr import extract_receipt_fallback
-from app.ocr_utils import _IMAGE_TYPES, _tesseract_text
-from app.router_client import enhance
+from ..fallbacks.ocr import extract_receipt_fallback
+from ..ocr_utils import _IMAGE_TYPES, _tesseract_text
+from ..router_client import enhance
 
 
 async def run(payload: dict) -> dict:

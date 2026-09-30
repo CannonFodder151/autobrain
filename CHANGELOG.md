@@ -11,6 +11,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-2784)
+- fix(ai): the AI gateway now imports its own modules relatively, so it is
+  self-contained as `ai_app` in the shared backend image. `docker/backend/Dockerfile`
+  copies `ai/app` to `ai_app` and runs it as a co-process on `:8001` inside the
+  backend container, but every gateway module used an absolute `from app.…`
+  import. In that image `app` resolves to the **backend** package, which has no
+  `logging`, `modules`, `router_client` or `fallbacks`, so the gateway died at
+  startup with `ModuleNotFoundError: No module named 'app.logging'` and every
+  `/ai/` route 502'd. 48 import statements across 20 files converted; the
+  standalone `ai/` suite is unchanged (109 passed, same 3 pre-existing failures).
+- test(ai): `ai/tests/test_merged_image_layout.py` simulates the image layout
+  (backend `app` + gateway `ai_app` side by side) and asserts the gateway both
+  imports and serves `/health` + auth on `:8001`, plus an AST check that no
+  absolute `app.*` import reappears. The standalone AI suite imports `app.main`
+  and could never catch this class of breakage; the new file fails 3/4 on the
+  pre-fix tree and passes 4/4 after.
+
 ## [0.3.289] - 2026-09-30
 
 ### Changed (AUT-3944)
