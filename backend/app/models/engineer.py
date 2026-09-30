@@ -71,6 +71,10 @@ class Engineer(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
+    reviews: Mapped[list["EngineerReview"]] = relationship(
+        back_populates="engineer", lazy="selectin", cascade="all, delete-orphan"
+    )
+
     # Indexes for common query patterns
     __table_args__ = (
         Index("ix_engineers_active_rating", "is_active", "rating"),
@@ -114,9 +118,3 @@ class EngineerReview(Base):
     __table_args__ = (
         Index("ix_engineer_reviews_engineer_created", "engineer_id", "created_at"),
     )
-
-
-# Back-reference for Engineer
-Engineer.reviews: Mapped[list["EngineerReview"]] = relationship(
-    back_populates="engineer", lazy="selectin", cascade="all, delete-orphan"
-)
