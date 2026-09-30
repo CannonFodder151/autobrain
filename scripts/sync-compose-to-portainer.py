@@ -51,13 +51,21 @@ def main():
     stack_id = ids[0]["Id"]
 
     # Fetch current env to preserve existing stack env (never clobber).
+    # AUT-4778: env lives on GET /api/stacks/{id}; GET /api/stacks/{id}/file
+    # returns only StackFileContent, so reading Env from /file sent Env: []
+    # and wiped all 49 stack env vars on every sync. Portainer then failed
+    # compose interpolation of ${POSTGRES_USER:?...} and returned HTTP 500.
     req = urllib.request.Request(
-        f"{api}/stacks/{stack_id}/file",
+        f"{api}/stacks/{stack_id}",
         headers={"X-API-Key": args.api_key, "Accept": "application/json"},
     )
     with urllib.request.urlopen(req, timeout=30) as r:
         current = json.load(r)
     env = current.get("Env") or []
+    if not env:
+        print("ERROR: stack env is empty — refusing to sync (would wipe it)",
+              file=sys.stderr)
+        return 3
 
     body = {
         "StackFileContent": content,

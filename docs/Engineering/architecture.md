@@ -36,7 +36,7 @@
   image runs API + AI gateway + Celery worker+beat in one container (see
   `docker/backend/Dockerfile`).
 - **Hosted:** `docker-compose.hosted.yml` — 10 containers (postgres, redis, minio,
-  backend, dongle-server, frontend, hub, 9router, autobrain-backup, gh-runner).
+  backend, dongle-server, frontend, hub, 9router, backup, gh-runner).
   Prebuilt GHCR images (multi-arch amd64+arm64), Stripe billing, self-service
   signup, Portainer-managed on Oracle Cloud ARM64. The AI gateway runs inside
   the `backend` container on :8001 (AUT-3153); market-data scraper runs as Celery

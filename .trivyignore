@@ -125,6 +125,18 @@ CVE-2026-80256  # nginx placeholder; trivy 0.70 false-positive on missing metada
 CVE-2026-86145  # pcre2 OOB write: not exposed via public API regex input
 CVE-2026-89161  # pcre2 JIT memory corruption: same exposure surface as above
 
+# --- AUT-4718: pcre2 32-bit-only OOB write, same deb12u1 upstream fix -----------
+# CVE-2026-89157: pcre2_pattern_convert out-of-bounds write when an attacker
+# supplies a large pattern. Debian security-tracker describes it as affecting
+# 32-BIT PLATFORMS ONLY ("PCRE2 before 10.48, on 32-bit platforms, ..."). Every
+# AutoBrain container image is amd64 or arm64 (64-bit); the pgvector:pg17 digest
+# we pin has no 32-bit variant in the deploy path, so the vulnerable code path
+# cannot execute here. Same source package/fix as the deb12u1 entries above:
+# libpcre2-8-0 10.42-1 -> 10.42-1+deb12u1, pgvector image not yet rebuilt.
+# Re-check 2026-11-30 with the entries above: drop when the pgvector:pg17 digest
+# ships deb12u1. Security Officer sign-off: APPROVED (AUT-4718).
+CVE-2026-89157  # pcre2 pcre2_pattern_convert OOB write: 32-bit platforms only; we run 64-bit
+
 # --- AUT-2918: python:3.13.15-slim-trixie base image CVEs (unused at runtime) --------
 # python:3.13.15-slim-trixie@sha256:9d2e555... (debian 13.6) carries 10 HIGH/CRITICAL
 # CVEs across gzip, libsqlite3-0, and perl-base. All three packages are present in
