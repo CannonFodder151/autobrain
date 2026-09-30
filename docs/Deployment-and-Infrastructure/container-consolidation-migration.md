@@ -2,6 +2,45 @@
 
 Phase 1(a): reduce the number of containers in the AutoBrain stack.
 
+## Exception — EP2 personal/non-AutoBrain containers STAY (AUT-4502, board directive 2026-09-29)
+
+**Do NOT move personal apps off Portainer endpoint 2 (Portainer-Host, 10.0.3.17).**
+Nathan denied the AUT-4502 migration plan in writing: *"DO NOT move these. Add an
+exception — not to move containers off this host. Default is for my use only."*
+
+EP2 carries both the AutoBrain Demo + Default stacks and Nathan's personal
+self-hosted services. The personal set is **in scope for hosting on EP2 and out
+of scope for every container-consolidation, migration and image-prune task.**
+Container count on EP2 is therefore *not* a consolidation KPI — do not derive
+"remove N containers" work from it.
+
+Personal / non-AutoBrain containers on EP2 (as of 2026-09-29; 37 containers total
+on the host):
+
+| Group | Containers |
+|-------|-----------|
+| Photos | `immich_server`, `immich_machine_learning`, `immich_postgres`, `immich_redis` |
+| Game hosting | `pterodactyl-panel-panel-1`, `pterodactyl-panel-database-1`, `pterodactyl-panel-cache-1` |
+| Media / *arr | `Prowlarr`, `Ombi`, `Huntarr`, `FlareSolverr` |
+| Network | `UniFi-OPSAT`, `unifi-fubar`, `unifi-mongo` |
+| Apps | `mealie`, `Whoogle-Search`, `cards-against-docker`, `Headroom`, `Stirling-PDF`, `Draw.io` |
+| Platform / tooling | `Grafana`, `n8n-n8n-1`, `n8n-traefik-1`, `outline`, `outline-postgres`, `outline-redis`, `portainer`, `portainer-mcp`, `watchtower-noaccess-watchtower-1`, `9Router` |
+
+Rules:
+
+- **No migration.** Do not create a "personal services host" for these. EP2 is
+  Nathan's host; its personal services are permanent there.
+- **No consolidation.** Do not merge, containerise or refactor personal
+  containers as part of AutoBrain work.
+- **No pruning.** `scripts/prune-images.sh` and any EP2 image/cleanup pass must
+  **exclude images used by the personal containers listed above**. Prune
+  AutoBrain images only (`cannonfodder151/autobrain-*`,
+  `ghcr.io/cannonfodder151/*`).
+- **No redeploys.** Per the AUT-2409 promotion override, EP2 (Demo + Default)
+  deploys stay paused; that pause also covers these personal stacks.
+- Any future request to "tidy up" EP2 requires a new, explicit board directive
+  from Nathan. This exception is only lifted by that directive.
+
 ## Scope
 
 - **Target:** `docker-compose.hosted.yml` (Portainer stack `autobrain-hosted`,
