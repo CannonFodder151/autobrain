@@ -245,11 +245,12 @@ services:
       # calls the backend's /devices/verify to check paid status at the edge.
       DONGLE_SERVER_API_KEY_FILE: /run/secrets/dongle_server_api_key
       DONGLE_SERVER_URL: http://dongle-server:8000
-      # AUT-3827: off-site backup push (replaces the standalone backup-agent
-      # container). The backend's Celery beat runs backup_offsite_hourly at
-      # :00 and pushes snapshots to autobrain-backup /api/backup/ingest.
+      # AUT-3827/AUT-3944: off-site backup push (replaces the standalone
+      # backup-agent container). The backend's Celery beat runs
+      # backup_offsite_hourly at :00 and pushes snapshots to backup
+      # /api/backup/ingest.
       BACKUP_OFFSITE_ENABLED: "true"
-      BACKUP_OFFSITE_URL: ${BACKUP_OFFSITE_URL:-http://autobrain-backup:8080}
+      BACKUP_OFFSITE_URL: ${BACKUP_OFFSITE_URL:-http://backup:8080}
       BACKUP_OFFSITE_GUI_KEY_FILE: /run/secrets/backup_offsite_gui_key
       BACKUP_OFFSITE_INGEST_KEY_FILE: /run/secrets/backup_offsite_ingest_key
       BACKUP_OFFSITE_INSTANCE: ${BACKUP_OFFSITE_INSTANCE:-hosted}
@@ -469,13 +470,19 @@ services:
     ports:
       - "0.0.0.0:20128:20128"
 
-  # AUT-2367: autobrain-backup — web GUI for backup management, restore, and retention.
-  autobrain-backup:
+  # AUT-2367 + AUT-3944: `backup` — web GUI for backup management, restore, and
+  # retention. Renamed from `autobrain-backup` so the compose service name, the
+  # image repo name and the docker DNS name all agree (the hourly snapshot cron
+  # itself already lives in `backend`'s Celery beat, AUT-3827, so this stack runs
+  # one backup container, not two). Renaming changes the DNS name — every
+  # reference must use `backup`, e.g. BACKUP_OFFSITE_URL below.
+  backup:
     # Pinned to a digest to harden against supply-chain drift (AUT-1533 pattern).
     # The :hosted tag carries a multi-arch manifest (amd64 + arm64) so this
     # stack file works on every Portainer endpoint without re-tagging.
     # Bind mounts live under /data (snap dockerd masks /opt + /srv as RO
     # core24 squashfs; see AUT-1853).
+    # GUI endpoint is unchanged: localhost-bound 127.0.0.1:8080 -> 8080.
     image: ghcr.io/cannonfodder151/autobrain-backup:hosted@sha256:e76fac3c69ce5d6e2f670cbe9d41f72fec235d6769bf9f046faa71c9c06b4880
     restart: unless-stopped
     ports:
@@ -484,10 +491,10 @@ services:
       - /data/autobrain-backup/config:/config
       - /data/autobrain-backup/data:/backups
 
-  # AUT-3827: the standalone `backup-agent` service is REMOVED. Its job
-  # (hourly snapshot push to autobrain-backup) now runs as a Celery beat task
-  # inside `backend` (app.workers.tasks.backup_offsite_hourly). The hosted stack
-  # drops from 8 to 7 containers. See backend/app/services/backup_offsite.py.
+  # AUT-3827/AUT-3944: the standalone `backup-agent` service is REMOVED. Its job
+  # (hourly snapshot push) runs as a Celery beat task inside `backend`
+  # (app.workers.tasks.backup_offsite_hourly), pushing to the single `backup`
+  # service below. One backup container, no poller sidecar.
 
 volumes:
    postgres-data:

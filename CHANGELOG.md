@@ -11,6 +11,37 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.289] - 2026-09-30
+
+### Changed (AUT-3944)
+- chore(deploy): the hosted `autobrain-backup` service is renamed to `backup`
+  and is now the **single** backup container. `backup-agent` stays removed
+  (AUT-3827 — its hourly snapshot push is the `offsite-backup-hourly` Celery
+  beat task in `backend`), so the hosted stack runs one backup container
+  instead of a GUI container plus a poller sidecar. GUI endpoint is unchanged
+  (`127.0.0.1:8080` on the host, `/backups` bind mount preserved).
+  `BACKUP_OFFSITE_URL` now defaults to `http://backup:8080`; **any EP5 stack
+  env override of the old `http://autobrain-backup:8080` must be updated or
+  hourly pushes stop on DNS failure.**
+
+### Fixed (AUT-3944)
+- fix(ci): `scripts/check-compose-consolidation.py` and
+  `scripts/check-compose-config.py` no longer crash or pass vacuously on the
+  consolidated stack — both still asserted the `ai` service that AUT-3824
+  removed (`KeyError: 'ai'`), and neither allowed-listed the
+  `backup_offsite_*` secret files added by AUT-3827. Both now assert the exact
+  10-service set and the `backup` DNS name.
+
+## [0.3.288] - 2026-09-30
+
+### Security (AUT-4743)
+- fix(backend): bump `PyJWT[crypto]` 2.13.0 -> 2.15.1. 2.13.0 carries 12 known
+  CVEs (CVE-2026-101917/101918/102265-102274), which made both `pip-audit-gate`
+  and the resolved-tree scan (AUT-1189) fail on every PR and on `main` — it was
+  blocking the hosted deploy pipeline, not just this PR. The API used by
+  `app/core/security.py` and `app/services/iap.py` (`encode`/`decode`/
+  `get_unverified_header`/`PyJWTError`/`InvalidTokenError`) is unchanged.
+
 ## [0.3.287] - 2026-09-30
 
 - **CI (AUT-1029):** `dockerhub-publish.yml` gains a `dedupe-main-queue` job that cancels superseded `queued`/`pending` publish runs on `main` before the heavy jobs start, so a burst of merges no longer queues N full 5-image builds behind the 3-runner fleet. In-flight runs are never cancelled (AUT-967/AUT-1756 behaviour preserved).

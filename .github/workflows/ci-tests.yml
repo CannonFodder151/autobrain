@@ -8,12 +8,12 @@ on:
   pull_request:
     paths:
       - "backend/**"
-      - ".github/workflows/ci-tests.yml"
+      - ".github/workflows/**"
   push:
     branches: [main]
     paths:
       - "backend/**"
-      - ".github/workflows/ci-tests.yml"
+      - ".github/workflows/**"
 
 permissions:
   contents: read
@@ -88,3 +88,33 @@ jobs:
             }
         env:
           SLACK_WEBHOOK_URL: https://n8n.nathanmartina.com/webhook/discord-report
+
+  # A workflow with invalid YAML never runs a single job — GitHub records it as a
+  # 0-job `failure` on every push and the deploy signal is silently lost (AUT-4911).
+  workflow-yaml:
+    name: workflow yaml parse
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Every workflow file must parse
+        run: |
+          python -m pip install --quiet pyyaml
+          python - <<'PY'
+          import pathlib, sys, yaml
+          bad = []
+          for f in sorted(pathlib.Path(".github/workflows").glob("*.y*ml")):
+              try:
+                  yaml.safe_load(f.read_text())
+              except Exception as e:
+                  bad.append(f"{f}: {e}")
+          if bad:
+              print("Invalid workflow YAML:\n" + "\n".join(bad))
+              sys.exit(1)
+          print("all workflow files parse")
+          PY

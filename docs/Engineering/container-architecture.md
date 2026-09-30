@@ -31,7 +31,7 @@ self-signup + MFA enforced. Deployed via Portainer on the Oracle Cloud VM (ARM64
 | frontend | `autobrain-frontend:hosted@sha256:02ed10e3...` | Static nginx-unprivileged :8080, localhost-bound, non-root |
 | hub | `autobrain-federation-hub:hosted@sha256:d1d9bde1...` | Federation hub (Community Garage), deploy-only; private repo |
 | 9router | `decolua/9router:0.5.55@sha256:f00fe389...` | LLM router + embeddings on 0.0.0.0:20128, host-firewalled, external `9router-data` volume |
-| autobrain-backup | `autobrain-backup:hosted@sha256:e76fac3c...` | Backup web GUI, localhost-bound :8080, non-root |
+| backup | `autobrain-backup:hosted@sha256:e76fac3c...` | Backup web GUI, localhost-bound :8080, non-root. Service renamed from `autobrain-backup` in AUT-3944; hourly snapshot push runs in the backend Celery beat (AUT-3827), so there is no backup-agent sidecar. |
 | gh-runner | `autobrain-gh-runner:arm64-latest` | ARM64 GitHub Actions self-hosted runner (privileged, AUT-2469) |
 
 The stack uses 10 long-running containers. The standalone Celery worker+beat
