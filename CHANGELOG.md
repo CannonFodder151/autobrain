@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.288] - 2026-09-30
+
 ### Security (AUT-4743)
 - fix(backend): bump `PyJWT[crypto]` 2.13.0 -> 2.15.1. 2.13.0 carries 12 known
   CVEs (CVE-2026-101917/101918/102265-102274), which made both `pip-audit-gate`
