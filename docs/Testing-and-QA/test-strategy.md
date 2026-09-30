@@ -66,7 +66,7 @@ GitHub Actions workflows live in `.github/workflows/`. Key pipelines:
 > workflow. It is not copied into the backend image either — `docker/backend/Dockerfile`
 > copies `ai/app` → `ai_app` only — so `pytest ai/tests/` does not work inside the
 > running container. AI gateway tests run only from a developer checkout with
-> dependencies installed. Filed as a follow-up to AUT-4395.
+> dependencies installed. Tracked in AUT-4748.
 
 Run the backend suite locally against the stack:
 
