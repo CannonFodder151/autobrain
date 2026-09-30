@@ -26,9 +26,17 @@ def _pins(req_file: Path) -> dict[str, tuple[int, ...]]:
         if not line or line.startswith("#"):
             continue
         name, _, version = line.partition("==")
-        name = name.strip()
-        if name and version:
-            pins[name.lower()] = tuple(int(part) for part in version.split("."))
+        # Drop extras: `PyJWT[crypto]` keys as `pyjwt`.
+        name = name.partition("[")[0].strip()
+        # Only the leading numeric segments are comparable; PEP 440 suffixes
+        # (`2.9.0.post0`) previously raised ValueError and broke the whole file.
+        parts: list[int] = []
+        for segment in version.split("."):
+            if not segment.isdigit():
+                break
+            parts.append(int(segment))
+        if name and parts:
+            pins[name.lower()] = tuple(parts)
     return pins
 
 
@@ -55,4 +63,20 @@ def test_pyjwt_replaces_python_jose_and_ecdsa() -> None:
     assert "python-jose" not in pins and "ecdsa" not in pins, (
         "python-jose/ecdsa must not be reintroduced: ecdsa 0.19.2 (the latest "
         "published) carries PYSEC-2026-1325 and python-jose is unmaintained"
+    )
+
+# AUT-4701: PyJWT 2.13.0 carried 12 OSV advisories. 2.14.0 fixes 11 but leaves
+# GHSA-42vr-xj54-vc7v (unauthenticated RecursionError DoS reachable through
+# PyJWKClient.get_signing_key_from_jwt with verify_signature=False, fixed in
+# 2.15.0), so the floor is 2.15.0 — not 2.14.0.
+MIN_PYJWT = (2, 15, 0)
+
+
+def test_pyjwt_above_cve_fixes() -> None:
+    pyjwt = _pins(REQ_FILES[0]).get("pyjwt")
+    assert pyjwt is not None, "backend must pin PyJWT[crypto]"
+    assert pyjwt >= MIN_PYJWT, (
+        f"backend: pyjwt {'.'.join(map(str, pyjwt))} < {'.'.join(map(str, MIN_PYJWT))} "
+        "re-exposes the PyJWT GHSA set, including GHSA-42vr-xj54-vc7v "
+        "(pre-verification recursion DoS) which 2.14.0 does NOT fix (AUT-4701)"
     )

@@ -11,6 +11,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security (AUT-4701)
+- test(backend): add a PyJWT floor guard to `test_deps_transitive_cves.py` —
+  `pyjwt >= 2.15.0`, so a future downgrade cannot silently re-expose
+  GHSA-42vr-xj54-vc7v (unauthenticated `RecursionError` DoS via
+  `PyJWKClient.get_signing_key_from_jwt` with `verify_signature=False`),
+  which 2.14.0 does **not** fix. The pin guard itself is also hardened:
+  `_pins()` now strips `[extras]` (`PyJWT[crypto]` -> `pyjwt`) and tolerates
+  PEP 440 suffixes (`2.9.0.post0`), which previously raised `ValueError` and
+  took down the whole module. The 2.15.1 pin itself already landed via
+  AUT-4743 (#828).
+
 ## [0.3.291] - 2026-10-01
 
 ### Fixed (AUT-4855)
@@ -33,7 +44,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   `docker build -f docker/frontend/Dockerfile` snippet in
   `docs/Deployment-and-Infrastructure/deployment-guide.md`, the three
   hosted/default/demo build commands printed by `scripts/bump-version.sh`, and
-  the stale "Empty -> key-less public basemap" comments in `.env.example`,
+  the   stale "Empty -> key-less public basemap" comments in `.env.example`,
   `docker-compose.yml` and `docker-compose.prod.yml` (the empty default is
   intentional — it fails the build loud rather than shipping a watermapped map).
   No behaviour change. New `scripts/check-carto-build-arg-propagation.py`
