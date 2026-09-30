@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+- **CI (AUT-1029):** `dockerhub-publish.yml` gains a `dedupe-main-queue` job that cancels superseded `queued`/`pending` publish runs on `main` before the heavy jobs start, so a burst of merges no longer queues N full 5-image builds behind the 3-runner fleet. In-flight runs are never cancelled (AUT-967/AUT-1756 behaviour preserved).
+
+
 ### Changed (AUT-4503)
 - chore(deploy): the EP2 9Router (`10.0.3.17:20128`) is a managed Portainer
   stack (`9router`, id 128) from `docker-compose.9router.yml` instead of a loose
