@@ -58,6 +58,7 @@ Oracle VM; the stack frontend nginx exposes `:8086`.
 
 | Date | Version | Change | Verified |
 |------|---------|--------|----------|
+| 2026-09-30 | 9router 0.5.91 (digest efc6e88c…) | AUT-4503: EP2 9Router moved out of a loose `docker run` container into Portainer stack `9router` (id 128) from new `docker-compose.9router.yml`. Loose container stopped + removed; same image digest it was already serving (`:latest` = 0.5.91), same `/home/administrator/9Router:/app/data` bind, still `0.0.0.0:20128`. Added an `/api/health` healthcheck (the loose container had none). | Stack container `Up (healthy)`; `GET http://10.0.3.17:20128/api/health` → 200 `{"ok":true}`; `/v1/models` → 401 unauth (up, auth required); no other EP2 container lost its route. |
 | 2026-08-27 | d946fe9 (PR #300, AUT-1673 paid-account gate) | Promote Demo → Default → Hosted (AUT-78) + Dev box, per AUT-1753. Hosted (83 EP5) `ghcr.io/...:hosted` (d946fe9 build, build-hosted run unblocked via AUT-1756). Demo (73 EP2) + Default (68 EP2) **repointed `:0.3.141`→`:latest`** — the pinned `:0.3.141` Docker Hub tag was stale/pre-merge (last push 2026-08-27T02:22) so it would NOT have carried d946fe9; `:latest` (13:17) does. Dev box (109 EP6) compose repointed `0.3.139`/`hosted-sha-4141…`→`ghcr.io/...:hosted`. Hosted backend env wired to dongle-server backchannel: added `DONGLE_SERVER_API_KEY: <redacted>` + `DONGLE_SERVER_URL: http://dongle-server:8012` (was missing → 503 "backchannel not configured"). PullImage:false after pre-pulling fresh images (proxy 60s timeout blocks blocking PullImage:true); hosted app containers force-recreated. | Hosted `/health` → v0.3.144, Demo/Default → v0.3.145 (both include d946fe9). Paid gate `GET /api/v1/dongle/firmware/latest` unauth → **401** (require_premium enforced). Backchannel `POST /api/v1/devices/verify` unauth → **401 "Invalid or missing internal API key"** (was 503 — now wired). **Dev box (109 EP6) BLOCKED**: stack stopped; EP6 `/run/secrets` only has minio keys — full secret set (postgres/redis/backend/ai/admin/dongle) never seeded, so backend crash-loops (`MINIO_ACCESS_KEY must be set`). Needs SSH + `scripts/seed-secrets.sh` + secret values (no `devbox_ssh_password` granted). |
 | 2026-08-27 | v0.3.141 | Deploy order Demo → Default → Hosted (Portainer stacks 73/68 EP2, 83 EP5, `pullImage:true`). Docker Hub `cannonfodder151/autobrain-{backend,ai,frontend}:0.3.141` rebuilt on `ubuntu-latest` (self-hosted x64 runner busy with OCR review — temporary CI dispatch bypassed). ghcr.io `:hosted` manifest recreated from existing amd64+arm64 variants (build-hosted run cancelled mid-pipeline). Demo frontend ghcr `:demo` rebuilt. All redeploy guards verified: frontend `ipv4_address: 172.18.0.14`, `9router` bound to `127.0.0.1`, `9router-data` volume external, `SOCIAL_FEDERATION_HUB_URL` retained in backend env. | `/health` → 0.3.141 on all three tiers; pruned dangling images (EP2: 0.04GB reclaimed, EP5: 4.9GB reclaimed). |
 | 2026-08-13 | v0.3.56 | Post-merge deploy of AUT-531 license deep-link (PR #100) + AUT-597 bounded social upload reads (PR #110). Deploy order Demo → Default → Hosted (Portainer stacks 73/68 EP2, 83 EP5, `pullImage:true`, backend/ai/market-data/frontend → `0.3.56`). Demo frontend ghcr `:demo` rebuilt from current main (workflow_dispatch, tag=demo). Pruned dangling images (EP2 ~940MB/51, EP5 ~640MB/4). | `/health` → `0.3.56` on all three tiers; hosted `/#/license` logged-out → login form (headless render); hosted `/auth/config` `license_enabled:true` + `/billing/pricing` → AUD plans (auth'd). Deep-link routing (`fragment=="license"` → LicenseScreen) present in all three deployed bundles. Logged-in headless render raced the Flutter engine's URL-fragment normalization (fragment cleared before async session restore) — flagged for real-browser QA confirm. |
@@ -286,6 +287,47 @@ Rules:
 - npm, `9router`, and `rego-lookup` are attached to `autobrain-hosted_default`
   as external containers; never let compose try to recreate that network
   (marking it `external` or changing its IPAM fails or tears the stack down).
+
+## 9Router: three instances, all stack-managed (AUT-4503)
+
+There is no such thing as "the" 9Router. Each environment runs its own router
+instance; they do not share config, keys or data.
+
+| Instance | Endpoint | Portainer stack | Compose file | Reached as |
+|----------|----------|-----------------|--------------|------------|
+| EP2 (Portainer-Host, LAN) | 2 | `9router` (id 128) | `docker-compose.9router.yml` | `http://10.0.3.17:20128/v1` |
+| EP5 (Oracle VM, hosted) | 5 | `autobrain-hosted` | `docker-compose.hosted.yml` (`9router` service) | `http://9router:20128/v1` (docker DNS) |
+| EP6 (dev box) | 6 | — | — | dev stack points at the EP2 instance |
+
+Until AUT-4503 the EP2 instance was a loose `docker run` container named
+`9Router`, invisible to Portainer's stack view — no consistent update path and
+no health signal. It is now the `9router` stack, created from
+`docker-compose.9router.yml`. Verify the invariants with:
+
+```bash
+python3 scripts/check-9router-stack.py
+```
+
+Update it through the Portainer API (never SSH, never a local `docker compose`):
+
+```bash
+python3 scripts/sync-compose-to-portainer.py \
+    --stack 9router --endpoint 2 --file docker-compose.9router.yml
+```
+
+Two things to not get wrong:
+
+- **Do not rebind EP2 `:20128` to `127.0.0.1`.** Every LAN stack resolves
+  `AI_ROUTER_URL` to `http://10.0.3.17:20128/v1`; a loopback bind breaks the
+  backend/ai gateway silently.
+- **Do not touch the data bind.** `/home/administrator/9Router:/app/data` holds
+  the provider config, API keys, model catalog and sqlite DB from the original
+  container. Repointing it starts a fresh, empty router.
+
+Health: `GET http://10.0.3.17:20128/api/health` → `{"ok":true}` (the only
+unauthenticated JSON endpoint; `GET /v1/models` returns 401 without a key, which
+is the correct "up but authed" signal). The stack healthcheck polls `/api/health`
+every 30s.
 
 ## Security: management surface lockdown (AUT-473)
 
