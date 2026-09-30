@@ -11,6 +11,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security (AUT-4701)
+- test(backend): add a PyJWT floor guard to `test_deps_transitive_cves.py` —
+  `pyjwt >= 2.15.0`, so a future downgrade cannot silently re-expose
+  GHSA-42vr-xj54-vc7v (unauthenticated `RecursionError` DoS via
+  `PyJWKClient.get_signing_key_from_jwt` with `verify_signature=False`),
+  which 2.14.0 does **not** fix. The pin guard itself is also hardened:
+  `_pins()` now strips `[extras]` (`PyJWT[crypto]` -> `pyjwt`) and tolerates
+  PEP 440 suffixes (`2.9.0.post0`), which previously raised `ValueError` and
+  took down the whole module. The 2.15.1 pin itself already landed via
+  AUT-4743 (#828).
+
 ## [0.3.290] - 2026-09-30
 
 ### Fixed (AUT-2784)
