@@ -14,8 +14,13 @@
           {
             "group": "Company",
             "pages": [
+              "Company/mission-vision",
+              "Company/org-chart",
+              "Company/working-rules",
+              "Company/roadmap",
               "Company/documentation-policy",
-              "Company/department-ownership-map"
+              "Company/department-ownership-map",
+              "Company/decisions-adr"
             ]
           },
           {
@@ -25,8 +30,9 @@
               "Business-Reviews/changelog",
               "Business-Reviews/product-rules",
               "Business-Reviews/monthly-quarterly-yearly-reviews",
-              "Business-Reviews/sales-pack",
-              "Business-Reviews/weekly-template"
+              "Business-Reviews/autobrain-sales-pack",
+              "Business-Reviews/weekly-review-consolidation",
+              "Business-Reviews/weekly-reviews-template-process-index"
             ]
           }
         ]
@@ -81,6 +87,15 @@
               "Engineering/obd-integration",
               "Engineering/obd2-dongle/README",
               "Engineering/obd2-dongle/nodemcu32s-build-guide"
+            ]
+          },
+          {
+            "group": "OBD2 Dongle Build Archive",
+            "pages": [
+              "Engineering/obd2-dongle/archive/01-bom",
+              "Engineering/obd2-dongle/archive/02-wiring",
+              "Engineering/obd2-dongle/archive/03-soldering-guide",
+              "Engineering/obd2-dongle/archive/04-flash-and-test"
             ]
           },
           {

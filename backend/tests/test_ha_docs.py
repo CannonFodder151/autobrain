@@ -1,7 +1,7 @@
 """Doc-schema drift guard for the Home Assistant integration (AUT-2543).
 
 Validates that the paths and field names documented in
-`docs/home-assistant-integration.md` and `docs/api-spec.md` match the real
+`docs/home-assistant-integration.md` and `docs/Engineering/api-spec.md` match the real
 HA route table and schemas.
 
 Skips automatically if the HA code is not present (i.e. before AUT-2541's
@@ -44,7 +44,7 @@ def _doc_rest_paths() -> set[str]:
 
 
 def _api_spec_ha_paths() -> set[str]:
-    txt = (ROOT / "docs" / "api-spec.md").read_text()
+    txt = (ROOT / "docs" / "Engineering" / "api-spec.md").read_text()
     rows = re.findall(r"`/ha/[A-Za-z0-9_{}\[\]./:-]+`", txt)
     paths = set()
     for r in rows:
@@ -77,7 +77,7 @@ class TestHomeAssistantDocsPaths:
 
     def test_api_spec_paths_match_route_table(self) -> None:
         paths = _api_spec_ha_paths()
-        assert paths, "No /api/v1/ha/* paths found in docs/api-spec.md HA section"
+        assert paths, "No /api/v1/ha/* paths found in docs/Engineering/api-spec.md HA section"
         assert paths == REAL_HA_PATHS, (
             f"api-spec.md HA paths differ from the actual route table.\n"
             f"In spec but not routes: {sorted(paths - REAL_HA_PATHS)}\n"
