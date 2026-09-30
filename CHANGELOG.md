@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-4736)
+- test(frontend,servo-spy): add a regression group asserting both CARTO basemap `urlTemplate` branches interpolate `_kCartoKeyParam`. `cartoKeyParam` was correct but unreferenced by the tile URL, so a build with `--dart-define=CARTO_API_KEY` still rendered watermapped tiles and `flutter analyze` only emitted an `unused_element` warning. Mirrored into `autobrain-mobile` by hand because `sync-mobile.yml` is red on the pre-existing analyze backlog (AUT-4708).
+
 ## [0.3.287] - 2026-09-30
 
 - **CI (AUT-1029):** `dockerhub-publish.yml` gains a `dedupe-main-queue` job that cancels superseded `queued`/`pending` publish runs on `main` before the heavy jobs start, so a burst of merges no longer queues N full 5-image builds behind the 3-runner fleet. In-flight runs are never cancelled (AUT-967/AUT-1756 behaviour preserved).
