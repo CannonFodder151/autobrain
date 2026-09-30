@@ -30,6 +30,22 @@ def container(stack, service, state="running"):
     }
 
 
+RUNNER_COMPANION = "gh-runner-autobrain-arm64/gh-runner-autobrain-arm64=gh-runner"
+
+
+class TestParseCompanion(unittest.TestCase):
+    def test_parses_stack_service_declared(self):
+        self.assertEqual(
+            vhc.parse_companion(RUNNER_COMPANION),
+            ("gh-runner-autobrain-arm64", "gh-runner-autobrain-arm64", "gh-runner"),
+        )
+
+    def test_rejects_malformed_spec(self):
+        for bad in ("nonsense", "stack=", "/svc=declared", "stack/svc=", "stack/svc"):
+            with self.assertRaises(ValueError):
+                vhc.parse_companion(bad)
+
+
 class TestRunningServices(unittest.TestCase):
     def test_only_counts_target_stack(self):
         containers = [
@@ -42,6 +58,41 @@ class TestRunningServices(unittest.TestCase):
     def test_captures_state(self):
         containers = [container("s", "minio", state="exited")]
         self.assertEqual(vhc.running_services(containers, "s"), {"minio": "exited"})
+
+    def test_companion_stack_resolves_declared_name(self):
+        # AUT-4725: gh-runner is declared in the hosted compose but Portainer runs
+        # it as its own stack under a different service name.
+        containers = [
+            container("autobrain-hosted", "backend"),
+            container("gh-runner-autobrain-arm64", "gh-runner-autobrain-arm64"),
+        ]
+        self.assertEqual(
+            vhc.running_services(containers, "autobrain-hosted", [RUNNER_COMPANION]),
+            {"backend": "running", "gh-runner": "running"},
+        )
+
+    def test_companion_not_counted_without_spec(self):
+        containers = [container("gh-runner-autobrain-arm64", "gh-runner-autobrain-arm64")]
+        self.assertEqual(vhc.running_services(containers, "autobrain-hosted"), {})
+
+    def test_main_stack_wins_over_companion(self):
+        containers = [
+            container("autobrain-hosted", "gh-runner", state="running"),
+            container("gh-runner-autobrain-arm64", "gh-runner-autobrain-arm64", state="exited"),
+        ]
+        self.assertEqual(
+            vhc.running_services(containers, "autobrain-hosted", [RUNNER_COMPANION]),
+            {"gh-runner": "running"},
+        )
+
+    def test_companion_stopped_service_reported_not_running(self):
+        containers = [
+            container("gh-runner-autobrain-arm64", "gh-runner-autobrain-arm64", state="exited"),
+        ]
+        self.assertEqual(
+            vhc.running_services(containers, "autobrain-hosted", [RUNNER_COMPANION]),
+            {"gh-runner": "exited"},
+        )
 
 
 class TestCompare(unittest.TestCase):
@@ -66,6 +117,15 @@ class TestComposeConsolidation(unittest.TestCase):
         self.assertFalse(
             {"worker", "ai", "market-data", "backup-agent"} & vhc.compose_services(),
             "consolidated services must not be back in docker-compose.hosted.yml")
+
+    def test_declared_companion_defaults_resolve_against_real_compose(self):
+        # Every default companion must name a service that compose actually
+        # declares, otherwise a typo silently turns into a MISSING failure.
+        declared = vhc.compose_services()
+        for spec in vhc.DEFAULT_COMPANION_STACKS:
+            _, _, declared_name = vhc.parse_companion(spec)
+            self.assertIn(declared_name, declared,
+                          f"companion {spec} does not map to a declared service")
 
 
 if __name__ == "__main__":
