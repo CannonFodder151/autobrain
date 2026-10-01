@@ -11,6 +11,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-4925)
+- fix(backend): repair the Alembic head that hard-failed on every boot of the hosted
+  stack. `alembic_version` read `aut3447_passkey_credentials`, but `passkey_credentials`,
+  `engineers` and `engineer_reviews` did not exist, so head migration `f7e8d9c0b1a2`
+  raised `UndefinedTableError: relation "passkey_credentials" does not exist`.
+  `bootstrap()` then fell back to `create_all`, which could not repair the gap
+  because `app/models/__init__.py` never imported those three models — so the
+  version never advanced and the loop repeated indefinitely. Passkey sign-in and
+  the engineer marketplace were both non-functional on hosted as a result. Three
+  changes: `f7e8d9c0b1a2` is now guarded and no-ops when the table is absent; a new
+  guarded migration `aut4925_missing_tables` creates the three tables
+  column-for-column identical to the ORM models (including
+  `engineer_reviews.updated_at`, which `a3661engineers` omits); and the three
+  models are imported so the `create_all` fallback covers them. A new
+  `test_every_model_table_is_exported_for_create_all` guard fails if any model
+  class declaring `__tablename__` is not exported from `app.models`.
+
 ## [0.3.292] - 2026-10-01
 
 ### Security (AUT-4701)
