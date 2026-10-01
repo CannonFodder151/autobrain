@@ -11,6 +11,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-4855)
+- ci(release): `scripts/bump-version.sh` printed `docker build` instructions that
+  interpolated `"$CARTO_API_KEY"` even though the commands are only echoed, never
+  run. Under `set -u` — how CI invokes it via `auto-bump.sh` — an unset
+  `CARTO_API_KEY` killed the script at line 64 with `unbound variable`, after the
+  CHANGELOG had been promoted but before the version bump could be committed. That
+  broke the `auto-bump` job in both `Publish images to Docker Hub` and
+  `Build hosted images (multi-arch)`, blocking every release off `main`. This was a
+  regression introduced by AUT-4824 (PR #822). The three lines now print a literal
+  `$CARTO_API_KEY` placeholder for the operator to substitute; the `set -u` guard
+  is untouched. New `scripts/test-bump-version.sh` runs the real script in a
+  sandbox with the key unset and set, asserting exit 0 and that the bump lands.
+
 ### Fixed (AUT-4824)
 - docs(docker): the `CARTO_API_KEY` hard-fail introduced by AUT-4690 (PR #822)
   left three documented/scripted frontend build paths passing no
