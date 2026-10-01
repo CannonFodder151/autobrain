@@ -11,6 +11,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-4911)
+- deploy(hosted): remove the `gh-runner` service from `docker-compose.hosted.yml`.
+  It carried an inline `build:` block, and Portainer cannot build service images for
+  a remote endpoint with no uploaded build context, so every compose-pin sync of this
+  file failed with `HTTP 500` on `PUT /stacks/122?endpointId=5` (body:
+  `failed to deploy a stack: compose build operation failed: listing workers for Build`)
+  — reproduced on EP5 and EP6. The ARM64 runner already runs as its own Portainer
+  stack (`gh-runner-autobrain-arm64`, stack 123 on EP5) on the external
+  `autobrain-hosted_default` network, and its image `autobrain-gh-runner:arm64-latest`
+  is unpublished, so the inlined service could never have started on EP5 anyway.
+- deploy(hosted): `scripts/sync-compose-to-portainer.py` now prints the Portainer
+  response body on failure and exits 4 instead of logging a bare `HTTP Error 500`,
+  so the next such error names itself in the CI log.
+- ci: this entry lands as a `CHANGELOG.md`-only commit. The AUT-4911 merge itself
+  shipped without one, so the post-merge `changelog-gate` job failed on `main` and
+  took the `Publish images to Docker Hub` run down with it, leaving the release queue
+  stuck. A changelog-only diff does not re-trip the gate.
+
 ## [0.3.293] - 2026-10-01
 
 ### Fixed (AUT-4919)
