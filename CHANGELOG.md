@@ -11,6 +11,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-4718)
+- security(ci): `Security — base image CVE scan (trivy)` scanned a **different nginx
+  image than the one the build ships**. `trivy-image-scan.yml` pinned
+  `NGINX_FRONTEND_IMAGE` at `@sha256:ee1643ae…` while `docker/frontend/Dockerfile`
+  built `@sha256:44275388…`; both carried `libexpat CVE-2026-93990` (HIGH,
+  "XML Injection via Malformed UTF-16 Input", fixed in 2.8.5-r0), so the gate stayed
+  red on `main` and the suppressions in `.trivyignore` were masking a **real HIGH**,
+  not an acceptable one. Both pins now point at the current `stable-alpine` head
+  `@sha256:ed04ec1f…` (alpine 3.24.2, libexpat 2.8.5-r0), which scans clean at
+  HIGH/CRITICAL with **no ignores at all**.
+- security(ci): dropped the three now-dead nginx suppression blocks from `.trivyignore`
+  (`AUT-1998` libexpat, `AUT-2762` + `AUT-1600-PR` util-linux/libuuid). The digest bump
+  resolves them upstream, so the entries only served to hide the next nginx finding.
+- security(ci): `libexpat-version-check.yml` `PINNED_DIGEST` updated to the same digest
+  so the fix-detector compares against what we actually build.
+- security(ci): added time-boxed suppressions for `CVE-2026-75804` (OpenSSL QUIC
+  connection-level flow control, CWE-770) and `CVE-2026-84782` (DTLS handshake
+  retransmission OOB read, CWE-125) in `python:3.13.15-slim-trixie`. `deb13u3` is
+  published but no 3.13.15-slim-trixie digest carries it; both require QUIC/DTLS and
+  the stack is TLS-over-TCP only. Re-check 2026-10-15.
+
+Verified 2026-10-01: all three pinned base images scan 0 findings at HIGH/CRITICAL
+against the edited `.trivyignore` (trivy 0.70.0, exit 0 each).
+
 ## [0.3.290] - 2026-09-30
 
 ### Fixed (AUT-2784)

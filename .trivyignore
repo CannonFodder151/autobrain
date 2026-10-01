@@ -81,37 +81,29 @@ GHSA-5rjg-fvgr-3xxf  # setuptools: GHSA alias of CVE-2025-47273; build-time only
 # Time-boxed: re-check 2026-11-28; drop entry + bump PYTHON_BASE_IMAGE digest once
 # a 3.13-slim respin ships openssl>=3.5.7-1~deb13u2.
 
-# --- AUT-1998: nginx libexpat HIGH CVEs (image not yet rebuilt with expat 2.8.4) ------------------
-# Source: libexpat in nginxinc/nginx-unprivileged:stable-alpine@sha256:ee055adf...
-# CVE-2026-66046 and CVE-2026-76641: DoS via crafted XML. expat 2.8.4-r0 fixes.
-# Image tag hasn't been rebuilt with patched expet yet. Suppress until image rebuilt;
-# re-check 2026-12-28: if upstream nginx releases patched alpine build, bump image digest.
-CVE-2026-66046  # expat DoS: no network exposure in AutoBrain nginx frontend
-CVE-2026-76641  # expat: same package; no runtime impact
-
-
-# --- AUT-2762: nginx libuuid (util-linux) HIGH CVEs (alpine 3.24.1 base package; no upstream fix yet) ---
-# Source: libuuid in nginxinc/nginx-unprivileged:stable-alpine@sha256:45ce1e2e...
-# CVE-2026-53612/53613/53614: TOCTOU / SUID mount bypass via libmount; CVE-2026-76642: privileged X-mount post-hooks.
-# CVE-2026-78408/78409/78410: nsenter cgroup leak / X-mount.subdir symlink escape / restricted bind-mount pinning.
-# These are util-linux/libmount mount(8) features AutoBrain does not use — the nginx frontend
-# container never invokes mount(8), nsenter, or libmount path resolution at runtime.
-# Time-boxed: re-check 2026-12-28; drop entries + bump NGINX_FRONTEND_IMAGE digest if
-# nginxinc ships an alpine 3.24.x respin with util-linux >= 2.42.3-r0.
-CVE-2026-53612  # util-linux TOCTOU in mount(8): nginx frontend never invokes mount
-CVE-2026-53613  # util-linux ancestor directory swap via mount: nginx frontend never invokes mount
-CVE-2026-53614  # util-linux SUID mount(8) nosuid bypass: nginx frontend never invokes mount
-CVE-2026-76642  # util-linux failed mount helper post-hooks: nginx frontend never invokes mount
-CVE-2026-78408  # util-linux nsenter --join-cgroup root cgroup leak: nginx frontend never invokes nsenter
-CVE-2026-78409  # util-linux X-mount.subdir symlink escape: nginx frontend never invokes libmount
-CVE-2026-78410  # util-linux restricted bind-mount source pinning bypass: nginx frontend never invokes mount
-# --- AUT-2332: trivy-db placeholder CVE in nginxinc/nginx-unprivileged:stable-alpine ----
-# CVE-2026-80256 was added to the Alpine 3.24.1 vuln DB on 2026-09-03 but its
-# metadata is still being populated upstream (trivy 0.70 logs "no vulnerability
-# details" and exits 1 even though the finding is suppressed by --ignore-unfixed).
-# Trivy 0.74 + a fully populated DB will resolve itself; for now, suppress the
-# noisy placeholder so PRs don't get blocked on DB freshness. Reviewer: Sec.
-CVE-2026-80256  # nginx placeholder; trivy 0.70 false-positive on missing metadata
+# --- AUT-4718: openssl QUIC/DTLS CVEs in python:3.13.15-slim-trixie -------------------
+# CVE-2026-75804 (QUIC stack enforces stream- but not connection-level flow control,
+# CWE-770 unbounded allocation, fixed 3.5.7-1~deb13u3) and CVE-2026-84782 (DTLS
+# handshake retransmission reuses the suspended write's buffer, OOB read disclosing
+# heap to the peer, CWE-125, same fix).
+# Source: libssl3t64/openssl/openssl-provider-legacy 3.5.7-1~deb13u2 in
+# python:3.13.15-slim-trixie (debian 13.6), pinned at
+# @sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285.
+# deb13u3 IS published (security.debian.org pool, packages.debian.org/trixie) but no
+# 3.13.15-slim-trixie digest carries it yet — tag head
+# @sha256:7c61056e61ac89e852de05f3dc6fa51a6dd2181797bceed46aa725dd7cb2cd3b scanned
+# 2026-10-01 still reports deb13u2. Tolerate per gate policy ("no fixed image exists").
+# Exposure: BOTH require the QUIC/DTLS code paths. No AutoBrain component enables
+# them — FastAPI/Uvicorn, celery worker, market-data and the ai gateway all speak TLS
+# <=1.3 over TCP/HTTPS only. Verified 2026-10-01: no quic/dtls/aioquic/set_quic_method
+# reference anywhere in backend/, ai/, frontend/, market-data/ or the compose files.
+# CVE-2026-75804 additionally requires the remote peer to open several streams and
+# stay within the stream limit; without a QUIC listener there is no handshake.
+# Severity HIGH (upstream), exploitability NONE for AutoBrain.
+# Time-boxed: re-check 2026-10-15; drop both entries + bump PYTHON_BASE_IMAGE digest
+# once a 3.13.15-slim-trixie digest ships libssl3t64 >= 3.5.7-1~deb13u3.
+CVE-2026-75804  # openssl QUIC connection flow control DoS: no QUIC listener in the stack
+CVE-2026-84782  # openssl DTLS handshake retransmission OOB read: no DTLS listener in the stack
 
 # --- POSTGRESQL libpcre2 CVEs (pgvector/pgvector:pg17) ---
 # CVE-2026-86145 / CVE-2026-89161: pcre2 out-of-bounds write + JIT memory corruption.
@@ -168,23 +160,3 @@ CVE-2026-42497  # perl-archive-tar hardlink arbitrary write: build-time only
 CVE-2026-48962  # perl-IO-Compress arbitrary code via glob: build-time only
 CVE-2026-57432  # perl pack/unpack info leak: build-time only
 CVE-2026-57433  # perl Storable DoS: build-time only; no Storable in runtime
-
-# --- AUT-1600-PR: nginx libuuid/util-linux HIGH CVEs (pending upstream rebuild) -----
-# Source: libuuid (util-linux 2.42.1-r0) in nginxinc/nginx-unprivileged:stable-alpine.
-# CVE-2026-53612/53613/53614: TOCTOU/SUID mount bypasses require filesystem
-#   mount operations or SUID mount(8) — nginx frontend does neither.
-# CVE-2026-76642: external mount helper post-hooks require privileged mount paths —
-#   nginx serves static files from a read-only image layer, no mount operations.
-# CVE-2026-78408/78409/78410: nsenter cgroup leak, symlink tree escape, bind-mount
-#   source pinning — all require process spawning, cgroup namespaces, or bind-mount
-#   source control, none of which the nginx frontend container performs.
-# The nginxinc/nginx-unprivileged image rebuilds periodically; once the Alpine
-# 3.24.1 util-linux package reaches 2.42.3-r0/r1, drop these entries.
-# Time-boxed: re-check 2026-12-31.
-CVE-2026-53612  # util-linux TOCTOU mount: nginx frontend does no mount ops
-CVE-2026-53613  # util-linux ancestor dir swap: requires mount, not present
-CVE-2026-53614  # util-linux SUID mount bypass: nginx runs non-root unprivileged
-CVE-2026-76642  # util-linux mount post-hooks: no privileged mount paths
-CVE-2026-78408  # util-linux nsenter cgroup: nginx never spawns nsenter
-CVE-2026-78409  # util-linux X-mount.subdir symlink escape: no mount ops
-CVE-2026-78410  # util-linux bind-mount source pinning: no bind mounts
