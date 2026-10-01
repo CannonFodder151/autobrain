@@ -365,8 +365,14 @@ services:
     # :hosted image's wget lives at /usr/bin/wget (nginx-unprivileged alpine).
     environment:
       BACKEND_URL: ${BACKEND_URL:-http://backend:8000}
+      AI_URL: ${AI_URL:-http://backend:8001}
+    # AUT-4788: also probe the AI gateway co-process on :8001. The gateway is a
+    # background uvicorn inside the backend container — when it dies the backend
+    # still serves /health, so the stack reported healthy while /ai/v1/* 502'd
+    # for 5 releases (v0.3.276 -> v0.3.287). One probe, both ports: Docker and
+    # Portainer now flip this container unhealthy when the gateway goes dark.
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- \"${BACKEND_URL:-http://backend:8000}/health\" | grep -q '\"status\":\"ok\"'"]
+      test: ["CMD-SHELL", "wget -qO- \"${BACKEND_URL:-http://backend:8000}/health\" | grep -q '\"status\":\"ok\"' && wget -qO- \"${AI_URL:-http://backend:8001}/health\" | grep -q '\"service\":\"autobrain-ai\"'"]
       interval: 15s
       timeout: 5s
       retries: 5
