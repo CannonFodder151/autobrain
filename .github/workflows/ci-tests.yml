@@ -8,11 +8,13 @@ on:
   pull_request:
     paths:
       - "backend/**"
+      - "scripts/**"
       - ".github/workflows/**"
   push:
     branches: [main]
     paths:
       - "backend/**"
+      - "scripts/**"
       - ".github/workflows/**"
 
 permissions:
@@ -135,3 +137,16 @@ jobs:
 
       - name: Documented/scripted frontend builds must pass CARTO_API_KEY
         run: python3 scripts/check-carto-build-arg-propagation.py
+
+  # scripts/bump-version.sh dies on an unset CARTO_API_KEY under `set -u` while
+  # only printing its help text, which blocked the auto-bump release job on main
+  # (AUT-4855, a regression from AUT-4824). Runs in a sandbox — no docker needed.
+  release-scripts:
+    name: release script self-checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: bump-version.sh survives an unset CARTO_API_KEY
+        run: bash scripts/test-bump-version.sh
