@@ -1,7 +1,12 @@
 # AUT-1720: auto-free queued runs that are stuck on a deleted/merged branch.
+# AUT-4949: also free *superseded* and *starved* runs, which is what actually wedged
+#           the hosted deploy lane (82 queued runs while both x64 runners sat at
+#           busy:true with zero assigned jobs).
 # A run left `queued` after its head branch disappears becomes an un-cancellable
-# GitHub zombie that makes the pipeline look frozen. This guard cancels such runs
-# before they linger, so the x64 runner queue never appears wedged again.
+# GitHub zombie. A queued `push`/`workflow_dispatch` run whose commit has since been
+# overtaken by a newer run of the same workflow on the same ref is just as dead
+# weight: it can only ever produce a stale artifact, and it starves the runners.
+# Logic lives in scripts/ci-queue-guard.sh so it can be unit tested.
 name: CI Queue Guard
 
 on:
@@ -25,27 +30,15 @@ jobs:
       # The AutoBrain self-hosted runner fleet lives under one owner.
       matrix:
         repo: [autobrain, autobrainservice-website, rego-lookup-api]
+    env:
+      # Starvation ceilings. A run queued this long on a busy fleet will not be
+      # picked up; cancelling frees a slot and the commit can be re-run or will be
+      # superseded by the next push.
+      PUSH_TTL_MINUTES: "45"
+      PR_TTL_MINUTES: "240"
     steps:
-      - name: Cancel queued runs whose head branch no longer exists
+      - uses: actions/checkout@v4
+      - name: Cancel deleted-branch, superseded and starved queued runs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          repo="${{ matrix.repo }}"
-          ids=$(gh api "repos/CannonFodder151/$repo/actions/runs?status=queued&per_page=100" \
-                  --jq '.workflow_runs[] | "\(.id)\t\(.head_branch)"')
-          [ -z "$ids" ] && { echo "no queued runs in $repo"; exit 0; }
-          while IFS=$'\t' read -r id branch; do
-            [ -z "$id" ] && continue
-            # `push`/`pull_request` runs reference a head branch. If that ref has
-            # been merged/force-deleted, the run can never start and will zombie.
-            if git ls-remote --heads --exit-code \
-                 "https://github.com/CannonFodder151/$repo.git" "$branch" >/dev/null 2>&1; then
-              echo "run $id ($branch): branch still exists — leave queued"
-              continue
-            fi
-            echo "run $id ($branch): head branch gone — cancelling"
-            gh api -X POST "repos/CannonFodder151/$repo/actions/runs/$id/cancel" \
-              >/dev/null 2>&1 && echo "  cancelled" \
-              || echo "  cancel unavailable (GH zombie) — will retry next tick"
-          done <<< "$ids"
+        run: ./scripts/ci-queue-guard.sh "${{ matrix.repo }}"
