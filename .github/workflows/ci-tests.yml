@@ -150,3 +150,9 @@ jobs:
 
       - name: bump-version.sh survives an unset CARTO_API_KEY
         run: bash scripts/test-bump-version.sh
+
+      # sync-mobile.sh commits with `git add -A` on the persistent runner
+      # checkout, so a stray editor backup got swept into a release commit
+      # (CHANGELOG.md.bak shipped to autobrain-mobile, AUT-4919).
+      - name: sync-mobile.sh refuses editor backup files
+        run: bash scripts/test-sync-mobile-backup-guard.sh
