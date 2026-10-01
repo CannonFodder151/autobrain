@@ -426,12 +426,19 @@ Prod runs behind nginx on port 80:
 docker build -f docker/frontend/Dockerfile \
   --build-arg API_BASE_URL=http://<host>/api/v1 \
   --build-arg WS_BASE_URL=ws://<host>/ws \
+  --build-arg CARTO_API_KEY="$CARTO_API_KEY" \
   -t autobrain-frontend:web .
 docker create --name ab-web autobrain-frontend:web
 docker cp ab-web:/usr/share/nginx/html ./web-dist
 docker rm ab-web
 docker compose -f docker-compose.prod.yml up -d nginx   # mounts ./web-dist
 ```
+
+`CARTO_API_KEY` is **required** (AUT-4690): `docker/frontend/Dockerfile`
+fails the build immediately when it is unset, and re-checks that the value
+reached the compiled bundle. Export it (or read it from `.env`) before
+building. A key-less build would ship the watermapped public basemap in
+production.
 
 ## Over SSH
 

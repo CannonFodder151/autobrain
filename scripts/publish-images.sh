@@ -4,6 +4,8 @@
 #   docker login                      # once, with your app.docker.com account
 #   ./scripts/publish-images.sh [tag] # tag defaults to "latest"
 # Frontend API/WS base URLs are read from .env (API_BASE_URL / WS_BASE_URL).
+# AUT-4690: CARTO_API_KEY is required by docker/frontend/Dockerfile — the build
+# fails fast without it, so read it from .env alongside the base URLs.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -18,10 +20,13 @@ TAG="${1:-latest}"
 
 API_BASE_URL="${API_BASE_URL:-http://localhost:8000/api/v1}"
 WS_BASE_URL="${WS_BASE_URL:-ws://localhost:8000/ws}"
+CARTO_API_KEY="${CARTO_API_KEY:-}"
 if [[ -f .env ]]; then
   API_BASE_URL="$(grep -E '^API_BASE_URL=' .env | tail -1 | cut -d= -f2- | tr -d '\r')"
   WS_BASE_URL="$(grep -E '^WS_BASE_URL=' .env | tail -1 | cut -d= -f2- | tr -d '\r')"
+  CARTO_API_KEY="$(grep -E '^CARTO_API_KEY=' .env | tail -1 | cut -d= -f2- | tr -d '\r' || true)"
 fi
+: "${CARTO_API_KEY:?Set CARTO_API_KEY in .env or the environment — docker/frontend/Dockerfile refuses to build without it (AUT-4690)}"
 
 echo "==> Building images as $USER/autobrain-*:$TAG"
 
@@ -35,6 +40,7 @@ echo "==> frontend (API_BASE_URL=$API_BASE_URL WS_BASE_URL=$WS_BASE_URL)"
 docker build -f docker/frontend/Dockerfile \
   --build-arg API_BASE_URL="$API_BASE_URL" \
   --build-arg WS_BASE_URL="$WS_BASE_URL" \
+  --build-arg CARTO_API_KEY="$CARTO_API_KEY" \
   -t "$USER/autobrain-frontend:$TAG" .
 
 echo "==> Pushing"
