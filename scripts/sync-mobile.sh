@@ -46,6 +46,29 @@ done
 for d in ios android; do
   [[ ! -d "$FRONT/$d" ]] || { echo "::error::$FRONT/$d exists — platform dirs must stay in autobrain-mobile" >&2; exit 1; }
 done
+# --- Editor backup guard (pre-flight) -------------------------------------------
+# AUT-4919: sync-mobile.yml commits with `git add -A`, so any stray file sitting
+# in the mobile working tree gets committed wholesale. Commit b102347 shipped a
+# 140KB CHANGELOG.md.bak into the autobrain-mobile repo root that way and it stayed
+# tracked in every clone. Check both sides of the copy BEFORE copying anything:
+# editor backup artifacts must never enter the mobile tree, and any that are
+# already there must be deleted (not synced) rather than committed. Fail loudly
+# instead of silently cleaning, so the author confirms the file was not intended.
+stray="$({ find "$FRONT/lib" "$FRONT/assets" "$ROOT/CHANGELOG.md" \
+             \( -name '*.bak' -o -name '*~' \) 2>/dev/null || true; } | sort -u)"
+# The stray file that caused this landed in the mobile repo ROOT (the working
+# dir), not under lib/ or assets/. `git add -A` commits the whole tree, so scan
+# the entire mobile checkout — not just the paths this script copies. Build and
+# VCS dirs are pruned: third-party build output is never committed by this sync.
+stray="$stray$({ find . \( -name .git -o -name .dart_tool -o -name build -o -name Pods \) -prune -o \
+             \( -name '*.bak' -o -name '*~' \) -print 2>/dev/null || true; } | sort -u)"
+if [[ -n "${stray//[[:space:]]/}" ]]; then
+  echo "::error::editor backup files found in the sync paths — delete them, then re-run:" >&2
+  printf '%s\n' "$stray" | sed '/^[[:space:]]*$/d;s/^/::error::  /' >&2
+  echo "::error::These are gitignored in autobrain-mobile (*.bak, *~) and must not reach the tree." >&2
+  exit 1
+fi
+
 # Copy lib/ verbatim except the mobile-only-delta files.
 for f in core/auth_state.dart core/config.dart \
     screens/auth/login_screen.dart screens/settings/license_screen.dart \
