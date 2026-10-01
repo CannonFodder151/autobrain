@@ -119,32 +119,45 @@ endpoint. Market data is best-effort — never blocks the estimate.
 + AI advice). Everything still works; the search UI shows "provider not
 configured".
 
-## Deploying the scraper (AUT-290)
+## Where the scraper runs today
 
-The scraper source lives in the monorepo as `market-data/` (FastAPI + `carsguide.py`) and is
-bundled into the AI image (AUT-1242-C3). The `ai` container runs **two uvicorn processes**:
-- **:8001** — the AI inference gateway (`app.main:app`).
-- **:8000** — the CarsGuide/BikeGuide market-data scraper (`market-data/main:app`).
+The scraper source lives in the monorepo as `market-data/` (FastAPI + `carsguide.py`,
+`bikesguide.py`, `sca.py`, `browser.py`). Current state:
 
-- **Hosted:** the `autobrain-hosted` stack (EP5) has no separate `market-data` service.
-  The backend is wired via `MARKET_DATA_URL: http://ai:8000` / `MARKET_DATA_API_KEY` (stack env).
-- **Prod/Dev compose:** uses the same image; `MARKET_DATA_URL` defaults to `http://ai:8000`
-  when the env var is set in the deployment env file.
-- **Dev box mirror:** Portainer stack `market-data` on EP6 (`:8003`) is legacy and
+- **No compose service.** There is no `ai` / `market-data` service in
+  `docker-compose.yml`, `docker-compose.prod.yml` or `docker-compose.hosted.yml`.
+  The earlier "one image, two uvicorn processes (`:8001` gateway + `:8000`
+  scraper)" shape (AUT-1242-C3) has been retired.
+- **Hosted (AUT-3810 Phase 1a):** `MARKET_DATA_URL` is *intentionally not set*
+  in `docker-compose.hosted.yml`, so `backend/app/services/market_data.py`
+  takes the local fallback path — `source=fallback`, `sample_size=0`, and the
+  valuation uses the deterministic depreciation model + AI used-price advice
+  (clamped ±15%). **Consequence for cost: hosted pays no scraper compute or
+  egress** — the price anchor is not live on hosted today.
+- **Dev/Prod compose:** set `MARKET_DATA_URL` (pointing at a running
+  `market-data/main:app`) to re-enable live listings. Unset behaves as above.
+- **Dev box:** the Portainer `market-data` stack on EP6 (`:8003`) is legacy and
   should be removed when convenient.
-- **Gotcha:** the current backend config refuses *default* credentials in
-  `production` (`POSTGRES_PASSWORD`/`MINIO_SECRET_KEY` = `autobrain`,
-  `SECRET_KEY` = `change-me`). Before the hosted backend can boot on the
-  current image the stack's postgres role and MinIO root password must be
-  rotated to real values AND reflected in the stack env — rotate the Postgres
-  role with `ALTER USER ... PASSWORD '...'` and MinIO with
-  `mc admin user set-password`, then redeploy. The demo/default tiers have the
-  same latent debt.
+- **Gotcha:** the backend config refuses *default* credentials outside
+  `development` (`POSTGRES_PASSWORD`/`MINIO_SECRET_KEY` = `autobrain`,
+  `SECRET_KEY` = `change-me`). The stack's postgres role and MinIO root password
+  must be real values reflected in the stack env — rotate the Postgres role with
+  `ALTER USER ... PASSWORD '...'` and MinIO with `mc admin user set-password`,
+  then redeploy.
+
+### Provider cost profile
+
+| Tier | Live listings? | Marginal cost |
+|------|-----------------|---------------|
+| Hosted (prod) | No (`MARKET_DATA_URL` unset) | None — deterministic model only |
+| Dev / Prod compose with `MARKET_DATA_URL` | Yes | Scrape CPU + egress, 24h cache absorbs most requests |
+| Motorcycle (BikeGuide/BikeSales) | No — both gated/parked | None; degraded to AI path |
 
 ## Supercheap Auto parts-guide scraper (AUT-1792)
 
-The same market-data container also scrapes the **Supercheap Auto parts-guide**
-so AutoBrain can suggest real parts for a vehicle. Source: `market-data/sca.py`.
+The parts-guide scraper also feeds the **Supercheap Auto parts-guide** so
+AutoBrain can suggest real parts for a vehicle. Source: `market-data/sca.py`,
+invoked in-process by the backend.
 
 - **Endpoint:** `POST /sca-parts` with `{rego, state, make, model, year}`
   (rego+state resolve the vehicle via the browser flow; make/model/year is the
@@ -164,6 +177,18 @@ so AutoBrain can suggest real parts for a vehicle. Source: `market-data/sca.py`.
   - `GET /vehicles/{id}/parts/sca-lookup` → Inventory-formatted SCA parts.
   - `POST /vehicles/{id}/parts/suggest-for-service` → parts prefill for an
     AI-suggested service, **inventory-first then SCA**.
-- **Config:** no new env var — it reuses `MARKET_DATA_URL` / `MARKET_DATA_API_KEY`.
+- **Config:** no new env var.
 - **Caching:** results are cached in `sca_parts_cache` (keyed by
-  `make|model|year`, 24h TTL) so repeat lookups are stable and cheap.
+  `make|model|year`, 24h TTL) so repeat lookups are stable and cheap. A nightly
+  Celery beat task (`refresh_sca_parts_cache`, AUT-2419) pre-warms the cache so
+  the first user click returns from cache; failures are logged and never abort
+  the rest.
+
+## Related Finance Docs
+
+- **[index.md](./index.md)** — Finance section index
+- **[infrastructure-costs.md](./infrastructure-costs.md)** — per-service spend and optimisation
+- **[fuel-pricing.md](./fuel-pricing.md)** / **[fuel-servo-spy.md](./fuel-servo-spy.md)** — deterministic fuel price paths
+
+Credentials (`MARKET_DATA_API_KEY`) are deployment secrets and are never
+committed — see [Documentation Policy](../Company/documentation-policy.md).
