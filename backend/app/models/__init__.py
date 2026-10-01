@@ -20,6 +20,8 @@ from app.models.fuel_price import FuelPricePollState, FuelPriceSnapshot, FuelPri
 from app.models.notification import NotificationPreference, NotificationDelivery
 from app.models.share import VehicleShare
 from app.models.refresh_token import RevokedRefreshToken
+from app.models.passkey import PasskeyCredential
+from app.models.engineer import Engineer, EngineerReview
 from app.models.ha import HaIntegration
 from app.social.models import (
     SocialBuild,
@@ -62,6 +64,9 @@ __all__ = [
     "NotificationDelivery",
     "VehicleShare",
     "RevokedRefreshToken",
+    "PasskeyCredential",
+    "Engineer",
+    "EngineerReview",
     "HaIntegration",
     "SocialBuild",
     "SocialPhoto",

@@ -52,3 +52,9 @@ The frontend calls this when a user selects *fuel at 7-Eleven* and pre-fills
 - `backend/app/schemas/fuel.py` — `FuelPriceQuote`, `SevenElevenPricesOut`.
 - `backend/app/api/v1/fuel.py` — `/prices/7eleven` route.
 - `backend/tests/test_fuel_prices.py` — offline parse/geo tests (no network).
+
+## Related Finance Docs
+
+- **[index.md](./index.md)** — Finance section index
+- **[fuel-servo-spy.md](./fuel-servo-spy.md)** — Servo Spy state fuel feeds (WA/NSW/VIC/QLD)
+- **[petrol-price-map.md](../petrol-price-map.md)** — Petrol price map (AUT-1813)

@@ -73,8 +73,9 @@ def test_browser_script_import_resolution() -> None:
     then assert the hoisted names exist.
     """
     import importlib.util
+    from pathlib import Path
 
-    script = "/home/node/autobrain/backend/app/services/market_scraper/browser.py"
+    script = str(Path(__file__).resolve().parents[1] / "app/services/market_scraper/browser.py")
     with open(script) as f:
         source = f.read()
 

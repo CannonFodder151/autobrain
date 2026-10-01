@@ -21,7 +21,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: frontend
-          image: ghcr.io/cannonfodder151/autobrain-frontend:hosted
+          image: ghcr.io/cannonfodder151/autobrain-frontend@sha256:02e9255ec6cda3f9c0ba0aa49919638e5f76ab645cd8e5357bcc17f8f8bccb77
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80

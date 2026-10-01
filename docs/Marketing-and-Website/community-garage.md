@@ -25,7 +25,7 @@ Display identity: `<Display name> from <Server Name>`.
 | 1   | Photo upload (car) | Backend media API → MinIO; Flutter picker |
 | 2   | Opt-in to sharing a build | `SocialBuild` opt-in flag per vehicle |
 | 3   | Cross-instance posts | Federation hub (relay) |
-| 4   | Hub hosting | Oracle VM (AutoBrain-Hosted, 152.69.188.133) — new lightweight service |
+| 4   | Hub hosting | Oracle VM (AutoBrain-Hosted) — new lightweight service |
 | 5   | Data stays on each server | Hub routes only; origin server authoritative |
 | 6   | Two-tier admin control | (a) Federated participation on/off → off keeps social local-only; (b) feature entirely on/off |
 | 7   | Facebook-style scrolling feed, mod-list driven, photos on main screen | New Social feed screen; content from existing vehicles + mods data |
@@ -101,7 +101,7 @@ Branch: `feat/community-garage`. No mobile app release until P4 completes.
  4. **Registration email** → Verification/contact only, never public.
  5. **Share-scope defaults** → Minimal: photos + make/model + mod list.
  6. **Comment/like sync** → Hub fan-out, eventual consistency.
- 7. **Cost** → Existing Oracle VM capacity (152.69.188.133); no new infra.
+ 7. **Cost** → Existing Oracle VM capacity; no new infra.
  8. **Federated opt-out** → Local-only social (feed shows local builds only); feature off → "Disabled by your admin".
  9. **Premium gating** → Community Garage is a premium entitlement; free accounts locked out; enforced server-side.
 10. **Marketing timing** → Campaign starts now, positioning as "coming soon"; feature unpublished until P3 gate clears.
@@ -126,4 +126,4 @@ Branch: `feat/community-garage`. No mobile app release until P4 completes.
 
 Feature is **not actioned** until: (a) all current in-flight jobs complete, and (b) QA/security testing of the current stack is green. Implementation child issues are parked in `backlog` until this gate clears. **Exception:** the marketing campaign (website teaser, blog post, socials) is active now — "coming soon" only, never presented as live.
 
-Source: [AUT-294](https://paperclip.nathanmartina.com/AUT/issues/AUT-294) — plan document (rev 7, approved).
+Source: [AUT-294](<INTERNAL_PAPERCLIP_URL>/AUT/issues/AUT-294) — plan document (rev 7, approved).

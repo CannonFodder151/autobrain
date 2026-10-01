@@ -1,6 +1,6 @@
 """AI module registry."""
 
-from app.modules import (
+from ..modules import (
     advisor,
     car_check,
     condition,

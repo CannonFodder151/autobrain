@@ -14,7 +14,7 @@ work with the router down (deterministic fallback):
 
 ```python
 def router_url() -> str:
-    return os.getenv("AI_ROUTER_URL", "http://10.0.3.17:20128/v1").rstrip("/")
+    return os.getenv("AI_ROUTER_URL", "<INTERNAL_9ROUTER_URL>").rstrip("/")
 
 def router_enabled() -> bool:
     url = router_url()
@@ -26,16 +26,17 @@ def router_enabled() -> bool:
 `.env`:
 
 ```
-AI_ROUTER_URL=http://10.0.3.17:20128/v1
+AI_ROUTER_URL=<INTERNAL_9ROUTER_URL>
 AI_ROUTER_API_KEY=
 AI_ROUTER_MODEL=General-Use
 AI_ROUTER_TIMEOUT_SECONDS=120
 ```
 
-The canonical endpoint is `http://10.0.3.17:20128/v1` (on-prem 9Router; dev/demo
-stacks use it via `.env`). The Oracle-hosted stack overrides this to its
-stack-local `9router` service because `10.0.3.17` is unreachable from Oracle
-Cloud. If `AI_ROUTER_URL` is left at the old placeholder
+The canonical endpoint is set per-instance via `AI_ROUTER_URL` (on-prem 9Router;
+dev/demo stacks use it via `.env`); the concrete host:port is intentionally not
+published in this repo. The Oracle-hosted stack overrides this to its
+stack-local `9router` service because the on-prem router is unreachable from
+Oracle Cloud. If `AI_ROUTER_URL` is left at the old placeholder
 `http://your-9router-instance:port/v1`, routing is disabled and the gateway
 always uses the local fallback so the platform runs end-to-end without a router.
 Check available models with `GET {AI_ROUTER_URL}/models`.
@@ -56,10 +57,13 @@ backend (ai_client.py)
             └─ validated, clamped result
 ```
 
-Note: In dev and prod stacks, the AI gateway runs inside the backend container
-on :8001 (alongside the API on :8000 and Celery worker+beat). In the hosted
-stack, the AI gateway runs in a separate `ai` container (AUT-1242/C3) because
-it also hosts the market-data scraper.
+Note: In dev, prod, and hosted stacks, the AI gateway runs inside the backend
+container on :8001 (alongside the API on :8000 and Celery worker+beat). The
+market-data scraper runs as Celery tasks in the backend (AUT-3810); no separate
+`ai` service exists. The hosted stack overrides `AI_ROUTER_URL` to its
+stack-local `9router` service (`http://9router:20128/v1`) because the corporate
+9Router at `http://10.0.3.17:20128/v1` is on the on-prem LAN and is NOT
+reachable from Oracle Cloud.
 
 ## Failure behaviour
 

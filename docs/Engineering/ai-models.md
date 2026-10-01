@@ -20,6 +20,8 @@ rule-based engine that always produces a valid result, then optionally lets
 | Odometer | `/v1/odometer` | local Tesseract + regex digit scan on the dashboard photo | **None — deterministic-only** |
 | Parts guide | `/v1/parts-guide` | SCA category taxonomy normalisation + service-type inventory prefill | Tidy descriptions, brands, categories (never overrides SKU/service_group) |
 | Social image | `/v1/social-image` | Pillow on-brand card renderer (title/hook/CTA, 1200x630) | Optional prompt → free Pollinations photo (falls back to deterministic card) |
+| Ownership advisor | `/v1/advisor` | Deterministic Value/Replace/Upgrade/Finance/Dream sub-scores → keep/upgrade/delay/strategy decision with confidence | Richer rationale and sharper `next_actions` (never overrides `decision`) |
+| Car check | `/v1/car-check` | Listing-field extraction + deterministic deal score → summary with red/green flags | Narrative polish only (never overrides `deal_score`) |
 
 ## Deterministic-first flow
 
@@ -48,7 +50,8 @@ The response includes a `model` field so callers know which path produced it:
 
 `ai/app/fallbacks/` implements the deterministic engines, one module per
 feature (`condition.py`, `diagnose.py`, `service_prediction.py`, `ocr.py`,
-`resale.py`, `mod_impact.py`, `fuel_ocr.py`, `odometer.py`).
+`resale.py`, `mod_impact.py`, `fuel_ocr.py`, `odometer.py`, `advisor.py`,
+`car_check.py`, `parts_guide.py`).
 
 - **Diagnostics:** keyword rules for symptoms (brakes, vibration, leaks,
   noises…) + OBD code table mapped to parts/costs.

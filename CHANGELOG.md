@@ -11,6 +11,220 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-4919)
+- fix(ci): stop lineage sync from committing editor backup files. `sync-mobile.yml`
+  commits with `git add -A`, so a stray `CHANGELOG.md.bak` left in the
+  `autobrain-mobile` working tree was swept into commit `b102347` and stayed
+  tracked (140KB) in every clone. Two fixes: `autobrain-mobile` now gitignores
+  `*.bak` and `*~`, and `scripts/sync-mobile.sh` runs a pre-flight that aborts
+  the sync if a backup artifact is present on either side of the copy — before
+  any file is written, so there is no partial sync. Covered by
+  `scripts/test_sync_mobile_backup_guard.sh`.
+
+### Fixed (AUT-4925)
+- fix(backend): repair the Alembic head that hard-failed on every boot of the hosted
+  stack. `alembic_version` read `aut3447_passkey_credentials`, but `passkey_credentials`,
+  `engineers` and `engineer_reviews` did not exist, so head migration `f7e8d9c0b1a2`
+  raised `UndefinedTableError: relation "passkey_credentials" does not exist`.
+  `bootstrap()` then fell back to `create_all`, which could not repair the gap
+  because `app/models/__init__.py` never imported those three models — so the
+  version never advanced and the loop repeated indefinitely. Passkey sign-in and
+  the engineer marketplace were both non-functional on hosted as a result. Three
+  changes: `f7e8d9c0b1a2` is now guarded and no-ops when the table is absent; a new
+  guarded migration `aut4925_missing_tables` creates the three tables
+  column-for-column identical to the ORM models (including
+  `engineer_reviews.updated_at`, which `a3661engineers` omits); and the three
+  models are imported so the `create_all` fallback covers them. A new
+  `test_every_model_table_is_exported_for_create_all` guard fails if any model
+  class declaring `__tablename__` is not exported from `app.models`.
+
+## [0.3.292] - 2026-10-01
+
+### Security (AUT-4701)
+- test(backend): add a PyJWT floor guard to `test_deps_transitive_cves.py` —
+  `pyjwt >= 2.15.0`, so a future downgrade cannot silently re-expose
+  GHSA-42vr-xj54-vc7v (unauthenticated `RecursionError` DoS via
+  `PyJWKClient.get_signing_key_from_jwt` with `verify_signature=False`),
+  which 2.14.0 does **not** fix. The pin guard itself is also hardened:
+  `_pins()` now strips `[extras]` (`PyJWT[crypto]` -> `pyjwt`) and tolerates
+  PEP 440 suffixes (`2.9.0.post0`), which previously raised `ValueError` and
+  took down the whole module. The 2.15.1 pin itself already landed via
+  AUT-4743 (#828).
+
+## [0.3.291] - 2026-10-01
+
+### Fixed (AUT-4855)
+- ci(release): `scripts/bump-version.sh` printed `docker build` instructions that
+  interpolated `"$CARTO_API_KEY"` even though the commands are only echoed, never
+  run. Under `set -u` — how CI invokes it via `auto-bump.sh` — an unset
+  `CARTO_API_KEY` killed the script at line 64 with `unbound variable`, after the
+  CHANGELOG had been promoted but before the version bump could be committed. That
+  broke the `auto-bump` job in both `Publish images to Docker Hub` and
+  `Build hosted images (multi-arch)`, blocking every release off `main`. This was a
+  regression introduced by AUT-4824 (PR #822). The three lines now print a literal
+  `$CARTO_API_KEY` placeholder for the operator to substitute; the `set -u` guard
+  is untouched. New `scripts/test-bump-version.sh` runs the real script in a
+  sandbox with the key unset and set, asserting exit 0 and that the bump lands.
+
+### Fixed (AUT-4824)
+- docs(docker): the `CARTO_API_KEY` hard-fail introduced by AUT-4690 (PR #822)
+  left three documented/scripted frontend build paths passing no
+  `--build-arg CARTO_API_KEY`, so all of them failed if copied: the manual
+  `docker build -f docker/frontend/Dockerfile` snippet in
+  `docs/Deployment-and-Infrastructure/deployment-guide.md`, the three
+  hosted/default/demo build commands printed by `scripts/bump-version.sh`, and
+  the   stale "Empty -> key-less public basemap" comments in `.env.example`,
+  `docker-compose.yml` and `docker-compose.prod.yml` (the empty default is
+  intentional — it fails the build loud rather than shipping a watermapped map).
+  No behaviour change. New `scripts/check-carto-build-arg-propagation.py`
+  statically asserts that every documented/scripted frontend build passes the key;
+  it now runs as the `carto build-arg propagation` CI job so the paths cannot
+  silently regress. `scripts/publish-images.sh` also sources the key from `.env`
+  and hard-fails early instead of letting `docker build` reject it, and
+  `dockerhub-publish.yml` fails with a readable message when the
+  `CARTO_API_KEY` secret is unset rather than surfacing an opaque error deep
+  inside the build.
+
+## [0.3.290] - 2026-09-30
+
+### Fixed (AUT-2784)
+- fix(ai): the AI gateway now imports its own modules relatively, so it is
+  self-contained as `ai_app` in the shared backend image. `docker/backend/Dockerfile`
+  copies `ai/app` to `ai_app` and runs it as a co-process on `:8001` inside the
+  backend container, but every gateway module used an absolute `from app.…`
+  import. In that image `app` resolves to the **backend** package, which has no
+  `logging`, `modules`, `router_client` or `fallbacks`, so the gateway died at
+  startup with `ModuleNotFoundError: No module named 'app.logging'` and every
+  `/ai/` route 502'd. 48 import statements across 20 files converted; the
+  standalone `ai/` suite is unchanged (109 passed, same 3 pre-existing failures).
+- test(ai): `ai/tests/test_merged_image_layout.py` simulates the image layout
+  (backend `app` + gateway `ai_app` side by side) and asserts the gateway both
+  imports and serves `/health` + auth on `:8001`, plus an AST check that no
+  absolute `app.*` import reappears. The standalone AI suite imports `app.main`
+  and could never catch this class of breakage; the new file fails 3/4 on the
+  pre-fix tree and passes 4/4 after.
+
+## [0.3.289] - 2026-09-30
+
+### Changed (AUT-3944)
+- chore(deploy): the hosted `autobrain-backup` service is renamed to `backup`
+  and is now the **single** backup container. `backup-agent` stays removed
+  (AUT-3827 — its hourly snapshot push is the `offsite-backup-hourly` Celery
+  beat task in `backend`), so the hosted stack runs one backup container
+  instead of a GUI container plus a poller sidecar. GUI endpoint is unchanged
+  (`127.0.0.1:8080` on the host, `/backups` bind mount preserved).
+  `BACKUP_OFFSITE_URL` now defaults to `http://backup:8080`; **any EP5 stack
+  env override of the old `http://autobrain-backup:8080` must be updated or
+  hourly pushes stop on DNS failure.**
+
+### Fixed (AUT-3944)
+- fix(ci): `scripts/check-compose-consolidation.py` and
+  `scripts/check-compose-config.py` no longer crash or pass vacuously on the
+  consolidated stack — both still asserted the `ai` service that AUT-3824
+  removed (`KeyError: 'ai'`), and neither allowed-listed the
+  `backup_offsite_*` secret files added by AUT-3827. Both now assert the exact
+  10-service set and the `backup` DNS name.
+
+## [0.3.288] - 2026-09-30
+
+### Security (AUT-4743)
+- fix(backend): bump `PyJWT[crypto]` 2.13.0 -> 2.15.1. 2.13.0 carries 12 known
+  CVEs (CVE-2026-101917/101918/102265-102274), which made both `pip-audit-gate`
+  and the resolved-tree scan (AUT-1189) fail on every PR and on `main` — it was
+  blocking the hosted deploy pipeline, not just this PR. The API used by
+  `app/core/security.py` and `app/services/iap.py` (`encode`/`decode`/
+  `get_unverified_header`/`PyJWTError`/`InvalidTokenError`) is unchanged.
+### Fixed (AUT-4690)
+- **CI:** `docker/frontend/Dockerfile` now hard-fails when `CARTO_API_KEY` is
+  unset/expired, and asserts the key value is actually present in the built
+  `main.dart.js`. Previously an empty secret produced a *green* build and the
+  Servo Spy map silently fell back to the watermapped public basemap, only
+  caught weeks later by a human QA curl (AUT-4533, AUT-4649). The empty-key
+  check runs before `flutter build web` so it fails fast.
+
+## [0.3.287] - 2026-09-30
+
+- **CI (AUT-1029):** `dockerhub-publish.yml` gains a `dedupe-main-queue` job that cancels superseded `queued`/`pending` publish runs on `main` before the heavy jobs start, so a burst of merges no longer queues N full 5-image builds behind the 3-runner fleet. In-flight runs are never cancelled (AUT-967/AUT-1756 behaviour preserved).
+
+### Changed (AUT-4503)
+- chore(deploy): the EP2 9Router (`10.0.3.17:20128`) is a managed Portainer
+  stack (`9router`, id 128) from `docker-compose.9router.yml` instead of a loose
+  `docker run` container — it was invisible to Portainer's stack view, so it had
+  no consistent update path and no health signal
+- chore(deploy): the EP2 router image is pinned by digest
+  (`decolua/9router:0.5.91@sha256:efc6e88c…`) — the same image the floating
+  `:latest` tag was already resolving to, so no version change
+- feat(deploy): the EP2 router stack carries an `/api/health` healthcheck; the
+  loose container had none
+- docs(deploy): document all three 9Router instances (EP2 stack, EP5 inside
+  `autobrain-hosted`, EP6 has none and uses the EP2 one) and the two ways to
+  break the shared `:20128` route
+
+## [0.3.286] - 2026-09-29
+
+### Added (AUT-3503)
+- feat(backend): WebAuthn passkey sign-in is functional end-to-end (the route
+  skeleton shipped in AUT-3447 but could never complete a ceremony)
+- fix(backend): passkey registration verification now parses the real
+  `AuthenticatorAttestationResponse`; it previously passed `response=None`, so
+  every registration attempt failed
+- fix(backend): `/auth/passkey/authenticate/complete` now returns
+  `access_token` + `refresh_token`; it minted both tokens and then discarded
+  them, so a successful passkey assertion could not sign the user in
+- fix(backend): expected origin and RP ID are derived from `APP_BASE_URL`
+  instead of the client-supplied `Origin` header, which made the origin check a
+  no-op (an attacker could echo any origin)
+- fix(backend): WebAuthn challenges live in Redis with a 5-minute TTL so they
+  survive across workers and restart; the in-process dict was shared by
+  nothing when the API scaled past one worker
+- feat(backend): alembic `f7e8d9c0b1a2` adds a unique constraint on
+  `passkey_credentials (user_id, credential_id)` so one authenticator cannot
+  be registered twice for an account
+
+### Fixed (AUT-3661)
+- fix(backend): `EngineerSortBy` no longer inherits from `list`, which raised
+  `TypeError: multiple bases have instance lay-out conflict` on Python 3.13
+  and broke app import
+- fix(backend): `/api/v1/engineers` imported `EngineerSearchResult` and
+  `EngineerSearchResponse` from the service module, which does not export
+  them; both now import from `app.schemas.engineer` (also fixes
+  `EngineerResponse` being undefined)
+
+## [0.3.285] - 2026-09-28
+
+### Fixed (AUT-4143)
+- fix(backend): disable VIC Servo Saver fuel feed — endpoint `api.servosaver.com.au` returns NXDOMAIN and would raise `FuelFeedError` instead of returning 0 stations; set `FUEL_VIC_ENABLED="false"` in `docker-compose.prod.yml` and commented out unused secret seeds in `scripts/seed-secrets.sh` until a paid VIC aggregator is available
+
+## [0.3.284] - 2026-09-28
+
+### Fixed (AUT-4317)
+- fix(frontend): match both MinIO bucket prefixes (`autobrain-assets` on
+  dev/hosted, `autobrainservice-assets` on demo/default) in nginx so
+  community-hub photos load instead of serving the SPA shell; the regex
+  location forwards the original URI (with its bucket prefix) to MinIO
+
+## [0.3.283] - 2026-09-28
+
+### Fixed (AUT-4327, AUT-4357)
+- fix(frontend): login, signup and server-setup logo is no longer stretched (`BoxFit.cover` → `BoxFit.contain`) and sits in a black circle instead of a white one, on all three auth screens (AUD-427 user report)
+- fix(frontend): `ApiClient.getCachedDecoded` no longer throws when the local cache backend is unavailable (web/sqflite); the vehicle manage screen, timeline, and every other cache-first screen fall through to the network path instead of failing to load
+
+## [0.3.282] - 2026-09-27
+
+### Changed (AUT-4289)
+- fix(frontend): remove the "Petrol Prices" feature tile from the home screen feature grid; `PetrolPriceMapScreen` itself is unchanged and still reachable from `frontend/lib/screens/fuel/petrol_price_map_screen.dart`
+
+## [0.3.281] - 2026-09-27
+
+### Fixed (AUT-4259)
+- fix(backend): merge alembic heads `a3661engineers` (engineer marketplace) and `aut3447_passkey_credentials` (WebAuthn) via new merge revision `m3rge07`; restores single-head guarantee so `alembic upgrade head` works and pytest-smoke gate passes
+
+## [0.3.280] - 2026-09-27
+
+### Added (AUT-4120)
+- feat(backend): Redis cache (TTL 1h) for query embeddings in `vector_search.py`; repeated searches return cached vector without 9Router call
+- fix(backend): cached vectors are re-validated against `EMBEDDING_DIMENSION` on read; a poisoned/wrong-dimension cache entry is rejected and the router path re-derives the vector instead of binding it to SQL (22P02)
+
 ### Added (AUT-3843 / AUT-4113)
 - feat(backend): merge market-data Chromium scraper into backend Celery tasks
   (removes standalone market-data container; hosted stack −1 container)
@@ -24,6 +238,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed (AUT-4113)
 - fix(browser): hoist `carsguide`/`sca` imports to module top so script-mode
   invocation (`python browser.py ...`) resolves without ImportError
+- fix(tests): derive the browser-script path from `Path(__file__).resolve()` in
+  `test_market_scraper.py` instead of hardcoding `/home/node/autobrain/...`, which
+  only resolved on the dev box and broke collection on CI runners and the hosted
+  ARM64 VM (QA finding on PR #777)
 - fix(docs): update market-data architecture doc and container-consolidation
   migration checklist to reflect local scraping in backend
 

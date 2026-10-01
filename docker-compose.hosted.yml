@@ -158,7 +158,7 @@ services:
     # AUT-3153: the standalone Celery worker+beat service is merged into this
     # container. The backend image already carries the worker dependencies and
     # its default CMD runs the same topology as docker-compose.prod.yml.
-    image: ghcr.io/cannonfodder151/autobrain-backend:hosted@sha256:14543848e3e428701be45afc9848642a5fc5b2c6a4e9d1356a6fd1fa3eba9462
+    image: ghcr.io/cannonfodder151/autobrain-backend:hosted@sha256:df70b14a85c894bc12a5cfdc4e52887f88f3f1b4e80a21cdd75e2f2ddaf1b871
     restart: unless-stopped
     command: sh -c "export AI_ROUTER_API_KEY=$(cat /run/secrets/ai_router_api_key) && python -m app.db.bootstrap && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && (uvicorn ai_app.main:app --host 0.0.0.0 --port 8001 &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
@@ -245,11 +245,12 @@ services:
       # calls the backend's /devices/verify to check paid status at the edge.
       DONGLE_SERVER_API_KEY_FILE: /run/secrets/dongle_server_api_key
       DONGLE_SERVER_URL: http://dongle-server:8000
-      # AUT-3827: off-site backup push (replaces the standalone backup-agent
-      # container). The backend's Celery beat runs backup_offsite_hourly at
-      # :00 and pushes snapshots to autobrain-backup /api/backup/ingest.
+      # AUT-3827/AUT-3944: off-site backup push (replaces the standalone
+      # backup-agent container). The backend's Celery beat runs
+      # backup_offsite_hourly at :00 and pushes snapshots to backup
+      # /api/backup/ingest.
       BACKUP_OFFSITE_ENABLED: "true"
-      BACKUP_OFFSITE_URL: ${BACKUP_OFFSITE_URL:-http://autobrain-backup:8080}
+      BACKUP_OFFSITE_URL: ${BACKUP_OFFSITE_URL:-http://backup:8080}
       BACKUP_OFFSITE_GUI_KEY_FILE: /run/secrets/backup_offsite_gui_key
       BACKUP_OFFSITE_INGEST_KEY_FILE: /run/secrets/backup_offsite_ingest_key
       BACKUP_OFFSITE_INSTANCE: ${BACKUP_OFFSITE_INSTANCE:-hosted}
@@ -321,7 +322,7 @@ services:
       - "8000"
 
   frontend:
-    image: ghcr.io/cannonfodder151/autobrain-frontend:hosted@sha256:02ed10e3b1a5f70f3f17253e60f7c6dc1825dcd2e1d79687dfce7ed2ff57554e
+    image: ghcr.io/cannonfodder151/autobrain-frontend:hosted@sha256:627c6cc1038cad0d1966b007f319aa614d44442f7b01afae49164301b65c7cce
     # AUT-2087: pinned to the verified arm64 child manifest digest of the
     # autobrain-frontend :hosted OCI image index. Earlier pin
     # (`@sha256:8937c2bb…`) targeted an arm64 image whose nginx + busybox
@@ -390,50 +391,16 @@ services:
       timeout: 5s
       retries: 5
 
-  # AUT-2469: GitHub Actions ARM64 self-hosted runner on EP5.
-  # Replaces the standalone `myoung34/github-runner:latest` container that was
-  # restart-looping on EP5:
-  #   `ldd: ./bin/libcoreclr.so: No such file or directory`
-  #   `./config.sh: line 78: ./bin/Runner.Listener: No such file or directory`
-  # The myoung34 image is amd64-only (libcoreclr.so + Runner.Listener are
-  # amd64 .NET binaries); the Oracle VM (EP5) is aarch64. Official image:
-  # `ghcr.io/actions/actions-runner:latest` (multi-arch, includes linux/arm64).
-  # Registration is re-derived every boot via the PAT in /run/secrets/github_pat
-  # (AUT-1533 *_FILE pattern), so the short-lived runner token never needs to
-  # be persisted across container recreates. ARM CI on Hosted is unblocked.
-  gh-runner:
-    # AUT-2469: the official image ships amd64 + arm64 binaries; on EP5 Docker
-    # pulls the arm64 variant. We build a thin wrapper that only adds the
-    # registration-token-refresh entrypoint; the build runs on the x64 runner,
-    # but buildx cross-builds the arm64 variant (the Oracle VM is aarch64).
-    # Pin the base by digest (AUT-1533); update this digest when rotating.
-    build:
-      context: .
-      dockerfile: docker/runner/Dockerfile
-      args:
-        RUNNER_BASE_IMAGE: ${GH_RUNNER_BASE_IMAGE:-ghcr.io/actions/actions-runner:latest}
-    image: ghcr.io/cannonfodder151/autobrain-gh-runner:arm64-latest
-    pull_policy: always
-    restart: unless-stopped
-    privileged: true
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - type: bind
-        source: ${SECRETS_DIR:-/data/autobrain/secrets}
-        target: /run/secrets
-        read_only: true
-    environment:
-      GITHUB_PAT_FILE: /run/secrets/github_pat
-      GITHUB_REPOSITORY: ${GITHUB_REPOSITORY:-CannonFodder151/autobrain}
-      RUNNER_NAME: ${RUNNER_NAME:-gh-runner-autobrain-arm64}
-      RUNNER_LABELS: ${RUNNER_LABELS:-self-hosted,Linux,ARM64}
-      RUNNER_GROUP: ${RUNNER_GROUP:-Default}
-      RUNNER_REPLACE: ${RUNNER_REPLACE:-true}
-      DISABLE_RUNNER_UPDATE: ${DISABLE_RUNNER_UPDATE:-false}
-    # CMD ["/entrypoint.sh", "run"] lives in the wrapper Dockerfile (docker/runner)
-    # so the runner entrypoint can refresh the registration token before
-    # delegating. No command override needed in compose.
-
+# AUT-4911: the ARM64 runner is NOT part of this stack. It runs as its own
+# Portainer stack (`gh-runner-autobrain-arm64`, stack 123 on EP5) joined to
+# the external `autobrain-hosted_default` network.
+#
+# It was previously inlined here with a `build:` block. Portainer cannot build
+# service images for a remote endpoint with no uploaded build context, so every
+# `compose-pin` sync of this file failed with HTTP 500 and the CI log showed only
+# "HTTP Error 500" -- the real Portainer body ("compose build operation failed:
+# ghcr.io/cannonfodder151/autobrain-gh-runner:arm64-latest is also unpublished,
+# so the service could never have started on EP5 regardless.
   # 9Router AI router (AUT-473). Published on `0.0.0.0:20128` so it is reachable
   # on the host's public interface, but the host firewall (`fw-keeper`) restricts
   # :20128 to the allow-listed dev egress IP (`122.199.30.128`, see
@@ -469,13 +436,19 @@ services:
     ports:
       - "0.0.0.0:20128:20128"
 
-  # AUT-2367: autobrain-backup — web GUI for backup management, restore, and retention.
-  autobrain-backup:
+  # AUT-2367 + AUT-3944: `backup` — web GUI for backup management, restore, and
+  # retention. Renamed from `autobrain-backup` so the compose service name, the
+  # image repo name and the docker DNS name all agree (the hourly snapshot cron
+  # itself already lives in `backend`'s Celery beat, AUT-3827, so this stack runs
+  # one backup container, not two). Renaming changes the DNS name — every
+  # reference must use `backup`, e.g. BACKUP_OFFSITE_URL below.
+  backup:
     # Pinned to a digest to harden against supply-chain drift (AUT-1533 pattern).
     # The :hosted tag carries a multi-arch manifest (amd64 + arm64) so this
     # stack file works on every Portainer endpoint without re-tagging.
     # Bind mounts live under /data (snap dockerd masks /opt + /srv as RO
     # core24 squashfs; see AUT-1853).
+    # GUI endpoint is unchanged: localhost-bound 127.0.0.1:8080 -> 8080.
     image: ghcr.io/cannonfodder151/autobrain-backup:hosted@sha256:e76fac3c69ce5d6e2f670cbe9d41f72fec235d6769bf9f046faa71c9c06b4880
     restart: unless-stopped
     ports:
@@ -484,10 +457,10 @@ services:
       - /data/autobrain-backup/config:/config
       - /data/autobrain-backup/data:/backups
 
-  # AUT-3827: the standalone `backup-agent` service is REMOVED. Its job
-  # (hourly snapshot push to autobrain-backup) now runs as a Celery beat task
-  # inside `backend` (app.workers.tasks.backup_offsite_hourly). The hosted stack
-  # drops from 8 to 7 containers. See backend/app/services/backup_offsite.py.
+  # AUT-3827/AUT-3944: the standalone `backup-agent` service is REMOVED. Its job
+  # (hourly snapshot push) runs as a Celery beat task inside `backend`
+  # (app.workers.tasks.backup_offsite_hourly), pushing to the single `backup`
+  # service below. One backup container, no poller sidecar.
 
 volumes:
    postgres-data:

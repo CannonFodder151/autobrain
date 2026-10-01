@@ -72,17 +72,27 @@ class PasskeyRegistrationComplete(BaseModel):
     """Request body for completing a passkey registration ceremony.
 
     The frontend posts the authenticator's response to navigator.credentials.create().
+    Accepts either the standard PublicKeyCredential object (field `credential`)
+    or the legacy split-field format.
     """
 
-    credential_public_key: str = Field(..., description="COSE public key bytes (base64url)")
-    credential_attestation: str = Field(
-        ..., description="Attestation object (base64url or stringified JSON)"
+    # Standard format: full PublicKeyCredential object from navigator.credentials.create()
+    credential: Optional[dict] = Field(
+        default=None, description="Full PublicKeyCredential object (standard WebAuthn)"
     )
-    credential_client_data_json: str = Field(
-        ..., description="Client data JSON (base64url or stringified JSON)"
+
+    # Legacy split-field format (deprecated)
+    credential_public_key: Optional[str] = Field(
+        default=None, description="COSE public key bytes (base64url)"
     )
-    credential_device_type: str = Field(
-        ...,
+    credential_attestation: Optional[str] = Field(
+        default=None, description="Attestation object (base64url or stringified JSON)"
+    )
+    credential_client_data_json: Optional[str] = Field(
+        default=None, description="Client data JSON (base64url or stringified JSON)"
+    )
+    credential_device_type: Optional[str] = Field(
+        default=None,
         pattern="^(platform|cross-platform|unknown)$",
     )
     credential_attestation_transport: Optional[str] = Field(
@@ -93,6 +103,8 @@ class PasskeyRegistrationComplete(BaseModel):
     @validator("credential_public_key", "credential_attestation", "credential_client_data_json")
     def _b64url_or_json(cls, v: str) -> str:
         """Accept either base64url or a JSON string."""
+        if v is None:
+            return v
         # Try base64url decode first
         try:
             _b64url_to_bytes(v)
@@ -191,6 +203,9 @@ class PasskeyAuthenticationSuccess(BaseModel):
     success: bool = True
     user_verified: bool
     sign_count: int  # new counter value from authenticator
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
 
 
 class PasskeyListResponse(BaseModel):

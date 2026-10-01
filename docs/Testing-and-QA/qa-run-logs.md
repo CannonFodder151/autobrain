@@ -1,8 +1,24 @@
 # QA Run Logs
 
-**Owner:** QA & User Testing. **Section:** Testing & QA. **Last reviewed:** 2026-09-06 (AUT-2632).
+**Owner:** QA & User Testing. **Section:** Testing & QA. **Last reviewed:** 2026-09-28 (AUT-4395).
 
 Chronological log of verified test passes and verification runs. Real state only — mirrors repo `docs/qa-run-logs.md`. Newest first.
+
+## 2026-09-28 — QA Documentation Refresh: AUT-4395
+
+Refreshed Testing & QA section (test-strategy.md, qa-run-logs.md, user-testing-results.md, index.md) to reflect current stack state:
+- PostgreSQL 17 + pgvector extension
+- Non-root containers with read-only filesystems, cap_drop: ALL, tmpfs
+- AI gateway co-located in backend container on :8001 (AUT-2000)
+- 9Router at http://9router:20128/v1 (Hosted) / http://10.0.3.17:20128/v1 (Dev/Default/Demo)
+- Community Garage federation hub deployed on Hosted (AUT-333, AUT-532)
+- Worker merged into backend (AUT-3153); backup as Celery beat task (AUT-3827)
+- Dev box IP corrected to 10.0.3.39 (was 192.168.1.100)
+- Added Graft usage instructions and cross-links to related docs
+- Verified no secrets or internal-only content in repo docs/ mirror
+- Added GitHub Actions CI/CD workflow table (ci-tests.yml, security-pr-gate.yml, build-hosted.yml, etc.)
+
+**Findings:** None. Repo docs/ mirror sanitised. Outline sync pending (AUT-3815 workstream E).
 
 ## 2026-09-06 — Location Services verification: AUT-2632 (iOS + Android)
 
@@ -70,7 +86,7 @@ Second post-push pass under the change validation gate. Covers commits merged to
 
 **Live tier status:** the tested commits are merged under v0.3.7 — not yet deployed anywhere (demo still **0.3.6**, hosted still **0.3.5**). Promotion (Demo → Default → Hosted) pending deployment.
 
-**Findings:** none release-blocking. Minor pre-existing lint F401 (`select as sa_select`, `workers/tasks.py:164`, commit `a795b4f6` — predates this scope). Test-isolation note: running `test_config_prod_guard.py` in the same pytest session as the sqlite-backed suites pollutes `os.environ` and forces a Postgres connect (DNS fail); the suites pass when run per-file — suite hygiene, not an app defect. DB-dependent suites (test_search_scope, test_share*, test_api, test_billing, test_service_*, test_logbook_club_reg) still need the compose Postgres; dev box SSH (`10.0.3.39`) not reachable this run — deferred to deployment-time pass.
+**Findings:** none release-blocking. Minor pre-existing lint F401 (`select as sa_select`, `workers/tasks.py:164`, commit `a795b4f6` — predates this scope). Test-isolation note: running `test_config_prod_guard.py` in the same pytest session as the sqlite-backed suites pollutes `os.environ` and forces a Postgres connect (DNS fail); the suites pass when run per-file — suite hygiene, not an app defect. DB-dependent suites (test_search_scope, test_share*, test_api, test_billing, test_service_*, test_logbook_club_reg) still need the compose Postgres; dev box SSH (`<DEV_BOX_IP>`) not reachable this run — deferred to deployment-time pass.
 
 ## 2026-08-10 — Post-push pass: changes merged since 2026-08-08 (AUT-249, Gate 2)
 
@@ -88,7 +104,7 @@ First post-push pass under the change validation gate (docs/change-validation-ga
 
 - `app_version` still **0.3.5** on both; `/` serves **no** CSP/X-Frame-Options/Referrer-Policy headers → v0.3.6 + security-header change are merged but **not yet deployed/promoted** to any tier. Promotion (Demo → Default → Hosted) pending deployment.
 
-**Not runnable from this environment:** DB-dependent backend suites (test_search_scope, test_share*, test_api, test_billing, test_service_*, test_logbook_club_reg) need the compose Postgres; dev box SSH (`10.0.3.39`) not reachable this run — deferred to deployment-time pass. No release-blocking bug found in the runnable suites.
+**Not runnable from this environment:** DB-dependent backend suites (test_search_scope, test_share*, test_api, test_billing, test_service_*, test_logbook_club_reg) need the compose Postgres; dev box SSH (`<DEV_BOX_IP>`) not reachable this run — deferred to deployment-time pass. No release-blocking bug found in the runnable suites.
 
 ## 2026-08-10 — QA documentation pass (AUT-182)
 
@@ -103,7 +119,7 @@ Baseline smoke on the live stack recorded ahead of the migration:
 
 ## Rego lookup verification — Hosted (AUT-85/86)
 
-- Redeployed `rego-lookup:hosted` on Oracle `152.69.188.133:8011` (Portainer EP5) with `PLAYWRIGHT=1` + `UNDETECTED=1`
+- Redeployed `rego-lookup:hosted` on Oracle `<HOSTED_VM_IP>:8011` (Portainer EP5) with `PLAYWRIGHT=1` + `UNDETECTED=1`
 - Verified VIC test vehicle **1ZZZ999** lookup succeeds
 - Earlier arm64 blocker found and fixed during the redeploy
 

@@ -54,28 +54,22 @@ def _generate_challenge() -> str:
 
 
 def _get_expected_origin(request: Request) -> str:
-    """Get the expected origin from request headers.
+    """Get the expected origin from server config.
 
-    The frontend sends Origin header; we validate against it.
+    The Origin header is NOT trusted — an attacker can set it to any value.
+    We validate against a configured allowlist derived from APP_BASE_URL.
     """
-    origin = request.headers.get("origin")
-    if not origin:
-        # Fallback to APP_BASE_URL
-        return settings.APP_BASE_URL.rstrip("/")
-    return origin
+    return settings.APP_BASE_URL.rstrip("/")
 
 
 def _get_expected_rp_id(request: Request) -> str:
-    """Get the expected RP ID from request or config.
+    """Get the expected RP ID from server config.
 
-    In production this should be the domain (e.g. autobrainservice.app).
-    For development it can be localhost.
+    The RP ID is the effective domain (no scheme, no port) derived from
+    APP_BASE_URL. Client-supplied values are ignored.
     """
-    # Extract hostname from APP_BASE_URL or Origin header
-    origin = _get_expected_origin(request)
-    # RP ID is the effective domain (no scheme, no port)
     from urllib.parse import urlparse
-    parsed = urlparse(origin)
+    parsed = urlparse(settings.APP_BASE_URL)
     hostname = parsed.hostname or "localhost"
     return hostname
 
@@ -120,7 +114,7 @@ async def passkey_register_begin(
     # Validate challenge format and store it
     challenge_b64 = _generate_challenge()
 
-    options, request_id = passkey_svc.build_registration_options(
+    options, request_id = await passkey_svc.build_registration_options(
         user=user,
         rp_id=payload.rp_id,
         rp_name=payload.rp_name,
@@ -150,36 +144,12 @@ async def passkey_register_complete(
     """Complete a passkey registration ceremony.
 
     Verifies the authenticator response and stores the credential.
+    Accepts either the standard PublicKeyCredential object (field `credential`)
+    or the legacy split-field format.
     """
     expected_rp_id = _get_expected_rp_id(request)
     expected_origin = _get_expected_origin(request)
 
-    # The request_id is embedded in the credential_attestation or we
-    # need it passed separately. For simplicity we include it in the
-    # credential_attestation field as a composite value, but the proper
-    # way is to pass it as a separate field. Let's require it in the
-    # payload. Actually, looking at the schema, we don't have request_id
-    # there. We'll need to add it or derive it. Let's add it to the
-    # schema or infer from the session. For now, we'll require it as
-    # a query param or in the payload. Let's modify the approach:
-    # The frontend stores the request_id from /register/begin and
-    # includes it in the complete call.
-
-    # For now, we'll require request_id in the payload - let's
-    # extract from the credential_attestation if it's a JSON string
-    # or add a separate field. Let's check the payload structure.
-
-    # Actually, I need to rethink this. The standard flow is:
-    # 1. Client calls /register/begin -> gets options + request_id
-    # 2. Client calls navigator.credentials.create(options)
-    # 3. Client posts credential response + request_id to /register/complete
-    # The schema needs request_id. Let me add it.
-
-    # For backward compat, let's try to extract from the attestation
-    # or require it. I'll add request_id to the payload validation.
-
-    # This is a simplified implementation - we'll pass request_id
-    # as a query parameter for now.
     request_id = request.query_params.get("request_id")
     if not request_id:
         raise HTTPException(
@@ -187,15 +157,27 @@ async def passkey_register_complete(
             detail="Missing request_id query parameter (from /register/begin response)",
         )
 
+    # Build credential dict from either standard or legacy fields
+    credential = {}
+    if hasattr(payload, "credential") and payload.credential is not None:
+        # Standard format: full PublicKeyCredential object
+        credential = payload.credential if isinstance(payload.credential, dict) else {"id": "legacy"}
+    else:
+        # Legacy split-field format
+        credential = {
+            "credential_public_key": payload.credential_public_key,
+            "credential_attestation": payload.credential_attestation,
+            "credential_client_data_json": payload.credential_client_data_json,
+            "credential_device_type": payload.credential_device_type,
+            "credential_attestation_transport": payload.credential_attestation_transport,
+            "id": getattr(payload, "id", "legacy"),
+        }
+
     try:
-        result = passkey_svc.verify_registration(
+        result = await passkey_svc.verify_registration(
             user=user,
             request_id=request_id,
-            credential_public_key_b64=payload.credential_public_key,
-            credential_attestation=payload.credential_attestation,
-            credential_client_data_json=payload.credential_client_data_json,
-            credential_device_type=payload.credential_device_type,
-            credential_attestation_transport=payload.credential_attestation_transport,
+            credential=credential,
             rp_id=expected_rp_id,
             expected_origin=expected_origin,
         )
@@ -203,7 +185,7 @@ async def passkey_register_complete(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     # Store the credential
-    credential = PasskeyCredential(
+    credential_obj = PasskeyCredential(
         user_id=user.id,
         credential_id=result["credential_id"],
         public_key=result["credential_public_key"],
@@ -212,9 +194,9 @@ async def passkey_register_complete(
         transports=payload.credential_attestation_transport or "",
         label=f"Passkey {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}",
     )
-    db.add(credential)
+    db.add(credential_obj)
     await db.commit()
-    await db.refresh(credential)
+    await db.refresh(credential_obj)
 
     return PasskeyRegistrationSuccess(
         success=True,
@@ -266,7 +248,7 @@ async def passkey_authenticate_begin(
     if not user or not user.is_active:
         # Uniform response — don't reveal account existence
         # Return empty allowCredentials (client will fall back to password)
-        options, request_id = passkey_svc.build_authentication_options(
+        options, request_id = await passkey_svc.build_authentication_options(
             user_id="unknown",
             rp_id=payload.rp_id,
             challenge_b64=_generate_challenge(),
@@ -289,7 +271,7 @@ async def passkey_authenticate_begin(
         for c in creds.all()
     ]
 
-    options, request_id = passkey_svc.build_authentication_options(
+    options, request_id = await passkey_svc.build_authentication_options(
         user_id=user.id,
         rp_id=payload.rp_id,
         challenge_b64=_generate_challenge(),
@@ -339,7 +321,7 @@ async def passkey_authenticate_complete(
         raise HTTPException(status_code=401, detail="Account not found or disabled")
 
     try:
-        result = passkey_svc.verify_authentication(
+        result = await passkey_svc.verify_authentication(
             user_id=user.id,
             request_id=request_id,
             credential_response=payload.credential_response,
@@ -360,13 +342,12 @@ async def passkey_authenticate_complete(
     access_token = create_access_token(user.id, token_version=user.token_version)
     refresh_token = create_refresh_token(user.id, token_version=user.token_version)
 
-    # The frontend expects the standard token pair format
-    from app.schemas.auth import TokenPair, UserOut
-
     return PasskeyAuthenticationSuccess(
         success=True,
         user_verified=result["user_verified"],
         sign_count=result["new_sign_count"],
+        access_token=access_token,
+        refresh_token=refresh_token,
     )
 
 

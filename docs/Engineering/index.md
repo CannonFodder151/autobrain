@@ -17,6 +17,9 @@ Architecture, API, database, AI modules, OBD, mobile, developer onboarding, vers
 | [developer-onboarding.md](./developer-onboarding.md) | Getting started for devs |
 | [versioning.md](./versioning.md) | Versioning strategy |
 | [task-pipeline.md](./task-pipeline.md) | Sub-task & follow-up creation pattern, curl examples |
+| [system-overview.md](./system-overview.md) | End-to-end system overview + component table |
+| [postgresql-17-upgrade.md](./postgresql-17-upgrade.md) | PG17 + pgvector upgrade notes + digest pin rationale |
+| [safpis-sa-fuel-api-research.md](./safpis-sa-fuel-api-research.md) | SA FPIS fuel API research + integration plan |
 
 ### AI & Modules
 
@@ -51,3 +54,19 @@ Architecture, API, database, AI modules, OBD, mobile, developer onboarding, vers
 ### ADRs
 
 - [adr/0001-ownership-advisor.md](./adr/0001-ownership-advisor.md)
+
+### VASS — Vehicle Approval & Modification Compliance
+
+Deterministic ADR/VSI/VSB6 modification compliance. **Not merged yet** — see
+[vass/index.md](./vass/index.md) for per-area status.
+
+| Document | Purpose |
+|----------|---------|
+| [vass/index.md](./vass/index.md) | VASS overview + status table |
+| [vass/data-models.md](./vass/data-models.md) | `VASRule` / `VASCheck`, enums, ADR class taxonomy |
+| [vass/api.md](./vass/api.md) | `/vass/check`, `/vass/rules`, rule CRUD |
+| [vass/rule-engine.md](./vass/rule-engine.md) | Deterministic evaluation + status fold |
+| [vass/standards-catalog.md](./vass/standards-catalog.md) | ADR / VSI / VSB6 citations + seeding contract |
+| [vass/vector-corpus.md](./vass/vector-corpus.md) | Planned regulatory corpus vector store (blocked) |
+| [vass/pre-check-wizard.md](./vass/pre-check-wizard.md) | Pre-check wizard flow (Flutter, not started) |
+| [vass/compliance-packs.md](./vass/compliance-packs.md) | PDF/HTML compliance packs (not started) |

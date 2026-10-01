@@ -14,6 +14,7 @@ import argparse
 import json
 import os
 import sys
+import urllib.error
 import urllib.request
 
 
@@ -51,13 +52,21 @@ def main():
     stack_id = ids[0]["Id"]
 
     # Fetch current env to preserve existing stack env (never clobber).
+    # AUT-4778: env lives on GET /api/stacks/{id}; GET /api/stacks/{id}/file
+    # returns only StackFileContent, so reading Env from /file sent Env: []
+    # and wiped all 49 stack env vars on every sync. Portainer then failed
+    # compose interpolation of ${POSTGRES_USER:?...} and returned HTTP 500.
     req = urllib.request.Request(
-        f"{api}/stacks/{stack_id}/file",
+        f"{api}/stacks/{stack_id}",
         headers={"X-API-Key": args.api_key, "Accept": "application/json"},
     )
     with urllib.request.urlopen(req, timeout=30) as r:
         current = json.load(r)
     env = current.get("Env") or []
+    if not env:
+        print("ERROR: stack env is empty — refusing to sync (would wipe it)",
+              file=sys.stderr)
+        return 3
 
     body = {
         "StackFileContent": content,
@@ -78,8 +87,17 @@ def main():
             "Accept": "application/json",
         },
     )
-    with urllib.request.urlopen(req, timeout=120) as r:
-        r.read()
+    # AUT-4911: print the Portainer response body on failure. The bare
+    # "HTTP Error 500" hid the actual cause ("compose build operation failed:
+    # listing workers for Build") for a whole day of red CI.
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            r.read()
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", "replace")
+        print(f"ERROR: Portainer PUT /stacks/{stack_id} -> HTTP {e.code}", file=sys.stderr)
+        print(body, file=sys.stderr)
+        return 4
     print(f"stack={args.stack} id={stack_id} endpoint={args.endpoint} updated")
     return 0
 

@@ -110,17 +110,25 @@ endpoint. Market data is best-effort — never blocks the estimate.
 + AI advice). Everything still works; the search UI shows "provider not
 configured".
 
-## Deploying the scraper (AUT-4113)
+## Deploying the scraper (AUT-4113 / AUT-3843)
 
-The scraper source lives in the monorepo under `app/services/market_scraper/` and is
-bundled into the **backend image** (not the AI image). The backend Dockerfile
+The scraper source lives in the monorepo under `backend/app/services/market_scraper/`
+and is bundled into the **backend image** (not the AI image). The backend Dockerfile
 installs Playwright + Chromium system deps and sets `PLAYWRIGHT_BROWSERS_PATH`.
 
-- **Hosted:** the `autobrain-hosted` stack (EP5) has **no separate `market-data` service**.
-  The backend Celery worker+beat runs the scrapers locally; `MARKET_DATA_URL` is
-  intentionally unset in the stack env so the local fallback is used.
-- **Prod/Dev compose:** same — the backend image carries the scrapers; no
-  separate market-data container.
+- **No compose service.** There is no `market-data` service in `docker-compose.yml`,
+  `docker-compose.prod.yml` or `docker-compose.hosted.yml`. The earlier "one image,
+  two uvicorn processes (`:8001` gateway + `:8000` scraper)" shape (AUT-1242-C3) is
+  retired. Hosted goes from 12 → 11 containers.
+- **Celery beat drives it.** `refresh_market_data` (`app.workers.tasks`) runs daily
+  at 03:00 and sweeps up to 1000 distinct `(make, model, year, vehicle_type)` rows
+  from the `vehicles` table, forcing a fresh scrape per vehicle. Per-vehicle
+  failures are logged and skipped so one bad vehicle never aborts the sweep.
+  Progress is logged as `market_data_refresh_done`.
+- **`MARKET_DATA_URL` is gone** from the backend config — the Celery worker calls
+  `search_carsguide` / `search_bikesguide` in-process. When a scrape fails the
+  pipeline degrades deterministically (`source=fallback`, `sample_size=0`) and the
+  valuation uses the deterministic depreciation model + AI used-price advice.
 - **Resource:** the backend service declares `shm_size: "256m"` so the Chromium
   sandbox has enough shared memory.
 - **Gotcha:** the backend runs as non-root user `autobrain` (CWE-250 hardening).
@@ -128,11 +136,29 @@ installs Playwright + Chromium system deps and sets `PLAYWRIGHT_BROWSERS_PATH`.
   re-owned to `root:root 4755` at build time (AUT-1739 / AUT-2258) so the
   scraper can sandbox untrusted third-party content; it falls back to
   `--no-sandbox` only if the sandboxed launch fails.
+- **Legacy:** the Portainer `market-data` stack on EP6 (`:8003`) is leftover from
+  before the consolidation and should be removed when convenient.
+
+### Provider cost profile
+
+| Tier | Live listings? | Marginal cost |
+|------|-----------------|---------------|
+| Hosted (prod) | Yes — local beat sweep | Scrape CPU inside the backend container; 24h cache absorbs repeat valuations |
+| Dev / Prod compose | Yes — same local path | Scrape CPU only, no egress |
+| Motorcycle (BikeGuide/SCA) | Partial — both gated/parked | None; degrades to deterministic fallback |
+
+- **Gotcha (deployment, not scraper-specific):** the backend config refuses
+  *default* credentials outside `development` (`POSTGRES_PASSWORD`/`MINIO_SECRET_KEY`
+  = `autobrain`, `SECRET_KEY` = `change-me`). The stack's postgres role and MinIO
+  root password must be real values reflected in the stack env — rotate the Postgres
+  role with `ALTER USER ... PASSWORD '...'` and MinIO with
+  `mc admin user set-password`, then redeploy.
 
 ## Supercheap Auto parts-guide scraper (AUT-1792)
 
-The same market-data container also scrapes the **Supercheap Auto parts-guide**
-so AutoBrain can suggest real parts for a vehicle. Source: `market-data/sca.py`.
+The parts-guide scraper also feeds the **Supercheap Auto parts-guide** so
+AutoBrain can suggest real parts for a vehicle. Source: `market-data/sca.py`,
+invoked in-process by the backend.
 
 - **Endpoint:** `POST /sca-parts` with `{rego, state, make, model, year}`
   (rego+state resolve the vehicle via the browser flow; make/model/year is the
@@ -152,9 +178,21 @@ so AutoBrain can suggest real parts for a vehicle. Source: `market-data/sca.py`.
   - `GET /vehicles/{id}/parts/sca-lookup` → Inventory-formatted SCA parts.
   - `POST /vehicles/{id}/parts/suggest-for-service` → parts prefill for an
     AI-suggested service, **inventory-first then SCA**.
-- **Config:** no new env var. The SCA scraper now lives in `app/services/market_scraper/sca.py`
-  and is called directly by `app/services/parts_guide.py` (no `MARKET_DATA_URL` needed).
+- **Config:** no new env var. The SCA scraper now lives in `backend/app/services/market_scraper/sca.py`
+  and is called directly by `backend/app/services/parts_guide.py` (no `MARKET_DATA_URL` needed).
   Playwright + Chromium are installed in the backend image (`docker/backend/Dockerfile`),
   and the backend service runs with `shm_size: "256m"` (needed for the Chromium sandbox).
 - **Caching:** results are cached in `sca_parts_cache` (keyed by
-  `make|model|year`, 24h TTL) so repeat lookups are stable and cheap.
+  `make|model|year`, 24h TTL) so repeat lookups are stable and cheap. A nightly
+  Celery beat task (`refresh_sca_parts_cache`, AUT-2419) pre-warms the cache so
+  the first user click returns from cache; failures are logged and never abort
+  the rest.
+
+## Related Finance Docs
+
+- **[index.md](./index.md)** — Finance section index
+- **[infrastructure-costs.md](./infrastructure-costs.md)** — per-service spend and optimisation
+- **[fuel-pricing.md](./fuel-pricing.md)** / **[fuel-servo-spy.md](./fuel-servo-spy.md)** — deterministic fuel price paths
+
+Credentials (`MARKET_DATA_API_KEY`) are deployment secrets and are never
+committed — see [Documentation Policy](../Company/documentation-policy.md).

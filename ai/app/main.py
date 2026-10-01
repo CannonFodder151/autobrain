@@ -27,9 +27,9 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from app.logging import get_logger, setup_logging
-from app.modules import MODULES
-from app.router_client import ai_telemetry_reset, ai_telemetry_snapshot, router_enabled, router_url
+from .logging import get_logger, setup_logging
+from .modules import MODULES
+from .router_client import ai_telemetry_reset, ai_telemetry_snapshot, router_enabled, router_url
 
 logger = get_logger(__name__)
 
@@ -71,7 +71,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="AutoBrain AI Gateway",
-    version=os.environ.get("APP_VERSION", "0.3.279"),  # bump-version.sh keeps this in sync
+    version=os.environ.get("APP_VERSION", "0.3.292"),  # bump-version.sh keeps this in sync
     description="Inference layer. Routes through 9Router via AI_ROUTER_URL.",
     lifespan=lifespan,
 )
@@ -134,7 +134,7 @@ async def health() -> dict:
     return {
         "status": "ok",
         "service": "autobrain-ai",
-        "version": os.environ.get("APP_VERSION", "0.3.279"),
+        "version": os.environ.get("APP_VERSION", "0.3.292"),
     }
 
 

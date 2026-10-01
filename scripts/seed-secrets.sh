@@ -21,6 +21,10 @@ seed() {
         case "$line" in ''|\#*) continue ;; esac
         key=${line%%=*}
         val=${line#*=}
+        # NB: no comments inside this continuation — a `#` line between two
+        # backslash-continued lines terminates the sed arg list (AUT-2241).
+        # FUEL_VIC_API_KEY / FUEL_VIC_API_SECRET are intentionally unmapped
+        # (AUT-4143): the VIC Servo Saver endpoint does not exist (NXDOMAIN).
         name=$(printf '%s\n' "$key" | sed \
             -e 's/^POSTGRES_PASSWORD$/postgres_password/' \
             -e 's/^SECRET_KEY$/backend_secret_key/' \
@@ -35,8 +39,6 @@ seed() {
             -e 's/^CARTO_API_KEY$/carto_api_key/' \
             -e 's/^FUEL_NSW_API_KEY$/fuel_nsw_api_key/' \
             -e 's/^FUEL_NSW_API_SECRET$/fuel_nsw_api_secret/' \
-            -e 's/^FUEL_VIC_API_KEY$/fuel_vic_api_key/' \
-            -e 's/^FUEL_VIC_API_SECRET$/fuel_vic_api_secret/' \
             -e 's/^FUEL_QLD_API_KEY$/fuel_qld_api_key/' \
             -e 's/^FUEL_SA_API_KEY$/fuel_sa_api_key/' \
             -e 's/^DONGLE_SERVER_API_KEY$/dongle_server_api_key/' \
@@ -51,8 +53,17 @@ seed() {
             -e 's/^IAP_APPLE_PRIVATE_KEY$/iap_apple_private_key/' \
             -e 's/^SOCIAL_FEDERATION_HOSTED_REGISTRATION_KEY$/hub_hosted_registration_key/')
         [ "$name" = "$key" ] && continue   # not a mapped secret — skip
+        # AUT-2241: never overwrite an existing non-empty secret. The running
+        # services already consumed the old value (postgres volume, redis
+        # --requirepass, minio root creds, jwt SECRET_KEY), so overwriting the
+        # file alone silently breaks auth while the file side looks correct.
+        if [ -s "$DIR/$name" ] && [ "${SEED_ALLOW_OVERWRITE:-0}" != 1 ]; then
+            echo "KEEP   $DIR/$name (exists; set SEED_ALLOW_OVERWRITE=1 to replace)"
+            continue
+        fi
         printf '%s' "$val" > "$DIR/$name"
-        chown root:1000 "$DIR/$name"
+        chown root:1000 "$DIR/$name" 2>/dev/null || \
+            echo "warn: chown $DIR/$name failed (rootless/userns?) — check ownership manually"
         chmod 0640 "$DIR/$name"
         echo "seeded $DIR/$name"
     done < "$ENV_FILE"
@@ -66,7 +77,7 @@ seed
 if [ ! -s "$DIR/redis_password" ]; then
     val=$(openssl rand -hex 24 2>/dev/null) || val=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
     printf '%s' "$val" > "$DIR/redis_password"
-    chown root:1000 "$DIR/redis_password"
+    chown root:1000 "$DIR/redis_password" 2>/dev/null || true
     chmod 0640 "$DIR/redis_password"
     echo "generated $DIR/redis_password"
 fi

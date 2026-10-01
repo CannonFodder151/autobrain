@@ -10,8 +10,8 @@ and may refine the narrative, but never invents numbers or overrides
 so the router cannot change it).
 """
 
-from app.fallbacks.car_check import car_check_fallback, validate_car_check_response
-from app.router_client import enhance
+from ..fallbacks.car_check import car_check_fallback, validate_car_check_response
+from ..router_client import enhance
 
 
 async def run(payload: dict) -> dict:

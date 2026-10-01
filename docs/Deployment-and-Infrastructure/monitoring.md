@@ -37,7 +37,7 @@ uptime monitor:
 | Queue depth | Celery `inspect active`, Redis `llen` on broker queues |
 | Disk | `df -h` (backups + MinIO grow fastest) |
 | AI fallback rate | Log grep for `router_unreachable_using_fallback` (indicates router down; system works via fallbacks) |
-| Backup health | `autobrain-backup` web GUI (port 8080) health/stats; email alerts on failure/corruption |
+| Backup health | `backup` web GUI (port 8080) health/stats; email alerts on failure/corruption |
 
 ## Alerting
 
@@ -46,7 +46,7 @@ uptime monitor:
   indicates the 9Router is down (system still works via fallbacks).
 - Service status → `#status` channel; incidents → `#incidents` channel
   (Deployment team owns triage).
-- `autobrain-backup` sends email alerts on backup failure/corruption.
+- The `backup` service sends email alerts on backup failure/corruption.
 
 ## Tracing (future)
 

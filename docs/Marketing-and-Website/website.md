@@ -2,7 +2,7 @@
 
 ## Overview
 
-The marketing website lives at **autobrainservice.app** and is a separate repository: **CannonFodder151/autobrainservice-website** (private). It is a static site (vanilla HTML/CSS/JS) deployed to the Oracle VM (152.69.188.133) via NGINX (Portainer endpoint 3). The site does **not** use a build step or framework — every page is a `.html` file.
+The marketing website lives at **autobrainservice.app** and is a separate repository: **CannonFodder151/autobrainservice-website** (private). It is a static site (vanilla HTML/CSS/JS) deployed to the hosted VM via NGINX. The site does **not** use a build step or framework — every page is a `.html` file.
 
 **Domain:** `autobrainservice.app` (Cloudflare DNS, managed by Deployment team).  
 **Subdomains:**
@@ -51,7 +51,7 @@ autobrainservice-website/
 
 ## Deployment
 
-- **Target:** Oracle VM (152.69.188.133) — Portainer endpoint 3 (NGINX-Host)
+- **Target:** Hosted VM — Portainer NGINX-Host endpoint
 - **Method:** Static files served by NGINX container. No build pipeline.
 - **SSL:** Cloudflare Full (strict) + Let's Encrypt on NGINX.
 - **Cache headers:** `Cache-Control: public, max-age=31536000, immutable` for `/assets/*`; `no-cache` for HTML.
@@ -71,7 +71,7 @@ autobrainservice-website/
 - **Marketing copy changes:** CMO agent drafts → human CMO approves in Discord `#marketing` via n8n Reporter embed → CMO agent commits to repo → Deployment team deploys.
 - **Phase 1 marketing refresh branch:** `phase1/cmo-marketing-refresh` (tracks updated copy for all pages).
 - **Blog posts:** Drafted in Outline → approved in Discord `#marketing` → committed as `.html` in `blog/` + per-post OG image in `assets/blog/og/`.
-- **Lead capture:** `lead.js` posts to n8n webhook (`https://n8n.nathanmartina.com/webhook/lead`) → creates Discord thread in `#support` + logs to Outline.
+- **Lead capture:** `lead.js` posts to n8n webhook (`<INTERNAL_N8N_BASE_URL>/webhook/lead`) → creates Discord thread in `#support` + logs to Outline.
 
 ## Analytics & Tracking
 

@@ -13,8 +13,17 @@ ARG API_BASE_URL=http://localhost:8000/api/v1
 ARG WS_BASE_URL=ws://localhost:8000/ws
 # AUT-2220: CARTO basemap API key. CARTO keys are designed to be public
 # (embedded in tile URLs as ?key=...). CI must pass --build-arg CARTO_API_KEY
-# explicitly. Empty value falls back to the key-less public basemap.
+# explicitly. An empty value is now a hard build failure (see the assertion
+# below) instead of silently shipping the watermapped public basemap.
 ARG CARTO_API_KEY=
+
+# AUT-4690: fail fast, before the multi-minute `flutter build web`, when the key
+# is unset/expired. Previously this only surfaced as a watermapped basemap in
+# production, caught weeks later by a human QA curl (AUT-4533, AUT-4649).
+RUN [ -n "${CARTO_API_KEY}" ] || { \
+      echo "ERROR: CARTO_API_KEY is empty. The --build-arg / GitHub Actions secret CARTO_API_KEY is unset or expired; refusing to build a key-less CARTO basemap." >&2; \
+      exit 1; \
+    }
 
 WORKDIR /build
 # Copy the lockfile too so `pub get` resolves the exact pinned dependency set
@@ -26,6 +35,18 @@ RUN flutter build web \
     --dart-define=API_BASE_URL=${API_BASE_URL} \
     --dart-define=WS_BASE_URL=${WS_BASE_URL} \
     --dart-define=CARTO_API_KEY=${CARTO_API_KEY}
+
+# AUT-4690: belt-and-braces. The key is inlined into main.dart.js at compile
+# time, so assert the value actually reached the shipped bundle (catches a
+# dropped --dart-define or a renamed const, which the fail-fast check above
+# cannot see). Matches on the literal value, so any key format works.
+RUN set -eu; \
+    js=build/web/main.dart.js; \
+    if ! grep -qF "${CARTO_API_KEY}" "$js"; then \
+      echo "ERROR: CARTO_API_KEY value not found in $js — the key was not baked into the bundle." >&2; \
+      exit 1; \
+    fi; \
+    grep -qF '?key=' "$js" || echo "WARN: '?key=' not found in $js; check the CARTO tile template in frontend/lib/screens/servo_spy." >&2
 
 FROM nginxinc/nginx-unprivileged:stable-alpine@sha256:442753882674b49ae2c1de83ed67896131c0777f56df5005e356e62bc3f7e7ce
 COPY --from=build /build/build/web /usr/share/nginx/html

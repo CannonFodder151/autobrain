@@ -83,3 +83,39 @@ def test_no_duplicate_table_names() -> None:
         f"Duplicate __tablename__ across model classes: "
         + "; ".join(f"{t} claimed by {a} and {b}" for t, a, b in dups)
     )
+
+def test_every_model_table_is_exported_for_create_all() -> None:
+    """AUT-4925: every model table must be reachable from ``app.models``.
+
+    ``bootstrap()`` falls back to ``Base.metadata.create_all`` when Alembic
+    cannot run. That only creates tables for models imported in
+    ``app/models/__init__.py`` — ``PasskeyCredential``/``Engineer`` were
+    missing there, so hosted never got those tables.
+    """
+    import ast
+
+    init_src = (BACKEND_DIR / "app" / "models" / "__init__.py").read_text()
+    exported: set[str] = set()
+    for node in ast.parse(init_src).body:
+        if isinstance(node, (ast.ImportFrom, ast.Import)):
+            for alias in node.names:
+                exported.add(alias.name)
+
+    models_dir = BACKEND_DIR / "app" / "models"
+    for py in sorted(models_dir.glob("*.py")):
+        if py.name == "__init__.py":
+            continue
+        for cls in ast.parse(py.read_text()).body:
+            if not isinstance(cls, ast.ClassDef):
+                continue
+            declares_table = any(
+                isinstance(n, ast.Assign)
+                and any(isinstance(t, ast.Name) and t.id == "__tablename__" for t in n.targets)
+                for n in ast.walk(cls)
+            )
+            if not declares_table:
+                continue
+            assert cls.name in exported, (
+                f"{py.stem}.{cls.name} is not imported in app/models/__init__.py — "
+                "the create_all fallback will never create its table"
+            )

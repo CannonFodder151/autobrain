@@ -7,7 +7,8 @@
           {
             "group": "Overview",
             "pages": [
-              "index"
+              "index",
+              "Company/index"
             ]
           },
           {
@@ -20,8 +21,12 @@
           {
             "group": "Business Reviews",
             "pages": [
+              "Business-Reviews/index",
               "Business-Reviews/changelog",
-              "Business-Reviews/product-rules"
+              "Business-Reviews/product-rules",
+              "Business-Reviews/monthly-quarterly-yearly-reviews",
+              "Business-Reviews/autobrain-sales-pack",
+              "Business-Reviews/weekly-reviews-template-process-index"
             ]
           }
         ]
@@ -35,20 +40,25 @@
               "Engineering/index"
             ]
           },
-          {
-            "group": "Core",
-            "pages": [
-              "Engineering/architecture",
-              "Engineering/api-spec",
-              "Engineering/integrating-autobrain",
-              "Engineering/database-schema",
-              "Engineering/container-architecture",
-              "Engineering/developer-onboarding",
-              "Engineering/versioning",
-              "Engineering/task-pipeline",
-              "Engineering/change-validation-gate"
-            ]
-          },
+{
+              "group": "Core",
+              "pages": [
+                "Engineering/architecture",
+                "Engineering/api-spec",
+                "Engineering/integrating-autobrain",
+                "Engineering/database-schema",
+                "Engineering/container-architecture",
+                "Engineering/developer-onboarding",
+                "Engineering/versioning",
+                "Engineering/task-pipeline",
+                "Engineering/change-validation-gate",
+                "Engineering/module-graph",
+                "Engineering/product-rules",
+                "Engineering/system-overview",
+                "Engineering/postgresql-17-upgrade",
+                "Engineering/safpis-sa-fuel-api-research"
+              ]
+            },
           {
             "group": "AI",
             "pages": [
@@ -74,10 +84,29 @@
             ]
           },
           {
+            "group": "Integrations",
+            "pages": [
+              "home-assistant-integration"
+            ]
+          },
+          {
             "group": "ADRs",
             "pages": [
               "Engineering/adr/0001-ownership-advisor",
               "Engineering/adr/0026-home-assistant-integration"
+            ]
+          },
+          {
+            "group": "VASS",
+            "pages": [
+              "Engineering/vass/index",
+              "Engineering/vass/data-models",
+              "Engineering/vass/api",
+              "Engineering/vass/rule-engine",
+              "Engineering/vass/standards-catalog",
+              "Engineering/vass/vector-corpus",
+              "Engineering/vass/pre-check-wizard",
+              "Engineering/vass/compliance-packs"
             ]
           }
         ]
@@ -137,7 +166,8 @@
             "pages": [
               "Testing-and-QA/test-strategy",
               "Testing-and-QA/qa-run-logs",
-              "Testing-and-QA/user-testing-results"
+              "Testing-and-QA/user-testing-results",
+              "desktop-breakpoints-audit-AUT-2524"
             ]
           }
         ]
@@ -160,7 +190,8 @@
               "Finance/migration-budget",
               "Finance/fuel-pricing",
               "Finance/fuel-servo-spy",
-              "Finance/market-data"
+              "Finance/market-data",
+              "petrol-price-map"
             ]
           }
         ]
@@ -180,7 +211,11 @@
               "Marketing-and-Website/social",
               "Marketing-and-Website/social-image-generation",
               "Marketing-and-Website/per-post-og-image-workflow",
-              "Marketing-and-Website/community-garage"
+              "Marketing-and-Website/community-garage",
+              "Marketing-and-Website/content-calendar",
+              "Marketing-and-Website/demo-environment",
+              "Marketing-and-Website/growth-metrics",
+              "Marketing-and-Website/website"
             ]
           }
         ]

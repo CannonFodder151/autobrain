@@ -59,10 +59,11 @@ fi
 
 echo
 echo "==> Done — version is $V. Commit, then build & push images:"
+echo "    (AUT-4690: CARTO_API_KEY is required by docker/frontend/Dockerfile — export it or the frontend build fails.)"
 echo "    docker build -f docker/backend/Dockerfile -t cannonfodder151/autobrain-backend:$V ./backend && docker push cannonfodder151/autobrain-backend:$V"
-echo "    docker build -f docker/frontend/Dockerfile --build-arg API_BASE_URL=https://hosted.autobrainservice.app/api/v1 --build-arg WS_BASE_URL=wss://hosted.autobrainservice.app/ws -t cannonfodder151/autobrain-frontend:$V-hosted ."
-echo "    docker build -f docker/frontend/Dockerfile --build-arg API_BASE_URL=https://default.autobrainservice.app/api/v1 --build-arg WS_BASE_URL=wss://default.autobrainservice.app/ws -t cannonfodder151/autobrain-frontend:$V ."
-echo "    docker build -f docker/frontend/Dockerfile --build-arg API_BASE_URL=https://demo.autobrainservice.app/api/v1 --build-arg WS_BASE_URL=wss://demo.autobrainservice.app/ws -t cannonfodder151/autobrain-frontend-demo:$V ."
+echo "    docker build -f docker/frontend/Dockerfile --build-arg API_BASE_URL=https://hosted.autobrainservice.app/api/v1 --build-arg WS_BASE_URL=wss://hosted.autobrainservice.app/ws --build-arg CARTO_API_KEY=\$CARTO_API_KEY -t cannonfodder151/autobrain-frontend:$V-hosted ."
+echo "    docker build -f docker/frontend/Dockerfile --build-arg API_BASE_URL=https://default.autobrainservice.app/api/v1 --build-arg WS_BASE_URL=wss://default.autobrainservice.app/ws --build-arg CARTO_API_KEY=\$CARTO_API_KEY -t cannonfodder151/autobrain-frontend:$V ."
+echo "    docker build -f docker/frontend/Dockerfile --build-arg API_BASE_URL=https://demo.autobrainservice.app/api/v1 --build-arg WS_BASE_URL=wss://demo.autobrainservice.app/ws --build-arg CARTO_API_KEY=\$CARTO_API_KEY -t cannonfodder151/autobrain-frontend-demo:$V ."
 echo
 echo "    The marketing site changelog is updated automatically: the Docker Hub"
 echo "    publish workflow syncs CHANGELOG.md and regenerates changelog.html on main."
