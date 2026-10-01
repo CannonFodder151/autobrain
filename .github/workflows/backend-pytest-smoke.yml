@@ -2,7 +2,10 @@
 # on every push and PR so duplicate table-name registrations and other model
 # definition regressions get caught before they reach main or break pytest
 # collection in developer environments.
-name: Backend — pytest smoke (model metadata + alembic heads)
+# AUT-3814: also runs the domain-module boundary guards — the offline AST test
+# and the .importlinter contracts — so a module split cannot silently reach
+# upward or fork a legacy path back into its own copy of the code.
+name: Backend — pytest smoke (model metadata + alembic heads + module boundaries)
 
 on:
   push:
@@ -19,7 +22,7 @@ concurrency:
 
 jobs:
   pytest-smoke:
-    name: pytest — model metadata + alembic heads
+    name: pytest — model metadata + alembic heads + module boundaries
     runs-on: [self-hosted, linux, x64]
     defaults:
       run:
@@ -39,14 +42,22 @@ jobs:
           set -euo pipefail
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
-      - name: Run pytest smoke (model metadata + alembic heads)
+      - name: Run pytest smoke (model metadata + alembic heads + module boundaries)
         run: |
           set -euo pipefail
-          # AUT-2277 regression guard only. Runs the offline alembic-graph +
-          # duplicate-tablename tests, which do not import the app and cannot
-          # be broken by unrelated test-module rot (e.g. AUT-2201/2203 station
-          # annotation tests, which still pull in app.api.v1.fuel and are out
-          # of scope here).
+          # AUT-2277 + AUT-3814 regression guards only. All three run offline and
+          # do not import the app, so they cannot be broken by unrelated
+          # test-module rot (e.g. AUT-2201/2203 station annotation tests, which
+          # still pull in app.api.v1.fuel and are out of scope here).
           python -m pytest \
             tests/test_alembic_heads.py \
+            tests/test_module_boundaries.py \
             -q
+
+      - name: Check domain-module import contracts
+        # AUT-3814: .importlinter contracts — models->schemas->services->api
+        # layering plus no cross-domain imports. Needs the full env installed
+        # above, unlike the offline AST boundary test.
+        run: |
+          set -euo pipefail
+          lint-imports

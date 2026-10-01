@@ -1,7 +1,7 @@
-"""Backwards-compatible re-export for the vehicle domain.
+"""Vehicle domain — schema layer.
 
-The real implementation now lives in ``app.modules.vehicles.schemas.vehicle``.
-See ``app/models/vehicle.py`` for the rationale behind these shims.
+Request/response models for the vehicle API. Imports only from
+``app.modules.vehicles.models``; see ``backend/.importlinter``.
 """
 
 from app.modules.vehicles.schemas.vehicle import (
