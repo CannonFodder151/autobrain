@@ -2,7 +2,7 @@
 
 Managed by SQLAlchemy models (`backend/app/models/`) and Alembic migrations (`backend/alembic/`).
 
-> **Migration heads:** the chain has a **single head** at `m3rge07`
+> **Migration heads:** the chain has a **single head** at `f7e8d9c0b1a2`
 > (verified by `backend/tests/test_alembic_heads.py`). No merge migration is
 > pending; `alembic upgrade head` applies cleanly.
 
@@ -125,3 +125,109 @@ ATO logbook trips for non-club-reg vehicles only (rule [PR-1](product-rules.md#p
 id, vehicle_id (FK), code, description, source (obd/manual), is_resolved, created_at.
 
 Fault codes captured from a Bluetooth OBD2 adapter; pushed into the diagnostic AI tool.
+
+## devices
+
+id, user_id (FK), name, api_key_prefix, api_key_hash, vehicle_id (FK, nullable),
+vehicle_type, last_seen_at, created_at.
+
+Machine-to-machine API keys issued per user and optionally scoped to one vehicle.
+Only `api_key_prefix` is stored in clear; the hash backs constant-time comparison.
+
+## ha_integrations
+
+id, user_id (FK), label, api_key_prefix, api_key_hash, vehicle_id (FK, nullable),
+last_used_at, created_at.
+
+Home Assistant integration keys (AUT-2541). Same prefix/hash shape as `devices`;
+see [ADR 0026](./adr/0026-home-assistant-integration.md).
+
+## passkey_credentials
+
+id, user_id (FK), credential_id, public_key, sign_count, label, device_type,
+transports, created_at, last_used_at.
+
+WebAuthn registrations for passwordless login (AUT-3447). `UNIQUE(user_id, credential_id)`
+enforced by migration `f7e8d9c0b1a2`.
+
+## revoked_refresh_tokens
+
+jti (PK), revoked_at, expires_at.
+
+Denylist of refresh-token JTIs; checked on every refresh so a logged-out token
+cannot be replayed before natural expiry.
+
+## dongle_firmware
+
+id, model, version, sha256, size_bytes, blob_key, release_notes, created_at.
+UNIQUE(model, version). Firmware manifests for the OBD2 dongle (AUT-1673); the
+binary lives in MinIO under `blob_key` and is served via signed URL.
+
+## dongle_installed_firmware
+
+device_id (PK), model (PK), firmware_version, serial_number, last_reported_at.
+
+What each dongle reports it is running, so the backend can tell "needs update"
+from "already current".
+
+## engineers
+
+id, display_name, email, phone, lat, lon, postcode, address, specialties (JSON),
+certifications (JSON), years_experience, rating, review_count, price_per_hour,
+price_per_job_min, price_per_job_max, availability (JSON), is_active,
+is_verified, verification_status, embedding (vector), created_at, updated_at.
+
+AutoBrain Shop engineer marketplace. Note `embedding` is a `Text` column (a
+serialised float list), **not** a pgvector column — engineers are searched by
+PostgreSQL full-text/filters, not cosine distance. It is therefore not one of the
+five vectorised tables listed above.
+
+## engineer_reviews
+
+id, engineer_id (FK), user_id (FK), vehicle_id (FK, nullable), rating, title,
+body, service_type, cost, created_at, updated_at.
+
+Reviews left after an engineer job; feeds the marketplace `rating` aggregate.
+
+## fuel_stations
+
+id, source, source_id, brand, lat, lon, name, address, updated_at.
+UNIQUE(source, source_id). Canonical station identity across fuel feeds.
+
+## fuel_prices
+
+id, station_id (FK), fuel_type, price, effective_at, source_id,
+arbitration_score.
+
+One current price per (station, fuel type, effective time). `arbitration_score`
+records how confidently the arbitration layer picked this figure.
+
+## fuel_price_snapshots
+
+id, state, station_code, station_name, brand, address, latitude, longitude,
+fuel_type, price, currency, updated_at, fetched_at, previous_price,
+previous_price_at.
+
+Append-only history per state, used by the fuel map, price-trend alerts and the
+Servo Spy overlay. `previous_price*` makes trend deltas readable without a join.
+
+## fuel_price_watchlist
+
+id, user_id (FK), state, station_code, station_name, brand, fuel_type,
+direction (up/down), threshold_pct, created_at.
+
+Per-user "tell me when this station moves X%" rule (AUT-1859).
+
+## fuel_price_poll_state
+
+instance_id (PK), state (PK), last_poll_at.
+
+Poll cadence bookkeeping so only one instance polls a given state (AUT-1813).
+
+## fuel_price_arbitrations
+
+id, station_id (FK), fuel_type, day, source_id, price, arbitration_score,
+candidate_count, created_at.
+
+One row per (station, fuel type, day) recording which feed won arbitration and
+from how many candidates (AUT-2381/AUT-2386).
