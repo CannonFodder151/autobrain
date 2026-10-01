@@ -14,8 +14,111 @@ import argparse
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
+
+import yaml
+
+
+def _api(args, path, method="GET", body=None, timeout=30):
+    """Call the Portainer API and return parsed JSON."""
+    headers = {"X-API-Key": args.api_key, "Accept": "application/json"}
+    data = None
+    if body is not None:
+        data = json.dumps(body).encode()
+        headers["Content-Type"] = "application/json"
+    req = urllib.request.Request(
+        f"{args.portainer_url}/api{path}", data=data, method=method,
+        headers=headers,
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        raw = r.read()
+    return json.loads(raw) if raw else None
+
+
+def compose_services_and_ports(content):
+    """Return (service names, {service: set(host ports)}).
+
+    Handles both short syntax ("127.0.0.1:8080:8080") and long syntax
+    ({published: ...}) port entries.
+    """
+    doc = yaml.safe_load(content) or {}
+    services = doc.get("services") or {}
+    ports = {}
+    for name, spec in services.items():
+        found = set()
+        for entry in (spec or {}).get("ports") or []:
+            if isinstance(entry, dict):
+                published = entry.get("published")
+                if published:
+                    found.add(int(published))
+                continue
+            parts = str(entry).split("/")[0].split(":")
+            if len(parts) >= 2:  # host:container
+                try:
+                    found.add(int(parts[-2]))
+                except ValueError:
+                    pass
+            else:  # container-only — published on an ephemeral host port
+                try:
+                    found.add(int(parts[0]))
+                except ValueError:
+                    pass
+        if found:
+            ports[name] = found
+    return set(services), ports
+
+
+def endpoint_containers(args):
+    """All containers on the endpoint (including stopped/unused ones)."""
+    return _api(args, f"/endpoints/{args.endpoint}/docker/containers/json?all=true")
+
+
+def _service_of(c):
+    return (c.get("Labels") or {}).get("com.docker.compose.service") or ""
+
+
+def _published_ports(c):
+    return {p["PublicPort"] for p in c.get("Ports") or []
+            if p.get("PublicPort")}
+
+
+def check_port_collisions(args, services, wanted_ports):
+    """Refuse if a host port the new compose wants is held by a container whose
+    service is NOT in the new compose (an orphan Portainer will not reap)."""
+    containers = endpoint_containers(args)
+    problems = []
+    for c in containers:
+        svc = _service_of(c)
+        if svc in services:
+            continue
+        clash = _published_ports(c) & set(wanted_ports)
+        if clash:
+            problems.append((c["Names"][0].lstrip("/"), svc or "<no label>",
+                             sorted(clash)))
+    return problems
+
+
+def verify_running(args, services, attempts=20, delay=5):
+    """Wait for every service to have a running container. Returns list of
+    problems; empty means healthy."""
+    for _ in range(attempts):
+        containers = endpoint_containers(args)
+        running = {_service_of(c) for c in containers if c.get("State") == "running"}
+        stuck = [(c["Names"][0].lstrip("/"), c.get("State"))
+                 for c in containers if c.get("State") == "created"]
+        missing = sorted(services - running)
+        if not missing and not stuck:
+            return []
+        time.sleep(delay)
+    containers = endpoint_containers(args)
+    running = {_service_of(c) for c in containers if c.get("State") == "running"}
+    stuck = [(c["Names"][0].lstrip("/"), c.get("State"))
+             for c in containers if c.get("State") == "created"]
+    return ([(None, f"service {m!r} has no running container")
+             for m in sorted(services - running)] +
+            [(n, f"stuck in state {st}") for n, st in stuck])
 
 
 def main():
@@ -68,6 +171,32 @@ def main():
               file=sys.stderr)
         return 3
 
+    # AUT-4946: refuse BEFORE the PUT if a host port this compose needs is
+    # held by a container from a service the new compose drops. Portainer's
+    # PUT is not atomic: it leaves the replacement stuck in state "created"
+    # forever and the site 502s (AUT-4911).
+    services, wanted_ports = compose_services_and_ports(content)
+    flat_wanted = {p for ps in wanted_ports.values() for p in ps}
+    try:
+        clashes = check_port_collisions(args, services, flat_wanted)
+    except urllib.error.HTTPError as e:
+        print(f"WARNING: could not read endpoint containers -> HTTP {e.code}; "
+              "skipping the pre-PUT orphan check", file=sys.stderr)
+        clashes = []
+    if clashes:
+        print(f"ERROR: refusing to sync — host port collision with orphans on "
+              f"endpoint {args.endpoint}:", file=sys.stderr)
+        for name, svc, ports in clashes:
+            print(f"  {name} (service {svc!r}) holds host port(s) "
+                  f"{', '.join(str(p) for p in ports)} that the new compose "
+                  f"needs, but {svc!r} is not a service in the incoming compose",
+                  file=sys.stderr)
+        print("RECOVERY (destructive — run by hand, then re-run this sync):\n"
+              f"  curl -X DELETE \"{args.portainer_url}/api/endpoints/"
+              f"{args.endpoint}/docker/containers/<NAME>?force=true&v=true\" \\\n"
+              f"    -H \"X-API-Key: $PORTAINER_API_KEY\"", file=sys.stderr)
+        return 5
+
     body = {
         "StackFileContent": content,
         "Env": env,
@@ -98,7 +227,27 @@ def main():
         print(f"ERROR: Portainer PUT /stacks/{stack_id} -> HTTP {e.code}", file=sys.stderr)
         print(body, file=sys.stderr)
         return 4
+
+    # AUT-4946: a 200 PUT does not mean a healthy stack. Verify.
+    try:
+        problems = verify_running(args, services)
+    except urllib.error.HTTPError as e:
+        print(f"WARNING: could not verify containers -> HTTP {e.code}", file=sys.stderr)
+        problems = []
+    if problems:
+        print(f"ERROR: stack {args.stack!r} updated but is NOT healthy:", file=sys.stderr)
+        for name, why in problems:
+            print(f"  {name}: {why}", file=sys.stderr)
+        print("RECOVERY (destructive — run by hand):\n"
+              f"  curl -X DELETE \"{args.portainer_url}/api/endpoints/"
+              f"{args.endpoint}/docker/containers/<NAME>?force=true&v=true\" \\\n"
+              "    -H \"X-API-Key: $PORTAINER_API_KEY\"\n"
+              "then re-run this script (or redeploy the stack from Portainer).",
+              file=sys.stderr)
+        return 6
+
     print(f"stack={args.stack} id={stack_id} endpoint={args.endpoint} updated")
+    print(f"verified: {len(services)} services running, no stuck containers")
     return 0
 
 
