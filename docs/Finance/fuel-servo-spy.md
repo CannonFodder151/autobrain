@@ -80,8 +80,10 @@ receive no station or price data. Each response includes the
   `celery_app.conf.beat_schedule` as `ingest-fuel-prices`.
 - NSW FuelCheck is opt-in via `FUEL_NSW_ENABLED` / `FUEL_NSW_API_KEY`; when the key
   is absent the NSW step is skipped (the other feeds still run).
-- VIC is opt-in via `FUEL_VIC_ENABLED` / `FUEL_VIC_API_KEY` and is **enabled on the
-  hosted stack** (secret files, AUT-1533). QLD is skipped when
+- VIC is opt-in via `FUEL_VIC_ENABLED` / `FUEL_VIC_API_KEY` and is **disabled on every
+  deployed stack** (AUT-4976): `api.servosaver.com.au` is NXDOMAIN (AUT-4143), so the
+  step would raise `FuelFeedError` on every beat. Re-enable once a paid VIC aggregator
+  is available. QLD is skipped when
   `FUEL_QLD_API_KEY` is absent.
 - On managed tiers every feed credential arrives as a `*_FILE` secret
   (`FUEL_NSW_API_KEY_FILE`, `FUEL_VIC_API_KEY_FILE`, …); Pydantic settings load

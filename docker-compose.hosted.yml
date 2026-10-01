@@ -184,9 +184,12 @@ services:
       FUEL_NSW_API_SECRET_FILE: /run/secrets/fuel_nsw_api_secret
       FUEL_NSW_ENABLED: "true"
       # AUT-1813/AUT-1932: VIC Servo Saver — approved partner key + secret via secret file.
+      # AUT-4976: disabled — api.servosaver.com.au is NXDOMAIN (AUT-4143), so the beat
+      # only logged a FuelFeedError. Secret files stay mounted so the feed can be
+      # re-enabled when a paid VIC aggregator is available.
       FUEL_VIC_API_KEY_FILE: /run/secrets/fuel_vic_api_key
       FUEL_VIC_API_SECRET_FILE: /run/secrets/fuel_vic_api_secret
-      FUEL_VIC_ENABLED: "true"
+      FUEL_VIC_ENABLED: "false"
       # AUT-2218: QLD DirectAPI subscription token (AUT-1813 phase). Pydantic
       # settings loads FUEL_QLD_API_KEY from FUEL_QLD_API_KEY_FILE at startup;
       # the secrets anchor below mounts ${SECRETS_DIR} read-only, so the file

@@ -11,6 +11,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-4976)
+- deploy(hosted): set `FUEL_VIC_ENABLED: "false"` in `docker-compose.hosted.yml`,
+  matching `docker-compose.prod.yml`. The VIC Servo Saver endpoint
+  `api.servosaver.com.au` is NXDOMAIN (AUT-4143), so the hosted nightly beat
+  (`ingest-fuel-prices`) raised `FuelFeedError` for VIC on every run. NSW, QLD and
+  SA feeds are unaffected. The VIC secret files stay mounted so the feed can be
+  re-enabled when a paid VIC aggregator is available. Guarded by
+  `backend/tests/test_fuel_feed_flags.py`.
+
 ## [0.3.294] - 2026-10-01
 
 ### Fixed (AUT-4911)
