@@ -14,6 +14,7 @@ import argparse
 import json
 import os
 import sys
+import urllib.error
 import urllib.request
 
 
@@ -86,8 +87,25 @@ def main():
             "Accept": "application/json",
         },
     )
-    with urllib.request.urlopen(req, timeout=120) as r:
-        r.read()
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            r.read()
+    except urllib.error.HTTPError as e:
+        # Portainer puts the real cause (bad interpolation, pull failure) in
+        # the response body. Swallowing it leaves the CI log with only
+        # "HTTP Error 500", which is why the compose-pin failure was
+        # undiagnosable from the workflow logs (AUT-2998). Redact stack env
+        # values first — this runs in public CI logs.
+        detail = e.read().decode("utf-8", "replace")[:2000]
+        for item in env:
+            value = item.get("value")
+            if value:
+                detail = detail.replace(value, "***")
+        print(f"ERROR: portainer PUT {e.code} {e.reason}", file=sys.stderr)
+        print(f"stack={args.stack} id={stack_id} endpoint={args.endpoint}",
+              file=sys.stderr)
+        print(detail, file=sys.stderr)
+        return 1
     print(f"stack={args.stack} id={stack_id} endpoint={args.endpoint} updated")
     return 0
 

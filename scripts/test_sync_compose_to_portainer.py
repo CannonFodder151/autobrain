@@ -4,11 +4,13 @@
 Verifies the script logs only essential metadata, not the API response body.
 """
 import importlib.util
+import io
 import json
 import os
 import sys
 import tempfile
 import unittest
+import urllib.error
 from io import StringIO
 from unittest.mock import MagicMock, patch
 
@@ -161,6 +163,54 @@ class TestSyncComposeLogging(unittest.TestCase):
 
         self.assertIn("would wipe it", err.getvalue())
         self.assertEqual(len(mock_urlopen.call_args_list), 2)  # no PUT
+
+    @patch("urllib.request.urlopen")
+    def test_http_error_body_logged_with_env_values_redacted(self, mock_urlopen):
+        """AUT-2998: the compose error must reach CI, minus stack secrets."""
+        stacks_response = MagicMock()
+        stacks_response.__enter__.return_value.read.return_value = json.dumps([
+            {"Id": 42, "Name": "autobrain-hosted"}
+        ]).encode()
+
+        detail_response = MagicMock()
+        detail_response.__enter__.return_value.read.return_value = json.dumps({
+            "Id": 42,
+            "Env": [{"name": "ADMIN_API_KEY", "value": "s3cr3t-token"}],
+        }).encode()
+
+        put_error = urllib.error.HTTPError(
+            "https://portainer.example.com/api/stacks/42?endpointId=5",
+            500, "Internal Server Error", {},
+            io.BytesIO(
+                b"service backend: POSTGRES_USER must be set; "
+                b"ADMIN_API_KEY=s3cr3t-token"
+            ),
+        )
+
+        mock_urlopen.side_effect = [stacks_response, detail_response, put_error]
+
+        err = StringIO()
+        old_argv, old_err = sys.argv, sys.stderr
+        try:
+            sys.argv = [
+                "sync-compose-to-portainer.py",
+                "--stack", "autobrain-hosted",
+                "--endpoint", "5",
+                "--file", self.compose_file,
+                "--portainer-url", "https://portainer.example.com",
+                "--api-key", "test-key",
+            ]
+            sys.stderr = err
+            self.assertEqual(scp.main(), 1)
+        finally:
+            sys.stderr = old_err
+            sys.argv = old_argv
+
+        logged = err.getvalue()
+        self.assertIn("500", logged)
+        self.assertIn("POSTGRES_USER must be set", logged)
+        self.assertNotIn("s3cr3t-token", logged)
+        self.assertIn("***", logged)
 
 
 if __name__ == "__main__":
