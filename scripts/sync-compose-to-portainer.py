@@ -14,6 +14,7 @@ import argparse
 import json
 import os
 import sys
+import urllib.error
 import urllib.request
 
 
@@ -86,8 +87,17 @@ def main():
             "Accept": "application/json",
         },
     )
-    with urllib.request.urlopen(req, timeout=120) as r:
-        r.read()
+    # AUT-4911: print the Portainer response body on failure. The bare
+    # "HTTP Error 500" hid the actual cause ("compose build operation failed:
+    # listing workers for Build") for a whole day of red CI.
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            r.read()
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", "replace")
+        print(f"ERROR: Portainer PUT /stacks/{stack_id} -> HTTP {e.code}", file=sys.stderr)
+        print(body, file=sys.stderr)
+        return 4
     print(f"stack={args.stack} id={stack_id} endpoint={args.endpoint} updated")
     return 0
 
