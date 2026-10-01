@@ -64,6 +64,15 @@ class Engineer(Base):
     # Embedding for semantic search on specialties/description
     embedding: Mapped[list[float] | None] = mapped_column(Text, nullable=True)
 
+    # Back-reference to EngineerReview (declared after this class). It must live
+    # in the class body: a relationship assigned after the class is created is
+    # never scanned by the declarative machinery, so mapper configuration fails
+    # with "relationship 'reviews' expects a class or a mapper argument" and
+    # every ORM query in the process dies with it.
+    reviews: Mapped[list["EngineerReview"]] = relationship(
+        back_populates="engineer", lazy="selectin", cascade="all, delete-orphan"
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -114,9 +123,3 @@ class EngineerReview(Base):
     __table_args__ = (
         Index("ix_engineer_reviews_engineer_created", "engineer_id", "created_at"),
     )
-
-
-# Back-reference for Engineer
-Engineer.reviews: Mapped[list["EngineerReview"]] = relationship(
-    back_populates="engineer", lazy="selectin", cascade="all, delete-orphan"
-)

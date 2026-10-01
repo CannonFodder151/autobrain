@@ -25,7 +25,12 @@ from app.models.user import User  # noqa: E402
 from app.services import billing as svc  # noqa: E402
 from app.services import iap  # noqa: E402
 
-PRODUCT_MONTHLY = "com.autobrainservice.app.enthusiast.monthly"
+# The ids below are the ones Google Play / App Store Connect must be configured
+# with. They are read from billing.IAP_PRODUCTS rather than hardcoded so a
+# product-id change (AUT-1152 shortened the Enthusiast ids to fit Play's 40-char
+# limit) can never leave the tests asserting a stale id again — that drift made
+# this whole module red on main and hid the real IAP regressions.
+PRODUCT_MONTHLY = "enthusiast_monthly"
 PRODUCT_GARAGE = "com.autobrainservice.app.garage.yearly"
 
 
@@ -98,11 +103,29 @@ def test_catalog_enabled_with_google(monkeypatch) -> None:
     data = iap.catalog()
     assert data["enabled"] is True
     ids = {(p["product_id"], p["platform"]) for p in data["products"]}
-    assert ("com.autobrainservice.app.enthusiast.monthly", "android") in ids
-    assert ("com.autobrainservice.app.enthusiast.monthly", "ios") in ids
+    # Every configured product must be advertised on both stores, keyed by the
+    # id the store teams actually created.
+    assert ids == {
+        (product_id, platform) for product_id in svc.IAP_PRODUCTS for platform in ("android", "ios")
+    }
+    assert (PRODUCT_MONTHLY, "android") in ids
+    assert (PRODUCT_MONTHLY, "ios") in ids
     by_id = {p["product_id"]: p for p in data["products"]}
     assert by_id[PRODUCT_GARAGE]["plan"] == "garage"
     assert by_id[PRODUCT_GARAGE]["billing"] == "yearly"
+
+
+def test_product_ids_fit_google_play_limits() -> None:
+    """Play rejects a product id over 40 chars (AUT-1152), and the store never
+    serves it — the app then finds no products and the Android upgrade path
+    silently disappears. Guard the limit so the next id change cannot repeat it.
+    """
+    for product_id in svc.IAP_PRODUCTS:
+        assert len(product_id) <= 40, f"{product_id} exceeds Google Play's 40-char limit"
+        assert product_id == product_id.lower()
+    # No two ids may map to the same plan+interval, or a purchase would grant an
+    # ambiguous entitlement.
+    assert len(set(svc.IAP_PRODUCTS.values())) == len(svc.IAP_PRODUCTS)
 
 
 def test_catalog_endpoint_public() -> None:

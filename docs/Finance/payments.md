@@ -55,9 +55,16 @@ Two paid tiers plus a free tier. Prices in AUD (AUT-523); source of truth is `sc
 
 ## Store-native IAP (mobile store builds)
 
-The store builds of the mobile app sell the same licences through Apple App Store / Google Play (AUT-610/617). Product ids (same on both stores): `com.autobrainservice.app.{enthusiast,garage}.{monthly,yearly}`.
+The store builds of the mobile app sell the same licences through Apple App Store / Google Play (AUT-610/617). Product ids (same on both stores, one source of truth in `backend/app/services/billing.py` → `IAP_PRODUCTS`):
 
-- Catalogue: `GET /billing/iap/catalog` (public) → `{enabled, products}`; `enabled` is false until IAP credentials are set, and the mobile app then falls back to the Stripe browser path.
+| Plan | Monthly | Yearly |
+|------|---------|--------|
+| Enthusiast | `enthusiast_monthly` | `enthusiast_yearly` |
+| Garage | `com.autobrainservice.app.garage.monthly` | `com.autobrainservice.app.garage.yearly` |
+
+The Enthusiast ids were shortened from `com.autobrainservice.app.enthusiast.*` in AUT-1152 because Google Play rejects a product id over 40 characters. `backend/tests/test_iap.py` asserts the table above against `IAP_PRODUCTS`, so a change there cannot silently drift from the store configuration again.
+
+- Catalogue: `GET /billing/iap/catalog` (public) → `{enabled, products}`. `enabled` is **false until store credentials are configured**, and a store build (`MOBILE_STORE_BUILD=true`) then shows "In-app purchase is not configured yet" with **no upgrade path at all** — store policy (AUT-931) forbids falling back to the Stripe browser checkout from a store build. To make upgrades work: set the store credentials below, create the four subscriptions with exactly these ids, then confirm `enabled: true` on the live endpoint. Non-store (sideload/web) builds ignore the catalogue and use Stripe.
 - Verify: `POST /billing/iap/verify` (auth) verifies the store transaction server-side and grants the plan; purchases are recorded on the user (`iap_*` fields) and durable across reinstall/re-login.
 - Renewal model: verify-on-refresh — `GET /auth/me` re-validates the stored purchase token against the store API when the entitlement is expired or within `IAP_REFRESH_WINDOW_DAYS` of expiry (no webhooks needed). Webhooks (`POST /billing/iap/webhook/apple|google`) are also accepted and act as refresh triggers when the store teams configure them.
 - Rate limiting: `POST /billing/iap/verify` is rate-limited per user (in-process sliding window, 10 hits/60s). The limiter is process-local — correct for the single-uvicorn hosted deploy (`docker-compose.hosted.yml`), but it is invalidated if the backend ever scales to multiple workers/instances; move the window to a shared store (e.g. Redis) before scaling out (N4).

@@ -11,6 +11,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-4806)
+- fix(backend): `Engineer.reviews` was assigned after the class body, which the
+  SQLAlchemy declarative machinery never scans — mapper configuration then
+  failed for the whole process ("relationship 'reviews' expects a class or a
+  mapper argument"), taking down every ORM query and every model test in the
+  backend test suite. Declared in the class body where it belongs
+- test(backend): `tests/test_iap.py` asserted the pre-AUT-1152 FQN product ids
+  while `billing.IAP_PRODUCTS` ships the shortened Enthusiast ids, leaving the
+  whole store-IAP suite red. The catalogue test now derives its expectations
+  from `IAP_PRODUCTS`, and a new guard fails any product id that would exceed
+  Google Play's 40-char limit (the limit that broke the Android upgrade path)
+- docs: `docs/Finance/payments.md` listed the wrong product ids and claimed a
+  store build falls back to the Stripe browser path — a store build with
+  `enabled: false` shows a not-configured state and offers no upgrade at all
+  (AUT-931), now documented with the exact ids and the provisioning steps
+
 ## [0.3.286] - 2026-09-29
 
 ### Added (AUT-3503)
