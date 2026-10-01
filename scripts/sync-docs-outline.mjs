@@ -147,6 +147,15 @@ async function docsJsonToPages() {
       }
     }
   }
+
+  // Fail closed before any writes: a missing ref means docs.json is stale after
+  // a rename, and syncing the rest would silently publish a partial doc set.
+  const missing = pages.filter((p) => !fs.existsSync(p.path));
+  if (missing.length) {
+    for (const p of missing) console.error(`ENOENT: ${p.path} (docs.json ref "${p.ref}")`);
+    throw new Error(`docs.json references ${missing.length} missing file(s); update docs/docs.json after any rename`);
+  }
+
   return pages;
 }
 
