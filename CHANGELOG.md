@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.294] - 2026-10-01
+
 ### Fixed (AUT-4911)
 - deploy(hosted): remove the `gh-runner` service from `docker-compose.hosted.yml`.
   It carried an inline `build:` block, and Portainer cannot build service images for
