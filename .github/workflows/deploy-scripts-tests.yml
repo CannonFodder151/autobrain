@@ -1,0 +1,43 @@
+name: Deploy script tests
+
+# AUT-4745: tests/test_hosted_deploy.py guards the hosted deploy digest-sync
+# path — including the strict digest validation that stops a crafted registry
+# digest from executing as shell on the self-hosted runner. Kept in its own
+# workflow (no DB, no backend deps) so script-only changes get a fast signal
+# instead of paying for the full pytest suite.
+
+on:
+  pull_request:
+    paths:
+      - "scripts/**"
+      - "tests/test_hosted_deploy.py"
+      - "docker-compose.hosted.yml"
+      - ".github/workflows/deploy-scripts-tests.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/**"
+      - "tests/test_hosted_deploy.py"
+      - "docker-compose.hosted.yml"
+      - ".github/workflows/deploy-scripts-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  hosted-deploy:
+    name: hosted deploy scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test deps
+        run: python -m pip install --upgrade pip && pip install pyyaml
+
+      - name: Run hosted deploy regression tests
+        run: python tests/test_hosted_deploy.py
