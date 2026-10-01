@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.292] - 2026-10-01
+
 ### Security (AUT-4701)
 - test(backend): add a PyJWT floor guard to `test_deps_transitive_cves.py` —
   `pyjwt >= 2.15.0`, so a future downgrade cannot silently re-expose
