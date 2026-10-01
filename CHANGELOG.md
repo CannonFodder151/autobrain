@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.291] - 2026-10-01
+
 ### Fixed (AUT-4855)
 - ci(release): `scripts/bump-version.sh` printed `docker build` instructions that
   interpolated `"$CARTO_API_KEY"` even though the commands are only echoed, never
