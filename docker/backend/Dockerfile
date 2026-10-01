@@ -21,14 +21,17 @@ RUN apt-get update \
     && ln -s /usr/bin/minio-client /usr/local/bin/mc \
     && rm -rf /var/lib/apt/lists/*
 
-# Playwright chromium for market-data scraper (AUT-4113)
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-RUN python -m playwright install --with-deps chromium \
-    && rm -rf /var/lib/apt/lists/*
-
 # Backend dependencies
 COPY backend/requirements.txt /tmp/backend-requirements.txt
 RUN pip install --no-cache-dir -r /tmp/backend-requirements.txt
+
+# Playwright chromium for market-data scraper (AUT-4113).
+# AUT-4979: this MUST come after the backend `pip install` — playwright is only
+# available via backend/requirements.txt, so running it against the bare base
+# image failed with `No module named playwright` and broke every backend build.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN python -m playwright install --with-deps chromium \
+    && rm -rf /var/lib/apt/lists/*
 
 # AI gateway dependencies
 COPY ai/requirements.txt /tmp/ai-requirements.txt

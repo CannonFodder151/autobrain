@@ -11,6 +11,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-4979)
+- fix(docker): repair the layer ordering in `docker/backend/Dockerfile` that broke every
+  backend image build. The Playwright Chromium download sat above the backend
+  `pip install`, so `python -m playwright install --with-deps chromium` ran against the
+  bare `python:3.13.15-slim-trixie` base and aborted with `No module named playwright` —
+  including the hosted ARM64 build that AUT-4153 / AUT-4160 depend on. The install block
+  (with `ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright`) now runs immediately after
+  `pip install -r backend/requirements.txt`; the root/SUID `chrome_sandbox` re-own stays
+  the final root layer. Guarded by `ai/tests/test_dockerfile_layer_order.py`.
+
 ### Fixed (AUT-4919)
 - fix(ci): stop lineage sync from committing editor backup files. `sync-mobile.yml`
   commits with `git add -A`, so a stray `CHANGELOG.md.bak` left in the
