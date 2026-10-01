@@ -11,6 +11,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-4919)
+- chore(mobile): stop the lineage sync from committing editor backup files.
+  `scripts/sync-mobile.sh` mirrors `frontend/lib` + `frontend/assets` + the shared
+  `CHANGELOG.md` into `autobrain-mobile`, and `.github/workflows/sync-mobile.yml`
+  commits the result with `git add -A` on the persistent self-hosted runner
+  checkout — so a stray `CHANGELOG.md.bak` sitting in either tree was swept into
+  release commit `b1023470` and shipped to `autobrain-mobile` (140KB, no
+  importers). `sync-mobile.sh` now fails fast on `*.bak` / `*.orig` / `*.rej` /
+  `*~` before any copy runs, those patterns are gitignored in both repos, and
+  `scripts/test-sync-mobile-backup-guard.sh` (wired into the
+  `release script self-checks` CI job) asserts the guard fires and copies nothing.
+
 ### Fixed (AUT-4925)
 - fix(backend): repair the Alembic head that hard-failed on every boot of the hosted
   stack. `alembic_version` read `aut3447_passkey_credentials`, but `passkey_credentials`,

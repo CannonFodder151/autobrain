@@ -62,3 +62,9 @@ graphify-out/cost.json
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/
+
+# Editor backup artifacts (AUT-4919) — never commit these.
+*.bak
+*.orig
+*.rej
+*~

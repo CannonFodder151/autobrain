@@ -40,6 +40,22 @@ for d in ios android; do
   [[ -d "$d" ]] || { echo "::error::$MOBILE/$d missing — platform dir was not migrated" >&2; exit 1; }
 done
 
+# --- Editor backup guard (AUT-4919) -------------------------------------------
+# The sync commits with `git add -A` in .github/workflows/sync-mobile.yml, so a
+# stray editor backup anywhere in the tree lands in a release commit — that is
+# how CHANGELOG.md.bak (140KB) shipped to autobrain-mobile in b1023470. Fail the
+# sync instead of copying or committing backup artifacts.
+backups="$(find "$FRONT/lib" "$FRONT/assets" lib assets -maxdepth 3 -type f \
+  \( -name '*.bak' -o -name '*.orig' -o -name '*.rej' -o -name '*~' \) 2>/dev/null
+  find . -maxdepth 1 -type f \
+  \( -name '*.bak' -o -name '*.orig' -o -name '*.rej' -o -name '*~' \) 2>/dev/null)"
+if [[ -n "$backups" ]]; then
+  echo "::error::editor backup files must not be synced or committed:" >&2
+  echo "$backups" | sed 's/^/::error::  /' >&2
+  echo "::error::Delete them (or add them to .gitignore) before syncing." >&2
+  exit 1
+fi
+
 # --- Shared lineage (lib + assets + CHANGELOG) -------------------------------
 # AUT-2642: platform dirs live in autobrain-mobile itself. If they ever appear
 # in frontend/ again, fail loudly instead of silently overwriting mobile configs.
