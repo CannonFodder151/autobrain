@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.293] - 2026-10-01
+
 ### Fixed (AUT-4919)
 - fix(ci): stop lineage sync from committing editor backup files. `sync-mobile.yml`
   commits with `git add -A`, so a stray `CHANGELOG.md.bak` left in the
