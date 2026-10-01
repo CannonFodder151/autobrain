@@ -3,6 +3,7 @@
 import os
 import subprocess
 import tempfile
+import unittest
 
 SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "seed-secrets.sh")
 ENV_DUMP = "POSTGRES_PASSWORD=from-env-dump\nREDIS_PASSWORD=also-from-dump\nUNMAPPED_KEY=x\n"
@@ -18,32 +19,41 @@ def run(secrets_dir, env_file, **extra):
     ).stdout
 
 
-def main():
-    with tempfile.TemporaryDirectory() as d:
-        env_file = os.path.join(d, "stack-env.txt")
-        with open(env_file, "w") as f:
-            f.write(ENV_DUMP)
+class TestSeedSecretsPreservesExisting(unittest.TestCase):
+    """AUT-2241: seed-secrets.sh must not silently overwrite existing secrets.
 
-        # First run seeds.
-        out = run(d, env_file)
-        pw = os.path.join(d, "postgres_password")
-        assert open(pw).read() == "from-env-dump", out
-        assert "seeded" in out and pw in out, out
+    Was a bare main() with module-level asserts, so `pytest scripts/` collected
+    zero tests from it and the guard never ran (AUT-4810).
+    """
 
-        # Second run with a different dump must NOT change the file (AUT-2241).
-        with open(env_file, "w") as f:
-            f.write("POSTGRES_PASSWORD=rotated-in-portainer\nREDIS_PASSWORD=rotated-too\n")
-        out = run(d, env_file)
-        assert open(pw).read() == "from-env-dump", "secret was overwritten: " + out
-        assert "KEEP" in out and pw in out, out
+    def test_seeds_then_refuses_to_overwrite_unless_forced(self):
+        with tempfile.TemporaryDirectory() as d:
+            env_file = os.path.join(d, "stack-env.txt")
+            with open(env_file, "w") as f:
+                f.write(ENV_DUMP)
 
-        # Opt-in overwrite still works for a deliberate rotation.
-        out = run(d, env_file, SEED_ALLOW_OVERWRITE="1")
-        assert open(pw).read() == "rotated-in-portainer", out
-        assert "seeded" in out, out
+            # First run seeds.
+            out = run(d, env_file)
+            pw = os.path.join(d, "postgres_password")
+            self.assertEqual(open(pw).read(), "from-env-dump", out)
+            self.assertIn("seeded", out)
+            self.assertIn(pw, out)
 
-    print("ok - seed-secrets.sh preserves existing secrets unless forced")
+            # Second run with a different dump must NOT change the file (AUT-2241).
+            with open(env_file, "w") as f:
+                f.write("POSTGRES_PASSWORD=rotated-in-portainer\nREDIS_PASSWORD=rotated-too\n")
+            out = run(d, env_file)
+            self.assertEqual(
+                open(pw).read(), "from-env-dump", "secret was overwritten: " + out
+            )
+            self.assertIn("KEEP", out)
+            self.assertIn(pw, out)
+
+            # Opt-in overwrite still works for a deliberate rotation.
+            out = run(d, env_file, SEED_ALLOW_OVERWRITE="1")
+            self.assertEqual(open(pw).read(), "rotated-in-portainer", out)
+            self.assertIn("seeded", out)
 
 
 if __name__ == "__main__":
-    main()
+    unittest.main()

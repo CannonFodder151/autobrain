@@ -3,16 +3,24 @@ name: Backend tests
 # Runs the pytest suite on every PR and every push to main. A failing
 # health_demo.test or any other test blocks the merge — see AUT-2119.
 # This is the gate that keeps hosted/default from drifting out of parity.
+#
+# scripts/** and docs/** are triggers because the stdlib-only guards in
+# scripts/test_*.py read backend/ and docs/ source files (AUT-4810). Before this,
+# scripts/test_docs_json_page_map.py existed on main and no workflow ever ran it.
 
 on:
   pull_request:
     paths:
       - "backend/**"
+      - "scripts/**"
+      - "docs/**"
       - ".github/workflows/**"
   push:
     branches: [main]
     paths:
       - "backend/**"
+      - "scripts/**"
+      - "docs/**"
       - ".github/workflows/**"
 
 permissions:
@@ -53,6 +61,18 @@ jobs:
         run: |
           pytest tests/test_health_demo.py -v --maxfail=1 --tb=short
 
+      # AC3 (AUT-4810): `|| true` STAYS, deliberately, until the collection
+      # error below is fixed. It is not there to hide failures:
+      #   pytest -v --maxfail=1 --tb=short  =>  "1 error, 91 items"
+      #   ERROR tests/test_advisor_value.py
+      #   ImportError: cannot import name 'BAND_HIGH_RATIO' from
+      #   'app.services.advisor'  (the names live in advisor/value.py but were
+      #   never re-exported from the package __init__)
+      # The gate above (tests/test_health_demo.py) still hard-fails the build, so
+      # this step is informational until the advisor export is repaired. Removing
+      # `|| true` before that fix would turn every main push red and block all
+      # merges. Tracked on AUT-4812; remove the `|| true` in the same PR that
+      # fixes the export.
       - name: Run full backend test suite
         working-directory: backend
         env:
@@ -88,6 +108,28 @@ jobs:
             }
         env:
           SLACK_WEBHOOK_URL: https://n8n.nathanmartina.com/webhook/discord-report
+
+  # AUT-4810: the guards in scripts/test_*.py are stdlib-only (unittest + json +
+  # subprocess), so they need none of the backend dependency tree — only pytest
+  # itself. They used to run nowhere at all.
+  scripts-tests:
+    name: scripts tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # ponytail: no cache: pip — the only install is pytest itself, so a
+      # dependency cache would cost more than it saves.
+      - name: Install pytest
+        run: python -m pip install --quiet pytest
+
+      - name: Run scripts/test_*.py
+        run: python -m pytest scripts/test_docs_json_page_map.py scripts/test_post_deploy_smoke.py scripts/test_seed_secrets.py scripts/test_sync_compose_to_portainer.py -v --tb=short
 
   # A workflow with invalid YAML never runs a single job — GitHub records it as a
   # 0-job `failure` on every push and the deploy signal is silently lost (AUT-4911).
