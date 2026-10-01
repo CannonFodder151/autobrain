@@ -95,6 +95,19 @@
               "Engineering/adr/0001-ownership-advisor",
               "Engineering/adr/0026-home-assistant-integration"
             ]
+          },
+          {
+            "group": "VASS",
+            "pages": [
+              "Engineering/vass/index",
+              "Engineering/vass/data-models",
+              "Engineering/vass/api",
+              "Engineering/vass/rule-engine",
+              "Engineering/vass/standards-catalog",
+              "Engineering/vass/vector-corpus",
+              "Engineering/vass/pre-check-wizard",
+              "Engineering/vass/compliance-packs"
+            ]
           }
         ]
       },

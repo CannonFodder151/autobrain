@@ -30,6 +30,21 @@ Vehicle sharing: a user with an accepted share on a vehicle can read and write i
 | POST   | `/auth/signup` | Self-service Free-tier signup (display name + email; setup link emailed). **403 when `SELF_SIGNUP_ENABLED=false`** |
 | POST   | `/auth/register` | **Admin-only** — create a user account |
 
+### Passkeys (WebAuthn) (`/auth/passkey`)
+
+WebAuthn passwordless login (AUT-3447). Supported COSE algorithms: ES256 (`-7`),
+EdDSA (`-8`), RS256 (`-257`). Credentials live in `passkey_credentials`; a
+`(user_id, credential_id)` pair is unique.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST   | `/auth/passkey/register/begin` | Get a `PublicKeyCredentialCreationOptions` challenge (user already authenticated) |
+| POST   | `/auth/passkey/register/complete` | Store the attested credential; returns the new credential id |
+| POST   | `/auth/passkey/authenticate/begin` | Get an assertion challenge for an email/username (no JWT required) |
+| POST   | `/auth/passkey/authenticate/complete` | Verify the assertion; returns a token pair |
+| GET    | `/auth/passkey/list` | Registered passkeys for the current user |
+| DELETE | `/auth/passkey/{credential_id}` | Revoke a passkey |
+
 ## Admin users & server (admin role only)
 
 | Method | Path | Description |
@@ -195,6 +210,55 @@ A diagnostic auto-flips to `resolved` when its linked service is completed.
 |- **Valuation** (`/vehicles/{id}/valuation`): POST (AI — disabled on free accounts), GET `/history`, GET `/market` (live CarsGuide/CarSales market data for the vehicle, cached 24h; `vehicle_type` routes cars vs motorcycles), GET `/market/search?q=` (search live listings across an arbitrary query, cached 24h). The estimate is anchored on the cached market median; when the user hasn't supplied a condition, it is inferred deterministically from diagnostics + service history (`condition` module) and surfaced in the response `factors` (`condition_estimate`, `condition_confidence`, `condition_score`, `condition_signals`).
 - **Analytics** (`/vehicles/{id}/analytics`): GET (spend, TCO, cost/km, forecast, insights).
 - **Notifications** (`/vehicles/{id}/notifications`): GET preferences, PUT update preferences (no `/test` endpoint).
+
+## Engineer marketplace (`/engineers`) — AUT-3661
+
+AutoBrain Shop: discover, review and verify engineers. Search is **deterministic**
+(filters + keyword, no LLM). Profile `embedding` is a generated 9Router embedding
+stored as a serialised float list in a `Text` column — it is **not** a pgvector
+column and does not participate in the cosine-similarity search path.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | `/engineers/search?q=&postcode=&radius_km=&lat=&lon=&specialty=&min_rating=&sort_by=` | Search/filter engineers (keyword across name, specialties, certifications; optional geospatial radius) |
+| GET    | `/engineers/{engineer_id}` | Engineer detail incl. reviews |
+| POST   | `/engineers/` | Create an engineer profile |
+| GET    | `/engineers/{engineer_id}/reviews` | Reviews for an engineer |
+| POST   | `/engineers/{engineer_id}/reviews?rating=&title=&body=&service_type=&cost=` | Leave a review (1–5) |
+| POST   | `/engineers/{engineer_id}/embeddings` | Generate the profile embedding; returns `{status: embedded \| no_text_for_embedding \| embedding_failed}` |
+
+## Social issues blog (`/social/issues`) — AUT-627
+
+Community help requests. Posts are federated to the hosted instance's hub when
+`SOCIAL_FEDERATION_HOSTED=true`.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | `/social/issues?tag=&q=&cursor=` | List/search posts |
+| POST   | `/social/issues` | Create a post |
+| GET    | `/social/issues/{post_id}` | Post detail with comments |
+| PATCH  | `/social/issues/{post_id}` | Edit own post |
+| DELETE | `/social/issues/{post_id}` | Delete own post |
+| POST   | `/social/issues/{post_id}/comments` | Add a comment |
+| POST   | `/social/issues/{post_id}/comments/{comment_id}/answer` | Mark a comment as the accepted answer |
+| POST   | `/social/issues/{post_id}/flag` | Flag a post |
+| POST   | `/social/issues/{post_id}/comments/{comment_id}/flag` | Flag a comment |
+
+## Dongle firmware (`/dongle`) — AUT-1673
+
+Firmware manifests for the OBD2 dongle. Binaries are stored in MinIO and served
+via signed URL; the client verifies `sha256` before flashing.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET    | `/dongle/firmware/latest?model=` | Latest firmware manifest for a model |
+| GET    | `/dongle/firmware/installed?serial_number=&model=` | What a given dongle last reported it is running |
+
+## CI webhook (`/ci`) — inbound only
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST   | `/ci/webhook` | Receives GitHub workflow/PR events; signature-verified. Not part of the public client API |
 
 ## Billing (`/billing`) — hosted (Stripe)
 

@@ -127,7 +127,7 @@ The query embedding is generated via 9Router. If the router is down, only keywor
 
 All three read `EMBEDDING_DIMENSION` from `app.core.config.settings` at apply
 time, so the column dimension can never drift from the configured embedding
-model. The chain is linear — single head `m3rge07` (verified by
+model. The chain is linear — single head `f7e8d9c0b1a2` (verified by
 `backend/tests/test_alembic_heads.py`).
 
 ## Fallback behaviour
