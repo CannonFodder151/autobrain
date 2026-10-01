@@ -1,18 +1,11 @@
-"""Vehicle schemas moved to the vehicles domain module (AUT-3814).
-
-The canonical definitions now live in
-:mod:`app.modules.vehicles.schemas.vehicle`. This module re-exports them so
-that existing ``app.schemas.vehicle`` imports keep working.
-
-Import from :mod:`app.modules.vehicles.schemas.vehicle` in new code.
-"""
+"""Vehicle domain schemas."""
 
 from app.modules.vehicles.schemas.vehicle import (
     RegoLookupRequest,
     RegoLookupResponse,
     ShareCreate,
-    ShareInviteOut,
     ShareOut,
+    ShareInviteOut,
     TimelineEventOut,
     VehicleCreate,
     VehicleOut,
@@ -23,8 +16,8 @@ __all__ = [
     "RegoLookupRequest",
     "RegoLookupResponse",
     "ShareCreate",
-    "ShareInviteOut",
     "ShareOut",
+    "ShareInviteOut",
     "TimelineEventOut",
     "VehicleCreate",
     "VehicleOut",

@@ -1,12 +1,4 @@
-"""Vehicle ownership logic moved to the vehicles domain module (AUT-3814).
-
-The canonical definitions now live in
-:mod:`app.modules.vehicles.services.ownership`. This module re-exports them so
-that existing ``app.services.ownership`` imports keep working — the functions
-are the *same objects*, so ``monkeypatch`` on either path still affects both.
-
-Import from :mod:`app.modules.vehicles.services.ownership` in new code.
-"""
+"""Vehicle domain services."""
 
 from app.modules.vehicles.services.ownership import (
     clear_primary,
@@ -17,6 +9,14 @@ from app.modules.vehicles.services.ownership import (
     require_logbook_enabled,
     sync_odometer_from_fuel,
 )
+from app.modules.vehicles.services.rego import lookup_rego
+from app.modules.vehicles.services.vehicle import (
+    enforce_vehicle_limit,
+    get_vehicle_timeline,
+    invite_share,
+    list_user_vehicles,
+    list_vehicle_shares,
+)
 
 __all__ = [
     "clear_primary",
@@ -26,4 +26,10 @@ __all__ = [
     "require_ai_vehicle",
     "require_logbook_enabled",
     "sync_odometer_from_fuel",
+    "lookup_rego",
+    "enforce_vehicle_limit",
+    "get_vehicle_timeline",
+    "invite_share",
+    "list_user_vehicles",
+    "list_vehicle_shares",
 ]
