@@ -1,0 +1,37 @@
+name: Docs page-map guard
+
+# Guards the docs/docs.json page map against the regression that shipped in
+# AUT-4632: a docs/ rename orphaned refs in the map and only surfaced as a
+# docs-sync failure after merge. scripts/test_docs_json_page_map.py is
+# stdlib-only (unittest + json), so it needs no install step.
+
+on:
+  pull_request:
+    paths:
+      - "docs/**"
+      - "docs/docs.json"
+      - "scripts/test_docs_json_page_map.py"
+      - ".github/workflows/docs-page-map.yml"
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "docs/docs.json"
+      - "scripts/test_docs_json_page_map.py"
+      - ".github/workflows/docs-page-map.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  docs-page-map:
+    name: docs page-map
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      # ponytail: relies on the python3 preinstalled on ubuntu-latest. Add
+      # actions/setup-python if the guard ever grows a third-party dependency.
+      - name: Assert every docs.json page ref resolves
+        run: python3 scripts/test_docs_json_page_map.py -v
