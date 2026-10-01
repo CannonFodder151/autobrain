@@ -88,7 +88,13 @@ services:
         target: /run/secrets/postgres_password
         read_only: true
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      # AUT-4038: -h 127.0.0.1 forces TCP. Without it pg_isready uses the local
+      # unix socket, where `local ... peer` auth compares the container's root
+      # OS user against the POSTGRES_USER role and logs
+      # "provided user name (autobrain) and authenticated user name (root) do
+      # not match" every healthcheck interval (5s). pg_isready never
+      # authenticates, so TCP readiness is both accurate and silent.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER}"]
       interval: 5s
       timeout: 5s
       retries: 10
