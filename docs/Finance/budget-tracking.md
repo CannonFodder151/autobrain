@@ -32,7 +32,7 @@ Monthly budget allocation, spend tracking, and variance analysis for AutoBrain o
 |----------|----------------|------------------|----------|-------|
 | **Infrastructure** | | | | |
 | Oracle Cloud VM (Production) | $75 AUD | $0 | - | AutoBrain-Hosted at <HOSTED_VM_IP> |
-| Oracle Cloud Block Storage | $15 AUD | $0 | - | Database + MinIO |
+| Oracle Cloud Block Storage | $15 AUD | $0 | - | PostgreSQL 17 + pgvector, MinIO, Redis |
 | Oracle Cloud Network Egress | $20 AUD | $0 | - | Variable by traffic |
 | On-Prem Dev Box | $60 AUD | $0 | - | Hidden costs (electricity, hardware) |
 | **Operations** | | | | |
@@ -98,6 +98,14 @@ To adjust a budget category:
 - **Portainer** — Container resource utilization (endpoint 5 = AutoBrain-Hosted)
 - **9Router** — AI routing costs (tracked via Paperclip company budget)
 
+## Related Finance Docs
+
+- **[index.md](./index.md)** — Finance section index
+- **[payments.md](./payments.md)** — Stripe plans, pricing, billing flow
+- **[infrastructure-costs.md](./infrastructure-costs.md)** — per-service Oracle Cloud + on-prem spend
+- **[migration-budget.md](./migration-budget.md)** — Phase 3 migration cost case
+- **[market-data.md](./market-data.md)** — scraper cost profile per tier
+
 ---
 
-*Last updated: 2026-09-26 | Owner: CFO | Review cadence: Monthly | Next review: 2026-10-26*
+*Last updated: 2026-10-01 | Owner: CFO | Reviewed by: Documentation Manager (AUT-4397) | Review cadence: Monthly | Next review: 2026-11-01*

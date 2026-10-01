@@ -5,18 +5,24 @@ Spy station map. Data is ingested on a Celery beat schedule
 (`ingest_fuel_prices`, every 6h) and served through premium-gated read routes at
 `/api/fuel/*`. No 9Router spend — nothing is guessed, it's a fetch + parse + upsert.
 
-## Sources (MVP)
+## Sources
 
 | Feed | URL | Key | Coverage |
 |------|-----|-----|----------|
 | WA FuelWatch | `industryprd.fuelwatch.wa.gov.au` | none (public) | WA |
 | NSW FuelCheck | `api.transport.nsw.gov.au/v1/fuel` | free key (`FUEL_NSW_API_KEY`) | NSW + ACT |
-| QLD Fuel Prices | `fuelpricesqld.com.au` | none (public) | QLD |
+| VIC Fuel Saver (Servo Saver) | `api.servosaver.com.au/v1/prices` | approved partner key+secret (`FUEL_VIC_API_KEY`, `FUEL_VIC_API_SECRET`, AUT-1932) | VIC |
+| QLD Fuel Prices | `fuelpricesqld.com.au` | DirectAPI subscription token (`FUEL_QLD_API_KEY`) | QLD |
 
-These four states + ACT cover ~63% of the Australian population.
-**VIC/SA/TAS/NT have no free feed** and are scoped as a later premium
-enhancement — they require a paid aggregator (MotorMouth / Informed Sources,
-~$2–3k/mo). Not an MVP blocker.
+WA + NSW/ACT + VIC + QLD cover ~80% of the Australian population.
+**SA/TAS/NT have no feed** — SA (SAFPIS) and TAS/NT need a paid aggregator
+(MotorMouth / Informed Sources, ~$2–3k/mo). SA has a reserved key in the
+compose config (`FUEL_SA_*`, AUT-2610) but no backend ingester yet, so those env
+vars are inert until the feed lands. Not an MVP blocker.
+
+QLD note: `FUEL_QLD_API_KEY` is the DirectAPI subscription token.
+`FUEL_QLD_USE_OPEN_FALLBACK` keeps the open-data site usable during a partial
+DirectAPI outage.
 
 ## Data model
 
@@ -25,8 +31,8 @@ fuel_stations(id, source, source_id, brand, lat, lon, name, address, updated_at)
 fuel_prices(station_id, fuel_type, price, effective_at)
 ```
 
-`source` is one of `wa`, `nsw`, `qld`. Stations are upserted on `(source,
-source_id)` and their price snapshot is refreshed each ingest (latest per
+`source` is one of `wa`, `nsw`, `vic`, `qld`. Stations are upserted on `(source,
+`source_id)` and their price snapshot is refreshed each ingest (latest per
 `fuel_type` is served). Radius queries use a **great-circle distance in Python**
 — no PostGIS column is required for MVP.
 
@@ -74,6 +80,12 @@ receive no station or price data. Each response includes the
   `celery_app.conf.beat_schedule` as `ingest-fuel-prices`.
 - NSW FuelCheck is opt-in via `FUEL_NSW_ENABLED` / `FUEL_NSW_API_KEY`; when the key
   is absent the NSW step is skipped (the other feeds still run).
+- VIC is opt-in via `FUEL_VIC_ENABLED` / `FUEL_VIC_API_KEY` and is **enabled on the
+  hosted stack** (secret files, AUT-1533). QLD is skipped when
+  `FUEL_QLD_API_KEY` is absent.
+- On managed tiers every feed credential arrives as a `*_FILE` secret
+  (`FUEL_NSW_API_KEY_FILE`, `FUEL_VIC_API_KEY_FILE`, …); Pydantic settings load
+  the plain name at startup. See `scripts/seed-secrets.sh`.
 
 ## Configuration (.env / deployment secrets)
 
@@ -82,8 +94,23 @@ FUEL_NSW_API_KEY=            # free key from api.nsw.gov.au → api.transport.ns
 FUEL_NSW_API_SECRET=         # (kept for parity; NSW uses the apikey header)
 FUEL_NSW_ENABLED=false
 FUEL_NSW_URL=https://api.transport.nsw.gov.au/v1/fuel
+FUEL_VIC_ENABLED=false
+FUEL_VIC_API_KEY=            # approved Servo Saver partner key (AUT-1932)
+FUEL_VIC_API_SECRET=         # sent as the X-Secret header
+FUEL_VIC_URL=https://api.servosaver.com.au/v1/prices
 FUEL_WA_SITES_URL=https://industryprd.fuelwatch.wa.gov.au/api/sites
 FUEL_WA_PRICES_URL=https://industryprd.fuelwatch.wa.gov.au/api/report/weekly-retail-prices
+FUEL_QLD_API_KEY=            # QLD DirectAPI subscription token
 FUEL_QLD_API_URL=https://www.fuelpricesqld.com.au/
+FUEL_QLD_USE_OPEN_FALLBACK=false
 FUEL_INGEST_USER_AGENT=AutoBrain Servo Spy (+https://autobrainservice.app)
 ```
+
+Credentials are secrets — they live on the deployment env / secret files, never in
+the repo. The hosted per-instance values are recorded in the Outline
+`Deployment & Infrastructure` section.
+
+## Related Finance Docs
+
+- **[fuel-pricing.md](./fuel-pricing.md)** — 7-Eleven fuel prices (deterministic, no AI)
+- **[market-data.md](./market-data.md)** — market data scrapers and caches
