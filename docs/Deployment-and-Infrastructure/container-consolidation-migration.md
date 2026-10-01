@@ -52,8 +52,8 @@ Rules:
   - Remove standalone `backup-agent` service; hourly snapshot push runs as Celery beat task in `backend` (AUT-3827).
   - Rename the `autobrain-backup` GUI service to `backup` so the compose service, docker DNS name and image repo agree (AUT-3944).
   - MinIO bucket init folded into `minio` entrypoint (AUT-1242/C2).
-- **Result:** hosted stack reduced from 12 → **10 long-running containers**.
-  Remaining: postgres, redis, minio, backend (API:8000 + AI:8001 + Celery), dongle-server, frontend, hub, gh-runner, 9router, backup.
+- **Result:** hosted stack reduced from 12 → **9 long-running containers**.
+  Remaining: postgres, redis, minio, backend (API:8000 + AI:8001 + Celery), dongle-server, frontend, hub, 9router, backup. (`gh-runner` was removed in AUT-4911; it runs as its own Portainer stack.)
 
 ## What is consolidated
 
@@ -110,7 +110,7 @@ The compose re-apply removes the standalone `worker`, `ai`, `market-data`, `back
       get` → `none`).
 - [ ] No `worker`, `ai`, `market-data`, or `backup-agent` containers exist in the hosted stack.
 - [ ] `docker-compose.hosted.yml` service list has no `worker`, `ai`, `market-data`, or `backup-agent` service.
-- [ ] Container count is 10 (postgres, redis, minio, backend, dongle-server, frontend, hub, gh-runner, 9router, backup).
+- [ ] Container count is 9 (postgres, redis, minio, backend, dongle-server, frontend, hub, 9router, backup).
 - [ ] No container or network alias named `autobrain-backup` remains; the
       GUI resolves at `http://backup:8080` from inside the stack.
 - [ ] `BACKUP_OFFSITE_URL` on the EP5 stack env is either unset (compose

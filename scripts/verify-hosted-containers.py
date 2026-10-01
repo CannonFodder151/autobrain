@@ -9,10 +9,10 @@ Run on a host with Portainer credentials:
   PORTAINER_API_KEY=<key> python3 scripts/verify-hosted-containers.py
   PORTAINER_API_KEY=<key> python3 scripts/verify-hosted-containers.py --endpoint 6 --stack autobrain-dev
 
-`gh-runner` is declared in docker-compose.hosted.yml but Portainer runs it as its
-own stack (AUT-4725), so companion stacks are scanned by default. Override with
-`--companion-stack <stack>/<service>=<declared>` (repeatable) or
-`--no-companion-stacks` to count only --stack.
+Companion stacks let a service that Portainer runs separately still be counted
+under the name compose declares: `--companion-stack <stack>/<service>=<declared>`
+(repeatable). There are no defaults — AUT-4911 dropped `gh-runner` from the
+hosted compose entirely, so every declared service now runs in `--stack`.
 
 Exit codes: 0 match, 1 mismatch, 2 usage/auth error.
 """
@@ -32,12 +32,8 @@ def compose_services(path=COMPOSE):
         return set(yaml.safe_load(f)["services"])
 
 
-# AUT-4725 moved `gh-runner` out of the hosted stack into its own Portainer stack
-# (the hosted stack project dir has no build context for the runner wrapper image).
-# It is still declared in docker-compose.hosted.yml, but the companion stack names
-# its service after the runner, so the two names have to be related explicitly.
 # Spec format: "<stack>/<actual_service>=<declared_service>".
-DEFAULT_COMPANION_STACKS = ("gh-runner-autobrain-arm64/gh-runner-autobrain-arm64=gh-runner",)
+DEFAULT_COMPANION_STACKS: tuple = ()
 
 
 def parse_companion(spec):
@@ -98,7 +94,7 @@ def main():
         default=None, metavar="STACK/SERVICE=DECLARED",
         help="Companion Portainer stack that also hosts a declared service, and "
              "how its service name maps to the declared one "
-             f"(default: {', '.join(DEFAULT_COMPANION_STACKS)}); repeatable. "
+             f"(default: {', '.join(DEFAULT_COMPANION_STACKS) or 'none'}); repeatable. "
              "Pass --no-companion-stacks to count only --stack.")
     ap.add_argument("--no-companion-stacks", action="store_true",
                     help="Count only --stack; declare a service deployed as its "
