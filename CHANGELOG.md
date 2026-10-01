@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.290] - 2026-09-30
+
 ### Fixed (AUT-2784)
 - fix(ai): the AI gateway now imports its own modules relatively, so it is
   self-contained as `ai_app` in the shared backend image. `docker/backend/Dockerfile`
