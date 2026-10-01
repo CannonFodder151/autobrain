@@ -22,7 +22,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   `docker-compose.yml` and `docker-compose.prod.yml` (the empty default is
   intentional — it fails the build loud rather than shipping a watermapped map).
   No behaviour change. New `scripts/check-carto-build-arg-propagation.py`
-  statically asserts that every documented/scripted frontend build passes the key.
+  statically asserts that every documented/scripted frontend build passes the key;
+  it now runs as the `carto build-arg propagation` CI job so the paths cannot
+  silently regress. `scripts/publish-images.sh` also sources the key from `.env`
+  and hard-fails early instead of letting `docker build` reject it.
 
 ## [0.3.290] - 2026-09-30
 

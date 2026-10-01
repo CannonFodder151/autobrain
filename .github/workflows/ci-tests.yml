@@ -118,3 +118,20 @@ jobs:
               sys.exit(1)
           print("all workflow files parse")
           PY
+
+  # AUT-4690 made docker/frontend/Dockerfile hard-fail on an empty CARTO_API_KEY,
+  # which silently broke every documented/scripted frontend build that omitted the
+  # build arg (AUT-4824). The check needs no docker daemon, so run it on every PR.
+  carto-build-arg:
+    name: carto build-arg propagation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Documented/scripted frontend builds must pass CARTO_API_KEY
+        run: python3 scripts/check-carto-build-arg-propagation.py
