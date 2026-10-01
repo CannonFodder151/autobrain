@@ -24,9 +24,9 @@ permissions:
   contents: read
 
 env:
-  THRESHOLD: '2.8.4-r0'
+  THRESHOLD: '2.8.5-r0'
   IMAGE_TAG: 'nginxinc/nginx-unprivileged:stable-alpine'
-  PINNED_DIGEST: 'sha256:45ce1e2e699234253d1def7baa96218a5d00b498d1ba0cbb1a17b6bdf73d1351'
+  PINNED_DIGEST: 'sha256:ed04ec1ff34502c339ee5c3ae3f855442398edc1d05591e2b98981dcbbd20b1e'
   DISCORD_REPORT_WEBHOOK: ${{ secrets.DISCORD_REPORT_WEBHOOK }}
 
 jobs:
@@ -53,7 +53,12 @@ jobs:
         id: digest
         run: |
           set -euo pipefail
-          DIGEST="$(regctl image digest --platform linux/amd64 "${{ env.IMAGE_TAG }}")"
+          # NOTE (AUT-4718): resolve the multi-arch INDEX digest, not a per-arch
+          # manifest digest. `--platform linux/amd64` returns the amd64 manifest
+          # (sha256:f4522a5f…), while PINNED_DIGEST holds the index digest
+          # (sha256:ed04ec1f…). Comparing the two made `unchanged` always false, so
+          # this workflow re-filed a duplicate Paperclip issue on every daily run.
+          DIGEST="$(regctl image digest "${{ env.IMAGE_TAG }}")"
           echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
           echo "current stable-alpine digest: $DIGEST"
           if [ "$DIGEST" = "${{ env.PINNED_DIGEST }}" ]; then

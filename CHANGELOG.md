@@ -11,6 +11,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-4718)
+- security(ci,docker): bump `nginxinc/nginx-unprivileged:stable-alpine` to
+  `sha256:ed04ec1f…` (Alpine 3.24.2, `libexpat` 2.8.5-r0). Fixes HIGH
+  `CVE-2026-93990` (libexpat XML injection via malformed UTF-16) that failed the
+  `image-scan` gate on `main`. Drops the now-fixed `CVE-2026-66046` /
+  `CVE-2026-76641` `.trivyignore` suppressions instead of re-suppressing.
+  Both `docker/frontend/Dockerfile` and `NGINX_FRONTEND_IMAGE` in
+  `trivy-image-scan.yml` had drifted onto two *different* stale digests
+  (`44275388…` and the amd64-only `ee1643ae…`); both now pin the same
+  multi-arch index.
+- fix(ci): `trivy-image-scan.yml` passed `scanner: vuln` to
+  `aquasecurity/trivy-action@v0.36.0`, which does not accept that input
+  (correct name is `scanners`). GitHub logged an "Unexpected input(s)" warning on
+  every one of the three scan steps and the value was silently dropped.
+- fix(ci): `libexpat-version-check.yml` compared a per-arch manifest digest
+  (`--platform linux/amd64`) against `PINNED_DIGEST`, which holds the multi-arch
+  index digest, so `unchanged` was always false and the daily job re-filed a
+  duplicate Paperclip issue on every run. Now resolves the index digest, and its
+  threshold is raised to 2.8.5-r0.
+
 ## [0.3.291] - 2026-10-01
 
 ### Fixed (AUT-4855)

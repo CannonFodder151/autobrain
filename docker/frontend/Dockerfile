@@ -48,7 +48,7 @@ RUN set -eu; \
     fi; \
     grep -qF '?key=' "$js" || echo "WARN: '?key=' not found in $js; check the CARTO tile template in frontend/lib/screens/servo_spy." >&2
 
-FROM nginxinc/nginx-unprivileged:stable-alpine@sha256:442753882674b49ae2c1de83ed67896131c0777f56df5005e356e62bc3f7e7ce
+FROM nginxinc/nginx-unprivileged:stable-alpine@sha256:ed04ec1ff34502c339ee5c3ae3f855442398edc1d05591e2b98981dcbbd20b1e
 COPY --from=build /build/build/web /usr/share/nginx/html
 COPY docker/frontend/nginx.conf /etc/nginx/conf.d/default.conf
 COPY docker/frontend/security-headers.inc /etc/nginx/conf.d/security-headers.inc

@@ -81,17 +81,18 @@ GHSA-5rjg-fvgr-3xxf  # setuptools: GHSA alias of CVE-2025-47273; build-time only
 # Time-boxed: re-check 2026-11-28; drop entry + bump PYTHON_BASE_IMAGE digest once
 # a 3.13-slim respin ships openssl>=3.5.7-1~deb13u2.
 
-# --- AUT-1998: nginx libexpat HIGH CVEs (image not yet rebuilt with expat 2.8.4) ------------------
-# Source: libexpat in nginxinc/nginx-unprivileged:stable-alpine@sha256:ee055adf...
-# CVE-2026-66046 and CVE-2026-76641: DoS via crafted XML. expat 2.8.4-r0 fixes.
-# Image tag hasn't been rebuilt with patched expet yet. Suppress until image rebuilt;
-# re-check 2026-12-28: if upstream nginx releases patched alpine build, bump image digest.
-CVE-2026-66046  # expat DoS: no network exposure in AutoBrain nginx frontend
-CVE-2026-76641  # expat: same package; no runtime impact
+# --- AUT-1998: nginx libexpat HIGH CVEs — RESOLVED by the AUT-4718 digest bump ---------------
+# Source: libexpat 2.8.3-r0 / 2.8.4-r0 in nginxinc/nginx-unprivileged:stable-alpine.
+# CVE-2026-66046 and CVE-2026-76641 (DoS via crafted XML) are fixed in 2.8.4-r0;
+# CVE-2026-93990 (XML injection via malformed UTF-16) required 2.8.5-r0.
+# nginxinc shipped an Alpine 3.24.2 rebuild carrying libexpat 2.8.5-r0, so the pin moved
+# to sha256:ed04ec1f... (amd64 and arm64 manifests both verified at 2.8.5-r0).
+# Entries DROPPED, not re-suppressed. The libexpat fix-detect workflow threshold is
+# raised to 2.8.5-r0 (AUT-4718).
 
 
 # --- AUT-2762: nginx libuuid (util-linux) HIGH CVEs (alpine 3.24.1 base package; no upstream fix yet) ---
-# Source: libuuid in nginxinc/nginx-unprivileged:stable-alpine@sha256:45ce1e2e...
+# Source: libuuid in nginxinc/nginx-unprivileged:stable-alpine@sha256:ed04ec1f...
 # CVE-2026-53612/53613/53614: TOCTOU / SUID mount bypass via libmount; CVE-2026-76642: privileged X-mount post-hooks.
 # CVE-2026-78408/78409/78410: nsenter cgroup leak / X-mount.subdir symlink escape / restricted bind-mount pinning.
 # These are util-linux/libmount mount(8) features AutoBrain does not use — the nginx frontend
@@ -111,7 +112,7 @@ CVE-2026-78410  # util-linux restricted bind-mount source pinning bypass: nginx 
 # details" and exits 1 even though the finding is suppressed by --ignore-unfixed).
 # Trivy 0.74 + a fully populated DB will resolve itself; for now, suppress the
 # noisy placeholder so PRs don't get blocked on DB freshness. Reviewer: Sec.
-CVE-2026-80256  # nginx placeholder; trivy 0.70 false-positive on missing metadata
+CVE-2026-80256  # nginx placeholder; trivy 0.70 false-positive on missing metadata (alpine 3.24.1)
 
 # --- POSTGRESQL libpcre2 CVEs (pgvector/pgvector:pg17) ---
 # CVE-2026-86145 / CVE-2026-89161: pcre2 out-of-bounds write + JIT memory corruption.
@@ -170,7 +171,7 @@ CVE-2026-57432  # perl pack/unpack info leak: build-time only
 CVE-2026-57433  # perl Storable DoS: build-time only; no Storable in runtime
 
 # --- AUT-1600-PR: nginx libuuid/util-linux HIGH CVEs (pending upstream rebuild) -----
-# Source: libuuid (util-linux 2.42.1-r0) in nginxinc/nginx-unprivileged:stable-alpine.
+# Source: libuuid (util-linux) in nginxinc/nginx-unprivileged:stable-alpine@sha256:ed04ec1f...
 # CVE-2026-53612/53613/53614: TOCTOU/SUID mount bypasses require filesystem
 #   mount operations or SUID mount(8) — nginx frontend does neither.
 # CVE-2026-76642: external mount helper post-hooks require privileged mount paths —
