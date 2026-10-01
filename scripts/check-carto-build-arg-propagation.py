@@ -37,6 +37,8 @@ def build_commands(text: str):
         if buf:
             joined.append((start, LINE_CONT.sub(" ", "\n".join(buf))))
             buf = []
+    if buf:  # command ran to EOF with a trailing backslash and no final newline
+        joined.append((start, LINE_CONT.sub(" ", "\n".join(buf))))
     return joined
 
 

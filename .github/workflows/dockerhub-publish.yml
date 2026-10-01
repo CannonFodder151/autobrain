@@ -237,6 +237,9 @@ jobs:
           CARTO_API_KEY: ${{ secrets.CARTO_API_KEY || '' }}
         run: |
           set -euo pipefail
+          # AUT-4824: fail here with a readable message. Without it the empty
+          # secret surfaces as an opaque error deep inside the frontend build.
+          : "${CARTO_API_KEY:?GitHub secret CARTO_API_KEY is unset or empty — the frontend build requires it (AUT-4690)}"
           VERSION="$(grep -E 'APP_VERSION: str' backend/app/core/config.py | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/')"
           echo "==> building images tagged with version $VERSION (linux/amd64)"
           for svc in backend ai frontend; do

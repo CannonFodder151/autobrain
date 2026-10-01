@@ -25,7 +25,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   statically asserts that every documented/scripted frontend build passes the key;
   it now runs as the `carto build-arg propagation` CI job so the paths cannot
   silently regress. `scripts/publish-images.sh` also sources the key from `.env`
-  and hard-fails early instead of letting `docker build` reject it.
+  and hard-fails early instead of letting `docker build` reject it, and
+  `dockerhub-publish.yml` fails with a readable message when the
+  `CARTO_API_KEY` secret is unset rather than surfacing an opaque error deep
+  inside the build.
 
 ## [0.3.290] - 2026-09-30
 
