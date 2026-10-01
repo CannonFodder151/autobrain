@@ -66,6 +66,16 @@ def main():
     hc = hc if isinstance(hc, str) else " ".join(hc)
     assert "/run/secrets/redis_password" in hc, f"redis healthcheck not authed: {hc!r}"
 
+    # AUT-4038: pg_isready without -h uses the local unix socket, where
+    # `local ... peer` auth compares the container's root OS user against the
+    # POSTGRES_USER role and logs an auth failure every healthcheck interval.
+    pg_hc = svcs["postgres"]["healthcheck"]["test"]
+    pg_hc = pg_hc if isinstance(pg_hc, str) else " ".join(pg_hc)
+    assert "-h 127.0.0.1" in pg_hc, (
+        f"postgres healthcheck must use TCP (-h 127.0.0.1), not the peer-auth "
+        f"unix socket: {pg_hc!r}"
+    )
+
     # F2: no secret-class plain env left on backend. The worker service was
     # merged into backend (AUT-3153) and the `ai` service into backend
     # (AUT-3824), so neither exists separately any more.

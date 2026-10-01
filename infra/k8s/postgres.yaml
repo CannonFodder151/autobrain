@@ -44,7 +44,9 @@ spec:
               mountPath: /var/lib/postgresql/data
           readinessProbe:
             exec:
-              command: ["pg_isready", "-U", "autobrain"]
+              # AUT-4038: -h 127.0.0.1 forces TCP; without it this probe uses
+              # the peer-auth unix socket as root and fails auth every time.
+              command: ["pg_isready", "-h", "127.0.0.1", "-U", "autobrain"]
             initialDelaySeconds: 5
           resources:
             requests:
