@@ -330,6 +330,8 @@ jobs:
           TAG: ${{ github.event.inputs.tag || 'hosted' }}
         run: |
           set -euo pipefail
+          # AUT-4946: the sync script parses compose + inspects container state.
+          PIP_BREAK_SYSTEM_PACKAGES=1 python3 -m pip install --quiet pyyaml
           python3 scripts/sync-compose-to-portainer.py \
             --stack autobrain-hosted \
             --endpoint 5 \
