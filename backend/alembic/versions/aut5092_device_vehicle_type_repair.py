@@ -9,9 +9,15 @@ aut2706 ALTER never ran. The ORM expects the column, so any query touching
 
 Idempotent: no-op when the table or column is already there.
 
-Revision ID: aut5092_device_vehicle_type_repair
+Revision ID: aut5092_dev_veh_type
 Revises: aut3448_fuel_price_snapshots
 Create Date: 2026-10-02
+
+AUT-5122: the revision id was ``aut5092_device_vehicle_type_repair`` (34 chars),
+but ``alembic_version.version_num`` is ``varchar(32)`` — the stamp raised
+``StringDataRightTruncationError``, bootstrap fell back to ``create_all`` and this
+repair never applied. Ids must stay <= 32 chars (guarded by
+``tests/test_alembic_heads.py::test_alembic_revision_ids_fit_version_column``).
 """
 
 from typing import Sequence, Union
@@ -19,7 +25,7 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import context, op
 
-revision: str = "aut5092_device_vehicle_type_repair"
+revision: str = "aut5092_dev_veh_type"
 down_revision: Union[str, Sequence[str], None] = "aut3448_fuel_price_snapshots"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
