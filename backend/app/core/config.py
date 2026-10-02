@@ -175,10 +175,12 @@ class Settings(BaseSettings):
     BACKUP_RETENTION_DAYS: int = 14
 
     # Off-site backup (hourly) — replaces the standalone backup-agent container (AUT-3827).
-    # Pushes full-DB snapshots to autobrain-backup /ingest with tiered retention.
+    # Pushes full-DB snapshots to autobrain-backup /ingest. Per-tier retention is
+    # owned by the autobrain-backup instance (retention.hourly/daily/weekly) —
+    # the backend never prunes this store (AUT-5136).
     BACKUP_OFFSITE_ENABLED: bool = False
     BACKUP_OFFSITE_URL: str = ""              # e.g. http://autobrain-backup:8080
-    BACKUP_OFFSITE_GUI_KEY: str = ""          # X-Gui-Key for /api/backups + /api/backup/delete
+    BACKUP_OFFSITE_GUI_KEY: str = ""          # X-Gui-Key (kept for admin/ops calls against the store)
     BACKUP_OFFSITE_GUI_KEY_FILE: str = ""     # secret-file fallback
     BACKUP_OFFSITE_INGEST_KEY: str = ""       # X-Ingest-Key for /api/backup/ingest
     BACKUP_OFFSITE_INGEST_KEY_FILE: str = ""  # secret-file fallback
