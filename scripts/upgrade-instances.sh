@@ -26,7 +26,7 @@
 #
 # Environment overrides (sane defaults for the three AutoBrain tiers):
 #   UPGRADE_TIERS        space/tab/newline separated "name|endpoint|health|required_env"
-#                           AUT-2409: default is hosted-only; override to add demo/default tiers manually
+#                           AUT-4982: default is the full promotion chain again (demo → default → hosted)
 #   UPGRADE_DRY_RUN=1    resolve + health-check only, do not redeploy
 #   HEALTH_TIMEOUT_SEC   per-tier health poll timeout (default 600)
 #
@@ -45,8 +45,14 @@ AUTH=(-H "X-API-Key: $PORTAINER_API_KEY")
 API="$PORTAINER_URL/api"
 
 # name | endpoint_id | health_url | "k=v,k=v" required env the stack must carry
+# AUT-4982: restore demo + default to the automatic promotion chain. AUT-2409 had
+# dropped them, which left demo/default frozen on whatever image was last pulled
+# by hand (demo went 502 and stayed there because nothing redeployed it).
+# Hosted keeps its 03:00-04:00 AEST window (AUT-2409); scope a dispatch with
+# UPGRADE_TIERS to honour that window, e.g. the `tiers` dispatch input.
 DEFAULT_TIERS="
-# AUT-2409: hosted-only deploys (03:00-04:00 AEST window; demo/default off-limits)
+autobrain-demo|2|https://demo.autobrainservice.app/health|
+autobrain|2|https://default.autobrainservice.app/health|
 autobrain-hosted|5|https://hosted.autobrainservice.app/health|POSTGRES_USER=autobrain,POSTGRES_DB=autobrain
 "
 

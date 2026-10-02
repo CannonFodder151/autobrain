@@ -14,13 +14,15 @@ health checks, key flows). A change never goes to Hosted without first passing
 Demo and Default. A release is **NOT complete** until Hosted is verified last.
 Source of truth: board directive AUT-107.
 
-> **OVERRIDE (AUT-2409) — hosted-only, in force.** The three-tier chain above is
-> **PAUSED**. All deploys go to **Hosted only** (Oracle Cloud, Portainer endpoint
-> 5), in the nightly 03:00–04:00 AEST window. Do **not** deploy to Demo or
-> Default (both on EP2). Image-prune across EP2 + EP5 stays permitted; stack
-> redeploys on EP2 do not. Out-of-window hosted deploys need explicit board
-> approval. This override is lifted only by a new board directive — when it is,
-> the chain above applies again.
+> **Hosted deploy window (AUT-2409 / AUT-5172).** The three-tier chain above is
+> **in force again** — AUT-4982 restored Demo and Default to the automatic
+> promotion path after AUT-2409 had paused them. Hosted remains the sensitive
+> tier: it deploys in the nightly 03:00–04:00 AEST window, and an out-of-window
+> hosted deploy needs explicit board approval. To honour the window, dispatch
+> `deploy-instances.yml` with the `tiers` input scoped to Demo/Default, or to
+> Hosted alone. Image-prune across EP2 + EP5 stays permitted. What must never
+> happen is an unscoped **EP2 redeploy of Nathan's personal apps** (AUT-4502,
+> below) — `upgrade-instances.sh` only ever touches the named AutoBrain stacks.
 >
 > **EP2 personal apps (AUT-4502) — do not touch.** EP2 (Portainer-Host) also
 > runs Nathan's personal services (immich, pterodactyl, media/*arr, unifi,
@@ -37,12 +39,13 @@ gate blocks the release at that tier.
 - [ ] 0. **Code gate** — every feature/PR for this release is **merged to `main`
       first**. Do NOT deploy, promote, or announce a feature whose PR is still
       open or unmerged.
-- [ ] 1. **Hosted** (AUT-2409 override) — build via the `build-hosted.yml`
-      workflow_dispatch on the self-hosted ARM64 runner, then update the EP5
-      stack (`pullImage:true`); verify startup + `/health` + key flows.
-      **The release is complete when this passes.**
-- [ ] ~~**Demo**~~ — **SKIPPED** (EP2 deploys paused, AUT-2409).
-- [ ] ~~**Default**~~ — **SKIPPED** (EP2 deploys paused, AUT-2409).
+- [ ] 1. **Demo** — update the EP2 `autobrain-demo` stack (`pullImage:true`);
+      verify startup + `/health` + key flows.
+- [ ] 2. **Default** — same for EP2 `autobrain`. Promote only once Demo is healthy.
+- [ ] 3. **Hosted** — build via `build-hosted.yml`, then update the EP5 stack
+      (`pullImage:true`); verify startup + `/health` + key flows. Scheduled runs
+      are gated to the 03:00–04:00 AEST window. **The release is complete when
+      this passes.**
 - [ ] **Verify the feature is actually present** on each tier — exercise the
       flow (open the new screen, hit the new endpoint), not just the version
       banner.
@@ -187,6 +190,8 @@ UPGRADE_TIERS="autobrain-hosted|5|https://hosted.autobrainservice.app/health|" \
 Run it from the repo checkout on a host that can reach Portainer (the
 `deploy-instances.yml` `upgrade` job does exactly this, with the
 `PORTAINER_API_KEY`/`PORTAINER_URL` repo secrets injected by GitHub).
+The job's `tiers` dispatch input is passed straight through as `UPGRADE_TIERS`;
+leave it blank for the full chain.
 
 Defaults stay `127.0.0.1` — `EXPOSE_LAN=0` means nothing is reachable off-host.
 Never commit `BIND_ADDRESS=0.0.0.0` to a shared `.env`.
@@ -267,6 +272,8 @@ UPGRADE_TIERS="autobrain-hosted|5|https://hosted.autobrainservice.app/health|" \
 Run it from the repo checkout on a host that can reach Portainer (the
 `deploy-instances.yml` `upgrade` job does exactly this, with the
 `PORTAINER_API_KEY`/`PORTAINER_URL` repo secrets injected by GitHub).
+The job's `tiers` dispatch input is passed straight through as `UPGRADE_TIERS`;
+leave it blank for the full chain.
 
 Portainer stack updates pull images (`pullImage=true`) and recreate changed
 services (AUT-372). This is intended so CI-published images reach the tier, and

@@ -10,6 +10,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+- fix(ci): restore automatic deploys for the **Demo** and **Default** tiers.
+  AUT-2409 narrowed `DEFAULT_TIERS` in `scripts/upgrade-instances.sh` to
+  Hosted-only, so neither EP2 stack was ever redeployed again and demo
+  (`demo.autobrainservice.app`) went 502 and stayed down. The full
+  Demo → Default → Hosted promotion chain is back in the defaults, still
+  health-gated per tier (AUT-107). Hosted keeps its 03:00–04:00 AEST window
+  (AUT-2409 / AUT-5172); scope a `deploy-instances.yml` dispatch with the new
+  `tiers` input to honour it.
 
 ## [0.3.299] - 2026-10-02
 - fix(backend): `backup_offsite_hourly` now wraps `run_backup_offsite()` in the
