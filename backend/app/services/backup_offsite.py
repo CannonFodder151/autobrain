@@ -19,6 +19,11 @@ from app.services.backup import dump_backup, serialize_all
 
 logger = logging.getLogger("autobrain.backup_offsite")
 
+# Every tier _apply_tiered_retention manages must also be flattened out of the
+# off-site listing, otherwise those snapshots are invisible to retention.
+# AUT-3827: `monthly` was missing here — monthly backups never deduped/pruned.
+_OFFSITE_TIERS = ("hourly", "daily", "weekly", "monthly")
+
 
 def _tier_for_age(hours_old: int) -> str | None:
     """Return tier name if the snapshot should be kept for that tier, else None (prune)."""
@@ -60,7 +65,7 @@ async def _list_existing_offsite() -> list[dict]:
             data = r.json()
             # Flatten hourly/daily/weekly into a single list with tier info
             all_backups = []
-            for tier in ("hourly", "daily", "weekly"):
+            for tier in _OFFSITE_TIERS:
                 for b in data.get(tier, []):
                     all_backups.append({"file": b["name"], "tier": tier, "timestamp": b.get("mtime"), "size": b.get("size")})
             return all_backups
