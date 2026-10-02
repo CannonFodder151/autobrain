@@ -1,10 +1,10 @@
-"""Tests for the CI triage webhook receiver (AUT-1669)."""
+"""Tests for the CI triage webhook receiver (AUT-1669, AUT-3103)."""
 
 import os
 
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test-user:test-password@postgres:5432/autobrain")
 os.environ.setdefault("SECRET_KEY", "test-secret")
-os.environ.setdefault("ADMIN_API_KEY", "test-admin-key")
+os.environ.setdefault("ADMIN_API_KEY", "test-admin-key-at-least-thirty-tw")
 
 from unittest.mock import AsyncMock, MagicMock, patch  # noqa: E402
 
@@ -20,6 +20,7 @@ CI_SECRET = "test-ci-webhook-secret"
 @pytest.fixture
 def app(monkeypatch: pytest.MonkeyPatch) -> FastAPI:
     monkeypatch.setenv("CI_TRIAGE_WEBHOOK_SECRET", CI_SECRET)
+    monkeypatch.setenv("CI_TRIAGE_ALLOWED_IPS", "127.0.0.1")
     monkeypatch.setenv("PAPERCLIP_API_URL", "https://paperclip.test")
     monkeypatch.setenv("PAPERCLIP_API_KEY", "test-paperclip-key")
     monkeypatch.setenv("PAPERCLIP_COMPANY_ID", "test-company-id")
@@ -27,12 +28,9 @@ def app(monkeypatch: pytest.MonkeyPatch) -> FastAPI:
     monkeypatch.setenv("CI_TRIAGE_GOAL_ID", "goal-456")
     monkeypatch.setenv("CI_TRIAGE_AGENT_ID", "acae6bf2")
 
-    # rebuild settings so env overrides take effect
     import app.core.config as config_mod
     monkeypatch.setattr(config_mod, "settings", config_mod.Settings(_env_file=None))
 
-    # ci.py bound `settings` at module import time; monkeypatch must also
-    # repoint it here, otherwise ci.py keeps the original (unconfigured) object.
     import app.api.v1.ci as ci_mod
     monkeypatch.setattr(ci_mod, "settings", config_mod.settings)
 
@@ -44,6 +42,50 @@ def app(monkeypatch: pytest.MonkeyPatch) -> FastAPI:
 @pytest.fixture
 def headers() -> dict:
     return {"Authorization": f"Bearer {CI_SECRET}"}
+
+
+@pytest.mark.asyncio
+async def test_empty_secret_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    """AUT-3103: empty CI_TRIAGE_WEBHOOK_SECRET returns 503."""
+    import app.core.config as config_mod
+    import app.api.v1.ci as ci_mod
+    monkeypatch.setattr(config_mod, "settings", config_mod.Settings(_env_file=None, CI_TRIAGE_WEBHOOK_SECRET=""))
+    monkeypatch.setattr(ci_mod, "settings", config_mod.settings)
+
+    a = FastAPI()
+    a.include_router(ci_router, prefix="/api/v1")
+    transport = ASGITransport(app=a)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/api/v1/ci/webhook", json={"repo": "o/r", "ref": "main"})
+    assert resp.status_code == 503
+    assert "not configured" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_ip_denied_403(app: FastAPI, headers: dict) -> None:
+    """AUT-3103: request from non-allowed IP returns 403."""
+    import app.api.v1.ci as ci_mod
+
+    with patch.object(ci_mod, "_client_ip", return_value="10.0.0.99"):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/api/v1/ci/webhook", json={"repo": "o/r", "ref": "main"}, headers=headers)
+    assert resp.status_code == 403
+    assert "IP not allowed" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_exceeded_429(app: FastAPI, headers: dict) -> None:
+    """AUT-3103: exceeding rate limit returns 429."""
+    import app.api.v1.ci as ci_mod
+
+    mock_bump = AsyncMock(side_effect=[11, 11, 11, 11])
+    with patch.object(ci_mod, "_ci_rate_bump", mock_bump):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/api/v1/ci/webhook", json={"repo": "o/r", "ref": "main"}, headers=headers)
+    assert resp.status_code == 429
+    assert "Rate limit exceeded" in resp.json()["detail"]
 
 
 @pytest.mark.asyncio
@@ -83,22 +125,6 @@ async def test_missing_payload_fields(app: FastAPI, headers: dict) -> None:
 
 
 @pytest.mark.asyncio
-async def test_not_configured_503(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> None:
-    """When CI_TRIAGE_WEBHOOK_SECRET is unset → 503."""
-    import app.core.config as config_mod
-    import app.api.v1.ci as ci_mod
-    monkeypatch.setattr(config_mod, "settings", config_mod.Settings(_env_file=None, CI_TRIAGE_WEBHOOK_SECRET=""))
-    monkeypatch.setattr(ci_mod, "settings", config_mod.settings)
-
-    a = FastAPI()
-    a.include_router(ci_router, prefix="/api/v1")
-    transport = ASGITransport(app=a)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.post("/api/v1/ci/webhook", json={"repo": "o/r", "ref": "main"})
-    assert resp.status_code == 503
-
-
-@pytest.mark.asyncio
 @patch("app.api.v1.ci.httpx.AsyncClient")
 async def test_webhook_creates_issue(mock_client_cls, app: FastAPI, headers: dict) -> None:
     mock_response = AsyncMock()
@@ -111,13 +137,14 @@ async def test_webhook_creates_issue(mock_client_cls, app: FastAPI, headers: dic
     mock_ac.__aexit__ = AsyncMock(return_value=None)
     mock_client_cls.return_value = mock_ac
 
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.post(
-            "/api/v1/ci/webhook",
-            json={"event": "push", "repo": "CannonFodder151/autobrain", "ref": "refs/heads/main"},
-            headers=headers,
-        )
+    with patch("app.api.v1.ci._ci_rate_bump", AsyncMock(return_value=1)):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/v1/ci/webhook",
+                json={"event": "push", "repo": "CannonFodder151/autobrain", "ref": "refs/heads/main"},
+                headers=headers,
+            )
 
     assert resp.status_code == 200
     assert resp.json()["issueId"] == "issue-abc"
@@ -137,13 +164,14 @@ async def test_webhook_http_error_returns_502(mock_client_cls, app: FastAPI, hea
     mock_ac.__aexit__ = AsyncMock(return_value=None)
     mock_client_cls.return_value = mock_ac
 
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.post(
-            "/api/v1/ci/webhook",
-            json={"event": "push", "repo": "o/r", "ref": "main"},
-            headers=headers,
-        )
+    with patch("app.api.v1.ci._ci_rate_bump", AsyncMock(return_value=1)):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/v1/ci/webhook",
+                json={"event": "push", "repo": "o/r", "ref": "main"},
+                headers=headers,
+            )
     assert resp.status_code == 502
 
 
@@ -161,12 +189,12 @@ async def test_webhook_non_json_response_returns_502(mock_client_cls, app: FastA
     mock_ac.__aexit__ = AsyncMock(return_value=None)
     mock_client_cls.return_value = mock_ac
 
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.post(
-            "/api/v1/ci/webhook",
-            json={"event": "push", "repo": "o/r", "ref": "main"},
-            headers=headers,
-        )
+    with patch("app.api.v1.ci._ci_rate_bump", AsyncMock(return_value=1)):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/api/v1/ci/webhook",
+                json={"event": "push", "repo": "o/r", "ref": "main"},
+                headers=headers,
+            )
     assert resp.status_code == 502
-# 
