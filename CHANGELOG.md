@@ -16,8 +16,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   migration failure — `alembic_version` sat at `aut4925_missing_tables` and
   `fuel_price_snapshots` existed only because `create_all` happened to build it.
   Guarded by `scripts/check-compose-consolidation.py` (with negative tests) and
-  a new `alembic-migrations` CI job that proves a fresh database reaches head and
-  that a data-only revision (`b4c5d6e7f8a9`) really rewrites rows.
+  a new `alembic-migrations` CI job that proves a create_all-built database
+  at the hosted stamp reaches head and that a data-only revision
+  (`b4c5d6e7f8a9`) really rewrites rows.
 - feat(alembic): add migration for `fuel_price_snapshots` — the table was only
 
 ### Fixed (AUT-4678)

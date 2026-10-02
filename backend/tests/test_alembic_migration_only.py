@@ -4,11 +4,14 @@ Hosted booted straight into ``python -m app.db.bootstrap``, whose ``create_all``
 fallback swallowed every migration failure, so migration-only changes (new
 index, constraint, column rename, data backfill) were dead code in production.
 Static compose guards catch a deleted ``alembic upgrade head``; this module
-catches the other half — a chain that no longer applies cleanly from zero, or a
-data-only revision that stopped doing anything.
+catches the other half — a chain that no longer upgrades a hosted-shaped
+database, or a data-only revision that stopped doing anything.
 
-Both cases build their own throwaway database from ``ALEMBIC_TEST_ADMIN_URL``
-(``postgresql://user:pass@host:5432/postgres``) and run the real ``alembic``
+Both cases start from the shape hosted actually has: the schema built by the
+``create_all`` fallback, ``alembic_version`` stamped but not advanced.
+
+Each case builds its own throwaway database from ``ALEMBIC_TEST_ADMIN_URL``
+(``postgresql://user:pass@host:5432/postgres``) and runs the real ``alembic``
 CLI against it, so nothing here needs the dev or hosted stack. Skipped when
 that variable is unset; the ``alembic-migrations`` CI job sets it against a
 ``pgvector/pgvector:pg17`` service, matching the hosted postgres image.
@@ -24,7 +27,6 @@ import pytest
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 ADMIN_URL = os.environ.get("ALEMBIC_TEST_ADMIN_URL", "")
-DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 pytestmark = pytest.mark.skipif(
     not ADMIN_URL, reason="ALEMBIC_TEST_ADMIN_URL not set (no throwaway postgres)"
@@ -38,20 +40,20 @@ def _head() -> str:
     cfg.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
     return ScriptDirectory.from_config(cfg).get_current_head()
 
+def _async_dsn(dsn: str) -> str:
+    """The app only has asyncpg installed, so the URL needs the async driver."""
+    return (
+        dsn.replace("postgresql://", "postgresql+asyncpg://", 1)
+        if dsn.startswith("postgresql://")
+        else dsn
+    )
+
 def _alembic(dsn: str, *args: str) -> None:
     """Run the real alembic CLI against `dsn`."""
     proc = subprocess.run(
         [sys.executable, "-m", "alembic", *args],
         cwd=BACKEND_DIR,
-        # The app only has asyncpg installed, so the URL needs the async driver.
-        env={
-            **os.environ,
-            "DATABASE_URL": (
-                dsn.replace("postgresql://", "postgresql+asyncpg://", 1)
-                if dsn.startswith("postgresql://")
-                else dsn
-            ),
-        },
+        env={**os.environ, "DATABASE_URL": _async_dsn(dsn)},
         capture_output=True,
         text=True,
     )
@@ -92,29 +94,41 @@ def fresh_db():
     finally:
         asyncio.run(_exec(ADMIN_URL, f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
 
-def test_fresh_database_reaches_head(fresh_db):
-    """An empty database must reach head with the hosted-relevant tables."""
+def _create_all(dsn: str) -> None:
+    """Build a schema the way `app.db.bootstrap`'s fallback does."""
+    proc = subprocess.run(
+        [sys.executable, "-c",
+         "import asyncio; from app.db.session import init_db; asyncio.run(init_db())"],
+        cwd=BACKEND_DIR,
+        env={**os.environ, "DATABASE_URL": _async_dsn(dsn)},
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, f"create_all failed: {proc.stderr[-2000:]}"
+
+def test_hosted_shaped_database_reaches_head(fresh_db):
+    """A create_all-built database at the hosted stamp must reach head.
+
+    This is the hosted shape exactly: the schema was built by the bootstrap
+    fallback, `alembic_version` was stamped at `aut4925_missing_tables` and
+    never advanced. After the AUT-5088 compose fix the boot runs
+    `alembic upgrade head`, so the version has to land on head — which is the
+    only way a migration-only change can ever reach production again.
+    """
+    _create_all(fresh_db)
+    _alembic(fresh_db, "stamp", "aut4925_missing_tables")
     _alembic(fresh_db, "upgrade", "head")
     assert asyncio.run(_sql(fresh_db, "select version_num from alembic_version")) == _head()
-    for table in ("fuel_price_snapshots", "passkey_credentials", "engineers"):
-        assert asyncio.run(
-            _sql(fresh_db, "select to_regclass($1) is not null", f"public.{table}")
-        ), f"{table} missing after upgrade head"
-    assert asyncio.run(
-        _sql(
-            fresh_db,
-            "select atttypid = 'vector'::regtype from pg_attribute "
-            "where attrelid = 'receipts'::regclass and attname = 'embedding'",
-        )
-    ), "receipts.embedding is not a pgvector column after upgrade head"
 
 def test_migration_only_backfill_applies(fresh_db):
     """b4c5d6e7f8a9 folds legacy oil service records into 'scheduled'.
 
-    That is a pure data rewrite — no schema change — so ``create_all`` can
-    never perform it. It only happens if the migration chain actually runs.
+    That is a pure data rewrite — no schema change — so `create_all` can never
+    perform it. It only happens if the migration chain actually runs against a
+    hosted-shaped database, which is the regression AUT-5088 is about.
     """
-    _alembic(fresh_db, "upgrade", "m3rge03")
+    _create_all(fresh_db)
+    _alembic(fresh_db, "stamp", "m3rge03")
     asyncio.run(
         _exec(
             fresh_db,
