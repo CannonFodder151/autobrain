@@ -43,6 +43,27 @@ def test_alembic_revision_ids_unique() -> None:
     assert not dups, f"duplicate alembic revision ids: {dups}"
 
 
+def test_alembic_revision_ids_fit_version_column() -> None:
+    """AUT-5122: every revision id must fit ``alembic_version.version_num``.
+
+    That column is ``varchar(32)``. A longer id does not fail at load time — it
+    fails on the ``UPDATE alembic_version`` during ``upgrade``, with
+    ``StringDataRightTruncationError``, after the DDL has already run.
+    ``bootstrap.py`` catches that and falls back to ``create_all``, which never
+    adds a column to an existing table, so the migration silently never applies
+    (this is exactly how ``devices.vehicle_type`` stayed missing on hosted).
+    """
+    too_long = {
+        rev.revision: len(rev.revision)
+        for rev in _script_dir().walk_revisions()
+        if len(rev.revision) > 32
+    }
+    assert not too_long, (
+        "alembic revision ids must be <= 32 chars (alembic_version.version_num "
+        f"is varchar(32)): {too_long}"
+    )
+
+
 def test_no_duplicate_table_names() -> None:
     """AUT-2277: no two ORM model classes may claim the same ``__tablename__``.
 
