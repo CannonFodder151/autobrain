@@ -8,6 +8,14 @@
 #
 # Default bumps the PATCH (x.y.z -> x.y.z+1). Cut minor/major manually with
 # ./scripts/bump-version.sh when a release deserves more than a patch.
+#
+# NOTE: The commit message intentionally omits [skip ci] (added 2026-09-17, AUT-2228).
+# The dockerhub-publish.yml and build-hosted.yml workflows already have version_only
+# steps that detect pure-version-cut pushes (CHANGELOG.md + version-only files) and skip
+# image build/publish. So [skip ci] is redundant and over-broad — it would suppress
+# sync-mobile.yml, github-release, and other workflows that should run on the auto-bump
+# push itself. Without [skip ci], those workflows fire on the same push, keeping the
+# stack in lockstep.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -73,7 +81,7 @@ awk -v v="## [$NEXT] - " '
 if [[ "$COMMIT" == "1" ]]; then
   git add -A
   git -c user.name="AutoBrain Release Bot" -c user.email="release@autobrainservice.app" \
-    commit -m "chore: release v$NEXT (auto-bump, AUT-240) [skip ci]" -q
+    commit -m "chore: release v$NEXT (auto-bump, AUT-240)" -q
   echo "==> committed v$NEXT"
   # Tag the release commit so `git tag --list` and the GitHub releases API
   # can see a real v* tag instead of just a CHANGELOG line (AUT-2055).
