@@ -328,6 +328,16 @@ jobs:
         if: steps.bump.outputs.changed == 'true'
         env:
           TAG: ${{ github.event.inputs.tag || 'hosted' }}
+          # AUT-5172: the hosted stack (EP5) is production. AUT-2409 confines
+          # hosted deploys to 03:00-04:00 AEST, so a push-to-main merge must
+          # only bump pins, never redeploy. The gate lives inside
+          # sync-compose-to-portainer.py (covers every caller) and skips the
+          # Portainer PUT out of window; pins stay bumped in git and the next
+          # in-window deploy applies them.
+          # A workflow_dispatch is the human, board-approved deploy action
+          # (scheduled/launched by the Deployment Lead), so it carries the
+          # explicit override and always syncs.
+          ALLOW_OUT_OF_WINDOW: ${{ github.event_name == 'workflow_dispatch' && 'true' || 'false' }}
         run: |
           set -euo pipefail
           # AUT-4946: the sync script parses compose + inspects container state.
