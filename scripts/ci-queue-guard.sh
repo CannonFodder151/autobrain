@@ -45,8 +45,20 @@ branch_exists() {
     grep -qxF "$1" "$LIVE_BRANCHES_FILE"
     return
   fi
-  git ls-remote --heads --exit-code \
-    "https://github.com/CannonFodder151/$repo.git" "$1" >/dev/null 2>&1
+  # AUT-4856: `git ls-remote` has no credentials for the sibling private repos, so it
+  # failed open-to-false there and every run looked like a deleted-branch zombie. Ask
+  # the API instead, using the same token as the run listing.
+  local out
+  if out=$(gh api "repos/CannonFodder151/$repo/branches/$1" 2>&1); then
+    return 0
+  fi
+  # Only a definitive 404 means "gone". Anything else (transient API error, missing
+  # token) must not be read as a deleted branch, or one bad tick cancels live runs.
+  case "$out" in
+    *"HTTP 404"* | *"Not Found"*) return 1 ;;
+  esac
+  echo "branch check for $1 inconclusive ($out) — treating as live" >&2
+  return 0
 }
 
 age_min() { echo $(( (now - $(date -u -d "$1" +%s)) / 60 )); }
@@ -56,10 +68,20 @@ age_min() { echo $(( (now - $(date -u -d "$1" +%s)) / 60 )); }
 if [ -n "${QUEUED_RUNS_FILE:-}" ]; then
   runs=$(sort -t$'\t' -k2,2 "$QUEUED_RUNS_FILE")
 else
-  runs=$(gh api "repos/CannonFodder151/$repo/actions/runs?status=queued&per_page=100" \
-           --jq '.workflow_runs[]
-                 | "\(.id)\t\(.created_at)\t\(.event)\t\(.head_branch)\t\(.name)\t\(.head_sha)"' \
-           | sort -t$'\t' -k2,2)
+  # AUT-4856: fail soft. A 404/403 here means this token cannot see the repo (or the
+  # API blipped) — an unknown state, not "this repo is broken". Exit 0 with a warning
+  # instead of `set -e` aborting, so one unreadable target cannot paint the whole cron
+  # red every 10 minutes.
+  list_err=$(mktemp)
+  if ! runs=$(gh api "repos/CannonFodder151/$repo/actions/runs?status=queued&per_page=100" \
+             --jq '.workflow_runs[]
+                   | "\(.id)\t\(.created_at)\t\(.event)\t\(.head_branch)\t\(.name)\t\(.head_sha)"' \
+           | sort -t$'\t' -k2,2 2>"$list_err"); then
+    echo "::warning::skipped $repo — queued-runs lookup failed: $(tr '\n' ' ' <"$list_err")"
+    rm -f "$list_err"
+    exit 0
+  fi
+  rm -f "$list_err"
 fi
 if [ -z "$runs" ]; then
   echo "no queued runs in $repo"
