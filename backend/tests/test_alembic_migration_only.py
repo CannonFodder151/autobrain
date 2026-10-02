@@ -20,7 +20,6 @@ import asyncio
 import os
 import subprocess
 import sys
-import textwrap
 import uuid
 from pathlib import Path
 
@@ -110,28 +109,6 @@ def _create_all(dsn: str) -> None:
     """Build a schema the way `app.db.bootstrap`'s fallback does."""
     _run_app(dsn, "import asyncio; from app.db.session import init_db; asyncio.run(init_db())")
 
-def _seed_legacy_oil_record(dsn: str) -> None:
-    """Insert a pre-AUT-1275 service record the way the app writes rows."""
-    _run_app(dsn, textwrap.dedent("""
-        import asyncio
-        from datetime import date
-        from app.db.session import SessionLocal
-        from app.models import ServiceRecord, User, Vehicle
-
-        async def main():
-            async with SessionLocal() as s:
-                s.add(User(id="u1", email="u1@example.com", display_name="U One",
-                           hashed_password="x"))
-                await s.flush()
-                s.add(Vehicle(id="v1", user_id="u1", nickname="Car"))
-                await s.flush()
-                s.add(ServiceRecord(id="s1", vehicle_id="v1", service_date=date.today(),
-                                    odometer_km=1000, service_type="oil"))
-                await s.commit()
-
-        asyncio.run(main())
-    """))
-
 def test_hosted_shaped_database_reaches_head(fresh_db):
     """A create_all-built database at the hosted stamp must reach head.
 
@@ -146,17 +123,20 @@ def test_hosted_shaped_database_reaches_head(fresh_db):
     _alembic(fresh_db, "upgrade", "head")
     assert asyncio.run(_sql(fresh_db, "select version_num from alembic_version")) == _head()
 
-def test_migration_only_backfill_applies(fresh_db):
-    """b4c5d6e7f8a9 folds legacy oil service records into 'scheduled'.
+def test_pending_revision_actually_applies(fresh_db):
+    """The pending revision must run DDL, not be skipped as "already there".
 
-    That is a pure data rewrite — no schema change — so `create_all` can never
-    perform it. It only happens if the migration chain actually runs against a
-    hosted-shaped database, which is the regression AUT-5088 is about.
+    Hosted sits at `aut4925_missing_tables` with head `aut3448_fuel_price_snapshots`.
+    Drop the table that head creates, then upgrade: the revision has to build it.
+    That is the difference between a boot that applies migrations and a boot that
+    just bumps a version string — and it is exactly why `fuel_price_snapshots`
+    had no migration history until AUT-3005.
     """
     _create_all(fresh_db)
-    _alembic(fresh_db, "stamp", "m3rge03")
-    _seed_legacy_oil_record(fresh_db)
+    _alembic(fresh_db, "stamp", "aut4925_missing_tables")
+    asyncio.run(_exec(fresh_db, "DROP TABLE IF EXISTS fuel_price_snapshots"))
     _alembic(fresh_db, "upgrade", "head")
     assert asyncio.run(
-        _sql(fresh_db, "select service_type from service_records where id = 's1'")
-    ) == "scheduled"
+        _sql(fresh_db, "select to_regclass('public.fuel_price_snapshots') is not null")
+    ), "head revision did not create fuel_price_snapshots"
+    assert asyncio.run(_sql(fresh_db, "select version_num from alembic_version")) == _head()
