@@ -95,6 +95,12 @@ def set_backup_ports(ports):
 def drop_backup_service(doc):
     del doc["services"]["backup"]
 
+def set_backend_command(cmd):
+    """Mutator: replace the backend container command."""
+    def apply(doc):
+        doc["services"]["backend"]["command"] = cmd
+    return apply
+
 
 class TestComposeConsolidationRealFile(unittest.TestCase):
     """The live compose file must satisfy every asserted invariant."""
@@ -188,6 +194,42 @@ class TestComposeConsolidationBackupInvariants(unittest.TestCase):
             'BACKUP_OFFSITE_ENABLED must stay "true"',
         )
 
+
+class TestComposeConsolidationMigrations(unittest.TestCase):
+    """AUT-5088: the backend must run `alembic upgrade head` before it serves.
+
+    Hosted booted straight into `python -m app.db.bootstrap`, whose create_all
+    fallback swallowed every migration failure, so migration-only changes (new
+    index, constraint, column rename, data backfill) never ran in production.
+    """
+
+    def setUp(self):
+        self.rc, self.out = run_check()
+        self.doc = load_compose()
+
+    def test_alembic_runs_before_bootstrap_in_backend_command(self):
+        cmd = self.doc["services"]["backend"]["command"]
+        self.assertIn("alembic upgrade head", cmd)
+        self.assertLess(
+            cmd.index("alembic upgrade head"), cmd.index("python -m app.db.bootstrap")
+        )
+
+    def test_missing_alembic_fails(self):
+        doc_cmd = load_compose()["services"]["backend"]["command"]
+        stripped = doc_cmd.replace("alembic upgrade head && ", "")
+        rc, out = run_check(broken(set_backend_command(stripped)))
+        self.assertEqual(rc, 1, out)
+        self.assertIn("`alembic upgrade head` (AUT-5088)", out)
+
+    def test_alembic_after_bootstrap_fails(self):
+        doc_cmd = load_compose()["services"]["backend"]["command"]
+        reordered = doc_cmd.replace(
+            "alembic upgrade head && python -m app.db.bootstrap",
+            "python -m app.db.bootstrap && alembic upgrade head",
+        )
+        rc, out = run_check(broken(set_backend_command(reordered)))
+        self.assertEqual(rc, 1, out)
+        self.assertIn("must run before bootstrap/uvicorn (AUT-5088)", out)
 
 if __name__ == "__main__":
     unittest.main()

@@ -167,7 +167,52 @@ jobs:
           python scripts/check-compose-consolidation.py
           python -m unittest scripts/test_check_compose_consolidation.py -v
 
-  # AUT-3027: scripts/test_sync_compose_to_portainer.py had no CI job, so the
+  # AUT-5088: hosted booted without `alembic upgrade head`, so every
+  # migration-only change was dead code in production. The compose guard in
+  # release-scripts catches a deleted migration step; this job proves the chain
+  # itself still applies — an empty database reaches head, and a data-only
+  # revision (`b4c5d6e7f8a9` folds oil service records into 'scheduled') really
+  # rewrites rows. pgvector/pgvector:pg17 matches the hosted postgres image.
+  alembic-migrations:
+    name: alembic upgrade head (fresh DB + migration-only backfill)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: autobrain
+          POSTGRES_PASSWORD: autobrain
+          POSTGRES_DB: postgres
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Migration chain reaches head; migration-only changes apply
+        working-directory: backend
+        env:
+          ALEMBIC_TEST_ADMIN_URL: "postgresql://autobrain:autobrain@localhost:5432/postgres"
+        run: pytest tests/test_alembic_migration_only.py -v --maxfail=1 --tb=short
+
+  # AUT-5031: scripts/test_sync_compose_to_portainer.py had no CI job, so the
   # AUT-4946 health gate (post-PUT verification + orphan-port refusal) shipped
   # with its own regression tests already stale — 2 of 3 failed because the
   # ordered mock list predated the new API calls. Pure stdlib, no docker.

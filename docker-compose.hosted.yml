@@ -166,7 +166,14 @@ services:
     # its default CMD runs the same topology as docker-compose.prod.yml.
     image: ghcr.io/cannonfodder151/autobrain-backend:hosted@sha256:28c1747959feed67ac58075692de0d49c9f0ffcabddf6734fe0e2a4628fa7464
     restart: unless-stopped
-    command: sh -c "export AI_ROUTER_API_KEY=$(cat /run/secrets/ai_router_api_key) && python -m app.db.bootstrap && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && (uvicorn ai_app.main:app --host 0.0.0.0 --port 8001 &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    # AUT-5088: `alembic upgrade head` runs first and its failure is fatal.
+    # Without it, bootstrap's `create_all` fallback silently swallowed every
+    # migration failure, so migration-only changes (new index, constraint,
+    # column rename, data backfill) were dead code on hosted — `alembic_version`
+    # sat at `aut4925_missing_tables` while `fuel_price_snapshots` existed only
+    # because create_all happened to build it. bootstrap still runs after it,
+    # for the admin/demo seed.
+    command: sh -c "export AI_ROUTER_API_KEY=$(cat /run/secrets/ai_router_api_key) && alembic upgrade head && python -m app.db.bootstrap && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && (uvicorn ai_app.main:app --host 0.0.0.0 --port 8001 &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
       <<: [*db-env, *core-env, *router-env]
       PYTHONPATH: /app
