@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+
+## [0.3.302] - 2026-10-02
 - fix(fuel): disable the SA (SAFPIS) feed (AUT-5072).
   `FUEL_SA_ENABLED: "true"` was set in both compose files
   (AUT-2610) with a seeded `fuel_sa_api_key` secret, but no
