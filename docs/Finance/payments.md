@@ -1,6 +1,6 @@
 # AutoBrain Payments & Subscription Plan (Stripe)
 
-Sanitised public mirror of the internal Finance doc. No secrets, no internal links. Hosted instance: `hosted.autobrainservice.app`.
+Public repo mirror of the internal Finance doc. No secrets. Hosted instance: `hosted.autobrainservice.app`.
 
 ## Plans & pricing
 
@@ -71,15 +71,31 @@ IAP env (empty = disabled): `IAP_GOOGLE_SERVICE_ACCOUNT_JSON`, `IAP_GOOGLE_PACKA
 
 ## Related Finance Docs
 
-- **[Budget Tracking](budget-tracking.md)** — monthly budget allocation, revenue vs. cost, variance analysis
-- **[Infrastructure Costs](infrastructure-costs.md)** — Oracle Cloud + on-prem spend, cost optimization
-- **[Migration Budget](migration-budget.md)** — Phase 3 Oracle Cloud migration cost case
+- **[index.md](./index.md)** — Finance section index
+- **[budget-tracking.md](./budget-tracking.md)** — monthly budget allocation, revenue vs. cost, variance analysis
+- **[infrastructure-costs.md](./infrastructure-costs.md)** — Oracle Cloud + on-prem spend, cost optimization
+- **[migration-budget.md](./migration-budget.md)** — Phase 3 Oracle Cloud migration cost case
+- **[Community Garage](../Marketing-and-Website/community-garage.md)** — planned $20/yr per self-hosted server federation fee (approved concept, not implemented)
+
+## Finding the code
+
+Use the repo context graph rather than grepping — see the Graft section in the
+root `AGENTS.md` (`graft ask "stripe checkout trial"`,
+`graft callers create_checkout_session`).
 
 ## References
 
 - `scripts/stripe-setup.py`, `backend/app/services/billing.py`, `backend/app/services/iap.py`, `backend/app/api/v1/billing.py`
 - `docker-compose.hosted.yml` (Stripe env), `.env.example` (Stripe + IAP blocks)
 
+## Sanitisation
+
+Public repo mirror. `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
+`STRIPE_PRICE_*` values and the IAP store credentials are deployment secrets
+recorded in the internal Outline `Deployment & Infrastructure` section — never
+committed. Env var *names* above are safe to publish; values are not. See
+[Documentation Policy](../Company/documentation-policy.md).
+
 ---
 
-*Last updated: 2026-09-26 | Owner: CFO | Sanitised public mirror — no secrets, no internal links*
+*Last updated: 2026-10-01 | Owner: CFO | Reviewed by: Documentation Manager (AUT-4397) | Sources: scripts/stripe-setup.py, backend/app/services/billing.py | Review cadence: Quarterly | Next review: 2027-01-01*
