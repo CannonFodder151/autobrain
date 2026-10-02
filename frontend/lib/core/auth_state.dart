@@ -65,20 +65,37 @@ class AuthState extends ChangeNotifier {
   ApiClient? _client;
   ApiClient get api => _client!;
 
-  Future<void> _restore() async {
-    final prefs = await SharedPreferences.getInstance();
-    await AppConfig.load();
-    final (token, refreshToken, role) = await _tokens.read();
+  /// Reads the stored session, migrating the legacy SharedPreferences copy
+  /// (written before this change) into secure storage on first read. Returns
+  /// true when plaintext tokens were found and wiped — the caller must force
+  /// re-authentication (AUT-3105).
+  Future<(String?, String?, String?, bool)> _restoreTokens() async {
+    final (token, refreshToken, role, needsReauth) =
+        await _tokens.readWithMigration();
     _token = token;
     _refreshToken = refreshToken;
     _role = role;
+    _needsReauth = needsReauth;
+    return (token, refreshToken, role, needsReauth);
+  }
+
+  bool get needsReauth => _needsReauth;
+  bool _needsReauth = false;
+
+  Future<void> _restore() async {
+    final prefs = await SharedPreferences.getInstance();
+    await AppConfig.load();
+    final (token, refreshToken, role, needsReauth) =
+        await _restoreTokens();
     _darkMode = prefs.getBool('dark_mode') ?? true;
     _loadConfig();
-    if (_token != null) {
-      _client = ApiClient(_token, onRefresh: _refreshAccess);
-      _refreshProfile();
-      notifyListeners();
+    if (needsReauth || _token == null) {
+      await serverChanged();
+      return;
     }
+    _client = ApiClient(_token, onRefresh: _refreshAccess);
+    _refreshProfile();
+    notifyListeners();
   }
 
   /// Fetches public server config (self-signup enabled, MFA enforced,
@@ -285,6 +302,7 @@ class AuthState extends ChangeNotifier {
     _userId = ((map['user'] as Map<String, dynamic>?) ?? {})['id'] as String?;
     _client = ApiClient(_token!, onRefresh: _refreshAccess);
     await _tokens.write(token: _token!, refreshToken: _refreshToken, role: _role ?? 'user');
+    await _tokens.ackReauth();
     notifyListeners();
   }
 }
