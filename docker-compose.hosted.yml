@@ -164,7 +164,7 @@ services:
     # AUT-3153: the standalone Celery worker+beat service is merged into this
     # container. The backend image already carries the worker dependencies and
     # its default CMD runs the same topology as docker-compose.prod.yml.
-    image: ghcr.io/cannonfodder151/autobrain-backend:hosted@sha256:7ef72ea3187938a29a07d2ea455831f86784043f28b0f7cb6a8e1c75641d2759
+    image: ghcr.io/cannonfodder151/autobrain-backend:hosted@sha256:237af6279f16d40494d2f1ed08488af55ac048687391f44c82728e9b6a9d44e9
     restart: unless-stopped
     command: sh -c "export AI_ROUTER_API_KEY=$(cat /run/secrets/ai_router_api_key) && python -m app.db.bootstrap && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && (uvicorn ai_app.main:app --host 0.0.0.0 --port 8001 &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
@@ -331,7 +331,7 @@ services:
       - "8000"
 
   frontend:
-    image: ghcr.io/cannonfodder151/autobrain-frontend:hosted@sha256:aa9a1bb1b157d24c9879dc9fe70401b03fcaa54be66186d4d26da4e1fb41296c
+    image: ghcr.io/cannonfodder151/autobrain-frontend:hosted@sha256:05ba909cd766bce844cd414c4b5daeafb6ac09a0c5f308018480cbbb5f7065e5
     # AUT-2087: pinned to the verified arm64 child manifest digest of the
     # autobrain-frontend :hosted OCI image index. Earlier pin
     # (`@sha256:8937c2bb…`) targeted an arm64 image whose nginx + busybox
