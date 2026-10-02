@@ -17,10 +17,14 @@ COMPOSE = "docker-compose.hosted.yml"
 # Services merged into `backend` or removed outright; none may come back.
 RETIRED = ("worker", "ai", "market-data", "backup-agent")
 
-# The hosted stack as consolidated: 10 long-running containers.
+# The hosted stack as consolidated: 9 long-running containers.
+# `gh-runner` is NOT here — AUT-4911 moved it to its own Portainer stack
+# (`gh-runner-autobrain-arm64`, stack 123 on EP5) because its image was
+# unpublished. It was still listed until now, which kept this check red on
+# main (AUT-5031) and therefore unenforced.
 EXPECTED = {
     "postgres", "redis", "minio", "backend", "dongle-server",
-    "frontend", "hub", "gh-runner", "9router", "backup",
+    "frontend", "hub", "9router", "backup",
 }
 
 
