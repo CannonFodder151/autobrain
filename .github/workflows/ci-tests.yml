@@ -170,11 +170,12 @@ jobs:
   # AUT-5088: hosted booted without `alembic upgrade head`, so every
   # migration-only change was dead code in production. The compose guard in
   # release-scripts catches a deleted migration step; this job proves the chain
-  # itself still applies — an empty database reaches head, and a data-only
-  # revision (`b4c5d6e7f8a9` folds oil service records into 'scheduled') really
-  # rewrites rows. pgvector/pgvector:pg17 matches the hosted postgres image.
+  # itself still applies — a create_all-built database at the hosted stamp
+  # reaches head, and a data-only revision (`b4c5d6e7f8a9` folds oil service
+  # records into 'scheduled') really rewrites rows. pgvector/pgvector:pg17
+  # matches the hosted postgres image.
   alembic-migrations:
-    name: alembic upgrade head (fresh DB + migration-only backfill)
+    name: alembic upgrade head (hosted-shaped DB + migration-only backfill)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:

@@ -132,8 +132,9 @@ def test_migration_only_backfill_applies(fresh_db):
     asyncio.run(
         _exec(
             fresh_db,
-            "INSERT INTO users (id, email, display_name, hashed_password) "
-            "VALUES ('u1', 'u1@example.com', 'U One', 'x');"
+            "INSERT INTO users (id, email, display_name, hashed_password, role, "
+            "max_vehicles, token_version) "
+            "VALUES ('u1', 'u1@example.com', 'U One', 'x', 'user', 1, 0);"
             "INSERT INTO vehicles (id, user_id, nickname) "
             "VALUES ('v1', 'u1', 'Car');"
             "INSERT INTO service_records (id, vehicle_id, service_date, odometer_km, service_type) "
