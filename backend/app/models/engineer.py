@@ -9,11 +9,16 @@ import uuid
 from datetime import datetime, time
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Float, ForeignKey, Index, String, Text, func
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Index, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.db.session import Base
+
+# JSONB in prod (indexable, `@>` containment search), plain JSON elsewhere —
+# the sqlite engines used by backup/restore regression tests cannot compile
+# JSONB (AUT-5005).
+JSONBOrJSON = JSON().with_variant(JSONB, "postgresql")
 
 if TYPE_CHECKING:
     from app.models.vehicle import Vehicle
@@ -40,8 +45,8 @@ class Engineer(Base):
     address: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
     # Professional details
-    specialties: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
-    certifications: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
+    specialties: Mapped[list[str]] = mapped_column(JSONBOrJSON, default=list, nullable=False)
+    certifications: Mapped[list[str]] = mapped_column(JSONBOrJSON, default=list, nullable=False)
     years_experience: Mapped[int | None] = mapped_column(nullable=True)
 
     # Marketplace metrics
@@ -52,7 +57,7 @@ class Engineer(Base):
     price_per_job_max: Mapped[float | None] = mapped_column(Float, nullable=True, index=True)
 
     # Availability: JSON array of {day: 0-6, start: "HH:MM", end: "HH:MM", timezone: "Australia/Sydney"}
-    availability: Mapped[list[dict]] = mapped_column(JSONB, default=list, nullable=False)
+    availability: Mapped[list[dict]] = mapped_column(JSONBOrJSON, default=list, nullable=False)
 
     # Status
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)

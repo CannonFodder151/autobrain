@@ -10,6 +10,110 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+- fix(backup): the backend no longer runs a second retention engine against the
+  off-site backup store. `backup_offsite.py::_apply_tiered_retention()` pruned
+  by file **age** (via `_tier_for_age`) while `autobrain-backup` prunes by
+  **count per tier directory** (`engine.py::_prune`, defaults hourly 24 /
+  daily 30 / weekly 12) — two policies, one store. Age-derived tiers ignored
+  the tier directory the API returns (a `daily/` snapshot 10 days old collapsed
+  to one per ISO week) and the backend's `monthly` tier does not exist on the
+  service side at all, so anything older than 24 weeks was deleted outright.
+  Repro against `main` @ `0f1f9248`: a listing the service itself considers
+  fully in-policy (24 hourly + 30 daily + 12 weekly) lost **29 of 66**
+  snapshots. Removed `_apply_tiered_retention`, `_list_existing_offsite`,
+  `_delete_offsite`, `_tier_for_age`, `_slot_key` and `_OFFSITE_TIERS`; the
+  hourly push and the `BACKUP_OFFSITE_ENABLED` guard are unchanged. Per-tier
+  retention is configured on the autobrain-backup instance
+  (`retention.hourly` / `retention.daily` / `retention.weekly`). Regression test
+  feeds the 66-snapshot in-policy listing through `run_backup_offsite()` and
+  asserts one ingest POST and zero deletes. Note: this task was a no-op before
+  AUT-3975 / PR #757, so no production data was lost yet.
+
+## [0.3.297] - 2026-10-02
+- fix(hosted): the hosted backend now runs `alembic upgrade head` before
+  bootstrap, so migration-only changes (new index, constraint, column rename,
+  data backfill) stop being dead code in production. Hosted booted straight
+  into `app.db.bootstrap`, whose `create_all` fallback swallowed every
+  migration failure — `alembic_version` sat at `aut4925_missing_tables` and
+  `fuel_price_snapshots` existed only because `create_all` happened to build it.
+  Guarded by `scripts/check-compose-consolidation.py` (with negative tests) and
+  a new `alembic-migrations` CI job that proves a create_all-built database
+  at the hosted stamp reaches head and that the pending revision performs real
+  DDL instead of only bumping a version string.
+- feat(alembic): add migration for `fuel_price_snapshots` — the table was only
+
+### Fixed (AUT-4678)
+- `scripts/check-compose-config.py` crashed with `KeyError: 'ai'` on `main`
+  after the AUT-3153 merge removed the standalone `ai` service, so the hosted
+  compose structural guard had been dead. Optional services are now filtered
+  by presence (`SECRET_SERVICES` + `present()`), `BACKUP_OFFSITE_GUI_KEY_FILE`
+  / `BACKUP_OFFSITE_INGEST_KEY_FILE` (and gh-runner's `github_pat`) are known
+  secret files, and the corresponding plain-env keys are forbidden.
+- `scripts/check-compose-consolidation.py` asserted the standalone `ai`
+  service existed; it now asserts the merged gateway indirection
+  (`AI_GATEWAY_API_KEY_FILE` / `AI_ROUTER_API_KEY_FILE`) lives on `backend`.
+- `scripts/seed-secrets.sh` aborted immediately: a comment inside a `sed`
+  backslash continuation (`# -e 's/^FUEL_VIC_API_KEY$/…' \`) terminated the
+  pipeline, so `set -eu` killed the script and **no** secret file was ever
+  seeded. Comment moved above the pipeline; `BACKUP_OFFSITE_GUI_KEY` /
+  `BACKUP_OFFSITE_INGEST_KEY` are now mapped to secret files.
+- New `.github/workflows/compose-checks.yml` runs every `scripts/check-*.py`
+  plus `scripts/test_check_compose_config.py` on compose/script changes, so
+  the guards can no longer rot unnoticed.
+
+## [0.3.296] - 2026-10-02
+
+### Fixed (AUT-5032)
+- test: three pre-existing failures in `backend/tests/test_workers.py` that
+  reproduced on a clean `origin/main` checkout (not env-dependent, and not
+  caused by the AUT-3827/AUT-3977 branch diff — root cause was the test
+  harness, not the code under test):
+  - `test_scheduled_backup_skips_on_missing_minio_credentials` asserted on
+    `caplog` (stdlib `logging`), but the worker logs through `structlog`, so the
+    records never reached `caplog`. It now uses
+    `structlog.testing.capture_logs()` and asserts on the
+    `reason="minio_credentials_missing"` event field, matching the pattern in
+    `backend/tests/test_aut324_rego_log_redaction.py`.
+  - `test_ingest_fuel_prices_no_typeerror_when_source_in_result` and
+    `test_run_due_checks_runs_inner_coro_via_run` raised `NameError` at the
+    `patch.object(...)` / `asyncio.new_event_loop()` call sites because
+    `unittest.mock.patch` and `asyncio` were never imported. Both are now
+    imported at module top.
+  - No production code changed. `python3 -m pytest backend/tests/test_workers.py`
+    is green (7 passed) with only `DATABASE_URL` + `SECRET_KEY` exported.
+
+### Security (AUT-5041)
+- deps: bump `pypdf` `6.16.1` -> `6.19.0` in `backend/requirements.txt` and
+  `ai/requirements.txt`. 6.16.1 carried 8 known vulnerabilities
+  (PYSEC-2026-4153..4160), which kept the `pip-audit-gate` job of
+  `Publish images to Docker Hub` red on `main` and blocked every PR merge.
+  `pip-audit --disable-pip --no-deps` over the deduplicated backend+ai pin
+  list is now clean. The receipt worker's `_pdf_text()` and the reportlab PDF
+  export paths are unchanged (`pypdf` is only ever a reader there); guarded by
+  `backend/tests/test_deps_pypdf_pin.py` (floor raised to 6.19.0),
+  `backend/tests/test_pdf_dos_regression.py` and the `test_api.py` PDF export
+  tests.
+
+## [0.3.295] - 2026-10-02
+
+### Fixed (AUT-3827)
+- backup: include the `monthly` tier when listing off-site snapshots
+  (`backend/app/services/backup_offsite.py`). Retention manages four tiers but the
+  off-site listing flattened only `hourly`/`daily`/`weekly`, so monthly backups were
+  invisible to `_apply_tiered_retention` — never deduped per month slot and never
+  pruned past the 6-month window. Tier list is now a single `_OFFSITE_TIERS`
+  constant. Guarded by `backend/tests/test_backup_offsite.py` (new).
+
+### Fixed (AUT-4976)
+- deploy(hosted): set `FUEL_VIC_ENABLED: "false"` in `docker-compose.hosted.yml`,
+  matching `docker-compose.prod.yml`. The VIC Servo Saver endpoint
+  `api.servosaver.com.au` is NXDOMAIN (AUT-4143), so the hosted nightly beat
+  (`ingest-fuel-prices`) raised `FuelFeedError` for VIC on every run. NSW, QLD and
+  SA feeds are unaffected. The VIC secret files stay mounted so the feed can be
+  re-enabled when a paid VIC aggregator is available. Guarded by
+  `backend/tests/test_fuel_feed_flags.py`.
+
+## [0.3.294] - 2026-10-01
 
 ### Fixed (AUT-4979)
 - fix(docker): repair the layer ordering in `docker/backend/Dockerfile` that broke every

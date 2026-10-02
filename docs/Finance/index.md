@@ -19,6 +19,14 @@ Budgets, costs, migration budget.
 
 - [Engineering](../Engineering/index.md) — architecture, API, database, AI modules
 - [Deployment & Infrastructure](../Deployment-and-Infrastructure/index.md) — compose stacks, per-instance secrets
+- [Marketing & Website](../Marketing-and-Website/index.md) — Community Garage (planned $20/yr federation fee)
+
+## Finding the code
+
+Finance facts are verified against the backend, not memory. Use the repo
+context graph (Graft — see the root `AGENTS.md`): `graft map` to orient,
+`graft ask "<question>"` to locate the code, `graft callers <symbol>` for the
+call graph, `graft grep "<literal>"` for an exhaustive search.
 
 ## Sanitisation
 
@@ -27,3 +35,7 @@ per-instance credentials (Stripe keys, fuel-feed partner keys, DB/MinIO
 secrets) are held in the internal Outline `Deployment & Infrastructure` section
 — never in this repo. See
 [Documentation Policy](../Company/documentation-policy.md).
+
+---
+
+*Last updated: 2026-10-01 | Owner: CFO | Reviewed by: Documentation Manager (AUT-4397) | Review cadence: Monthly | Next review: 2026-11-01*

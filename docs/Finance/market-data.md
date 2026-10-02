@@ -25,11 +25,13 @@ backend valuation route
        │    └─ browser.py               (Playwright subprocess for gated portals)
        ├─ market_listing_cache table   (24h TTL, keyed make|model|year)
        └─ fallback (source=fallback, sample_size=0) — pipeline never 404s
-  └─ payload["market"]  →  ai resale module
+  └─ payload["market"]  →  ai resale module (ai/app/modules/resale.py)
        ├─ sample_size >= 3  → median_price anchors the estimate
-       │     value = median × condition × km_mult; deterministic model is a
-       │     0.5× sanity floor so a bad median can't collapse the number.
-       └─ otherwise → AI used_price path (clamped ±15% as before)
+       │     value = max(median × cond_mult × km_mult + mods_value,
+       │                  rule_based × 0.5) — the rule-based number is a 0.5×
+       │     sanity floor so a bad median can't collapse the value.
+       └─ otherwise → AI-supplied current selling price refines the estimate,
+             clamped to ±15% of the rule-based band
 ```
 
 The median is **cached for 24h**, so consecutive valuations return identical
@@ -136,7 +138,8 @@ installs Playwright + Chromium system deps and sets `PLAYWRIGHT_BROWSERS_PATH`.
   re-owned to `root:root 4755` at build time (AUT-1739 / AUT-2258) so the
   scraper can sandbox untrusted third-party content; it falls back to
   `--no-sandbox` only if the sandboxed launch fails.
-- **Legacy:** the Portainer `market-data` stack on EP6 (`:8003`) is leftover from
+- **Legacy:** the Portainer `market-data` stack on the dev box (`<DEV_BOX_IP>`,
+  Portainer endpoint 6) is leftover from
   before the consolidation and should be removed when convenient.
 
 ### Provider cost profile
@@ -174,8 +177,9 @@ invoked in-process by the backend.
   Inventory-shaped part suggestions and uses 9Router (only) to *tidy*
   descriptions / brands / categories — the deterministic classification is the
   ground truth and is never overwritten by the model.
-- **Two backend endpoints** sit on top of this (see `docs/api-spec.md`):
-  - `GET /vehicles/{id}/parts/sca-lookup` → Inventory-formatted SCA parts.
+- **Two backend endpoints** sit on top of this (see
+  [`../Engineering/api-spec.md`](../Engineering/api-spec.md)):
+  - `POST /vehicles/{id}/parts/sca-lookup` → Inventory-formatted SCA parts.
   - `POST /vehicles/{id}/parts/suggest-for-service` → parts prefill for an
     AI-suggested service, **inventory-first then SCA**.
 - **Config:** no new env var. The SCA scraper now lives in `backend/app/services/market_scraper/sca.py`
@@ -194,5 +198,21 @@ invoked in-process by the backend.
 - **[infrastructure-costs.md](./infrastructure-costs.md)** — per-service spend and optimisation
 - **[fuel-pricing.md](./fuel-pricing.md)** / **[fuel-servo-spy.md](./fuel-servo-spy.md)** — deterministic fuel price paths
 
-Credentials (`MARKET_DATA_API_KEY`) are deployment secrets and are never
-committed — see [Documentation Policy](../Company/documentation-policy.md).
+## Sanitisation
+
+Public repo mirror. `MARKET_DATA_API_KEY` is a deployment secret recorded in
+the internal Outline `Deployment & Infrastructure` section and is never
+committed; env var *names* above are safe to publish, values are not. Host
+addresses are placeholders from the sanctioned set (`<HOSTED_VM_IP>`,
+`<DEV_BOX_IP>`, `<PORTENER_HOST_IP>`). See
+[Documentation Policy](../Company/documentation-policy.md).
+
+## Finding the code
+
+Use the repo context graph rather than grepping — see the Graft section in the
+root `AGENTS.md` (`graft ask "market data median anchor"`,
+`graft callers get_market_data`).
+
+---
+
+*Last updated: 2026-10-02 | Owner: CFO + Backend | Reviewed by: Documentation Manager (AUT-4397) | Sources: backend/app/services/market_data.py, backend/app/services/parts_guide.py, ai/app/fallbacks/resale.py, docker-compose.hosted.yml | Next review: 2026-11-01*

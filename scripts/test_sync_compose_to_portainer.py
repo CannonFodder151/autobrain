@@ -1,16 +1,29 @@
 #!/usr/bin/env python3
-"""Regression test for sync-compose-to-portainer.py output logging.
+"""Regression tests for sync-compose-to-portainer.py.
 
-Verifies the script logs only essential metadata, not the API response body.
+Three behaviours that each took a production incident to pin down:
+
+* log output must not leak the API response body (secret hygiene);
+* stack env must be read from GET /api/stacks/{id}, never /file — reading it
+  from /file sent Env: [] and wiped all stack env vars (AUT-4778), which made
+  Portainer fail compose interpolation with HTTP 500;
+* a 200 PUT is not a healthy stack — a host-port orphan must block the PUT and
+  an unhealthy result after the PUT must fail the job (AUT-4911, AUT-4946).
+
+Mocks are routed by URL rather than by call order: the script makes a variable
+number of calls (the health poll repeats), and an ordered list silently went
+stale the moment PR #852 added the verification calls.
 """
+import contextlib
 import importlib.util
+import io
 import json
 import os
+import shutil
 import sys
 import tempfile
 import unittest
-from io import StringIO
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location(
     "sync_compose_to_portainer",
@@ -19,148 +32,243 @@ spec = importlib.util.spec_from_file_location(
 scp = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(scp)
 
+STACKS = [{"Id": 42, "Name": "autobrain-hosted"}]
 
-class TestSyncComposeLogging(unittest.TestCase):
+
+class _Args:
+    """Minimal stand-in for the parsed argparse namespace."""
+    endpoint = 5
+    api_key = "test-key"
+    portainer_url = "https://portainer.example.com"
+
+
+def _container(name, service, state="running", ports=()):
+    return {
+        "Names": ["/" + name],
+        "State": state,
+        "Status": f"Up (mock) {state}",
+        "Labels": {"com.docker.compose.service": service},
+        "Ports": [{"PublicPort": p} for p in ports],
+    }
+
+
+class _Responder:
+    """Serve canned JSON by (method, path substring)."""
+
+    def __init__(self, routes):
+        self.routes = routes
+        self.calls = []
+
+    def __call__(self, req, timeout=None):
+        method = getattr(req, "method", None) or "GET"
+        url = req.full_url
+        self.calls.append((method, url, req.data))
+        # Longest fragment first: "/api/stacks/42" must win over "/api/stacks".
+        for (route_method, fragment), payload in sorted(
+                self.routes.items(), key=lambda kv: -len(kv[0][1])):
+            if route_method == method and fragment in url:
+                body = json.dumps(payload).encode()
+                return contextlib.nullcontext(_FakeResponse(body))
+        raise AssertionError(f"unexpected {method} {url}")
+
+    def urls(self, method=None):
+        return [u for (m, u, _) in self.calls if method is None or m == method]
+
+    def methods_for(self, fragment):
+        """Methods used against any URL containing fragment."""
+        return [m for (m, u, _) in self.calls if fragment in u]
+
+    def last_body(self, method):
+        for (m, _, data) in reversed(self.calls):
+            if m == method and data is not None:
+                return json.loads(data)
+        raise AssertionError(f"no {method} body recorded")
+
+
+class _FakeResponse:
+    def __init__(self, body):
+        self._body = body
+
+    def read(self):
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+class SyncComposeTestBase(unittest.TestCase):
 
     def setUp(self):
-        self.temp_dir = tempfile.mkdtemp()
-        self.compose_file = os.path.join(self.temp_dir, "docker-compose.hosted.yml")
+        self.tmp = tempfile.mkdtemp()
+        self.compose_file = os.path.join(self.tmp, "docker-compose.hosted.yml")
         with open(self.compose_file, "w") as f:
-            f.write("version: '3.8'\nservices:\n  test:\n    image: test:latest\n")
+            f.write("version: '3.8'\nservices:\n"
+                    "  backend:\n    image: ghcr.io/x/backend@sha256:aaa\n"
+                    "    ports:\n      - \"8000:8000\"\n"
+                    "  frontend:\n    image: ghcr.io/x/frontend@sha256:bbb\n"
+                    "    ports:\n      - \"80:80\"\n")
 
     def tearDown(self):
-        import shutil
-        shutil.rmtree(self.temp_dir, ignore_errors=True)
+        shutil.rmtree(self.tmp, ignore_errors=True)
 
-    @patch("urllib.request.urlopen")
-    def test_log_output_excludes_response_body(self, mock_urlopen):
-        stacks_response = MagicMock()
-        stacks_response.__enter__.return_value.read.return_value = json.dumps([
-            {"Id": 42, "Name": "autobrain-hosted"}
-        ]).encode()
-
-        current_response = MagicMock()
-        current_response.__enter__.return_value.read.return_value = json.dumps({
-            "Env": [{"name": "TEST_VAR", "value": "test"}]
-        }).encode()
-
-        put_response = MagicMock()
-        put_response.__enter__.return_value.read.return_value = json.dumps({
-            "Id": 42,
-            "SomeSensitiveData": "should-not-appear-in-logs"
-        }).encode()
-
-        mock_urlopen.side_effect = [stacks_response, current_response, put_response]
-
-        captured = StringIO()
-        sys.stdout = captured
-        old_argv = sys.argv
-
-        try:
-            sys.argv = [
-                "sync-compose-to-portainer.py",
+    def run_main(self, responder, extra_args=()):
+        """Run main() with urlopen routed by responder; returns (rc, out, err)."""
+        out, err = io.StringIO(), io.StringIO()
+        argv = ["sync-compose-to-portainer.py",
                 "--stack", "autobrain-hosted",
                 "--endpoint", "5",
                 "--file", self.compose_file,
                 "--portainer-url", "https://portainer.example.com",
-                "--api-key", "test-key",
-            ]
-            scp.main()
-        finally:
-            sys.stdout = sys.__stdout__
-            sys.argv = old_argv
-
-        output = captured.getvalue().strip()
-
-        self.assertIn("stack=autobrain-hosted", output)
-        self.assertIn("id=42", output)
-        self.assertIn("endpoint=5", output)
-        self.assertIn("updated", output)
-
-        self.assertNotIn("SomeSensitiveData", output)
-        self.assertNotIn("should-not-appear-in-logs", output)
-        self.assertNotIn('{"Id": 42', output)
-
-    @patch("urllib.request.urlopen")
-    def test_env_read_from_stack_detail_not_file(self, mock_urlopen):
-        """AUT-4778: env must come from GET /api/stacks/{id}, not /file."""
-        stacks_response = MagicMock()
-        stacks_response.__enter__.return_value.read.return_value = json.dumps([
-            {"Id": 42, "Name": "autobrain-hosted"}
-        ]).encode()
-
-        # GET /api/stacks/42 — carries Env.
-        detail_response = MagicMock()
-        detail_response.__enter__.return_value.read.return_value = json.dumps({
-            "Id": 42,
-            "Env": [{"name": "POSTGRES_USER", "value": "autobrain"}],
-        }).encode()
-
-        put_response = MagicMock()
-        put_response.__enter__.return_value.read.return_value = b"{}"
-
-        mock_urlopen.side_effect = [stacks_response, detail_response, put_response]
-
-        captured = StringIO()
-        sys.stdout = captured
-        old_argv = sys.argv
+                "--api-key", "test-key", *extra_args]
+        old_argv, old_out, old_err = sys.argv, sys.stdout, sys.stderr
+        sys.argv, sys.stdout, sys.stderr = argv, out, err
         try:
-            sys.argv = [
-                "sync-compose-to-portainer.py",
-                "--stack", "autobrain-hosted",
-                "--endpoint", "5",
-                "--file", self.compose_file,
-                "--portainer-url", "https://portainer.example.com",
-                "--api-key", "test-key",
-            ]
-            self.assertEqual(scp.main(), 0)
+            with patch("urllib.request.urlopen", responder):
+                rc = scp.main()
         finally:
-            sys.stdout = sys.__stdout__
-            sys.argv = old_argv
+            sys.argv, sys.stdout, sys.stderr = old_argv, old_out, old_err
+        return rc, out.getvalue(), err.getvalue()
 
-        urls = [c.args[0].full_url for c in mock_urlopen.call_args_list
-                if c.args and hasattr(c.args[0], "full_url")]
-        self.assertIn("https://portainer.example.com/api/stacks/42", urls)
-        self.assertNotIn("https://portainer.example.com/api/stacks/42/file", urls)
+    def healthy_routes(self, containers):
+        return {
+            ("GET", "/api/stacks"): STACKS,
+            ("GET", "/api/stacks/42"): {"Id": 42, "Env": [
+                {"name": "POSTGRES_USER", "value": "autobrain"}]},
+            ("GET", "/docker/containers/json"): containers,
+            ("PUT", "/api/stacks/42"): {"Id": 42},
+        }
 
-        put_call = mock_urlopen.call_args_list[-1]
-        body = json.loads(put_call.args[0].data)
-        self.assertEqual(body["Env"], [{"name": "POSTGRES_USER",
-                                        "value": "autobrain"}])
 
-    @patch("urllib.request.urlopen")
-    def test_refuses_to_sync_when_env_empty(self, mock_urlopen):
-        """AUT-4778: an empty env read means we would wipe the stack — bail."""
-        stacks_response = MagicMock()
-        stacks_response.__enter__.return_value.read.return_value = json.dumps([
-            {"Id": 42, "Name": "autobrain-hosted"}
-        ]).encode()
+class TestLogHygiene(SyncComposeTestBase):
 
-        detail_response = MagicMock()
-        detail_response.__enter__.return_value.read.return_value = json.dumps(
-            {"Id": 42, "Env": []}).encode()
+    def test_log_output_excludes_response_body(self):
+        r = _Responder(self.healthy_routes([
+            _container("autobrain-hosted-backend-1", "backend"),
+            _container("autobrain-hosted-frontend-1", "frontend"),
+        ]))
+        r.routes[("PUT", "/api/stacks/42")] = {
+            "Id": 42, "SomeSensitiveData": "should-not-appear-in-logs"}
 
-        mock_urlopen.side_effect = [stacks_response, detail_response]
+        rc, out, _ = self.run_main(r)
 
-        err = StringIO()
-        old_argv, old_err = sys.argv, sys.stderr
-        try:
-            sys.argv = [
-                "sync-compose-to-portainer.py",
-                "--stack", "autobrain-hosted",
-                "--endpoint", "5",
-                "--file", self.compose_file,
-                "--portainer-url", "https://portainer.example.com",
-                "--api-key", "test-key",
-            ]
-            sys.stderr = err
-            self.assertEqual(scp.main(), 3)
-        finally:
-            sys.stderr = old_err
-            sys.argv = old_argv
+        self.assertEqual(rc, 0)
+        self.assertIn("stack=autobrain-hosted", out)
+        self.assertIn("id=42", out)
+        self.assertIn("endpoint=5", out)
+        self.assertNotIn("SomeSensitiveData", out)
+        self.assertNotIn("should-not-appear-in-logs", out)
 
-        self.assertIn("would wipe it", err.getvalue())
-        self.assertEqual(len(mock_urlopen.call_args_list), 2)  # no PUT
+
+class TestEnvPreservation(SyncComposeTestBase):
+
+    def test_env_read_from_stack_detail_not_file(self):
+        r = _Responder(self.healthy_routes([
+            _container("autobrain-hosted-backend-1", "backend"),
+            _container("autobrain-hosted-frontend-1", "frontend"),
+        ]))
+
+        rc, _, _ = self.run_main(r)
+
+        self.assertEqual(rc, 0)
+        self.assertIn("https://portainer.example.com/api/stacks/42", r.urls())
+        for url in r.urls():
+            self.assertNotIn("/api/stacks/42/file", url)
+        self.assertEqual(r.last_body("PUT")["Env"],
+                         [{"name": "POSTGRES_USER", "value": "autobrain"}])
+
+    def test_refuses_to_sync_when_env_empty(self):
+        routes = self.healthy_routes([])
+        routes[("GET", "/api/stacks/42")] = {"Id": 42, "Env": []}
+        r = _Responder(routes)
+
+        rc, _, err = self.run_main(r)
+
+        self.assertEqual(rc, 3)
+        self.assertIn("would wipe it", err)
+        self.assertNotIn("PUT", r.methods_for("/api/stacks/42"))
+
+
+class TestPortCollisionGuard(SyncComposeTestBase):
+    """AUT-4946: an orphan holding a port the new compose needs blocks the PUT."""
+
+    def test_refuses_put_when_orphan_holds_wanted_port(self):
+        r = _Responder(self.healthy_routes([
+            _container("autobrain-hosted-backend-1", "backend", ports=[8000]),
+            _container("autobrain-hosted-frontend-1", "frontend", ports=[80]),
+            _container("autobrain-ghost-1", "ghost", ports=[80]),
+        ]))
+
+        rc, _, err = self.run_main(r)
+
+        self.assertEqual(rc, 5)
+        self.assertIn("port collision", err)
+        self.assertIn("autobrain-ghost-1", err)
+        self.assertNotIn("PUT", r.methods_for("/api/stacks/42"))
+
+
+class TestPostUpdateHealthGate(SyncComposeTestBase):
+    """AUT-4946: a 200 PUT followed by unhealthy containers must fail the job."""
+
+    def test_fails_when_a_service_never_starts(self):
+        # backend missing, frontend up. verify_running is patched to avoid
+        # sleeping through its 20 x 5s poll.
+        containers = [_container("autobrain-hosted-frontend-1", "frontend")]
+        r = _Responder(self.healthy_routes(containers))
+
+        with patch.object(scp, "verify_running", return_value=[
+                (None, "service 'backend' has no running container")]):
+            rc, _, err = self.run_main(r)
+
+        self.assertEqual(rc, 6)
+        self.assertIn("NOT healthy", err)
+        self.assertIn("backend", err)
+        self.assertIn("PUT", r.methods_for("/api/stacks/42"))
+
+    def test_succeeds_when_all_services_running(self):
+        r = _Responder(self.healthy_routes([
+            _container("autobrain-hosted-backend-1", "backend"),
+            _container("autobrain-hosted-frontend-1", "frontend"),
+        ]))
+
+        with patch.object(scp, "verify_running", return_value=[]):
+            rc, out, _ = self.run_main(r)
+
+        self.assertEqual(rc, 0)
+        self.assertIn("verified:", out)
+
+
+class TestVerifyRunning(SyncComposeTestBase):
+    """The poll itself, driven by fake container state rather than a stub."""
+
+    def test_missing_service_reported(self):
+        r = _Responder({("GET", "/docker/containers/json"): [
+            _container("autobrain-hosted-frontend-1", "frontend")]})
+        args = _Args()
+
+        with patch("urllib.request.urlopen", r):
+            problems = scp.verify_running(args, {"backend", "frontend"},
+                                          attempts=1, delay=0)
+
+        self.assertEqual(len(problems), 1)
+        self.assertIn("backend", problems[0][1])
+
+    def test_created_container_counts_as_stuck(self):
+        r = _Responder({("GET", "/docker/containers/json"): [
+            _container("autobrain-hosted-backend-1", "backend"),
+            _container("autobrain-hosted-frontend-1", "frontend"),
+            _container("autobrain-hosted-worker-1", "worker", state="created"),
+        ]})
+        args = _Args()
+
+        with patch("urllib.request.urlopen", r):
+            problems = scp.verify_running(args, {"backend", "frontend"},
+                                          attempts=1, delay=0)
+
+        self.assertEqual([w for _, w in problems if "stuck" in w],
+                         ["stuck in state created"])
 
 
 if __name__ == "__main__":

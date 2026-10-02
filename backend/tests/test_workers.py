@@ -1,6 +1,11 @@
 """Worker task regression tests (mocked DB/manager, no live services)."""
 
+from unittest.mock import patch
+
+import asyncio
+
 import pytest  # noqa: F401
+from structlog.testing import capture_logs
 
 from app.workers import tasks
 
@@ -123,15 +128,13 @@ def test_scheduled_backup_stores_snapshot(monkeypatch) -> None:
     assert ctype == "application/json", ctype
 
 
-def test_scheduled_backup_skips_on_missing_minio_credentials(monkeypatch, caplog) -> None:
+def test_scheduled_backup_skips_on_missing_minio_credentials(monkeypatch) -> None:
     """AUT-2256: missing MINIO_* keys must skip-with-log, never Celery-FAIL.
 
     A bare worker (lib-load-secrets.sh never sourced, or secret file unmounted)
     must not turn every daily beat tick into a Celery FAIL with stack traces
     that hide the real config issue.
     """
-    import logging
-
     from app.core.config import settings
 
     bucket = FakeBucket()
@@ -143,13 +146,13 @@ def test_scheduled_backup_skips_on_missing_minio_credentials(monkeypatch, caplog
     import app.core.storage as storage
     monkeypatch.setattr(storage, "get_minio", lambda: bucket)
 
-    with caplog.at_level(logging.ERROR, logger="autobrain.workers"):
+    with capture_logs() as entries:
         tasks.scheduled_backup()
 
     assert bucket.written == [], "must not write without credentials"
-    assert any(
-        "minio_credentials_missing" in rec.message for rec in caplog.records
-    ), f"expected minio_credentials_missing log, got: {[r.message for r in caplog.records]}"
+    assert any(e.get("reason") == "minio_credentials_missing" for e in entries), (
+        f"expected minio_credentials_missing log, got: {entries}"
+    )
 
 
 def test_scheduled_backup_recovers_from_prune_error(monkeypatch) -> None:

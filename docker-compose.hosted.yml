@@ -88,7 +88,13 @@ services:
         target: /run/secrets/postgres_password
         read_only: true
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      # AUT-4038: -h 127.0.0.1 forces TCP. Without it pg_isready uses the local
+      # unix socket, where `local ... peer` auth compares the container's root
+      # OS user against the POSTGRES_USER role and logs
+      # "provided user name (autobrain) and authenticated user name (root) do
+      # not match" every healthcheck interval (5s). pg_isready never
+      # authenticates, so TCP readiness is both accurate and silent.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -158,9 +164,16 @@ services:
     # AUT-3153: the standalone Celery worker+beat service is merged into this
     # container. The backend image already carries the worker dependencies and
     # its default CMD runs the same topology as docker-compose.prod.yml.
-    image: ghcr.io/cannonfodder151/autobrain-backend:hosted@sha256:7ef72ea3187938a29a07d2ea455831f86784043f28b0f7cb6a8e1c75641d2759
+    image: ghcr.io/cannonfodder151/autobrain-backend:hosted@sha256:28c1747959feed67ac58075692de0d49c9f0ffcabddf6734fe0e2a4628fa7464
     restart: unless-stopped
-    command: sh -c "export AI_ROUTER_API_KEY=$(cat /run/secrets/ai_router_api_key) && python -m app.db.bootstrap && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && (uvicorn ai_app.main:app --host 0.0.0.0 --port 8001 &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    # AUT-5088: `alembic upgrade head` runs first and its failure is fatal.
+    # Without it, bootstrap's `create_all` fallback silently swallowed every
+    # migration failure, so migration-only changes (new index, constraint,
+    # column rename, data backfill) were dead code on hosted — `alembic_version`
+    # sat at `aut4925_missing_tables` while `fuel_price_snapshots` existed only
+    # because create_all happened to build it. bootstrap still runs after it,
+    # for the admin/demo seed.
+    command: sh -c "export AI_ROUTER_API_KEY=$(cat /run/secrets/ai_router_api_key) && alembic upgrade head && python -m app.db.bootstrap && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && (uvicorn ai_app.main:app --host 0.0.0.0 --port 8001 &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
       <<: [*db-env, *core-env, *router-env]
       PYTHONPATH: /app
@@ -178,9 +191,12 @@ services:
       FUEL_NSW_API_SECRET_FILE: /run/secrets/fuel_nsw_api_secret
       FUEL_NSW_ENABLED: "true"
       # AUT-1813/AUT-1932: VIC Servo Saver — approved partner key + secret via secret file.
+      # AUT-4976: disabled — api.servosaver.com.au is NXDOMAIN (AUT-4143), so the beat
+      # only logged a FuelFeedError. Secret files stay mounted so the feed can be
+      # re-enabled when a paid VIC aggregator is available.
       FUEL_VIC_API_KEY_FILE: /run/secrets/fuel_vic_api_key
       FUEL_VIC_API_SECRET_FILE: /run/secrets/fuel_vic_api_secret
-      FUEL_VIC_ENABLED: "true"
+      FUEL_VIC_ENABLED: "false"
       # AUT-2218: QLD DirectAPI subscription token (AUT-1813 phase). Pydantic
       # settings loads FUEL_QLD_API_KEY from FUEL_QLD_API_KEY_FILE at startup;
       # the secrets anchor below mounts ${SECRETS_DIR} read-only, so the file
@@ -322,7 +338,7 @@ services:
       - "8000"
 
   frontend:
-    image: ghcr.io/cannonfodder151/autobrain-frontend:hosted@sha256:aa9a1bb1b157d24c9879dc9fe70401b03fcaa54be66186d4d26da4e1fb41296c
+    image: ghcr.io/cannonfodder151/autobrain-frontend:hosted@sha256:e28ce22c9c5fe62589b3ed9f92ffe1dfa8c205dcc4d060e429a0a04bea59086c
     # AUT-2087: pinned to the verified arm64 child manifest digest of the
     # autobrain-frontend :hosted OCI image index. Earlier pin
     # (`@sha256:8937c2bb…`) targeted an arm64 image whose nginx + busybox

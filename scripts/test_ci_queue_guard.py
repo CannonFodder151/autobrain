@@ -150,6 +150,32 @@ class TestCIQueueGuard(unittest.TestCase):
         cancelled, out = run_guard(rows)
         self.assertEqual(cancelled, set(), out)
 
+    def test_unreadable_repo_exits_zero_with_warning(self):
+        # AUT-4856: the cross-repo legs 404'd (repo-scoped token) and `set -e` turned
+        # that into a red job every 10 minutes. A failed lookup must exit 0.
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_gh = os.path.join(tmp, "gh")
+            with open(fake_gh, "w") as fh:
+                fh.write('#!/bin/sh\necho "gh: Not Found (HTTP 404)" >&2\nexit 1\n')
+            os.chmod(fake_gh, 0o755)
+            env = dict(os.environ)
+            env["PATH"] = tmp + os.pathsep + env["PATH"]
+            env.pop("QUEUED_RUNS_FILE", None)
+            proc = subprocess.run(
+                ["bash", GUARD, "autobrainservice-website"],
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("::warning::skipped autobrainservice-website", proc.stdout)
+
+    def test_missing_repo_secret_still_runs_on_autobrain(self):
+        # The workflow's `secrets.CI_GUARD_TOKEN || secrets.GITHUB_TOKEN` fallback
+        # must not be dead weight: with the repo token the autobrain leg still works.
+        cancelled, out = run_guard([(1, ts(300), "push", "main", "Build hosted images", "a")])
+        self.assertEqual(cancelled, {1}, out)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

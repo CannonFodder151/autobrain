@@ -75,7 +75,7 @@ The dev box at `<DEV_BOX_IP>` runs on local hardware — no cloud bill, but real
 | PostgreSQL 17 + pgvector | ✓ | ✓ | ✓ | Storage + RAM |
 | Redis | ✓ | ✓ | ✓ | Memory (Celery broker) |
 | MinIO | ✓ | ✓ | ✓ | Storage growth |
-| AI gateway (5 modules, in backend) | ✓ | ✓ | ✓ | Network + 9Router tokens |
+| AI gateway (12 modules, in backend) | ✓ | ✓ | ✓ | Network + 9Router tokens |
 | 9Router (hosted-local) | remote | remote | ✓ | GPU/CPU inference on VM |
 | Rego Lookup API (external service, own repo) | ✓ | ✓ | via `REGO_LOOKUP_URL` | CPU (deterministic) |
 | Federation hub | — | — | ✓ | CPU + `hub.db` storage |
@@ -86,6 +86,8 @@ The dev box at `<DEV_BOX_IP>` runs on local hardware — no cloud bill, but real
 | Backup agent | ✓ | ✓ | ✓ | CPU + offsite egress |
 
 **ponytail:** per-service cost attribution is not currently measurable. Estimate from VM totals until Oracle Cloud per-VM/per-OCPU cost attribution is available.
+
+## Finding the code
 
 To trace where a cost driver lives in code, use the repo context graph rather
 than grepping — see the Graft section in the root `AGENTS.md`
@@ -134,4 +136,4 @@ here.
 
 ---
 
-*Last updated: 2026-10-01 | Owner: CFO | Reviewed by: Documentation Manager (AUT-4397) | Sources: Oracle Cloud Console, Portainer, `docker-compose.hosted.yml`, migration cost case | Next review: 2026-11-01*
+*Last updated: 2026-10-01 | Owner: CFO | Reviewed by: Documentation Manager (AUT-4397) | Sources: Oracle Cloud Console, Portainer, docker-compose.hosted.yml, migration cost case | Next review: 2026-11-01*
