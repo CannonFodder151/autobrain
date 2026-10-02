@@ -63,6 +63,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   `backend/tests/test_pdf_dos_regression.py` and the `test_api.py` PDF export
   tests.
 
+### Fixed (AUT-5069)
+- ci: `docker-compose.hosted.yml` added to the `paths:` filter of both triggers in
+  `.github/workflows/ci-tests.yml`. The `release-scripts` job that runs
+  `scripts/check-compose-consolidation.py` reads that file and nothing else, but a
+  PR touching only the hosted compose file never triggered the workflow — so the
+  AUT-3944 backup invariants (loopback-only `backup` GUI on :8080,
+  `BACKUP_OFFSITE_URL` targeting `backup:`, `BACKUP_OFFSITE_ENABLED=true`) were
+  unenforced for exactly the file they guard. A PR that widened the backup GUI to
+  `0.0.0.0:8080:8080`, or set `BACKUP_OFFSITE_ENABLED: "false"`, shipped green.
+  `scripts/test_check_compose_consolidation.py` now asserts the trigger paths so the
+  gap cannot reopen (16 tests).
+
 ## [0.3.295] - 2026-10-02
 
 ### Fixed (AUT-3827)

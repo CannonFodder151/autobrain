@@ -10,7 +10,8 @@ widen off loopback, or the hourly push could keep addressing the retired
 
 These tests drive the real script against the real compose file and against
 deliberately broken copies of it, so the invariants are enforced by CI rather
-than by memory.
+than by memory. A final pair asserts the trigger that makes CI run them at all
+(AUT-5069: the compose file was not in ci-tests.yml's `paths:` filter).
 
 Run: python3 -m unittest scripts/test_check_compose_consolidation.py -v
 """
@@ -26,6 +27,7 @@ import yaml
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCRIPT = os.path.join(REPO, "scripts", "check-compose-consolidation.py")
 COMPOSE = os.path.join(REPO, "docker-compose.hosted.yml")
+CI_WORKFLOW = os.path.join(REPO, ".github", "workflows", "ci-tests.yml")
 
 
 def load_compose():
@@ -187,6 +189,29 @@ class TestComposeConsolidationBackupInvariants(unittest.TestCase):
             drop_backend_env("BACKUP_OFFSITE_ENABLED"),
             'BACKUP_OFFSITE_ENABLED must stay "true"',
         )
+
+
+class TestComposeConsolidationIsTriggered(unittest.TestCase):
+    """The invariants above are only enforced if CI runs on the file they read.
+
+    AUT-5069: `docker-compose.hosted.yml` was absent from ci-tests.yml's
+    `paths:` filters, so a PR touching only the hosted compose file skipped
+    the release-scripts job entirely and the AUT-3944 invariants went
+    unenforced for exactly the file they guard.
+    """
+
+    def setUp(self):
+        with open(CI_WORKFLOW) as f:
+            doc = yaml.safe_load(f)
+        # YAML 1.1 parses a bare `on:` key as the boolean True.
+        self.on = doc.get("on", doc.get(True))
+        self.assertIsNotNone(self.on, "ci-tests.yml has no trigger block")
+
+    def test_pull_request_triggered_by_hosted_compose(self):
+        self.assertIn("docker-compose.hosted.yml", self.on["pull_request"]["paths"])
+
+    def test_push_to_main_triggered_by_hosted_compose(self):
+        self.assertIn("docker-compose.hosted.yml", self.on["push"]["paths"])
 
 
 if __name__ == "__main__":

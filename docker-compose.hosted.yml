@@ -13,6 +13,9 @@
 # retired from CI (AUT-3172).
 # The fuel-poll tasks that used to live in the worker now run in the backend
 # container, so FUEL_*_FILE secrets moved from the worker block to backend env.
+# Structural invariants for this file are enforced by
+# scripts/check-compose-consolidation.py in CI (AUT-3944, wired up AUT-5031).
+# Editing this file alone is enough to trigger that gate — keep it so (AUT-5069).
 
 # Secret-file pattern (AUT-1533): secret-class values are bind-mounted from
 # ${SECRETS_DIR:-/data/autobrain/secrets} (root:1000, 0640) and loaded into
