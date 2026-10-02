@@ -11,6 +11,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security (AUT-3977)
+- backup: SSRF guard on `BACKUP_OFFSITE_URL` (`backend/app/core/config.py`). The
+  backend now validates the configured off-site backup URL at startup and **fails
+  closed**: only schemes `http`/`https`, only hosts that are loopback-free,
+  link-local-free, and named in the new `BACKUP_OFFSITE_HOST_ALLOWLIST` exact-match
+  list are accepted. Cloud-metadata literals (`169.254.169.254`), their
+  decimal/hex/IPv4-mapped encodings, RFC1918 literals, and loopback aliases are
+  rejected even when allowlisted. Anchoring on anything but the whole label set
+  would let an attacker-registered domain such as `autobrain-backup.attacker.net`
+  satisfy the rule, so the match is an exact, case- and trailing-dot-normalised
+  host comparison.
+- deploy(hosted): `docker-compose.hosted.yml` sets
+  `BACKUP_OFFSITE_HOST_ALLOWLIST: ["backup"]` so the shipped default
+  `BACKUP_OFFSITE_URL` stays authorised. Overriding the URL without adding the new
+  host now makes the backend refuse to boot, by design.
+- docs: `.env.example` documents `BACKUP_OFFSITE_HOST_ALLOWLIST` next to the other
+  `BACKUP_OFFSITE_*` entries (the AUT-2390 compose diff gate requires every
+  compose env key to be declared there).
+- Guarded by `backend/tests/test_aut3977_backup_offsite_ssrff.py` (36 cases).
+
+### Fixed (AUT-3978)
+- fix(backup): `backup_offsite_hourly` wraps `run_backup_offsite()` in the
+  persistent-loop `_run()` wrapper. Before the fix the async function was passed
+  bare, so the coroutine was created and dropped — the task "succeeded" in
+  ~0.001s and the hourly off-site push never fired. Guarded by
+  `backend/tests/test_workers.py` and the real-task regression in
+  `backend/tests/test_backup_offsite.py`.
+
 ## [0.3.302] - 2026-10-02
 - fix(fuel): disable the SA (SAFPIS) feed (AUT-5072).
   `FUEL_SA_ENABLED: "true"` was set in both compose files
