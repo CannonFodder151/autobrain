@@ -13,6 +13,7 @@ Usage:
 import argparse
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -70,6 +71,17 @@ def compose_services_and_ports(content):
     return set(services), ports
 
 
+def compose_image_digests(content):
+    """Return {service: 'sha256:...'} for every digest-pinned service image."""
+    doc = yaml.safe_load(content) or {}
+    digests = {}
+    for name, spec in (doc.get("services") or {}).items():
+        m = re.search(r"@sha256:([0-9a-f]{64})", (spec or {}).get("image") or "")
+        if m:
+            digests[name] = "sha256:" + m.group(1)
+    return digests
+
+
 def endpoint_containers(args):
     """All containers on the endpoint (including stopped/unused ones)."""
     return _api(args, f"/endpoints/{args.endpoint}/docker/containers/json?all=true")
@@ -100,25 +112,49 @@ def check_port_collisions(args, services, wanted_ports):
     return problems
 
 
-def verify_running(args, services, attempts=20, delay=5):
+def verify_running(args, services, digests=None, attempts=20, delay=5):
     """Wait for every service to have a running container. Returns list of
-    problems; empty means healthy."""
-    for _ in range(attempts):
-        containers = endpoint_containers(args)
-        running = {_service_of(c) for c in containers if c.get("State") == "running"}
+    problems; empty means healthy.
+
+    digests (AUT-5132): {service: 'sha256:...'} from the compose. A digest
+    pin plus a running container whose ImageID differs means the redeploy did
+    not move the image — the exact silent no-op that let PR #870 sit merged in
+    main but un-deployed for a whole day. Compare ImageID (config digest), not
+    Image: for the single-platform images Portainer runs, ImageID equals the
+    compose's manifest pin for every service in the hosted stack.
+
+    ponytail: checks image identity only. Command/env drift is covered by the
+    digest changing plus post-deploy-smoke.sh; add a per-container
+    /containers/{id}/json command compare if a compose-only edit ever needs a
+    second alarm.
+    """
+    digests = digests or {}
+    containers = endpoint_containers(args)
+    def _problems():
+        running = {_service_of(c): c for c in containers if c.get("State") == "running"}
         stuck = [(c["Names"][0].lstrip("/"), c.get("State"))
                  for c in containers if c.get("State") == "created"]
-        missing = sorted(services - running)
-        if not missing and not stuck:
+        out = ([(None, f"service {m!r} has no running container")
+                for m in sorted(set(services) - set(running))] +
+               [(n, f"stuck in state {st}") for n, st in stuck])
+        for svc, want in sorted(digests.items()):
+            c = running.get(svc)
+            if c is None:
+                continue  # already reported as missing/stuck
+            got = c.get("ImageID") or ""
+            if got != want:
+                out.append((svc, f"image did not move — compose pins "
+                                 f"{want[7:19]} but running container is "
+                                 f"{(got or '<none>')[7:19] or '<none>'}"))
+        return out
+    for _ in range(attempts):
+        containers = endpoint_containers(args)
+        problems = _problems()
+        if not problems:
             return []
         time.sleep(delay)
     containers = endpoint_containers(args)
-    running = {_service_of(c) for c in containers if c.get("State") == "running"}
-    stuck = [(c["Names"][0].lstrip("/"), c.get("State"))
-             for c in containers if c.get("State") == "created"]
-    return ([(None, f"service {m!r} has no running container")
-             for m in sorted(services - running)] +
-            [(n, f"stuck in state {st}") for n, st in stuck])
+    return _problems()
 
 
 def main():
@@ -176,6 +212,7 @@ def main():
     # PUT is not atomic: it leaves the replacement stuck in state "created"
     # forever and the site 502s (AUT-4911).
     services, wanted_ports = compose_services_and_ports(content)
+    digests = compose_image_digests(content)
     flat_wanted = {p for ps in wanted_ports.values() for p in ps}
     try:
         clashes = check_port_collisions(args, services, flat_wanted)
@@ -230,7 +267,7 @@ def main():
 
     # AUT-4946: a 200 PUT does not mean a healthy stack. Verify.
     try:
-        problems = verify_running(args, services)
+        problems = verify_running(args, services, digests)
     except urllib.error.HTTPError as e:
         print(f"WARNING: could not verify containers -> HTTP {e.code}", file=sys.stderr)
         problems = []

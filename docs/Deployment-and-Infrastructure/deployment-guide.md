@@ -272,6 +272,51 @@ Portainer stack updates pull images (`pullImage=true`) and recreate changed
 services (AUT-372). This is intended so CI-published images reach the tier, and
 it is safe for the frontend because the stack pins a static IP.
 
+#### Hosted stack 122 is an inline, digest-pinned stack (AUT-5132)
+
+`autobrain-hosted` (stack id **122**, endpoint 5) is **not** a git stackfile:
+`GET /api/stacks/122` returns `GitConfig: null` and `AdditionalFiles: null`,
+meaning Portainer holds an uploaded compose file and re-applies it verbatim.
+Every image in `docker-compose.hosted.yml` is pinned by digest (mandated by
+`security-pr-gate.yml` "Pin guard"), e.g.
+
+```yaml
+image: ghcr.io/cannonfodder151/autobrain-backend:hosted@sha256:28c1747959fe...
+```
+
+Two consequences, both of which make a naive deploy a **silent no-op**:
+
+1. `pullImage:true` cannot move a `repo@sha256:…` reference — `docker compose
+   pull` resolves that exact immutable digest, so a redeploy recreates the same
+   image every time.
+2. The stored compose goes stale independently of git, so a compose edit merged
+   into `main` never reaches the running stack on its own.
+
+So `PUT /api/stacks/122?redeploy=true&pullImage=true` returning HTTP 200 is
+**not** evidence that anything deployed. What makes the running stack track
+`main` is the `compose-pin` job at the end of `build-hosted.yml`: it bumps the
+digest pins into `docker-compose.hosted.yml`, pushes, then calls
+`scripts/sync-compose-to-portainer.py`, which PUTs the file into stack 122 with
+`pullImage=true` and verifies the running container `ImageID` equals the pin.
+A digest that does not move fails the job instead of passing quietly.
+
+If a sync is ever needed by hand:
+
+```bash
+python3 scripts/sync-compose-to-portainer.py \
+  --stack autobrain-hosted --endpoint 5 --file docker-compose.hosted.yml
+```
+
+Verify a deploy actually moved, by comparing the running container image digest
+to the pin (this is the check `post-deploy-smoke.sh` cannot make — it is
+black-box HTTP):
+
+```bash
+curl -s -H "X-API-Key: $PORTAINER_API_KEY" \
+  "https://portainer.nathanmartina.com/api/endpoints/5/docker/containers/json?all=true" \
+  | jq -r '.[] | "\(.Labels["com.docker.compose.service"]) \(.ImageID)"'
+```
+
 Prerequisites for the Portainer API path to work (verified before relying on the
 upgrade path):
 

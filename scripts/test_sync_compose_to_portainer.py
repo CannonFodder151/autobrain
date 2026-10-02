@@ -42,13 +42,14 @@ class _Args:
     portainer_url = "https://portainer.example.com"
 
 
-def _container(name, service, state="running", ports=()):
+def _container(name, service, state="running", ports=(), image_id=""):
     return {
         "Names": ["/" + name],
         "State": state,
         "Status": f"Up (mock) {state}",
         "Labels": {"com.docker.compose.service": service},
         "Ports": [{"PublicPort": p} for p in ports],
+        "ImageID": image_id,
     }
 
 
@@ -269,6 +270,55 @@ class TestVerifyRunning(SyncComposeTestBase):
 
         self.assertEqual([w for _, w in problems if "stuck" in w],
                          ["stuck in state created"])
+
+    def test_image_did_not_move_is_a_problem(self):
+        # AUT-5132: every service is running, but the backend is still the old
+        # image. A redeploy that reports success while shipping nothing must
+        # fail loudly.
+        new = "sha256:" + "a" * 64
+        old = "sha256:" + "b" * 64
+        r = _Responder({("GET", "/docker/containers/json"): [
+            _container("autobrain-hosted-backend-1", "backend", image_id=old),
+            _container("autobrain-hosted-frontend-1", "frontend", image_id=new),
+        ]})
+        args = _Args()
+
+        with patch("urllib.request.urlopen", r):
+            problems = scp.verify_running(args, {"backend", "frontend"},
+                                          {"backend": new, "frontend": new},
+                                          attempts=1, delay=0)
+
+        self.assertEqual(len(problems), 1)
+        self.assertIn("image did not move", problems[0][1])
+        self.assertIn(new[7:19], problems[0][1])
+        self.assertIn(old[7:19], problems[0][1])
+
+    def test_matching_digests_produce_no_problem(self):
+        new = "sha256:" + "a" * 64
+        r = _Responder({("GET", "/docker/containers/json"): [
+            _container("autobrain-hosted-backend-1", "backend", image_id=new),
+            _container("autobrain-hosted-frontend-1", "frontend", image_id=new),
+        ]})
+        args = _Args()
+
+        with patch("urllib.request.urlopen", r):
+            self.assertEqual(
+                scp.verify_running(args, {"backend", "frontend"},
+                                   {"backend": new, "frontend": new},
+                                   attempts=1, delay=0), [])
+
+
+class TestComposeImageDigests(unittest.TestCase):
+    """Only digest-pinned services are checkable; tags are skipped, not failed."""
+
+    def test_reads_pins_and_skips_tags(self):
+        d = "sha256:" + "c" * 64
+        content = ("services:\n"
+                   "  backend:\n    image: ghcr.io/x/backend:hosted@sha256:%s\n"
+                   "  ai:\n    image: ghcr.io/x/ai@sha256:%s\n"
+                   "  tagonly:\n    image: nginx:stable\n" % ("c" * 64, "d" * 64))
+        self.assertEqual(scp.compose_image_digests(content), {
+            "backend": d, "ai": "sha256:" + "d" * 64})
 
 
 if __name__ == "__main__":

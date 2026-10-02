@@ -325,7 +325,14 @@ jobs:
           done
 
       - name: Sync updated compose into Portainer hosted stack
-        if: steps.bump.outputs.changed == 'true'
+        # AUT-5132: sync whenever the pin bump ran, not only when it changed a
+        # digest. The `changed` gate meant any compose edit that did not move a
+        # digest pin (e.g. the PR #870 alembic pre-step) never reached the
+        # running stack, so the nightly redeploy re-applied the stale stored
+        # compose — a redeploy that reports success and ships nothing. Stack
+        # files are digest-pinned, so `pullImage:true` alone can never move
+        # them; this sync is what makes the running stack track main.
+        if: always() && github.ref == 'refs/heads/main' && steps.bump.outcome == 'success'
         env:
           TAG: ${{ github.event.inputs.tag || 'hosted' }}
         run: |
