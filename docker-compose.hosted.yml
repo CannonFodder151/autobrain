@@ -164,7 +164,7 @@ services:
     # AUT-3153: the standalone Celery worker+beat service is merged into this
     # container. The backend image already carries the worker dependencies and
     # its default CMD runs the same topology as docker-compose.prod.yml.
-    image: ghcr.io/cannonfodder151/autobrain-backend:hosted@sha256:73f2c390983d682c85f41e2399c9dd26d6fc4d7aa071a2906336f6f4a0721e59
+    image: ghcr.io/cannonfodder151/autobrain-backend:hosted@sha256:8fd7a180760944aa244a2c259cfb10e5a2aea6911072287605fe4925667290d8
     restart: unless-stopped
     # AUT-5088: `alembic upgrade head` runs first and its failure is fatal.
     # Without it, bootstrap's `create_all` fallback silently swallowed every
@@ -338,7 +338,7 @@ services:
       - "8000"
 
   frontend:
-    image: ghcr.io/cannonfodder151/autobrain-frontend:hosted@sha256:678af770a7344ef77f1773b057de2d3fce7ed96a686124e8ba8c798d20b8419a
+    image: ghcr.io/cannonfodder151/autobrain-frontend:hosted@sha256:4e34ed817ea1f2e069358cc39b9fccb8f7224208eb14eb49f9d5115224d7da4e
     # AUT-2087: pinned to the verified arm64 child manifest digest of the
     # autobrain-frontend :hosted OCI image index. Earlier pin
     # (`@sha256:8937c2bb…`) targeted an arm64 image whose nginx + busybox
