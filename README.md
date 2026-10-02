@@ -6,7 +6,7 @@ AI-powered car enthusiast companion. Manage vehicles, track maintenance & fuel, 
 [![Version](https://img.shields.io/badge/version-0.3.270-green)](CHANGELOG.md)
 
 - **Website / hosted service** — https://autobrainservice.app
-- **Live demo** — https://demo.autobrainservice.app (login: `demo@autobrainservice.app` / `demo`)
+- **Live demo** — https://demo.autobrainservice.app (login: `demo@autobrainservice.app`; password distributed via the Paperclip secret `demo/demo-account-password`, set on the demo stack as `DEMO_PASSWORD`)
 - **Marketing site** — https://autobrainservice.app (repo: `autobrainservice-website`)
 - **AU rego lookup API** — self-hosted Plate-API-Scraper (`rego-lookup-api` repo)
 - **Mobile app** — [`CannonFodder151/autobrain-mobile`](https://github.com/CannonFodder151/autobrain-mobile) (private)

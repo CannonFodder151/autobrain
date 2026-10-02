@@ -131,7 +131,10 @@ class Settings(BaseSettings):
     # Demo mode: seeds a read-only demo account + sample data. No AI, no writes.
     DEMO_MODE: bool = False
     DEMO_EMAIL: str = "demo@autobrainservice.app"
-    DEMO_PASSWORD: str = "demo"
+    # No default: the demo password is a secret (Paperclip
+    # `demo/demo-account-password`), never a literal in code. seed_demo /
+    # reset_demo fail closed when it is empty (AUT-5063).
+    DEMO_PASSWORD: str = ""
     DEMO_DISPLAY_NAME: str = "Demo Garage"
     # One-shot demo reseed: wipe + regenerate the demo data on startup
     # (used when the seed changes so existing instances get new sample data).
