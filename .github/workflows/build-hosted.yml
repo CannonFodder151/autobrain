@@ -269,6 +269,90 @@ jobs:
             echo "${svc}_digest=sha256:${d}" >> "$GITHUB_OUTPUT"
           done
 
+  # AUT-4497: resolve arm64 child manifest digests for ALL five hosted app
+  # services and commit an updated docker-compose.hosted.yml. This runs AFTER
+  # compose-pin so it overwrites the index digests with the actual arm64 child
+  # digests that EP5 runs. The gh-runner build: block is stripped by the sync
+  # script so the deploy no longer 500s.
+  digest-sync:
+    needs: [build-manifest, compose-pin]
+    if: github.event_name != 'pull_request'
+    runs-on: [self-hosted, linux, x64, vm2]
+    permissions:
+      contents: write
+    env:
+      PORTAINER_URL: https://portainer.nathanmartina.com
+    steps:
+      # AUT-4745: actions pinned to commit SHAs, not mutable tags. PORTAINER_API_KEY
+      # is deliberately NOT set at job level — it is scoped to the single
+      # "Sync updated compose" step that reads it, so the checkout and GHCR
+      # login steps never see it.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Resolve arm64 child digests for all hosted app services
+        id: resolve
+        run: |
+          set -euo pipefail
+          python3 scripts/resolve-hosted-digests.py --tag hosted
+
+      - name: Bump compose pins to arm64 child digests
+        id: bump
+        run: |
+          set -euo pipefail
+          set +e
+          ./scripts/update-compose-pins.py \
+            backend="${{ steps.resolve.outputs.backend }}" \
+            frontend="${{ steps.resolve.outputs.frontend }}" \
+            dongle-server="${{ steps.resolve.outputs.dongle_server }}" \
+            hub="${{ steps.resolve.outputs.hub }}" \
+            backup="${{ steps.resolve.outputs.backup }}"
+          code=$?
+          echo "changed=$([ $code -eq 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Commit + push digest-sync bump [skip ci]
+        if: steps.bump.outputs.changed == 'true'
+        env:
+          GIT_AUTHOR_NAME: AutoBrain Deployment Bot
+          GIT_AUTHOR_EMAIL: deploy@autobrainservice.app
+          GIT_COMMITTER_NAME: AutoBrain Deployment Bot
+          GIT_COMMITTER_EMAIL: deploy@autobrainservice.app
+        run: |
+          set -euo pipefail
+          git add docker-compose.hosted.yml docker-compose.prod.yml docker-compose.yml
+          git diff --cached --quiet && { echo "==> no staged changes — skipping"; exit 0; }
+          git commit -m "chore: bump hosted compose pins to arm64 child digests [skip ci]"
+          for i in 1 2 3; do
+            if git push origin main; then
+              echo "==> digest-sync pins pushed"
+              break
+            fi
+            echo "==> push raced with main — rebasing and retrying ($i/3)"
+            git pull --rebase origin main
+            git add docker-compose.hosted.yml docker-compose.prod.yml docker-compose.yml
+            git commit --amend --no-edit || true
+          done
+
+      - name: Sync updated compose into Portainer hosted stack
+        if: steps.bump.outputs.changed == 'true'
+        env:
+          PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+        run: |
+          set -euo pipefail
+          python3 scripts/sync-compose-to-portainer.py \
+            --stack autobrain-hosted \
+            --endpoint 5 \
+            --file docker-compose.hosted.yml
+
   compose-pin:
     needs: build-manifest
     if: github.event_name != 'pull_request'
@@ -278,9 +362,7 @@ jobs:
     env:
       TAG: ${{ github.event.inputs.tag || 'hosted' }}
       BACKEND_DIGEST: ${{ needs.build-manifest.outputs.backend_digest }}
-      AI_DIGEST: ${{ needs.build-manifest.outputs.ai_digest }}
       FRONTEND_DIGEST: ${{ needs.build-manifest.outputs.frontend_digest }}
-      PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
       PORTAINER_URL: https://portainer.nathanmartina.com
     steps:
       - uses: actions/checkout@v4
@@ -295,7 +377,6 @@ jobs:
           set +e
           ./scripts/update-compose-pins.py \
             backend="${BACKEND_DIGEST}" \
-            ai="${AI_DIGEST}" \
             frontend="${FRONTEND_DIGEST}"
           code=$?
           echo "changed=$([ $code -eq 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
@@ -328,6 +409,7 @@ jobs:
         if: steps.bump.outputs.changed == 'true'
         env:
           TAG: ${{ github.event.inputs.tag || 'hosted' }}
+          PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
         run: |
           set -euo pipefail
           # AUT-4946: the sync script parses compose + inspects container state.

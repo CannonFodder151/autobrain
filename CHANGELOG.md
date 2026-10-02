@@ -113,6 +113,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   re-enabled when a paid VIC aggregator is available. Guarded by
   `backend/tests/test_fuel_feed_flags.py`.
 
+### Security (AUT-4745)
+- fix(deploy): strict hex validation of image digests in the hosted digest-sync
+  path (`scripts/resolve-hosted-digests.py`, `scripts/update-compose-pins.py`).
+  The old check accepted any `sha256:`-prefixed 71-character string without
+  verifying the 64 trailing characters were hex; those digests are spliced
+  unquoted into a workflow `run:` block, so a crafted value (`sha256:"; …; "`
+  padded to 71 chars) executed as shell on the self-hosted runner holding
+  `PORTAINER_API_KEY` and `contents: write`. Non-hex digests were also being
+  written straight into the compose pins.
+- fix(deploy): scope `PORTAINER_API_KEY` to the single Portainer sync step
+  instead of job-level `env:` in `build-hosted.yml`, so `actions/checkout` and
+  the GHCR login step no longer receive it; pin both actions to commit SHAs.
+- fix(deploy): drop `curl -k` from the Portainer API calls in
+  `scripts/upgrade-instances.sh` and `scripts/prune-images.sh`, which were
+  sending `X-API-Key` with TLS verification disabled.
+- chore(deploy): remove the dead `ai` entry from the compose `PIN_MAP` — no
+  `autobrain-ai` service exists in any compose file, so it only produced a
+  `WARN: no pin matched` on every nightly run.
+
+
 ## [0.3.294] - 2026-10-01
 
 ### Fixed (AUT-4911)

@@ -21,6 +21,10 @@
 # + applies DB migrations on boot (docs/container-architecture.md), so a
 # redeploy is a complete upgrade.
 #
+# AUT-4497: after redeploy, verify the backend version actually changed.
+# A deploy that does not change the running version FAILS LOUDLY instead of
+# reporting success — this catches the silent no-op when compose pins are stale.
+#
 # Usage (Deployment Lead, after an image is published):
 #   PORTAINER_API_KEY=... PORTAINER_URL=... ./scripts/upgrade-instances.sh
 #
@@ -55,10 +59,19 @@ TIERS="${UPGRADE_TIERS:-$DEFAULT_TIERS}"
 log() { echo "$(date -u +%FT%TZ) [upgrade] $*"; }
 fail() { echo "$(date -u +%FT%TZ) [upgrade] ERROR: $*" >&2; }
 
+# Fetch the backend version from the tier's own /health URL. That endpoint
+# already reports {"status","service","version","env"} (see the hosted stack),
+# so the same URL serves both the health poll and the version check.
+fetch_backend_version() {
+  local health_url="$1"
+  curl -fsS --max-time 10 "$health_url" 2>/dev/null \
+    | python3 -c "import sys,json; print(json.load(sys.stdin).get('version',''))" 2>/dev/null || echo ""
+}
+
 # Resolve a stack id + endpoint by exact name (Portainer 2.45 ignores ?name=).
 resolve_stack() {
   local name="$1"
-  curl -sk "${AUTH[@]}" "$API/stacks" \
+  curl -sS "${AUTH[@]}" "$API/stacks" \
     | python3 -c "import sys,json
 d=json.load(sys.stdin)
 hits=[s for s in d if s.get('Name')==sys.argv[1]]
@@ -70,7 +83,7 @@ print(hits[0]['Id'], hits[0]['EndpointId'])" "$name"
 # Fetch {StackFileContent, Env} of a stack.
 fetch_stack() {
   local id="$1"
-  curl -sk "${AUTH[@]}" "$API/stacks/$id/file"
+  curl -sS "${AUTH[@]}" "$API/stacks/$id/file"
 }
 
 # Re-apply a stack, pulling the freshly published image and recreating changed
@@ -81,7 +94,7 @@ fetch_stack() {
 redeploy() {
   local id="$1" ep="$2" body="$3"
   local resp
-  resp="$(curl -sk -X PUT "${AUTH[@]}" -H "Content-Type: application/json" --data-binary "@$body" "$API/stacks/$id?endpointId=$ep&pullImage=true")"
+  resp="$(curl -sS -X PUT "${AUTH[@]}" -H "Content-Type: application/json" --data-binary "@$body" "$API/stacks/$id?endpointId=$ep&pullImage=true")"
   printf '%s' "$resp" | python3 -c "import sys,json
 raw=sys.stdin.read().strip()
 try:
@@ -122,6 +135,10 @@ while IFS= read -r line; do
     continue
   fi
 
+  # Capture backend version BEFORE redeploy.
+  version_before=$(fetch_backend_version "$health")
+  log "   version before: ${version_before:-unknown}"
+
   # Pull current compose + env, inject any required-but-missing env, redeploy.
   raw="$(mktemp "$SCRATCH/stack-raw-XXXX")"
   put="$(mktemp "$SCRATCH/stack-put-XXXX")"
@@ -148,7 +165,21 @@ PY
   log "   redeploy result: $result"
 
   if wait_health "$health"; then
-    log "   healthy ($health) — promote"
+    log "   healthy ($health) — checking version change"
+    # Capture backend version AFTER redeploy and health pass.
+    version_after=$(fetch_backend_version "$health")
+    log "   version after:  ${version_after:-unknown}"
+    if [ -n "$version_before" ] && [ -n "$version_after" ] && [ "$version_before" = "$version_after" ]; then
+      fail "   DEPLOY NO-OP: backend version unchanged ($version_before) — running image did not update"
+      OVERALL=1
+      break
+    elif [ -z "$version_after" ]; then
+      fail "   could not determine backend version after deploy — aborting"
+      OVERALL=1
+      break
+    else
+      log "   version changed: $version_before -> $version_after ✓"
+    fi
   else
     fail "   UNHEALTHY ($health) after redeploy — STOPPING promotion"
     OVERALL=1

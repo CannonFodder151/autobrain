@@ -15,12 +15,26 @@ import re
 import sys
 from pathlib import Path
 
-# service -> repo prefix as pinned in docker-compose.hosted.yml
+# service -> repo prefix as pinned in docker-compose.hosted.yml.
+# AUT-4497: all five AutoBrain app images are pinned here. backend/ai/frontend
+# are built by build-hosted.yml; dongle-server/hub/backup are built elsewhere
+# (private repos) and were never bumped automatically — the root cause of the
+# nightly no-op deploy. The digest-sync job resolves every :hosted tag's arm64
+# child digest and rewrites all five pins in one commit.
+# AUT-4745: F5 — the `ai` entry was dropped. There is no `autobrain-ai`
+# service in any compose file, so it only ever produced
+# `WARN: no pin matched for ai`. The AI gateway image is not deployed by
+# compose; if it is reintroduced, add it back with its real repo prefix.
 PIN_MAP = {
-    "backend":  "ghcr.io/cannonfodder151/autobrain-backend",
-    "ai":       "ghcr.io/cannonfodder151/autobrain-ai",
-    "frontend": "ghcr.io/cannonfodder151/autobrain-frontend",
+    "backend":       "ghcr.io/cannonfodder151/autobrain-backend",
+    "frontend":      "ghcr.io/cannonfodder151/autobrain-frontend",
+    "dongle-server": "ghcr.io/cannonfodder151/autobrain-dongle-server",
+    "hub":           "ghcr.io/cannonfodder151/autobrain-federation-hub",
+    "backup":        "ghcr.io/cannonfodder151/autobrain-backup",
 }
+
+# AUT-4745: see resolve-hosted-digests.py — same strict content-digest shape.
+DIGEST_RE = re.compile(r"sha256:[0-9a-f]{64}")
 
 
 def parse_args():
@@ -41,8 +55,13 @@ def main():
             print(f"ERROR: expected svc=digest, got {a!r}", file=sys.stderr)
             return 2
         k, v = a.split("=", 1)
-        if not v.startswith("sha256:"):
-            print(f"ERROR: digest for {k} must be sha256:..., got {v!r}", file=sys.stderr)
+        # AUT-4745: strict hex match, not `startswith("sha256:")`. A
+        # non-hex value is written straight into the compose file, and the
+        # same values arrive here from resolve-hosted-digests.py, whose output
+        # is spliced unquoted into a workflow `run:` block.
+        if not DIGEST_RE.fullmatch(v):
+            print(f"ERROR: digest for {k} must be sha256:<64 hex>, got {v!r}",
+                  file=sys.stderr)
             return 2
         pins[k] = v
 

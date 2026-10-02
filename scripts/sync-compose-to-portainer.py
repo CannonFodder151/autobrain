@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""AUT-2082: sync a git compose file into a Portainer stack (no human step).
+"""AUT-2082 + AUT-4497: sync a git compose file into a Portainer stack (no human step).
 
 After build-hosted.yml bumps the digest pins in docker-compose.hosted.yml,
 this pushes the updated StackFileContent into the running Portainer stack so
 the next deploy uses the freshly published digests — closing the drift
 between git and Portainer without a manual operator action.
+
+Also strips `build:` blocks (EP5 has no build worker) so the deploy no longer
+500s with "compose build operation failed" from the gh-runner service.
 
 Usage:
   python3 scripts/sync-compose-to-portainer.py \
@@ -13,6 +16,7 @@ Usage:
 import argparse
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -121,6 +125,36 @@ def verify_running(args, services, attempts=20, delay=5):
             [(n, f"stuck in state {st}") for n, st in stuck])
 
 
+def strip_build_blocks(content: str) -> str:
+    """Remove `build:` blocks from all services so EP5 (no build worker) can deploy."""
+    lines = content.splitlines(keepends=True)
+    out = []
+    in_build = False
+    build_base_indent = 0
+
+    for line in lines:
+        stripped = line.lstrip()
+        indent = len(line) - len(stripped)
+
+        # Detect a `build:` key at service level (indent 4, since services are at 2)
+        if stripped.startswith("build:") and indent == 4:
+            in_build = True
+            build_base_indent = indent
+            continue
+
+        if in_build:
+            # Skip empty lines and lines indented deeper than the build: key
+            if stripped == "" or indent > build_base_indent:
+                continue
+            else:
+                in_build = False
+
+        if not in_build:
+            out.append(line)
+
+    return "".join(out)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--stack", required=True)
@@ -139,6 +173,9 @@ def main():
 
     with open(args.file) as f:
         content = f.read()
+
+    # Strip build blocks (gh-runner has build: but EP5 has no build worker)
+    content = strip_build_blocks(content)
 
     # Resolve stack id by name (Portainer 2.45 ignores ?name=).
     api = f"{args.portainer_url}/api"
