@@ -22,14 +22,26 @@ void main() {
     await tester.pumpWidget(wrap());
     await tester.pumpAndSettle();
 
-    final Container container = tester.widget(find.byType(Container).first);
+    // Scope to the logo subtree: find.byType(Container).first matches the
+    // Scaffold body Container at login_screen.dart:181, which is a strict
+    // ancestor of the logo Container, so it is visited first in pre-order
+    // traversal. ClipOval is unique to the logo, so anchoring on it is
+    // order-independent.
+    final Container container =
+        tester.widget(find.ancestor(
+      of: find.byType(ClipOval),
+      matching: find.byType(Container),
+    ).first);
     expect(container.decoration, isA<BoxDecoration>());
     final BoxDecoration box =
         container.decoration as BoxDecoration;
     expect(box.shape, equals(BoxShape.circle));
     expect(box.color, equals(Colors.black));
 
-    final Image image = tester.widget(find.byType(Image).first);
+    final Image image = tester.widget(find.descendant(
+      of: find.byType(ClipOval),
+      matching: find.byType(Image),
+    ));
     expect(image.fit, equals(BoxFit.contain));
   });
 }

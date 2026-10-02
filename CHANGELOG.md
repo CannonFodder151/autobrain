@@ -36,6 +36,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   circular, black-background container and uses `BoxFit.contain`, so a
   non-square logo asset cannot silently stretch again. The layout fix itself
   already landed; this guards it.
+- test(frontend): scope the login-logo regression test to the `ClipOval` subtree.
+  `find.byType(Container).first` resolved to the gradient `Scaffold.body`
+  Container, so the test failed for the wrong reason. Also add the test to
+  `visual_regression.yml`, which previously never executed it.
 
 ## [0.3.296] - 2026-10-02
 
