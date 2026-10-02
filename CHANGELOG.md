@@ -10,6 +10,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+- fix(fuel): disable the SA (SAFPIS) feed (AUT-5072).
+  `FUEL_SA_ENABLED: "true"` was set in both compose files
+  (AUT-2610) with a seeded `fuel_sa_api_key` secret, but no
+  `ingest_sa_*` function exists — `ingest_all_fuel()` only
+  loops `wa`, `nsw`, `vic`, `qld`, so SA was nominally enabled
+  and silently produced zero stations forever. The SAFPIS
+  Direct API host `fppdirectapi.safuelpricinginformation.com.au`
+  is NXDOMAIN (verified against the authoritative nameserver via
+  public DoH) and the AUT-2372 research doc lists the production
+  URL as "to be confirmed from registration" — no subscriber
+  token was ever contracted. Building the ingester would have
+  reproduced the AUT-4143 VIC dead-feed failure mode. Both
+  `docker-compose.hosted.yml` and `docker-compose.prod.yml` now
+  set `FUEL_SA_ENABLED: "false"` (same pattern as VIC/AUT-4976);
+  the secret file stays mounted so re-enabling is a one-line flip
+  once an aggregator is contracted. `/fuel/stations` and
+  `/fuel/attribution` advertise only `wa`/`nsw`/`qld`, so SA
+  coverage is not advertised. Guarded by
+  `backend/tests/test_fuel_feed_flags.py`.
 
 ## [0.3.301] - 2026-10-02
 
