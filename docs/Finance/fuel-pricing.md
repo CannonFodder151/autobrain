@@ -44,13 +44,20 @@ The frontend calls this when a user selects *fuel at 7-Eleven* and pre-fills
 |-----|---------|-------|
 | `SEVEN_ELEVEN_API_URL` | `https://projectzerothree.info/api.php?format=json` | Override only for a self-hosted mirror. |
 | `SEVEN_ELEVEN_CACHE_TTL_MINUTES` | `60` | Snapshot cache lifetime. |
-| `SEVEN_ELEVEN_USER_AGENT` | `AutoBrain/1.0 ...` | Sent on fetch. |
+| `SEVEN_ELEVEN_USER_AGENT` | `AutoBrain/1.0 (+https://autobrainservice.app)` | Sent on fetch. |
 
-## Code map
+## Finding the code
+
+Use the repo context graph rather than grepping — see the Graft section in the
+root `AGENTS.md` (`graft map` to orient, `graft ask "7-eleven fuel price
+fetch"` to locate the code, `graft callers <symbol>` for the call graph).
+
+Code map:
 
 - `backend/app/services/fuel_prices.py` — client, parse, haversine, cache.
 - `backend/app/schemas/fuel.py` — `FuelPriceQuote`, `SevenElevenPricesOut`.
-- `backend/app/api/v1/fuel.py` — `/prices/7eleven` route.
+- `backend/app/api/v1/fuel.py` — `/prices/7eleven` route
+  (router prefix `/vehicles/{vehicle_id}/fuel`, mounted under `/api/v1`).
 - `backend/tests/test_fuel_prices.py` — offline parse/geo tests (no network).
 
 ## Related Finance Docs
@@ -58,3 +65,14 @@ The frontend calls this when a user selects *fuel at 7-Eleven* and pre-fills
 - **[index.md](./index.md)** — Finance section index
 - **[fuel-servo-spy.md](./fuel-servo-spy.md)** — Servo Spy state fuel feeds (WA/NSW/VIC/QLD)
 - **[petrol-price-map.md](../petrol-price-map.md)** — Petrol price map (AUT-1813)
+
+## Sanitisation
+
+Public repo mirror. No API key, host address or internal link — the upstream is
+keyless by design. Hosted per-instance values live in the internal Outline
+`Deployment & Infrastructure` section. See
+[Documentation Policy](../Company/documentation-policy.md).
+
+---
+
+*Last updated: 2026-10-01 | Owner: CFO | Reviewed by: Documentation Manager (AUT-4397) | Sources: `backend/app/services/fuel_prices.py`, `backend/app/api/v1/fuel.py` | Next review: 2026-11-01*

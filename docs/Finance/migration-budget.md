@@ -100,7 +100,7 @@ These require engineering time only, no infrastructure spend:
 - [ ] Document migration runbooks per service
 - [ ] Test marketing site on hosted stack
 - [ ] Test rego-lookup on hosted stack
-- [ ] Update DNS (Cloudflare) via Deployment team → Nathan approval
+- [ ] Update DNS (Cloudflare) via Deployment team → CEO approval
 - [ ] Validate end-to-end on hosted
 - [ ] Decommission on-prem services (if Option B)
 
@@ -109,7 +109,7 @@ These require engineering time only, no infrastructure spend:
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
 | VM capacity insufficient for added services | Medium | Medium | Load test before migration; provision 2nd VM if needed |
-| DNS cutover issues | Low | High | Staged rollout, rollback plan, Nathan approval via Discord |
+| DNS cutover issues | Low | High | Staged rollout, rollback plan, CEO approval via the `approvals` Discord channel |
 | Data migration loss | Low | Critical | Backup → verify → migrate → verify; MinIO/PostgreSQL dumps |
 | Dev team productivity drop | Medium (Option B) | Medium | Keep hybrid option as fallback |
 | Cloud cost overruns | Medium | Medium | Monthly billing alerts; freeze infra if > 90% of budget |
@@ -121,6 +121,25 @@ These require engineering time only, no infrastructure spend:
 3. CEO approves Option A / B / C via Paperclip interaction
 4. On approval, Deployment Lead executes migration plan
 
+## Related Finance Docs
+
+- **[index.md](./index.md)** — Finance section index
+- **[infrastructure-costs.md](./infrastructure-costs.md)** — current per-service Oracle Cloud + on-prem spend
+- **[budget-tracking.md](./budget-tracking.md)** — budget allocation and variance
+
+## Finding the code
+
+Compose topology and cost drivers trace to the stack files. Use the repo
+context graph rather than grepping — see the Graft section in the root
+`AGENTS.md` (`graft ask "hosted compose services"`, `graft map` to orient).
+
+## Sanitisation
+
+Public repo mirror. Host addresses are placeholders (`<HOSTED_VM_IP>`,
+`<DEV_BOX_IP>`, `<PORTENER_HOST_IP>`); real addresses and per-instance
+credentials live in the internal Outline `Deployment & Infrastructure` section.
+See [Documentation Policy](../Company/documentation-policy.md).
+
 ---
 
-*Last updated: 2026-09-26 | Owner: CFO + Deployment Lead | Source: migration-cost-case.md | Next review: Phase 3 kickoff*
+*Last updated: 2026-10-01 | Owner: CFO + Deployment Lead | Reviewed by: Documentation Manager (AUT-4397) | Sources: Oracle Cloud Console, Portainer, `docker-compose.hosted.yml` | Next review: Phase 3 kickoff*

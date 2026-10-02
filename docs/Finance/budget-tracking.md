@@ -23,8 +23,11 @@ Monthly budget allocation, spend tracking, and variance analysis for AutoBrain o
 | Enthusiast Yearly | $59 AUD/sub | Stripe: `autobrain-enthusiast-yearly` |
 | Garage Monthly | $11.90 AUD/sub | Stripe: `autobrain-garage-monthly` |
 | Garage Yearly | $119 AUD/sub | Stripe: `autobrain-garage-yearly` |
-| Early-Adopter (EARLY40) | Variable | 40% off first 3 months, capped at 100 redemptions |
+| Early-Adopter (EARLY40) | Variable | 40% off first 3 months, capped at 100 redemptions; sunset under AUT-1164 |
 | Mobile IAP | Same as web | Apple/Google take 15-30% |
+| Community Garage federation | $20/yr per self-hosted server | Board-approved concept (2026-08-11); **not implemented yet**, so $0 today. AutoBrain-hosted servers licensed free. See [Community Garage](../Marketing-and-Website/community-garage.md). |
+
+Prices are the source of truth in `scripts/stripe-setup.py` (AUT-523).
 
 ## Cost Categories
 
@@ -36,7 +39,7 @@ Monthly budget allocation, spend tracking, and variance analysis for AutoBrain o
 | Oracle Cloud Network Egress | $20 AUD | $0 | - | Variable by traffic |
 | On-Prem Dev Box | $60 AUD | $0 | - | Hidden costs (electricity, hardware) |
 | **Operations** | | | | |
-| 9Router AI Routing | $200 AUD | $0 | - | <INTERNAL_9ROUTER_URL> |
+| 9Router AI Routing | $200 AUD | $0 | - | Internal per-environment 9Router (no published URL) |
 | Domain & SSL | $15 AUD | $0 | - | Cloudflare (managed) |
 | Monitoring & Alerting | $50 AUD | $0 | - | Portainer, health checks |
 | **Development** | | | | |
@@ -105,6 +108,21 @@ To adjust a budget category:
 - **[infrastructure-costs.md](./infrastructure-costs.md)** — per-service Oracle Cloud + on-prem spend
 - **[migration-budget.md](./migration-budget.md)** — Phase 3 migration cost case
 - **[market-data.md](./market-data.md)** — scraper cost profile per tier
+- **[fuel-servo-spy.md](./fuel-servo-spy.md)** — fuel feed partner keys and ingest cadence (a future cost line once SA/TAS/NT aggregators land)
+
+## Finding the code
+
+Budget figures trace to real config, not memory. Use the repo context graph
+rather than grepping — see the Graft section in the root `AGENTS.md`
+(`graft ask "stripe price ids"`, `graft callers create_checkout_session`).
+
+## Sanitisation
+
+Public repo mirror. Budget figures are internal but not secret; instance IPs are
+placeholders (`<HOSTED_VM_IP>`, `<DEV_BOX_IP>`, `<PORTENER_HOST_IP>`) and
+per-instance credentials live in the internal Outline `Deployment &
+Infrastructure` section. See
+[Documentation Policy](../Company/documentation-policy.md).
 
 ---
 
