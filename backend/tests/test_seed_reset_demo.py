@@ -16,7 +16,7 @@ os.environ["DATABASE_URL"] = "sqlite+aiosqlite:////tmp/autobrain-seed-reset-test
 os.environ["SECRET_KEY"] = "test-secret"
 os.environ["DEMO_MODE"] = "true"
 os.environ["DEMO_EMAIL"] = "demo@test.local"
-os.environ["DEMO_PASSWORD"] = "demo"
+os.environ["DEMO_PASSWORD"] = "test-demo-password-123"
 os.environ["DEMO_DISPLAY_NAME"] = "Demo Garage"
 os.environ["POSTGRES_USER"] = "autobrain"
 os.environ["POSTGRES_PASSWORD"] = "autobrain"
@@ -48,7 +48,7 @@ from app.social.models import SocialIssueComment, SocialIssuePost  # noqa: E402
 # config directly on the cached instance instead of relying on os.environ.
 settings.DEMO_MODE = True
 settings.DEMO_EMAIL = "demo@test.local"
-settings.DEMO_PASSWORD = "demo"
+settings.DEMO_PASSWORD = "test-demo-password-123"
 settings.DEMO_DISPLAY_NAME = "Demo Garage"
 
 # Self-contained sqlite engine: seed.py resolves SessionLocal from
@@ -75,6 +75,51 @@ async def _reset_schema() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
+
+
+@pytest.mark.asyncio
+async def test_seed_demo_fails_closed_without_password() -> None:
+    """DEMO_MODE=true + empty DEMO_PASSWORD must not create an account (AUT-5063).
+
+    The demo password is a secret with no code default; a blank password
+    would be a publicly guessable demo login, so seeding is skipped.
+    """
+    saved = settings.DEMO_PASSWORD
+    settings.DEMO_PASSWORD = ""
+    try:
+        await _reset_schema()
+        await seed_demo()
+
+        async with SessionLocal() as db:
+            demo = await db.scalar(
+                select(User).where(User.email == "demo@test.local")
+            )
+            assert demo is None, "seed_demo created an account with no DEMO_PASSWORD"
+    finally:
+        settings.DEMO_PASSWORD = saved
+
+
+@pytest.mark.asyncio
+async def test_reset_demo_fails_closed_without_password() -> None:
+    """A reset that cannot re-seed must not wipe the demo environment.
+
+    reset_demo deletes the demo user + all demo data before re-seeding, so
+    with an empty DEMO_PASSWORD it has to skip entirely rather than leave
+    the demo stack empty.
+    """
+    await _reset_schema()
+    await seed_demo()
+
+    saved = settings.DEMO_PASSWORD
+    settings.DEMO_PASSWORD = ""
+    try:
+        await reset_demo()
+    finally:
+        settings.DEMO_PASSWORD = saved
+
+    async with SessionLocal() as db:
+        demo = await db.scalar(select(User).where(User.email == "demo@test.local"))
+        assert demo is not None, "reset_demo wiped the demo account without a password to re-seed it"
 
 
 @pytest.mark.asyncio

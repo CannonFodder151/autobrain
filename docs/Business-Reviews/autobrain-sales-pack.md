@@ -18,7 +18,7 @@ Sales enablement for AutoBrain — an AI-powered car enthusiast companion sold a
 | Web app | https://default.autobrainservice.app |
 | GitHub | https://github.com/CannonFodder151/autobrain |
 
-Demo login: `demo@autobrainservice.app` / `demo` (read-only, sample data, no AI spend).
+Demo login: `demo@autobrainservice.app` — password distributed on request via the Paperclip secret `demo/demo-account-password` (never published in this repo; read-only, sample data, no AI spend).
 
 ## Pricing
 
