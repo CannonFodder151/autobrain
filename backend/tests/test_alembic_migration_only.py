@@ -20,6 +20,7 @@ import asyncio
 import os
 import subprocess
 import sys
+import textwrap
 import uuid
 from pathlib import Path
 
@@ -94,17 +95,42 @@ def fresh_db():
     finally:
         asyncio.run(_exec(ADMIN_URL, f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
 
-def _create_all(dsn: str) -> None:
-    """Build a schema the way `app.db.bootstrap`'s fallback does."""
+def _run_app(dsn: str, code: str) -> None:
+    """Run a snippet against `dsn` in a child process holding real app settings."""
     proc = subprocess.run(
-        [sys.executable, "-c",
-         "import asyncio; from app.db.session import init_db; asyncio.run(init_db())"],
+        [sys.executable, "-c", code],
         cwd=BACKEND_DIR,
         env={**os.environ, "DATABASE_URL": _async_dsn(dsn)},
         capture_output=True,
         text=True,
     )
-    assert proc.returncode == 0, f"create_all failed: {proc.stderr[-2000:]}"
+    assert proc.returncode == 0, f"failed: {proc.stderr[-2000:]}"
+
+def _create_all(dsn: str) -> None:
+    """Build a schema the way `app.db.bootstrap`'s fallback does."""
+    _run_app(dsn, "import asyncio; from app.db.session import init_db; asyncio.run(init_db())")
+
+def _seed_legacy_oil_record(dsn: str) -> None:
+    """Insert a pre-AUT-1275 service record the way the app writes rows."""
+    _run_app(dsn, textwrap.dedent("""
+        import asyncio
+        from datetime import date
+        from app.db.session import SessionLocal
+        from app.models import ServiceRecord, User, Vehicle
+
+        async def main():
+            async with SessionLocal() as s:
+                s.add(User(id="u1", email="u1@example.com", display_name="U One",
+                           hashed_password="x"))
+                await s.flush()
+                s.add(Vehicle(id="v1", user_id="u1", nickname="Car"))
+                await s.flush()
+                s.add(ServiceRecord(id="s1", vehicle_id="v1", service_date=date.today(),
+                                    odometer_km=1000, service_type="oil"))
+                await s.commit()
+
+        asyncio.run(main())
+    """))
 
 def test_hosted_shaped_database_reaches_head(fresh_db):
     """A create_all-built database at the hosted stamp must reach head.
@@ -129,18 +155,7 @@ def test_migration_only_backfill_applies(fresh_db):
     """
     _create_all(fresh_db)
     _alembic(fresh_db, "stamp", "m3rge03")
-    asyncio.run(
-        _exec(
-            fresh_db,
-            "INSERT INTO users (id, email, display_name, hashed_password, role, "
-            "max_vehicles, token_version) "
-            "VALUES ('u1', 'u1@example.com', 'U One', 'x', 'user', 1, 0);"
-            "INSERT INTO vehicles (id, user_id, nickname) "
-            "VALUES ('v1', 'u1', 'Car');"
-            "INSERT INTO service_records (id, vehicle_id, service_date, odometer_km, service_type) "
-            "VALUES ('s1', 'v1', current_date, 1000, 'oil');",
-        )
-    )
+    _seed_legacy_oil_record(fresh_db)
     _alembic(fresh_db, "upgrade", "head")
     assert asyncio.run(
         _sql(fresh_db, "select service_type from service_records where id = 's1'")
