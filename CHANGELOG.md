@@ -11,6 +11,45 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-4718)
+- security(ci,docker): repinned the two base images that were failing the
+  `Security — base image CVE scan (trivy)` gate on `main`, and dropped the
+  `.trivyignore` entries the bumps made redundant. The gate had been red on `main`
+  since 2026-09-26, so every open PR looked like it had a regression.
+  - `nginxinc/nginx-unprivileged:stable-alpine` → `@sha256:ed04ec1f…`
+    (Alpine 3.24.2, `libexpat` 2.8.5-r0, `libuuid` 2.42.3-r1). Clears
+    `CVE-2026-93990`, `CVE-2026-66046` and `CVE-2026-76641` (libexpat) plus all
+    seven util-linux/libuuid and the `CVE-2026-80256` placeholder findings.
+  - `python:3.13.15-slim-trixie` → `python:3.13.16-slim-trixie@sha256:6906dca8…`
+    (Debian 13.7). Clears `CVE-2026-75804` / `CVE-2026-84782` (OpenSSL QUIC/DTLS),
+    `CVE-2026-41992` (gzip), `CVE-2026-11822` / `CVE-2026-11824` (libsqlite3-0) and
+    seven `perl-base` findings, and carries openssl `3.5.7-1~deb13u3` on both the
+    amd64 and arm64 manifests.
+  - All three nginx pins had drifted onto three *different* digests
+    (`docker/frontend/Dockerfile` built `44275388…`, `trivy-image-scan.yml` scanned
+    the amd64-only manifest `ee1643ae…`, and `libexpat-version-check.yml` watched
+    `45ce1e2e…`). All three now pin the same multi-arch index, so the scan again
+    covers the arm64 frontend we actually build.
+- security(ci): added three time-boxed `.trivyignore` entries, each with its
+  reachability argument, for CVEs whose fixes are published upstream but not yet in
+  any published image: `CVE-2026-103111` (pcre2 OOB write — needs an
+  attacker-controlled regex *and* JIT; CPython links no pcre2 and our nginx PCRE
+  patterns are static), and `CVE-2026-97687` / `CVE-2026-97689` (urllib3 2.7.0 as
+  pip's vendored copy — build-time only; the runtime HTTP stack is httpx).
+  Re-check 2026-11-30.
+- fix(ci): `trivy-image-scan.yml` passed `scanner: vuln` to
+  `aquasecurity/trivy-action@v0.36.0`, which does not accept that input (it is
+  `scanners`). GitHub logged `Unexpected input(s) 'scanner'` on all three scan
+  steps and dropped the value.
+- fix(ci): `libexpat-version-check.yml` compared a per-arch manifest digest
+  (`regctl image digest --platform linux/amd64`) against `PINNED_DIGEST`, which holds
+  the multi-arch index digest, so `unchanged` was never true and the daily job
+  re-filed a duplicate Paperclip issue on every run. It now resolves the index
+  digest, and its threshold is raised to 2.8.5-r0.
+- Verified 2026-10-02 with trivy 0.70.0 against the edited `.trivyignore`: all three
+  pinned base images return 0 findings at HIGH/CRITICAL with `--ignore-unfixed`
+  (exit 0 each).
+
 ## [0.3.300] - 2026-10-02
 - fix(ci): restore automatic deploys for the **Demo** and **Default** tiers.
   AUT-2409 narrowed `DEFAULT_TIERS` in `scripts/upgrade-instances.sh` to

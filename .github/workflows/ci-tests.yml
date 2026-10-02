@@ -227,3 +227,21 @@ jobs:
       # stdlib unittest only — ubuntu-latest ships no pytest.
       - name: sync-compose-to-portainer.py regression tests
         run: python3 scripts/test_sync_compose_to_portainer.py -v
+  # AUT-4718: the base-image CVE gate went red on `main` for a week because the
+  # Dockerfile pin and the trivy scan env had drifted onto different nginx digests —
+  # the gate was not scanning the image we build. This stdlib-only guard asserts the
+  # pins agree, that every pin is digest-pinned, and that no `.trivyignore` line
+  # lacks a justification. No docker daemon needed.
+  base-image-pins:
+    name: base image pin consistency
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Scan env must cover the images we build
+        run: python3 scripts/test_base_image_pin_consistency.py

@@ -5,8 +5,8 @@
 # pulled amd64 layers and every RUN step died with
 # `exec /bin/sh: exec format error` (exit 255), so the arm64 build job never
 # reached flutter/dart2js. Pin the MULTI-ARCH index tag+digest instead:
-# 3.13.15-slim-trixie resolves to aarch64 on arm64 runners.
-FROM python:3.13.15-slim-trixie@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285 AS base
+# 3.13.16-slim-trixie resolves to aarch64 on arm64 runners.
+FROM python:3.13.16-slim-trixie@sha256:6906dca82c0e83d5994bbf2e7fc33e6b63ce3e7f27c30eafd01dfabeb3c90bf3 AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
