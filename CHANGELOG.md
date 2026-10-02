@@ -8,7 +8,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > user-facing change ships with an entry here under `[Unreleased]` — see
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
+
 ## [Unreleased]
+
+## [0.3.297] - 2026-10-02
+- fix(hosted): the hosted backend now runs `alembic upgrade head` before
+  bootstrap, so migration-only changes (new index, constraint, column rename,
+  data backfill) stop being dead code in production. Hosted booted straight
+  into `app.db.bootstrap`, whose `create_all` fallback swallowed every
+  migration failure — `alembic_version` sat at `aut4925_missing_tables` and
+  `fuel_price_snapshots` existed only because `create_all` happened to build it.
+  Guarded by `scripts/check-compose-consolidation.py` (with negative tests) and
+  a new `alembic-migrations` CI job that proves a create_all-built database
+  at the hosted stamp reaches head and that the pending revision performs real
+  DDL instead of only bumping a version string.
 - feat(alembic): add migration for `fuel_price_snapshots` — the table was only
 
 ### Fixed (AUT-5092)

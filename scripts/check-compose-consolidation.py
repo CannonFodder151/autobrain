@@ -71,6 +71,22 @@ def main():
     if "8001" not in backend_cmd:
         errors.append("backend command missing the AI gateway uvicorn on :8001 (AUT-3824)")
 
+    # AUT-5088: migrations must run at boot. Hosted was still on
+    # `python -m app.db.bootstrap`, whose create_all fallback swallowed every
+    # migration failure, so migration-only changes were dead code in prod.
+    if "alembic upgrade head" not in backend_cmd:
+        errors.append(
+            "backend command missing `alembic upgrade head` (AUT-5088) — "
+            "migrations are dead code without it"
+        )
+    elif backend_cmd.index("alembic upgrade head") > min(
+        (backend_cmd.index(m) for m in ("python -m app.db.bootstrap", "uvicorn") if m in backend_cmd),
+        default=len(backend_cmd),
+    ):
+        errors.append(
+            "`alembic upgrade head` must run before bootstrap/uvicorn (AUT-5088)"
+        )
+
     # AUT-3153/AUT-3810/AUT-2195: fuel-poll secret files moved into backend env.
     for key in (
         "FUEL_NSW_API_KEY_FILE", "FUEL_NSW_API_SECRET_FILE",
