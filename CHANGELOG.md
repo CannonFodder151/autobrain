@@ -10,6 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+- backend: `engineers.specialties` / `certifications` / `availability` are declared as
 
 ## [0.3.296] - 2026-10-02
 
