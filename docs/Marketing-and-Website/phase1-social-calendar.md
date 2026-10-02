@@ -1,6 +1,6 @@
 # Phase 1 Marketing Refresh — Social Content Calendar (AUT-3972)
 
-**Status:** Draft — pending human CMO approval
+**Status:** Approved by Nathan (CMO) 2026-09-28 — scheduling tracked in AUT-3989
 **Owner:** CMO agent
 **Parent:** AUT-3968
 
