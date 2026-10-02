@@ -10,6 +10,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+- fix(backup): hourly off-site push 404s and dies on its first log line (AUT-5092).
+  Two defects on the off-site backup path, both on `main` today:
+  (a) `backup_offsite.py`, `billing.py`, `iap.py` and `api/v1/ci.py`
+  built a stdlib logger and then called it with structlog kwargs
+  (`logger.info("offsite_push_ok", filename=...)`) — the stdlib
+  logger raises `TypeError` on those kwargs, so the hourly task
+  died on its first log line and every push error was masked. All
+  four now use the project logger (`app.core.logging.get_logger`).
+  (b) the push POSTed to `/api/backup/ingest`; autobrain-backup
+  (v3.0.4) serves `POST /ingest?instance=<id>`, so every push 404'd.
+  Also ships the idempotent `aut5092_dev_veh_type` migration that
+  repairs `devices.vehicle_type` missing on hosted (the
+  `aut4925` `create_all` fallback cannot add a column to an existing
+  table, so any query touching `devices` — including the backup
+  serialisation — raised `UndefinedColumnError`), plus a guard that
+  every alembic revision id fits `alembic_version.version_num`
+  (`varchar(32)`), whose overflow silently degrades `upgrade` into
+  `create_all` (AUT-5122). Retention stays owned by autobrain-backup
+  (AUT-5136); regression tests cover the `/ingest` path, the awaited
+  push and the retention-ownership contract.
+
 - fix(fuel): disable the SA (SAFPIS) feed (AUT-5072).
   `FUEL_SA_ENABLED: "true"` was set in both compose files
   (AUT-2610) with a seeded `fuel_sa_api_key` secret, but no

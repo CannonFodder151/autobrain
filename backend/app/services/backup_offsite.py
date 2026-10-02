@@ -13,21 +13,29 @@ snapshots deleted on the first full day of hourly pushes. One owner, one
 policy.
 """
 
-import logging
 import time
 from datetime import datetime, timezone
 
 import httpx
 
 from app.core.config import settings
+from app.core.logging import get_logger
 from app.services.backup import dump_backup, serialize_all
 
-logger = logging.getLogger("autobrain.backup_offsite")
+# AUT-5092: this module logs with structlog kwargs (`logger.info("x", k=v)`).
+# The stdlib logger raises TypeError on those kwargs, which killed the hourly
+# task on its first log line and masked every push error.
+logger = get_logger("autobrain.backup_offsite")
 
 
 async def _push_offsite(payload: bytes, filename: str) -> bool:
-    """POST backup to autobrain-backup /api/backup/ingest."""
-    url = settings.BACKUP_OFFSITE_URL.rstrip("/") + "/api/backup/ingest"
+    """POST backup to the autobrain-backup ingest endpoint.
+
+    AUT-5092: the service serves `POST /ingest?instance=<id>`
+    (autobrain-backup server.py); the old `/api/backup/ingest` path 404s, so
+    every hourly push failed.
+    """
+    url = settings.BACKUP_OFFSITE_URL.rstrip("/") + "/ingest"
     params = {"instance": settings.BACKUP_OFFSITE_INSTANCE} if settings.BACKUP_OFFSITE_INSTANCE else {}
     headers = {"Content-Type": "application/json"}
     if settings.BACKUP_OFFSITE_INGEST_KEY:
