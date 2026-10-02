@@ -44,6 +44,8 @@ class DiagnosticOut(BaseModel):
     parts_needed: str | None
     added_to_service: bool
     linked_service_id: str | None
+    status: str
+    resolved_at: datetime | None
     created_at: datetime
 
     model_config = {"from_attributes": True}
