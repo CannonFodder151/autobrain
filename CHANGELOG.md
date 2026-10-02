@@ -9,6 +9,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
 ## [Unreleased]
+- feat(alembic): add migration for `fuel_price_snapshots` — the table was only
 
 ### Fixed (AUT-4678)
 - `scripts/check-compose-config.py` crashed with `KeyError: 'ai'` on `main`
