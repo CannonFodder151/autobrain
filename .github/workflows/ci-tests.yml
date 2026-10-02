@@ -141,6 +141,12 @@ jobs:
   # scripts/bump-version.sh dies on an unset CARTO_API_KEY under `set -u` while
   # only printing its help text, which blocked the auto-bump release job on main
   # (AUT-4855, a regression from AUT-4824). Runs in a sandbox — no docker needed.
+  #
+  # AUT-5031: also runs the hosted-compose consolidation check and its tests.
+  # The check was red on main (it still expected the gh-runner service that
+  # AUT-4911 moved to its own Portainer stack), so it was never green and
+  # therefore not enforced in CI — which is how the AUT-3944 backup invariants
+  # were dropped unnoticed by PR #832. Needs pyyaml, no docker daemon.
   release-scripts:
     name: release script self-checks
     runs-on: ubuntu-latest
@@ -148,8 +154,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: bump-version.sh survives an unset CARTO_API_KEY
         run: bash scripts/test-bump-version.sh
+
+      - name: hosted compose stays consolidated (AUT-3944 backup invariants)
+        run: |
+          python -m pip install --quiet pyyaml
+          python scripts/check-compose-consolidation.py
+          python -m unittest scripts/test_check_compose_consolidation.py -v
 
   # AUT-3027: scripts/test_sync_compose_to_portainer.py had no CI job, so the
   # AUT-4946 health gate (post-PUT verification + orphan-port refusal) shipped
