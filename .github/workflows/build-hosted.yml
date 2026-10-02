@@ -3,6 +3,11 @@ name: Build hosted images (multi-arch)
 on:
   push:
     branches: [main]
+  # AUT-5186: nightly 03:00 AEST (17:00 UTC, no DST) — the start of the
+  # AUT-2409 hosted deploy window. Only the nightly-hosted-sync job runs on
+  # schedule; it applies the pins the push path already bumped in git.
+  schedule:
+    - cron: "0 17 * * *"
   workflow_dispatch:
     inputs:
       tag:
@@ -37,7 +42,9 @@ jobs:
     # on `vm2` guarantees dispatch to the healthy new runner. Re-balance across
     # legacy+new again by dropping `vm2` once AUT-1781 is repaired. ARM builds
     # stay pinned to the Oracle VM arm64 runner below.
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    # AUT-5186: a schedule run lands on refs/heads/main too, so exclude it
+    # explicitly — the nightly sync must not cut a release.
+    if: github.event_name != 'pull_request' && github.event_name != 'schedule' && github.ref == 'refs/heads/main'
     runs-on: [self-hosted, linux, x64, vm2]
     permissions:
       contents: write
@@ -72,7 +79,9 @@ jobs:
 
   build:
     needs: auto-bump
-    if: github.event_name != 'pull_request'
+    # AUT-5186: the nightly cron only syncs pins (nightly-hosted-sync);
+    # it must never rebuild or re-pin images.
+    if: github.event_name != 'pull_request' && github.event_name != 'schedule'
     strategy:
       fail-fast: false
       matrix:
@@ -209,8 +218,13 @@ jobs:
       worker_digest: ${{ steps.digest.outputs.worker_digest }}
       ai_digest: ${{ steps.digest.outputs.ai_digest }}
       frontend_digest: ${{ steps.digest.outputs.frontend_digest }}
-    if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux, x64, vm2]
+    # AUT-5186: the nightly cron only syncs pins (nightly-hosted-sync);
+    # it must never rebuild or re-pin images.
+    if: github.event_name != 'pull_request' && github.event_name != 'schedule'
+    # AUT-5171: registry/git-only job — no image build, no self-hosted
+    # dockerd dependency. GitHub-hosted so the release tail can never
+    # starve behind PR gate jobs on the contended x64 vm2 pool.
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
@@ -271,8 +285,13 @@ jobs:
 
   compose-pin:
     needs: build-manifest
-    if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux, x64, vm2]
+    # AUT-5186: the nightly cron only syncs pins (nightly-hosted-sync);
+    # it must never rebuild or re-pin images.
+    if: github.event_name != 'pull_request' && github.event_name != 'schedule'
+    # AUT-5171: registry/git-only job — no image build, no self-hosted
+    # dockerd dependency. GitHub-hosted so the release tail can never
+    # starve behind PR gate jobs on the contended x64 vm2 pool.
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     env:
@@ -335,6 +354,16 @@ jobs:
         if: always() && github.ref == 'refs/heads/main' && steps.bump.outcome == 'success'
         env:
           TAG: ${{ github.event.inputs.tag || 'hosted' }}
+          # AUT-5172: the hosted stack (EP5) is production. AUT-2409 confines
+          # hosted deploys to 03:00-04:00 AEST, so a push-to-main merge must
+          # only bump pins, never redeploy. The gate lives inside
+          # sync-compose-to-portainer.py (covers every caller) and skips the
+          # Portainer PUT out of window; pins stay bumped in git and the next
+          # in-window deploy applies them.
+          # A workflow_dispatch is the human, board-approved deploy action
+          # (scheduled/launched by the Deployment Lead), so it carries the
+          # explicit override and always syncs.
+          ALLOW_OUT_OF_WINDOW: ${{ github.event_name == 'workflow_dispatch' && 'true' || 'false' }}
         run: |
           set -euo pipefail
           # AUT-4946: the sync script parses compose + inspects container state.
@@ -348,8 +377,13 @@ jobs:
     needs: build-manifest
     # AUT-2175: pin k8s manifests to the freshly published SHA digests so
     # a redeploy without a digest bump leaves the pod image unchanged.
-    if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux, x64, vm2]
+    # AUT-5186: the nightly cron only syncs pins (nightly-hosted-sync);
+    # it must never rebuild or re-pin images.
+    if: github.event_name != 'pull_request' && github.event_name != 'schedule'
+    # AUT-5171: registry/git-only job — no image build, no self-hosted
+    # dockerd dependency. GitHub-hosted so the release tail can never
+    # starve behind PR gate jobs on the contended x64 vm2 pool.
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     env:
@@ -399,3 +433,45 @@ jobs:
             git add infra/k8s/ai.yaml infra/k8s/backend.yaml infra/k8s/frontend.yaml infra/k8s/worker.yaml
             git commit --amend --no-edit || true
           done
+
+  nightly-hosted-sync:
+    # AUT-5186: the cron path back to an automatic hosted deploy. AUT-5172
+    # stopped push-triggered merges from redeploying EP5, which left the
+    # nightly 03:00-04:00 AEST window (AUT-2409) reachable only by a manual
+    # workflow_dispatch — so merges outside the window bumped
+    # docker-compose.hosted.yml pins into git and sat unapplied indefinitely.
+    #
+    # Sync only: build + pin bump stay on the push/dispatch path. This job
+    # pulls the `:hosted` manifests already on ghcr.io and PUTs the stack
+    # (--pull-image is the script default, i.e. pullImage=true).
+    #
+    # No ALLOW_OUT_OF_WINDOW here, so the script's own AUT-5172 gate still
+    # applies: a delayed or misfired cron that lands outside 03:00-04:00
+    # AEST logs `SKIP:` and returns 0 without touching EP5.
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    # Own group so the nightly sync is never queued behind an in-flight
+    # ~20 min multi-arch build and pushed past the end of the window.
+    concurrency:
+      group: build-hosted-nightly-sync
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    env:
+      PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Sync docker-compose.hosted.yml into Portainer EP5
+        # The script prints one `applied: <service> -> <image>@sha256:...`
+        # line per service, so the run log alone records which digests the
+        # nightly deploy rolled out.
+        run: |
+          set -euo pipefail
+          PIP_BREAK_SYSTEM_PACKAGES=1 python3 -m pip install --quiet pyyaml
+          python3 scripts/sync-compose-to-portainer.py \
+            --stack autobrain-hosted \
+            --endpoint 5 \
+            --file docker-compose.hosted.yml

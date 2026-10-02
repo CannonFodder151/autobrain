@@ -26,6 +26,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   Covered by 11 tests in `scripts/test_sync_compose_to_portainer.py` and
   documented in `docs/Deployment-and-Infrastructure/deployment-guide.md`.
 
+## [0.3.299] - 2026-10-02
+- fix(backend): `backup_offsite_hourly` now wraps `run_backup_offsite()` in the
+  persistent-loop `_run()` wrapper. Before the fix the async function was passed
+  bare, so the coroutine was never executed and the hourly off-site backup never
+  ran.
+
+## [0.3.298] - 2026-10-02
+- fix(backup): the backend no longer runs a second retention engine against the
+  off-site backup store. `backup_offsite.py::_apply_tiered_retention()` pruned
+  by file **age** (via `_tier_for_age`) while `autobrain-backup` prunes by
+  **count per tier directory** (`engine.py::_prune`, defaults hourly 24 /
+  daily 30 / weekly 12) — two policies, one store. Age-derived tiers ignored
+  the tier directory the API returns (a `daily/` snapshot 10 days old collapsed
+  to one per ISO week) and the backend's `monthly` tier does not exist on the
+  service side at all, so anything older than 24 weeks was deleted outright.
+  Repro against `main` @ `0f1f9248`: a listing the service itself considers
+  fully in-policy (24 hourly + 30 daily + 12 weekly) lost **29 of 66**
+  snapshots. Removed `_apply_tiered_retention`, `_list_existing_offsite`,
+  `_delete_offsite`, `_tier_for_age`, `_slot_key` and `_OFFSITE_TIERS`; the
+  hourly push and the `BACKUP_OFFSITE_ENABLED` guard are unchanged. Per-tier
+  retention is configured on the autobrain-backup instance
+  (`retention.hourly` / `retention.daily` / `retention.weekly`). Regression test
+  feeds the 66-snapshot in-policy listing through `run_backup_offsite()` and
+  asserts one ingest POST and zero deletes. Note: this task was a no-op before
+  AUT-3975 / PR #757, so no production data was lost yet.
+
 ## [0.3.297] - 2026-10-02
 - fix(hosted): the hosted backend now runs `alembic upgrade head` before
   bootstrap, so migration-only changes (new index, constraint, column rename,
