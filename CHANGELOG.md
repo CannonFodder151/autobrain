@@ -11,6 +11,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-3827)
+- backup: include the `monthly` tier when listing off-site snapshots
+  (`backend/app/services/backup_offsite.py`). Retention manages four tiers but the
+  off-site listing flattened only `hourly`/`daily`/`weekly`, so monthly backups were
+  invisible to `_apply_tiered_retention` — never deduped per month slot and never
+  pruned past the 6-month window. Tier list is now a single `_OFFSITE_TIERS`
+  constant. Guarded by `backend/tests/test_backup_offsite.py` (new).
+
 ### Fixed (AUT-4976)
 - deploy(hosted): set `FUEL_VIC_ENABLED: "false"` in `docker-compose.hosted.yml`,
   matching `docker-compose.prod.yml`. The VIC Servo Saver endpoint
