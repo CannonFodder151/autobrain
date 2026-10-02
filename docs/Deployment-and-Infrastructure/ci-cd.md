@@ -52,6 +52,30 @@ Manual workflow for one-off tags: input `tag` (default `hosted`), `platforms`,
 `api_base_url`, `ws_base_url`. Pushes to GHCR, not Docker Hub. Used for ad-hoc
 builds (e.g. a staging tag or a platform-limited test).
 
+### Hosted deploy window (AUT-5172 / AUT-2409)
+
+The hosted stack (Portainer endpoint 5, Oracle Cloud) is production, and
+AUT-2409 confines hosted deploys to the nightly **03:00–04:00 AEST** window.
+
+- `compose-pin` runs on every merge to `main`. It still bumps the
+  `docker-compose.hosted.yml` digest pins and pushes the commit `[skip ci]`,
+  but `scripts/sync-compose-to-portainer.py` **skips the Portainer PUT outside
+  the window** (exit 0, `SKIP: …` in the log, zero API calls). A merge at any
+  other hour therefore cannot recreate production containers. Pins stay bumped
+  in git and the next in-window deploy applies them.
+- The gate lives in the script, not the workflow, so every caller is covered —
+  not just `compose-pin`. It applies to `--endpoint 5` only; other endpoints
+  (e.g. EP2 `9router`) carry no window policy and stay hand-updatable.
+- **Override:** `ALLOW_OUT_OF_WINDOW=true` (exported, or the `secrets.*` env
+  entry on the dispatch job) permits an out-of-window deploy. Only the
+  Deployment Lead sets it, and only for a board-approved deploy.
+- A `workflow_dispatch` of this workflow *is* the approved deploy action — the
+  job sets `ALLOW_OUT_OF_WINDOW=true` on dispatch, so the in-window 03:00
+  deploy path keeps working while push-triggered merges do not redeploy.
+- Proof: `scripts/test_sync_compose_to_portainer.py::TestDeployWindowGate`
+  (23:00 AEST makes no API call; `ALLOW_OUT_OF_WINDOW=true` PUTs; EP2 still
+  PUTs out of window) — run by the `compose-sync-script` CI job.
+
 ## 3. Mobile sync (`sync-mobile.yml`)
 
 On any `main` push touching shared Flutter lineage (`frontend/lib`,
