@@ -8,7 +8,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > user-facing change ships with an entry here under `[Unreleased]` — see
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
+
 ## [Unreleased]
+
+## [0.3.297] - 2026-10-02
 - fix(hosted): the hosted backend now runs `alembic upgrade head` before
   bootstrap, so migration-only changes (new index, constraint, column rename,
   data backfill) stop being dead code in production. Hosted booted straight
