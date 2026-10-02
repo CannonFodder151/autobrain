@@ -345,6 +345,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed (AUT-3456)
 - fix(frontend): wrap getCachedDecoded in try/catch to prevent indefinite spinner on web
 
+### Fixed (AUT-3104)
+- fix(frontend): gate AuthState.test() behind kDebugMode guard so debug-profile tests cannot override production auth state checks.
+
 ## [0.3.271] - 2026-09-18
 
 ### Added (AUT-3447)
