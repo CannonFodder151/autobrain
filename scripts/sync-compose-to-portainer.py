@@ -98,6 +98,13 @@ def compose_services_and_ports(content):
     return set(services), ports
 
 
+def compose_image_refs(content):
+    """AUT-5186: {service: image ref} — the digest pins this PUT applies."""
+    doc = yaml.safe_load(content) or {}
+    return {name: (spec or {}).get("image", "<no image>")
+            for name, spec in (doc.get("services") or {}).items()}
+
+
 def endpoint_containers(args):
     """All containers on the endpoint (including stopped/unused ones)."""
     return _api(args, f"/endpoints/{args.endpoint}/docker/containers/json?all=true")
@@ -289,6 +296,11 @@ def main():
 
     print(f"stack={args.stack} id={stack_id} endpoint={args.endpoint} updated")
     print(f"verified: {len(services)} services running, no stuck containers")
+    # AUT-5186: audit trail for the nightly 03:00 AEST deploy — one line per
+    # service with the digest the stack now runs. The run log is the only
+    # record once the workflow is no longer tied to a human dispatch.
+    for name, ref in sorted(compose_image_refs(content).items()):
+        print(f"applied: {name} -> {ref}")
     return 0
 
 
