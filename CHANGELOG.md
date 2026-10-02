@@ -385,6 +385,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   - Backend: `Engineer` + `EngineerReview` models, pgvector embedding support for semantic search
   - Database migration: `a3661engineers_add_engineer_marketplace.py`
 
+### Fixed (AUT-2982)
+- fix(frontend): remove dart:io import from api_client.dart that blocks Flutter web build
+
 ## [0.3.274] - 2026-09-18
 
 ### Fixed (AUT-3515)
