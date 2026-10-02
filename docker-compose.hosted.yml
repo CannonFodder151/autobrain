@@ -273,6 +273,10 @@ services:
       # /api/backup/ingest.
       BACKUP_OFFSITE_ENABLED: "true"
       BACKUP_OFFSITE_URL: ${BACKUP_OFFSITE_URL:-http://backup:8080}
+      # AUT-3977: BACKUP_OFFSITE_URL is validated at startup against this
+      # exact-match allowlist (fail closed). Overriding BACKUP_OFFSITE_URL
+      # without adding the new host here makes the backend refuse to boot.
+      BACKUP_OFFSITE_HOST_ALLOWLIST: ${BACKUP_OFFSITE_HOST_ALLOWLIST:-["backup"]}
       BACKUP_OFFSITE_GUI_KEY_FILE: /run/secrets/backup_offsite_gui_key
       BACKUP_OFFSITE_INGEST_KEY_FILE: /run/secrets/backup_offsite_ingest_key
       BACKUP_OFFSITE_INSTANCE: ${BACKUP_OFFSITE_INSTANCE:-hosted}
