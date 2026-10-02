@@ -5,8 +5,6 @@ Pushes full-DB snapshots to autobrain-backup /ingest endpoint hourly.
 """
 
 import json
-import logging
-import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,10 +12,14 @@ from pathlib import Path
 import httpx
 
 from app.core.config import settings
+from app.core.logging import get_logger
 from app.core.storage import get_minio
 from app.services.backup import dump_backup, serialize_all
 
-logger = logging.getLogger("autobrain.backup_offsite")
+# AUT-5092: this module logs with structlog kwargs (`logger.info("x", k=v)`).
+# The stdlib logger raises TypeError on those kwargs, which killed the task on
+# its very first log line and masked every push error.
+logger = get_logger("autobrain.backup_offsite")
 
 # Every tier _apply_tiered_retention manages must also be flattened out of the
 # off-site listing, otherwise those snapshots are invisible to retention.
@@ -75,8 +77,12 @@ async def _list_existing_offsite() -> list[dict]:
 
 
 async def _push_offsite(payload: bytes, filename: str) -> bool:
-    """POST backup to autobrain-backup /api/backup/ingest."""
-    url = settings.BACKUP_OFFSITE_URL.rstrip("/") + "/api/backup/ingest"
+    """POST backup to the autobrain-backup ingest endpoint.
+
+    AUT-5092: the GUI serves `POST /ingest?instance=<id>` (autobrain-backup
+    server.py); the old `/api/backup/ingest` path 404s, so every push failed.
+    """
+    url = settings.BACKUP_OFFSITE_URL.rstrip("/") + "/ingest"
     params = {"instance": settings.BACKUP_OFFSITE_INSTANCE} if settings.BACKUP_OFFSITE_INSTANCE else {}
     headers = {"Content-Type": "application/json"}
     if settings.BACKUP_OFFSITE_INGEST_KEY:

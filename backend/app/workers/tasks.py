@@ -432,7 +432,9 @@ def backup_offsite_hourly() -> None:
     """
     from app.services.backup_offsite import run_backup_offsite
 
-    run_backup_offsite()
+    # AUT-5092: the bare call returned an un-awaited coroutine, so Celery marked
+    # the task successful in ~1ms and nothing was ever pushed off-site.
+    _run(run_backup_offsite())
 
 
 @shared_task
