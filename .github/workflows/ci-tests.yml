@@ -150,3 +150,18 @@ jobs:
 
       - name: bump-version.sh survives an unset CARTO_API_KEY
         run: bash scripts/test-bump-version.sh
+
+  # AUT-3027: scripts/test_sync_compose_to_portainer.py had no CI job, so the
+  # AUT-4946 health gate (post-PUT verification + orphan-port refusal) shipped
+  # with its own regression tests already stale — 2 of 3 failed because the
+  # ordered mock list predated the new API calls. Pure stdlib, no docker.
+  compose-sync-script:
+    name: compose sync script self-checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      # stdlib unittest only — ubuntu-latest ships no pytest.
+      - name: sync-compose-to-portainer.py regression tests
+        run: python3 scripts/test_sync_compose_to_portainer.py -v
