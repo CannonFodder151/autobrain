@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.295] - 2026-10-02
+
 ### Fixed (AUT-3827)
 - backup: include the `monthly` tier when listing off-site snapshots
   (`backend/app/services/backup_offsite.py`). Retention manages four tiers but the
