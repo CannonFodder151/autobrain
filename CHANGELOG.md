@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+
+## [0.3.300] - 2026-10-02
 - fix(ci): restore automatic deploys for the **Demo** and **Default** tiers.
   AUT-2409 narrowed `DEFAULT_TIERS` in `scripts/upgrade-instances.sh` to
   Hosted-only, so neither EP2 stack was ever redeployed again and demo
