@@ -426,9 +426,10 @@ def backfill_entity_embeddings() -> None:
 def backup_offsite_hourly() -> None:
     """AUT-3827: hourly off-site backup push (replaces the backup-agent container).
 
-    Deterministic-first: serialize the DB, push the snapshot to autobrain-backup
-    /ingest, then apply tiered retention (hourly/daily/weekly/monthly) against
-    the off-site store. Missing config → skip-with-loud-log (never Celery FAIL).
+    Deterministic-first: serialize the DB and push the snapshot to autobrain-backup
+    /ingest. Per-tier retention is owned by the autobrain-backup instance
+    (retention.hourly/daily/weekly), not the backend (AUT-5136).
+    Missing config → skip-with-loud-log (never Celery FAIL).
     """
     from app.services.backup_offsite import run_backup_offsite
 
