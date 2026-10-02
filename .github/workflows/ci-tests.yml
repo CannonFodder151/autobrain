@@ -171,11 +171,11 @@ jobs:
   # migration-only change was dead code in production. The compose guard in
   # release-scripts catches a deleted migration step; this job proves the chain
   # itself still applies — a create_all-built database at the hosted stamp
-  # reaches head, and a data-only revision (`b4c5d6e7f8a9` folds oil service
-  # records into 'scheduled') really rewrites rows. pgvector/pgvector:pg17
-  # matches the hosted postgres image.
+  # reaches head, and the pending revision performs real DDL rather than just
+  # bumping a version string. pgvector/pgvector:pg17 matches the hosted
+  # postgres image.
   alembic-migrations:
-    name: alembic upgrade head (hosted-shaped DB + migration-only backfill)
+    name: alembic upgrade head (hosted-shaped DB + pending revision DDL)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
