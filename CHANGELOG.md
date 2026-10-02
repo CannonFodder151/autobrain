@@ -11,6 +11,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-5132)
+- fix(deploy): the nightly hosted deploy to EP5 stack 122 was a **silent
+  no-op**. Stack 122 is an inline Portainer stack (`GitConfig: null`) with
+  every image digest-pinned, so `pullImage: true` re-resolves an immutable
+  digest and can never move a pin; and the compose-pin sync step in
+  `build-hosted.yml` was gated on a *digest* having changed, so a
+  compose-only edit (the #870 `alembic` pre-step) never reached the stack
+  even though the diff looked correct. The sync now runs whenever the pin
+  bump ran, and `scripts/sync-compose-to-portainer.py` exits non-zero when
+  a running container's `ImageID` does not equal the compose pin, or when
+  the expected deploy command is not the one running — a HTTP 200 from
+  Portainer is no longer treated as evidence that the change shipped.
+  Covered by 11 tests in `scripts/test_sync_compose_to_portainer.py` and
+  documented in `docs/Deployment-and-Infrastructure/deployment-guide.md`.
+
 ## [0.3.297] - 2026-10-02
 - fix(hosted): the hosted backend now runs `alembic upgrade head` before
   bootstrap, so migration-only changes (new index, constraint, column rename,
