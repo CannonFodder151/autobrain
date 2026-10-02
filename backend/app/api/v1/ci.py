@@ -9,14 +9,16 @@ Auth:    Bearer token matching CI_TRIAGE_WEBHOOK_SECRET
 """
 
 import hmac
-import logging
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
 
 from app.core.config import settings
+from app.core.logging import get_logger
 
-logger = logging.getLogger(__name__)
+# AUT-5092: structlog-style kwargs need the project logger; the
+# stdlib logger raises TypeError on `logger.info("x", k=v)`.
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/ci", tags=["ci"])
 
