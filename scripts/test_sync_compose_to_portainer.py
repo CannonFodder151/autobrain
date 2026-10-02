@@ -349,5 +349,44 @@ class TestDeployWindowGate(SyncComposeTestBase):
         self.assertEqual(rc, 0)
         self.assertNotIn("PUT", r.methods_for("/api/stacks/42"))
 
+class TestNightlyHostedSync(SyncComposeTestBase):
+    """AUT-5186: nightly-hosted-sync cron — in-window applies, misfire skips."""
+
+    def _r(self):
+        return _Responder(self.healthy_routes([
+            _container("autobrain-hosted-backend-1", "backend"),
+            _container("autobrain-hosted-frontend-1", "frontend"),
+        ]))
+
+    def test_in_window_logs_applied_digest_per_service(self):
+        # The cron job sets no ALLOW_OUT_OF_WINDOW, so with the gate closed by
+        # the real clock this only runs at 03:00-04:00 AEST.
+        r = self._r()
+
+        rc, out, _ = self.run_main(r, in_window=True)
+
+        self.assertEqual(rc, 0)
+        self.assertIn("PUT", r.methods_for("/api/stacks/42"))
+        self.assertIn("applied: backend -> ghcr.io/x/backend@sha256:aaa", out)
+        self.assertIn("applied: frontend -> ghcr.io/x/frontend@sha256:bbb", out)
+
+    def test_cron_misfire_out_of_window_skips_and_logs_no_digest(self):
+        # GitHub cron can fire late or early. Outside the window the run must
+        # skip rather than redeploy production, and must not claim a digest.
+        import os as _os
+        saved = _os.environ.pop("ALLOW_OUT_OF_WINDOW", None)
+        try:
+            r = self._r()
+
+            rc, out, _ = self.run_main(r, in_window=False)
+
+            self.assertEqual(rc, 0)
+            self.assertEqual(r.calls, [])
+            self.assertIn("SKIP", out)
+            self.assertNotIn("applied:", out)
+        finally:
+            if saved is not None:
+                _os.environ["ALLOW_OUT_OF_WINDOW"] = saved
+
 if __name__ == "__main__":
     unittest.main()
