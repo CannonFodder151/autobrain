@@ -81,6 +81,13 @@ Response (simplified):
 
 ## Risks / notes
 
+- **AUT-5072 (2026-10-02):** both Direct API hosts below are NXDOMAIN from
+  AutoBrain networks (`fppdirectapi.safuelpricinginformation.com.au`,
+  `fppdirectapi-uat.safuelpricinginformation.com.au`); only the marketing site
+  `www.safuelpricinginformation.com.au` resolves. `FUEL_SA_ENABLED` is therefore
+  `"false"` in both compose files and no `ingest_sa_*` parser is wired. Re-open
+  this research once a subscriber token from a contracted aggregator comes with a
+  reachable production host, then follow the integration plan below.
 - UAT endpoint is a sandbox; production base URL confirmed only after registration approval.
 - Same `FPDAPI SubscriberToken` auth as QLD — code can share the client wrapper.
 - Free for data publishers; no rate limits documented but implement exponential backoff.
