@@ -210,7 +210,10 @@ jobs:
       ai_digest: ${{ steps.digest.outputs.ai_digest }}
       frontend_digest: ${{ steps.digest.outputs.frontend_digest }}
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux, x64, vm2]
+    # AUT-5171: registry/git-only job — no image build, no self-hosted
+    # dockerd dependency. GitHub-hosted so the release tail can never
+    # starve behind PR gate jobs on the contended x64 vm2 pool.
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
@@ -272,7 +275,10 @@ jobs:
   compose-pin:
     needs: build-manifest
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux, x64, vm2]
+    # AUT-5171: registry/git-only job — no image build, no self-hosted
+    # dockerd dependency. GitHub-hosted so the release tail can never
+    # starve behind PR gate jobs on the contended x64 vm2 pool.
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     env:
@@ -352,7 +358,10 @@ jobs:
     # AUT-2175: pin k8s manifests to the freshly published SHA digests so
     # a redeploy without a digest bump leaves the pod image unchanged.
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux, x64, vm2]
+    # AUT-5171: registry/git-only job — no image build, no self-hosted
+    # dockerd dependency. GitHub-hosted so the release tail can never
+    # starve behind PR gate jobs on the contended x64 vm2 pool.
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     env:
