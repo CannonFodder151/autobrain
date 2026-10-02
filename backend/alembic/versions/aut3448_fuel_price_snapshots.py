@@ -5,7 +5,7 @@ created by the bootstrap create_all fallback but never by an explicit
 migration. This migration adds the table idempotently so fresh databases
 and CI environments have the schema guaranteed without relying on the
 bootstrap fallback. Anchored after aut1859_fuel_price_alerts conceptually;
-added at current head aut3447 in practice.
+added at the current head aut4925 in practice.
 """
 
 from typing import Sequence, Union
@@ -14,7 +14,7 @@ import sqlalchemy as sa
 from alembic import context, op
 
 revision: str = "aut3448_fuel_price_snapshots"
-down_revision: Union[str, None] = "aut3447_passkey_credentials"
+down_revision: Union[str, None] = "aut4925_missing_tables"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
