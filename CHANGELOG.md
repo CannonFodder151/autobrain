@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.296] - 2026-10-02
+
 ### Fixed (AUT-5032)
 - test: three pre-existing failures in `backend/tests/test_workers.py` that
   reproduced on a clean `origin/main` checkout (not env-dependent, and not
