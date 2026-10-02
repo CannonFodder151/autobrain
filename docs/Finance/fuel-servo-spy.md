@@ -30,12 +30,13 @@ the dead host.
 
 **SA/TAS/NT have no ingester yet** — SA (SAFPIS) and TAS/NT need a paid aggregator
 (MotorMouth / Informed Sources); the vendor quotes them a subscription, and this
-page does not carry a price figure. SA is wired at the deployment layer only:
-`docker-compose.hosted.yml` sets `FUEL_SA_ENABLED: "true"` and mounts
-`FUEL_SA_API_KEY_FILE` (AUT-2610), and the arbitration table reserves a `"sa"`
-source, but there is no `ingest_sa_*` function in
-`backend/app/services/fuel_feeds.py`, so those env vars have no consumer until the
-feed lands. Not an MVP blocker.
+page does not carry a price figure. AUT-5072 disabled the SA flag in both
+compose files: `FUEL_SA_ENABLED: "false"` (the Informed Sources Direct API host
+`fppdirectapi.safuelpricinginformation.com.au` is NXDOMAIN and there is no
+`ingest_sa_*` function in `backend/app/services/fuel_feeds.py`, so the flag only
+ever promised zero stations). `FUEL_SA_API_KEY_FILE` stays mounted and the
+arbitration table keeps its `"sa"` authority entry so the feed can be switched
+back on when a contracted aggregator exists. Not an MVP blocker.
 
 QLD note: `FUEL_QLD_API_KEY` is the DirectAPI subscription token.
 `FUEL_QLD_USE_OPEN_FALLBACK` keeps the open-data site usable during a partial

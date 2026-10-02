@@ -9,6 +9,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
 ## [Unreleased]
+- infra(fuel): disable the SA SAFPIS feed in `docker-compose.hosted.yml` and
+  `docker-compose.prod.yml` (`FUEL_SA_ENABLED: "false"`, AUT-5072). The flag was
+  enabled with a provisioned secret but no `ingest_sa_*` ingester existed and the
+  Informed Sources Direct API host is NXDOMAIN, so SA silently produced zero
+  stations. Same treatment as the dead VIC feed (AUT-4143/AUT-4976); the secret
+  file and the `"sa"` arbitration entry stay in place for a future contracted
+  aggregator. Guarded by `backend/tests/test_fuel_feed_flags.py`.
 - feat(alembic): add migration for `fuel_price_snapshots` — the table was only
 
 ### Fixed (AUT-4678)

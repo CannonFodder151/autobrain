@@ -195,10 +195,14 @@ services:
       # the secrets anchor below mounts ${SECRETS_DIR} read-only, so the file
       # resolves when seed-secrets.sh provisions fuel_qld_api_key.
       FUEL_QLD_API_KEY_FILE: /run/secrets/fuel_qld_api_key
-      # AUT-2610: SA SAFPIS ingester (AUT-2406). Same Informed Sources subscriber
-      # token as QLD; secret file provisioned via seed-secrets.sh.
+      # AUT-2610/AUT-5072: SA SAFPIS disabled. The Informed Sources Direct API
+      # host (fppdirectapi.safuelpricinginformation.com.au) is NXDOMAIN and there
+      # is no ingest_sa_* function in backend/app/services/fuel_feeds.py, so the
+      # flag enabled a feed that could only ever produce zero stations. Same
+      # treatment as VIC (AUT-4143/AUT-4976); the secret file stays mounted so
+      # the feed can be re-enabled when a contracted aggregator exists.
       FUEL_SA_API_KEY_FILE: /run/secrets/fuel_sa_api_key
-      FUEL_SA_ENABLED: "true"
+      FUEL_SA_ENABLED: "false"
       AI_GATEWAY_API_KEY_FILE: /run/secrets/ai_gateway_api_key
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@autobrain.io}
       ADMIN_DISPLAY_NAME: AutoBrain Admin
