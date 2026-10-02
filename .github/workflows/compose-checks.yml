@@ -1,0 +1,53 @@
+name: Compose structural checks
+
+# AUT-4678: the structural guards in scripts/check-*.py rotted silently because
+# nothing ran them. Any change to a compose file or to a check script must now
+# pass them. Kept separate from ci-tests.yml (that one installs the full backend
+# dependency tree; these checks only need pyyaml).
+
+on:
+  pull_request:
+    paths:
+      - "docker-compose*.yml"
+      - "scripts/check-*.py"
+      - "scripts/seed-secrets.sh"
+      - "scripts/test_check_compose_config.py"
+      - ".github/workflows/compose-checks.yml"
+  push:
+    branches: [main]
+    paths:
+      - "docker-compose*.yml"
+      - "scripts/check-*.py"
+      - "scripts/seed-secrets.sh"
+      - "scripts/test_check_compose_config.py"
+      - ".github/workflows/compose-checks.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  compose-checks:
+    name: compose-checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pyyaml
+        run: python -m pip install --upgrade pip && pip install pyyaml
+
+      - name: Run structural checks
+        run: |
+          set -e
+          for f in scripts/check-*.py; do
+            echo "::group::$f"
+            python3 "$f"
+            echo "::endgroup::"
+          done
+
+      - name: Regression test for the compose check
+        run: python3 -m unittest scripts.test_check_compose_config -v

@@ -21,8 +21,8 @@ seed() {
         case "$line" in ''|\#*) continue ;; esac
         key=${line%%=*}
         val=${line#*=}
-        # NB: no comments inside this continuation — a `#` line between two
-        # backslash-continued lines terminates the sed arg list (AUT-2241).
+        # NB: no comments inside the sed backslash continuation below — a `#` line
+        # between two continued lines terminates the sed arg list (AUT-2241).
         # FUEL_VIC_API_KEY / FUEL_VIC_API_SECRET are intentionally unmapped
         # (AUT-4143): the VIC Servo Saver endpoint does not exist (NXDOMAIN).
         name=$(printf '%s\n' "$key" | sed \
@@ -51,7 +51,9 @@ seed() {
             -e 's/^STRIPE_WEBHOOK_SECRET$/stripe_webhook_secret/' \
             -e 's/^IAP_GOOGLE_SERVICE_ACCOUNT_JSON$/iap_google_service_account_json/' \
             -e 's/^IAP_APPLE_PRIVATE_KEY$/iap_apple_private_key/' \
-            -e 's/^SOCIAL_FEDERATION_HOSTED_REGISTRATION_KEY$/hub_hosted_registration_key/')
+            -e 's/^SOCIAL_FEDERATION_HOSTED_REGISTRATION_KEY$/hub_hosted_registration_key/' \
+            -e 's/^BACKUP_OFFSITE_GUI_KEY$/backup_offsite_gui_key/' \
+            -e 's/^BACKUP_OFFSITE_INGEST_KEY$/backup_offsite_ingest_key/')
         [ "$name" = "$key" ] && continue   # not a mapped secret — skip
         # AUT-2241: never overwrite an existing non-empty secret. The running
         # services already consumed the old value (postgres volume, redis

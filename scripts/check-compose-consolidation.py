@@ -80,6 +80,15 @@ def main():
         if key not in backend_env:
             errors.append(f"backend env missing {key}")
 
+    # C4: the standalone `ai` service (gateway + market-data) is gone — the
+    # gateway merged into backend (AUT-3153 follow-up, AUT-3824), so the
+    # invariant is that backend carries the gateway's secret-file indirection.
+    if "ai" in svcs:
+        errors.append("standalone `ai` service is back (should be merged into backend)")
+    for key in ("AI_GATEWAY_API_KEY_FILE", "AI_ROUTER_API_KEY_FILE"):
+        if key not in backend_env:
+            errors.append(f"backend env missing merged-gateway {key}")
+
     if set(svcs) != EXPECTED:
         errors.append(
             f"service set drifted: unexpected={sorted(set(svcs) - EXPECTED)} "
