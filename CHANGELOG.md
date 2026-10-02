@@ -183,6 +183,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   DDL instead of only bumping a version string.
 - feat(alembic): add migration for `fuel_price_snapshots` — the table was only
 
+### Fixed (AUT-5092)
+- The hourly off-site backup produced zero artifacts while reporting healthy.
+  Four stacked defects, all fixed: `backup_offsite_hourly()` called
+  `run_backup_offsite()` without awaiting the coroutine (Celery logged success
+  in ~1ms); `backup_offsite.py`, `iap.py` and `billing.py` passed structlog
+  kwargs to the stdlib `logger`, so every line raised `TypeError` and masked the
+  real push error; the push targeted `/api/backup/ingest` while
+  `autobrain-backup` serves `/ingest`, so it 404'd; and `serialize_all()` died
+  on the missing `devices.vehicle_type` column (see below).
+- `aut5092_device_vehicle_type_repair` now revises `aut3448_fuel_price_snapshots`
+  instead of `aut4925_missing_tables`, keeping a single alembic head. With the
+  fork, `alembic upgrade head` failed with `Multiple head revisions are present`,
+  the backend never booted, and `bootstrap.py` fell back to `create_all` — which
+  never adds a column to an existing table, so `devices.vehicle_type` stayed
+  missing behind a "successful" deploy.
+
 ### Fixed (AUT-4678)
 - `scripts/check-compose-config.py` crashed with `KeyError: 'ai'` on `main`
   after the AUT-3153 merge removed the standalone `ai` service, so the hosted

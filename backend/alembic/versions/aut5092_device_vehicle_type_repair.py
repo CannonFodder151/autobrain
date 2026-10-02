@@ -10,7 +10,7 @@ aut2706 ALTER never ran. The ORM expects the column, so any query touching
 Idempotent: no-op when the table or column is already there.
 
 Revision ID: aut5092_device_vehicle_type_repair
-Revises: aut4925_missing_tables
+Revises: aut3448_fuel_price_snapshots
 Create Date: 2026-10-02
 """
 
@@ -20,7 +20,7 @@ import sqlalchemy as sa
 from alembic import context, op
 
 revision: str = "aut5092_device_vehicle_type_repair"
-down_revision: Union[str, Sequence[str], None] = "aut4925_missing_tables"
+down_revision: Union[str, Sequence[str], None] = "aut3448_fuel_price_snapshots"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
