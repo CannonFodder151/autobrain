@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.301] - 2026-10-02
+
 ### Fixed (AUT-5131)
 - security(ci): corrected the `.trivyignore` reachability rationale for
   `CVE-2026-103111` (pcre2 OOB write). The old condition-2 paragraph
