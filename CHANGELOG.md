@@ -11,6 +11,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-5032)
+- test: three pre-existing failures in `backend/tests/test_workers.py` that
+  reproduced on a clean `origin/main` checkout (not env-dependent, and not
+  caused by the AUT-3827/AUT-3977 branch diff — root cause was the test
+  harness, not the code under test):
+  - `test_scheduled_backup_skips_on_missing_minio_credentials` asserted on
+    `caplog` (stdlib `logging`), but the worker logs through `structlog`, so the
+    records never reached `caplog`. It now uses
+    `structlog.testing.capture_logs()` and asserts on the
+    `reason="minio_credentials_missing"` event field, matching the pattern in
+    `backend/tests/test_aut324_rego_log_redaction.py`.
+  - `test_ingest_fuel_prices_no_typeerror_when_source_in_result` and
+    `test_run_due_checks_runs_inner_coro_via_run` raised `NameError` at the
+    `patch.object(...)` / `asyncio.new_event_loop()` call sites because
+    `unittest.mock.patch` and `asyncio` were never imported. Both are now
+    imported at module top.
+  - No production code changed. `python3 -m pytest backend/tests/test_workers.py`
+    is green (7 passed) with only `DATABASE_URL` + `SECRET_KEY` exported.
+
 ### Security (AUT-5041)
 - deps: bump `pypdf` `6.16.1` -> `6.19.0` in `backend/requirements.txt` and
   `ai/requirements.txt`. 6.16.1 carried 8 known vulnerabilities
