@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+
+## [0.3.298] - 2026-10-02
 - fix(backup): the backend no longer runs a second retention engine against the
   off-site backup store. `backup_offsite.py::_apply_tiered_retention()` pruned
   by file **age** (via `_tier_for_age`) while `autobrain-backup` prunes by
