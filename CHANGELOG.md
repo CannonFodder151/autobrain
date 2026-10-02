@@ -11,6 +11,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security (AUT-5041)
+- deps: bump `pypdf` `6.16.1` -> `6.19.0` in `backend/requirements.txt` and
+  `ai/requirements.txt`. 6.16.1 carried 8 known vulnerabilities
+  (PYSEC-2026-4153..4160), which kept the `pip-audit-gate` job of
+  `Publish images to Docker Hub` red on `main` and blocked every PR merge.
+  `pip-audit --disable-pip --no-deps` over the deduplicated backend+ai pin
+  list is now clean. The receipt worker's `_pdf_text()` and the reportlab PDF
+  export paths are unchanged (`pypdf` is only ever a reader there); guarded by
+  `backend/tests/test_deps_pypdf_pin.py` (floor raised to 6.19.0),
+  `backend/tests/test_pdf_dos_regression.py` and the `test_api.py` PDF export
+  tests.
+
 ## [0.3.295] - 2026-10-02
 
 ### Fixed (AUT-3827)
