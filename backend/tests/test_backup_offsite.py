@@ -125,6 +125,58 @@ def test_hourly_push_deletes_nothing_on_an_in_policy_store(monkeypatch):
     assert [c for c in calls if c[0] == "POST"] == [("POST", "/api/backup/ingest")]
 
 
+def test_celery_task_actually_awaits_the_push(monkeypatch):
+    """The @shared_task entrypoint must drive the coroutine to completion.
+
+    AUT-5152: `backup_offsite_hourly` called the async `run_backup_offsite()`
+    bare, so the coroutine was created and dropped — the task "succeeded" in
+    ~0.001s and only logged `coroutine ... was never awaited`. Hosted therefore
+    never pushed a snapshot despite beat firing on the hour.
+    """
+    from app.core.config import settings
+    from app.db import session as session_mod
+    from app.workers import tasks as tasks_mod
+
+    posts: list[str] = []
+
+    class _FakeClient:
+        def __init__(self, *a, **kw):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def get(self, url, **kw):
+            return httpx.Response(200, request=httpx.Request("GET", str(url)), json={})
+
+        async def post(self, url, **kw):
+            posts.append(str(url))
+            return httpx.Response(200, request=httpx.Request("POST", str(url)), json={"ok": True})
+
+    class _FakeSession:
+        async def __aenter__(self):
+            return object()
+
+        async def __aexit__(self, *exc):
+            return False
+
+    async def _fake_serialize(db):
+        return {"data": {"cars": []}}
+
+    monkeypatch.setattr(backup_offsite.httpx, "AsyncClient", _FakeClient)
+    monkeypatch.setattr(backup_offsite, "serialize_all", _fake_serialize)
+    monkeypatch.setattr(session_mod, "SessionLocal", _FakeSession)
+    monkeypatch.setattr(settings, "BACKUP_OFFSITE_ENABLED", True)
+    monkeypatch.setattr(settings, "BACKUP_OFFSITE_URL", "http://backup:8080")
+    monkeypatch.setattr(settings, "BACKUP_OFFSITE_INSTANCE", "hosted")
+
+    tasks_mod.backup_offsite_hourly()
+
+    assert posts, "hourly task must POST the snapshot; an un-awaited coroutine pushes nothing"
+
 def test_hourly_push_skips_when_disabled(monkeypatch):
     """BACKUP_OFFSITE_ENABLED guard survives the removal (AUT-5136)."""
     from app.core.config import settings
