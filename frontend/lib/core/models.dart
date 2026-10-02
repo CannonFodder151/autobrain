@@ -17,3 +17,4 @@ part 'models/receipt.dart';
 part 'models/valuation.dart';
 part 'models/analytics.dart';
 part 'models/timeline.dart';
+part 'models/vass.dart';
