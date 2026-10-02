@@ -279,6 +279,85 @@ Portainer stack updates pull images (`pullImage=true`) and recreate changed
 services (AUT-372). This is intended so CI-published images reach the tier, and
 it is safe for the frontend because the stack pins a static IP.
 
+### Stack 122 (`autobrain-hosted`) is an INLINE, digest-pinned stack (AUT-5132)
+
+`GET /api/stacks/122` returns `GitConfig: null` and `AdditionalFiles: null`:
+the hosted stack was created by **uploading** a compose file, so Portainer stores
+it and re-applies that stored copy **verbatim** on every update. It never reads
+`docker-compose.hosted.yml` from `main`. Two consequences:
+
+1. **`pullImage=true` alone is a no-op.** Every app image is pinned by digest
+   (`ghcr.io/.../autobrain-backend:hosted@sha256:...`). A digest is immutable, so
+   `docker compose pull` re-resolves the *same* image and the redeploy recreates
+   the same container. The call returns 200 and nothing new ships. A reported
+   successful redeploy is **not** evidence of a deploy on this stack.
+2. **The stored compose can be stale.** If `docker-compose.hosted.yml` on `main`
+   gained a hunk (e.g. the `alembic upgrade head` pre-step in PR #870) and the
+   stored copy was never re-uploaded, the stack keeps recreating the *old*
+   container command even on a successful pull.
+
+The pins are not the bug — they are **mandated by the `security-pr-gate.yml`
+"Pin guard"**, and `build-hosted.yml`'s `compose-pin` job runs
+`scripts/update-compose-pins.py` to rewrite them to the digests it just
+published and pushes the result to `main`, so the pin source does advance. What
+makes the running stack track `main` is that same job: it bumps the pins, pushes,
+then PUTs the file into stack 122. It used to be gated on
+`steps.bump.outputs.changed == 'true'`, which meant a compose edit that did not
+move a digest (the PR #870 `alembic upgrade head` pre-step) never reached the
+stack — that gate is gone; the sync now runs on every build to `main`.
+
+**The working deploy is upload + update, not redeploy.** This is what
+`build-hosted.yml`'s "Sync updated compose into Portainer hosted stack" step
+runs; run it by hand for a one-off:
+
+```bash
+# 1. Make sure main has the compose AND the fresh digest pins (bump job ran).
+git fetch origin main && git checkout -B main origin/main
+grep -n '@sha256' docker-compose.hosted.yml    # note the digests you expect
+
+# 2. Upload the compose into the inline stack, pulling the new digests.
+python3 scripts/sync-compose-to-portainer.py \
+  --stack autobrain-hosted --endpoint 5 --file docker-compose.hosted.yml
+
+# 3. Re-assert what is actually running (no PUT — verification only).
+python3 scripts/sync-compose-to-portainer.py --verify-only \
+  --stack autobrain-hosted --endpoint 5 --file docker-compose.hosted.yml
+```
+
+`--verify-only` compares each running container's **image digest**
+(`/images/{id}/json` → `RepoDigests`) and its **command/entrypoint** against
+what the compose declares, and exits **7** on drift. That is the only check that
+distinguishes "deployed" from "recreated the same thing": `/health` and
+`scripts/post-deploy-smoke.sh` both pass on a no-op redeploy. Exit codes: `3`
+stack env empty, `4` PUT rejected, `5` host-port orphan, `6` containers not
+healthy, `7` running stack does not match the compose.
+
+Raw-API equivalent (if you must drive Portainer by hand):
+
+```bash
+# Preserve the stack env — reading it from /api/stacks/122/file sends Env: []
+# and wipes every stack env var (AUT-4778).
+STACK_ENV=$(curl -sS -H "X-API-Key: $PORTAINER_API_KEY" \
+  "$PORTAINER_URL/api/stacks/122" | jq '.Env')
+jq -n --rawfile compose docker-compose.hosted.yml --argjson env "$STACK_ENV" \
+  '{StackFileContent: $compose, Env: $env, Prune: false}' \
+| curl -sS -X PUT \
+    "$PORTAINER_URL/api/stacks/122?endpointId=5&pullImage=true" \
+    -H "X-API-Key: $PORTAINER_API_KEY" -H 'Content-Type: application/json' \
+    --data-binary @-
+```
+
+Never judge a hosted deploy by the Portainer response code. Use step 3.
+
+Quick eyeball of what the containers are actually running (this is the check
+`post-deploy-smoke.sh` cannot make — it is black-box HTTP):
+
+```bash
+curl -s -H "X-API-Key: $PORTAINER_API_KEY" \
+  "$PORTAINER_URL/api/endpoints/5/docker/containers/json?all=true" \
+  | jq -r '.[] | "\(.Labels["com.docker.compose.service"]) \(.ImageID)"'
+```
+
 Prerequisites for the Portainer API path to work (verified before relying on the
 upgrade path):
 

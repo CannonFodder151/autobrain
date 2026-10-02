@@ -21,6 +21,8 @@ Usage:
 import argparse
 import json
 import os
+import re
+import shlex
 import sys
 import time
 import urllib.error
@@ -98,6 +100,78 @@ def compose_services_and_ports(content):
     return set(services), ports
 
 
+# ponytail: a subset of docker compose interpolation — ${VAR}, ${VAR:-def},
+# ${VAR-def}, ${VAR:?msg}, $VAR, $$ -> $ and a literal "${". It does not
+# implement nested defaults or `:-` on a multi-line default; Portainer has
+# already done the real interpolation before the value reaches a container, so
+# anything left literal is compared verbatim rather than guessed at.
+_INTERP = re.compile(
+    r"""\$\$|
+        \$\{(?P<name>[A-Za-z_][A-Za-z0-9_]*)
+            (?:(?P<op>:?[-?])(?P<def>[^}]*))?\}|
+        \$(?P<bare>[A-Za-z_][A-Za-z0-9_]*)|
+        \$\{""",
+    re.X,
+)
+
+
+def interpolate(s, vars_):
+    """Resolve compose ${VAR}/$VAR against stack env + os.environ."""
+    def sub(m):
+        if m.group(0) == "$$":
+            return "$"
+        if m.group(0) == "${":
+            return "${"
+        name = m.group("name") or m.group("bare")
+        val = vars_.get(name, "")
+        if not val and m.group("def") is not None:
+            return m.group("def")
+        return val
+    return _INTERP.sub(sub, s)
+
+
+def compose_service_specs(content, vars_=None):
+    """{service: {"image"?, "command"?, "entrypoint"?}} for what compose declares.
+
+    Only declared keys are returned: an unset key means "use the image
+    default", and asserting on that would be a false failure. Values are
+    interpolated first, because Portainer interpolates the compose before the
+    value ever reaches a container — comparing raw `$$VAR` against the running
+    `$VAR` would flag every well-formed stack.
+    """
+    vars_ = dict(os.environ, **(vars_ or {}))
+    doc = yaml.safe_load(content) or {}
+    specs = {}
+    for name, spec in (doc.get("services") or {}).items():
+        spec = spec or {}
+        got = {}
+        for key in ("image", "command", "entrypoint"):
+            raw = spec.get(key)
+            if not raw:
+                continue
+            # A string command is shell-split by compose, a list is already
+            # argv — joining a list back into a string would lose the split.
+            if key == "image" or isinstance(raw, str):
+                val = interpolate(str(raw), vars_)
+                got[key] = val if key == "image" else shlex.split(val)
+            else:
+                got[key] = [interpolate(str(x), vars_) for x in raw]
+        if got:
+            specs[name] = got
+    return specs
+
+
+def _repo_of(ref):
+    """ghcr.io/o/r:hosted@sha256:x -> ghcr.io/o/r (registry ports keep theirs)."""
+    name = ref.split("@", 1)[0]
+    head, sep, tail = name.rpartition(":")
+    return head if sep and "/" not in tail else name
+
+
+def expected_repo_digest(ref):
+    """The repo@digest compose demands, or None when the ref is not pinned."""
+    return f"{_repo_of(ref)}@{ref.split('@', 1)[1]}" if "@" in ref else None
+
 def compose_image_refs(content):
     """AUT-5186: {service: image ref} — the digest pins this PUT applies."""
     doc = yaml.safe_load(content) or {}
@@ -156,6 +230,149 @@ def verify_running(args, services, attempts=20, delay=5):
             [(n, f"stuck in state {st}") for n, st in stuck])
 
 
+def _running_of(services, containers):
+    """{service: [container, ...]} for running containers only."""
+    out = {}
+    for c in containers:
+        svc = _service_of(c)
+        if c.get("State") == "running" and svc in services:
+            out.setdefault(svc, []).append(c)
+    return out
+
+def verify_image_digests(args, services, containers):
+    """Every running container must run the image digest the compose pins.
+
+    AUT-5132: stack 122 is an *inline* stack whose stored compose is re-applied
+    verbatim, so `redeploy?pullImage=true` on a `repo:tag@sha256:...` ref pulls
+    the same immutable digest and reports success without shipping new code.
+    The running RepoDigests are the only evidence that a deploy landed.
+    """
+    problems = []
+    for svc, ref in sorted(services.items()):
+        want = expected_repo_digest(ref)
+        if not want:  # unpinned ref: the tag itself is the contract
+            continue
+        live = [c for c in containers
+                if _service_of(c) == svc and c.get("State") == "running"]
+        if not live:
+            problems.append((None, f"service {svc!r} has no running container "
+                                   "to check the image digest"))
+            continue
+        for c in live:
+            name = c["Names"][0].lstrip("/")
+            try:
+                img = _api(args, f"/endpoints/{args.endpoint}/docker/images/"
+                                 f"{c.get('Image') or name}/json")
+            except urllib.error.HTTPError as e:
+                problems.append((name, f"could not inspect image -> HTTP {e.code}"))
+                continue
+            digests = img.get("RepoDigests") or []
+            if want not in digests:
+                problems.append((name, f"runs {digests or ['<no repo digest>']} "
+                                       f"but compose pins {want} — the deploy "
+                                       "was a no-op"))
+    return problems
+
+
+def _norm_argv(argv):
+    """Flatten argv to comparable command text.
+
+    argv equality is NOT a reliable contract here: compose resolves a string
+    `command` with its own shell lexer, so the inner double quotes of
+    `sh -c "... "$(cat f)" ..."` are consumed at parse time and never reach
+    docker. Collapse whitespace and drop double quotes — the shell never treats
+    either as significant once the string is argv, and every real difference we
+    care about (a missing `alembic upgrade head`) survives the normalisation.
+    """
+    return re.sub(r"\s+", " ", " ".join(argv).replace('"', "")).strip()
+
+
+def verify_commands(args, services, containers):
+    """Container command/entrypoint must match the compose the sync uploaded.
+
+    The stale-inline-compose half of AUT-5132: the stack can come up healthy on
+    the right image yet still run the previous container command.
+    """
+    problems = []
+    running = _running_of(services, containers)
+    for svc, want in sorted(services.items()):
+        for field, key in (("command", "Cmd"), ("entrypoint", "Entrypoint")):
+            if field not in want:
+                continue
+            for c in running.get(svc, []):
+                name = c["Names"][0].lstrip("/")
+                try:
+                    cfg = (_api(args, f"/endpoints/{args.endpoint}/docker/"
+                                     f"containers/{c.get('Id')}/json")
+                           .get("Config") or {})
+                except urllib.error.HTTPError as e:
+                    problems.append((name, f"could not inspect container -> "
+                                           f"HTTP {e.code}"))
+                    break
+                got = _norm_argv(cfg.get(key) or [])
+                exp = _norm_argv(want[field])
+                if got != exp:
+                    problems.append((name, f"{field} is {got or '<image default>'}"
+                                           f" but compose sets {exp}"))
+    return problems
+
+
+def upload(args, api, stack_id, content, env, services, wanted_ports):
+    """PUT the compose into the stack. Returns a main() exit code (0 = ok)."""
+    flat_wanted = {p for ps in wanted_ports.values() for p in ps}
+    try:
+        clashes = check_port_collisions(args, services, flat_wanted)
+    except urllib.error.HTTPError as e:
+        print(f"WARNING: could not read endpoint containers -> HTTP {e.code}; "
+              "skipping the pre-PUT orphan check", file=sys.stderr)
+        clashes = []
+    if clashes:
+        print(f"ERROR: refusing to sync — host port collision with orphans on "
+              f"endpoint {args.endpoint}:", file=sys.stderr)
+        for name, svc, ports in clashes:
+            print(f"  {name} (service {svc!r}) holds host port(s) "
+                  f"{', '.join(str(p) for p in ports)} that the new compose "
+                  f"needs, but {svc!r} is not a service in the incoming compose",
+                  file=sys.stderr)
+        print("RECOVERY (destructive — run by hand, then re-run this sync):\n"
+              f"  curl -X DELETE \"{args.portainer_url}/api/endpoints/"
+              f"{args.endpoint}/docker/containers/<NAME>?force=true&v=true\" \\\n"
+              f"    -H \"X-API-Key: $PORTAINER_API_KEY\"", file=sys.stderr)
+        return 5
+
+    body = {
+        "StackFileContent": content,
+        "Env": env,
+        "Prune": False,
+    }
+    params = f"?endpointId={args.endpoint}"
+    if args.pull_image:
+        params += "&pullImage=true"
+
+    req = urllib.request.Request(
+        f"{api}/stacks/{stack_id}{params}",
+        data=json.dumps(body).encode(),
+        method="PUT",
+        headers={
+            "X-API-Key": args.api_key,
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+    )
+    # AUT-4911: print the Portainer response body on failure. The bare
+    # "HTTP Error 500" hid the actual cause ("compose build operation failed:
+    # listing workers for Build") for a whole day of red CI.
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            r.read()
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", "replace")
+        print(f"ERROR: Portainer PUT /stacks/{stack_id} -> HTTP {e.code}", file=sys.stderr)
+        print(body, file=sys.stderr)
+        return 4
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--stack", required=True)
@@ -166,6 +383,9 @@ def main():
     ap.add_argument("--api-key", default=os.environ.get("PORTAINER_API_KEY"))
     ap.add_argument("--pull-image", action="store_true", default=True,
                     help="force a pull so the new digest is fetched (default: true)")
+    ap.add_argument("--verify-only", action="store_true",
+                    help="skip the PUT; only assert the running stack matches "
+                         "the compose (AUT-5132 re-verify of a deploy)")
     args = ap.parse_args()
 
     # AUT-5172: gate before any network call so a gated run has zero effect.
@@ -219,62 +439,16 @@ def main():
               file=sys.stderr)
         return 3
 
+    services, wanted_ports = compose_services_and_ports(content)
+
     # AUT-4946: refuse BEFORE the PUT if a host port this compose needs is
     # held by a container from a service the new compose drops. Portainer's
     # PUT is not atomic: it leaves the replacement stuck in state "created"
     # forever and the site 502s (AUT-4911).
-    services, wanted_ports = compose_services_and_ports(content)
-    flat_wanted = {p for ps in wanted_ports.values() for p in ps}
-    try:
-        clashes = check_port_collisions(args, services, flat_wanted)
-    except urllib.error.HTTPError as e:
-        print(f"WARNING: could not read endpoint containers -> HTTP {e.code}; "
-              "skipping the pre-PUT orphan check", file=sys.stderr)
-        clashes = []
-    if clashes:
-        print(f"ERROR: refusing to sync — host port collision with orphans on "
-              f"endpoint {args.endpoint}:", file=sys.stderr)
-        for name, svc, ports in clashes:
-            print(f"  {name} (service {svc!r}) holds host port(s) "
-                  f"{', '.join(str(p) for p in ports)} that the new compose "
-                  f"needs, but {svc!r} is not a service in the incoming compose",
-                  file=sys.stderr)
-        print("RECOVERY (destructive — run by hand, then re-run this sync):\n"
-              f"  curl -X DELETE \"{args.portainer_url}/api/endpoints/"
-              f"{args.endpoint}/docker/containers/<NAME>?force=true&v=true\" \\\n"
-              f"    -H \"X-API-Key: $PORTAINER_API_KEY\"", file=sys.stderr)
-        return 5
-
-    body = {
-        "StackFileContent": content,
-        "Env": env,
-        "Prune": False,
-    }
-    params = f"?endpointId={args.endpoint}"
-    if args.pull_image:
-        params += "&pullImage=true"
-
-    req = urllib.request.Request(
-        f"{api}/stacks/{stack_id}{params}",
-        data=json.dumps(body).encode(),
-        method="PUT",
-        headers={
-            "X-API-Key": args.api_key,
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        },
-    )
-    # AUT-4911: print the Portainer response body on failure. The bare
-    # "HTTP Error 500" hid the actual cause ("compose build operation failed:
-    # listing workers for Build") for a whole day of red CI.
-    try:
-        with urllib.request.urlopen(req, timeout=120) as r:
-            r.read()
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", "replace")
-        print(f"ERROR: Portainer PUT /stacks/{stack_id} -> HTTP {e.code}", file=sys.stderr)
-        print(body, file=sys.stderr)
-        return 4
+    rc = 0 if args.verify_only else upload(args, api, stack_id, content, env,
+                                           services, wanted_ports)
+    if rc:
+        return rc
 
     # AUT-4946: a 200 PUT does not mean a healthy stack. Verify.
     try:
@@ -294,8 +468,39 @@ def main():
               file=sys.stderr)
         return 6
 
-    print(f"stack={args.stack} id={stack_id} endpoint={args.endpoint} updated")
-    print(f"verified: {len(services)} services running, no stuck containers")
+    # AUT-5132: healthy is not deployed. Assert the running stack actually runs
+    # the image digests and container commands this compose declares, so a
+    # no-op redeploy (digest pin never advanced, or the inline compose in
+    # stack 122 was never re-uploaded) fails here instead of passing silently.
+    specs = compose_service_specs(
+        content, {e["name"]: e.get("value", "") for e in env})
+    try:
+        live = endpoint_containers(args)
+    except urllib.error.HTTPError as e:
+        print(f"WARNING: could not read containers for the digest check -> "
+              f"HTTP {e.code}", file=sys.stderr)
+        live = []
+    drift = (verify_image_digests(args, {s: specs[s]["image"] for s in specs
+                                          if "image" in specs[s]}, live)
+             + verify_commands(args, specs, live))
+    if drift:
+        print(f"ERROR: stack {args.stack!r} is running but does NOT match "
+              f"{args.file} — the deploy did not land:", file=sys.stderr)
+        for name, why in drift:
+            print(f"  {name}: {why}", file=sys.stderr)
+        print("CAUSE (AUT-5132): stack 122 is an INLINE stack — Portainer "
+              "re-applies its stored compose verbatim, and `pullImage=true` on "
+              "a repo@sha256:... ref re-pulls the same immutable digest.\n"
+              "Fix: re-upload the compose (this script without --verify-only), "
+              "or dispatch .github/workflows/build-hosted.yml so "
+              "scripts/update-compose-pins.py advances the pins first.",
+              file=sys.stderr)
+        return 7
+
+    verb = "verified" if args.verify_only else "updated"
+    print(f"stack={args.stack} id={stack_id} endpoint={args.endpoint} {verb}")
+    print(f"verified: {len(services)} services running, no stuck containers, "
+          f"image digests + container commands match the compose")
     # AUT-5186: audit trail for the nightly 03:00 AEST deploy — one line per
     # service with the digest the stack now runs. The run log is the only
     # record once the workflow is no longer tied to a human dispatch.
