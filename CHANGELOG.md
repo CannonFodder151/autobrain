@@ -11,6 +11,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-5131)
+- security(ci): corrected the `.trivyignore` reachability rationale for
+  `CVE-2026-103111` (pcre2 OOB write). The old condition-2 paragraph
+  claimed the nginx base image "ships no JIT-enabled pcre2 build for our
+  config" — false: the pinned `nginxinc/nginx-unprivileged:stable-alpine`
+  binary (nginx 1.30.5-r1, pcre2 10.48-r0) links `libpcre2-8.so.0` and
+  imports `pcre2_jit_compile_8` (plus `pcre2_compile_8`,
+  `pcre2_match_8`, `pcre2_pattern_info_8`) from its `.dynsym`, which is
+  the proof that PCRE2 JIT is compiled in. The suppression itself is
+  unchanged and stays approved: condition 1 (attacker-controlled regex)
+  fails independently — nginx only matches the static
+  `location ~ ^/(autobrain-assets|autobrainservice-assets)/` literal —
+  and CPython 3.13 links no pcre2 at all. No entry added or dropped;
+  the 2026-11-30 re-check date stands. Comment-only change, no runtime
+  effect.
+
 ### Fixed (AUT-4718)
 - security(ci,docker): repinned the two base images that were failing the
   `Security — base image CVE scan (trivy)` gate on `main`, and dropped the

@@ -133,27 +133,44 @@ CVE-2026-89157  # pcre2 pcre2_pattern_convert OOB write: 32-bit platforms only; 
 # --- AUT-4718: pcre2 CVE-2026-103111 (OOB write, attacker-controlled regex + JIT) ---------
 # "PCRE2 before 10.49, when there is an attacker-controlled regular expression and certain
 # JIT API usage, allows an out-of-bounds write with arbitrary data."
-# (GHSA-r9hj-j2rw-4q3m). Two conditions must BOTH hold, and neither is reachable here:
+# (GHSA-r9hj-j2rw-4q3m). Two conditions must BOTH hold; condition 1 fails, so the
+# advisory is unreachable here regardless of condition 2:
 #
 #   1. Attacker-controlled regular expression. AutoBrain compiles no regex from user input
 #      on any request path. The only regexes in the runtime are literals in our own source
 #      and in docker/frontend/nginx.conf (the one PCRE location is the static
 #      `location ~ ^/(autobrain-assets|autobrainservice-assets)/` prefix match). No public
 #      API endpoint accepts a pattern string (established for AUT-2918 and unchanged).
-#   2. JIT API usage. The python base image links NO pcre2 into the interpreter: the
-#      CPython binary's DT_NEEDED list is exactly {libc.so.6, libpython3.13.so.1.0}, and
-#      Python's `re` is the bundled `_sre` C module, not pcre2. libpcre2-8-0 is present
-#      only as a dependency of libselinux1. nginx's PCRE is used for location matching with
-#      static patterns and the image ships no JIT-enabled pcre2 build for our config.
+#   2. JIT API usage. NOT absent — it is present but not decisive. Verified 2026-10-02
+#      (AUT-5131) against the pinned images themselves, not inferred from the tags:
+#        * python base: no pcre2 in the interpreter at all. The CPython binary's DT_NEEDED
+#          is exactly {libc.so.6, libpython3.13.so.1.0} and Python's `re` is the bundled
+#          `_sre` C module. libpcre2-8-0 exists in the image, but only as a dependency of
+#          libselinux1 and nothing we run loads it for regex work.
+#        * nginx: PCRE2 JIT IS compiled in. usr/sbin/nginx (nginx 1.30.5-r1) has
+#          libpcre2-8.so.0 in DT_NEEDED and imports pcre2_jit_compile_8, pcre2_compile_8,
+#          pcre2_match_8 and pcre2_pattern_info_8 from .dynsym — the pcre2_jit_compile_8
+#          import is what proves it (the `--with-pcre-jit` configure flag being absent is
+#          NOT evidence either way). An earlier revision of this file claimed the image
+#          "ships no JIT-enabled pcre2 build for our config"; that was false and is
+#          withdrawn. It does not matter for this CVE: condition 1 already fails, because
+#          the only regex nginx ever evaluates against request data is the static
+#          `location ~ ^/(autobrain-assets|autobrainservice-assets)/` literal, so no
+#          attacker-controlled pattern is ever JIT-compiled.
 # Sources: pcre2 10.48-r0 (nginx Alpine 3.24.2) and libpcre2-8-0 10.46-1~deb13u2 (python
-# Debian 13.7). Fixes ARE published upstream — Alpine 3.24 main carries pcre2-10.49-r0 and
-# debian-security carries libpcre2-8-0 10.46-1~deb13u3 — but neither nginxinc nor the
-# python image has been rebuilt with them, so no digest bump clears this today. Suppress
-# per policy ("tolerate when no fixed image exists").
+# Debian 13.7), both read from the pinned digests' own layer metadata. Fixes ARE published
+# upstream — Alpine 3.24 main carries pcre2-10.49-r0 and debian-security carries
+# libpcre2-8-0 10.46-1~deb13u3 — but as re-checked 2026-10-02 (AUT-5131) neither
+# nginxinc/nginx-unprivileged:stable-alpine nor python:3.13.16-slim-trixie has been
+# rebuilt with them (the nginx tag still resolves to the exact pinned index digest
+# ed04ec1f..., and the newest python index's amd64 manifest is byte-identical to the
+# pinned 6906dca8 one), so no digest bump clears this today. Suppress per policy
+# ("tolerate when no fixed image exists").
 # Time-boxed: re-check 2026-11-30; drop the entry and bump the nginx + python base digests
-# as soon as either upstream image ships the fixed pcre2. Re-run the DT_NEEDED and
+# as soon as either upstream image ships the fixed pcre2. Re-run the DT_NEEDED, .dynsym and
 # nginx.conf checks at that point so a future dynamic-regex or JIT path cannot hide here.
-CVE-2026-103111  # pcre2 OOB write: needs attacker-controlled regex + JIT; neither is reachable
+CVE-2026-103111  # pcre2 OOB write: needs attacker-controlled regex AND JIT; JIT is compiled in
+                  # (see above) but no attacker-controlled regex is ever compiled — see conditions 1+2
 
 # --- AUT-4718: urllib3 CVE-2026-97687 / CVE-2026-97689 (pip's vendored copy) ----------------
 # urllib3 2.7.0 ships ONLY inside pip's vendor tree — `usr/local/lib/python3.13/
