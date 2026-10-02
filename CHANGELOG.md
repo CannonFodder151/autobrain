@@ -10,6 +10,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+- fix(backend): `backup_offsite_hourly` now wraps `run_backup_offsite()` in the
+  persistent-loop `_run()` wrapper. Before the fix the async function was passed
+  bare, so the coroutine was never executed and the hourly off-site backup never
+  ran.
 
 ## [0.3.298] - 2026-10-02
 - fix(backup): the backend no longer runs a second retention engine against the
