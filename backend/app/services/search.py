@@ -3,6 +3,7 @@
 from sqlalchemy import TextClause, and_, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings, DEFAULT_VECTOR_WEIGHTS
 from app.core.logging import get_logger
 from app.models.diagnostic import Diagnostic
 from app.models.mod import Modification
@@ -12,6 +13,31 @@ from app.services.vector_search import generate_embedding
 from app.social.models import SocialIssuePost
 
 logger = get_logger(__name__)
+
+# Default per-entity vector weight multipliers. All known entity types start
+# at 1.0; operators tune them via VECTOR_SEARCH_WEIGHTS in the deployment env.
+_DEFAULT_VECTOR_WEIGHTS = DEFAULT_VECTOR_WEIGHTS
+
+
+def _resolve_vector_weights() -> dict[str, float]:
+    """Merge configured weights with defaults.
+
+    Empty settings -> defaults. Partial settings -> fill missing entity types
+    with 1.0. Unknown entity types are ignored so a typo can't 500 the search.
+    """
+    configured = settings.VECTOR_SEARCH_WEIGHTS or {}
+    weights = dict(_DEFAULT_VECTOR_WEIGHTS)
+    for etype, weight in configured.items():
+        if etype in weights:
+            try:
+                weights[etype] = float(weight)
+            except (TypeError, ValueError):
+                logger.warning(
+                    "vector_weight_invalid",
+                    entity_type=etype,
+                    value=weight,
+                )
+    return weights
 
 # Entity tables with their searchable columns and vector column mapping.
 # `community: True` marks entities that are visible to every user (NOT scoped
@@ -69,9 +95,18 @@ async def semantic_search(
     Returns results ranked by combined score (keyword match weight + vector
     cosine similarity). Falls back to keyword-only if embeddings are
     unavailable.
+
+    Per-entity vector weights (VECTOR_SEARCH_WEIGHTS) scale the vector score
+    for each entity type, and the similarity threshold (VECTOR_SEARCH_
+    SIMILARITY_THRESHOLD) drops low-similarity vector hits before ranking.
     """
     types = list(entity_types) if entity_types is not None else list(_ENTITY_MAP.keys())
     results: list[dict] = []
+
+    # Resolve tuning knobs once per call.
+    weights = _resolve_vector_weights()
+    similarity_threshold = settings.VECTOR_SEARCH_SIMILARITY_THRESHOLD
+    keyword_weight = settings.VECTOR_SEARCH_KEYWORD_WEIGHT
 
     # Try vector search first (needs embedding for the query text).
     embedding = await generate_embedding("query", {"symptoms": query})
@@ -79,6 +114,7 @@ async def semantic_search(
     for etype in types:
         cfg = _ENTITY_MAP[etype]
         model = cfg["model"]
+        entity_weight = weights.get(etype, 1.0)
 
         base_filters = []
         if vehicle_ids is not None and not cfg.get("community"):
@@ -108,7 +144,9 @@ async def semantic_search(
         keyword_rows = (await db.execute(keyword_stmt)).scalars().all()
 
         for row in keyword_rows:
-            results.append(_serialise(etype, row, score=1.0, method="keyword"))
+            results.append(_serialise(
+                etype, row, score=keyword_weight, method="keyword"
+            ))
 
         # Vector search (cosine similarity) — runs if embedding available.
         if embedding is not None:
@@ -133,7 +171,15 @@ async def semantic_search(
                 # Skip if already found via keyword (dedupe).
                 if any(r["id"] == row.id for r in results):
                     continue
-                results.append(_serialise(etype, row, score=score, method="vector"))
+                # Drop results below the configured similarity threshold.
+                if score < similarity_threshold:
+                    continue
+                results.append(_serialise(
+                    etype,
+                    row,
+                    score=round(score * entity_weight, 3),
+                    method="vector",
+                ))
 
     # Sort by score descending.
     results.sort(key=lambda r: r["score"], reverse=True)
