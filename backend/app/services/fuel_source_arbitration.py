@@ -33,8 +33,9 @@ from typing import Iterable
 SOURCE_AUTHORITY: dict[str, int] = {
     "nsw": 0,  # GOVERNMENT_MANDATORY_REALTIME
     "qld": 0,  # GOVERNMENT_MANDATORY_REALTIME
-    "sa": 0,   # GOVERNMENT_MANDATORY_REALTIME (SAFPIS — included for forward
-               # compatibility, the SA feed is wired in a follow-up).
+    "sa": 0,   # GOVERNMENT_MANDATORY_REALTIME (SAFPIS — reserved for
+               # forward compatibility; the feed is disabled under
+               # AUT-5072, endpoint NXDOMAIN, no token contracted).
     "wa": 1,   # GOVERNMENT_DAILY (FuelWatch)
     "other": 2,  # OTHER (e.g. 7-Eleven, Caltex, or community scrapes).
 }

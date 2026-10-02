@@ -52,10 +52,14 @@ x-backend-base: &backend-base
     # AUT-2218: QLD DirectAPI subscription token (AUT-1813 phase). Empty key
     # disables the feed (mirrors the NSW no-key pattern).
     FUEL_QLD_API_KEY: ${FUEL_QLD_API_KEY:-}
-    # AUT-2610: SA SAFPIS ingester (AUT-2406). Same Informed Sources subscriber
-    # token as QLD; empty key disables the feed (mirrors the NSW no-key pattern).
+    # AUT-2610/AUT-5072: SA SAFPIS ingester. Disabled — the SAFPIS
+    # Direct API host (fppdirectapi.safuelpricinginformation.com.au)
+    # is NXDOMAIN and no subscriber token was ever contracted (the
+    # AUT-2372 research doc lists the production URL as "to be
+    # confirmed from registration"). Flip to "true" once an
+    # aggregator is contracted (same pattern as VIC/AUT-4976).
     FUEL_SA_API_KEY: ${FUEL_SA_API_KEY:-}
-    FUEL_SA_ENABLED: "true"
+    FUEL_SA_ENABLED: "false"
   depends_on:
     postgres:
       condition: service_healthy
