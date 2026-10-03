@@ -810,10 +810,9 @@ async def test_google_webhook_pubsub_envelope(google_cfg, monkeypatch) -> None:
 # --- security regressions (AUT-622 F1/F6) -------------------------------------
 
 
-def test_apple_webhook_rejects_forged_root_with_copied_subject() -> None:
-    """F1 regression: a forged chain whose terminal cert copies Apple's subject
-    but is signed by an attacker key must be rejected against the REAL
-    APPLE_ROOT_CA_G3 constant (deliberately not monkeypatched)."""
+def _forged_root_jws() -> tuple[str, list[str]]:
+    """JWS + x5c from an attacker chain whose terminal cert copies Apple's root
+    subject but is signed by an attacker key."""
     from cryptography import x509
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import ec
@@ -868,7 +867,16 @@ def test_apple_webhook_rejects_forged_root_with_copied_subject() -> None:
         algorithm="ES256",
         headers={"alg": "ES256", "x5c": x5c},
     )
+    return signed, x5c
 
+
+def test_apple_webhook_rejects_forged_root_with_copied_subject() -> None:
+    """F1 regression: a forged chain whose terminal cert copies Apple's subject
+    but is signed by an attacker key must be rejected against the REAL
+    APPLE_ROOT_CA_G3 constant (deliberately not monkeypatched)."""
+    from cryptography import x509
+
+    signed, x5c = _forged_root_jws()
     certs = [x509.load_der_x509_certificate(base64.b64decode(c)) for c in x5c]
     root = x509.load_pem_x509_certificate(iap.APPLE_ROOT_CA_G3.encode())
     assert iap._chain_verified(certs, root) is False
@@ -929,6 +937,75 @@ async def test_google_jwks_serves_from_cache() -> None:
             raise AssertionError("JWKS cache miss — refetched when cached")
 
     assert await iap._google_jwks(_NoFetchClient(), "k1") is not None
+
+
+# --- apple webhook receiver runs without App Store Connect creds (AUT-5358) --
+
+@pytest.fixture
+def apple_receiver_app():
+    """Billing router over a stub DB, with apple_configured() False
+    (the autouse clean_iap_config fixture clears the credentials) —
+    the state the receiver must tolerate while Nathan has not landed
+    the Issuer ID / Key ID / .p8 yet."""
+    from fastapi import FastAPI
+
+    from app.api.v1 import billing as billing_api
+    from app.db.session import get_db
+
+    a = FastAPI()
+    a.include_router(billing_api.router, prefix="/api/v1")
+    a.dependency_overrides[get_db] = lambda: _FakeDB(scalar_result=None)
+    return a
+
+
+def _apple_receiver_post(receiver_app, payload):
+    from httpx import ASGITransport, AsyncClient
+
+    async def _go():
+        transport = ASGITransport(app=receiver_app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            return await client.post("/api/v1/billing/iap/webhook/apple", json=payload)
+
+    return anyio_run(_go)
+
+
+def test_apple_webhook_receiver_empty_body_400_not_503(apple_receiver_app) -> None:
+    """AUT-5358 acceptance: {} must fail on the payload (400), not on
+    missing credentials (503) — a 503 here would let Apple disable the
+    registered Server Notifications URL."""
+    assert iap.apple_configured() is False
+    resp = _apple_receiver_post(apple_receiver_app, {})
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "Missing signedPayload"
+
+
+def test_apple_webhook_receiver_rejects_non_object_body(apple_receiver_app) -> None:
+    resp = _apple_receiver_post(apple_receiver_app, ["not-an-object"])
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "Invalid JSON body"
+
+
+def test_apple_webhook_receiver_rejects_untrusted_chain(apple_receiver_app) -> None:
+    """Forged/untrusted-chain signedPayload is a 400, with no
+    credentials configured."""
+    signed, _x5c = _forged_root_jws()
+    resp = _apple_receiver_post(apple_receiver_app, {"signedPayload": signed})
+    assert resp.status_code == 400
+    assert "Invalid App Store notification" in resp.json()["detail"]
+
+
+def test_apple_webhook_receiver_accepts_trusted_chain_unconfigured(
+    apple_receiver_app, monkeypatch
+) -> None:
+    """A chain that terminates at the pinned root is verified and
+    answered 200 even with no credentials: the out-of-band App Store
+    re-verification is what stays credential-gated (inside
+    refresh_entitlement), not the receiver itself."""
+    root_pem, signed, _root_key, _root_cert = _test_root_leaf()
+    monkeypatch.setattr(iap, "APPLE_ROOT_CA_G3", root_pem)
+    resp = _apple_receiver_post(apple_receiver_app, {"signedPayload": signed})
+    assert resp.status_code == 200
+    assert resp.json() == {"received": True}
 
 
 def anyio_run(fn, *args):
