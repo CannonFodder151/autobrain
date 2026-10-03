@@ -29,8 +29,11 @@ def _has_table(name: str) -> bool:
 def _has_constraint(name: str) -> bool:
     if context.is_offline_mode():
         return False
-    insp = sa.inspect(op.get_bind())
-    return any(c["name"] == name for c in insp.get_constraints("passkey_credentials"))
+    bind = op.get_bind()
+    if not _has_table("passkey_credentials"):
+        return False  # nothing to reflect; table created by aut4925_missing_tables
+    insp = sa.inspect(bind)
+    return any(c["name"] == name for c in insp.get_unique_constraints("passkey_credentials"))
 
 
 def upgrade() -> None:
