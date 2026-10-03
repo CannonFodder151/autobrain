@@ -1,0 +1,170 @@
+# AUT-5261: restore the EP2 Demo environment (demo.autobrainservice.app).
+#
+# Restores the `autobrain-demo` Portainer stack that was deleted from EP2,
+# which is why NPM proxy host 70 (demo -> 10.0.3.17:8089) has no upstream and
+# the domain returns 502.
+#
+# Shape mirrors the working Default stack on the same host (own postgres,
+# redis, minio; backend+ai+frontend), which is also what the surviving
+# `autobrain-demo_{postgres,redis,minio}-data` volumes and
+# docs/Marketing-and-Website/demo-environment.md describe.
+#
+# Frontend listens on 8089 — the port NPM proxy host 70 forwards to.
+x-core-env: &core-env
+  ENVIRONMENT: production
+  PYTHONPATH: /app
+  REDIS_URL: "redis://redis:6379/0"
+  MINIO_ENDPOINT: minio:9000
+  MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+  MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+  AI_LOCAL_BASE_URL: http://ai:8001
+  AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY}
+  AI_ROUTER_URL: ${AI_ROUTER_URL}
+  AI_ROUTER_API_KEY: ${AI_ROUTER_API_KEY}
+  AI_ROUTER_MODEL: ${AI_ROUTER_MODEL}
+  AI_ROUTER_TIMEOUT_SECONDS: 120
+  EMBEDDING_MODEL: ${EMBEDDING_MODEL}
+  AI_ENABLED: "true"
+  MARKET_DATA_URL: http://ai:8000
+  MARKET_DATA_API_KEY: ${MARKET_DATA_API_KEY}
+  # AUT-5261: read-only demo account, seeded on boot. Makes /health report
+  # "env":"demo" (backend/app/main.py) and provisions demo@autobrainservice.app.
+  DEMO_MODE: "true"
+  DEMO_EMAIL: demo@autobrainservice.app
+  DEMO_PASSWORD: demo
+  DEMO_DISPLAY_NAME: Demo Garage
+  # Demo is a public prospect sandbox: no signups, no billing, no email.
+  SELF_SIGNUP_ENABLED: "false"
+  LICENSE_ENABLED: "false"
+  SOCIAL_FEDERATION_HUB_URL: ${SOCIAL_FEDERATION_HUB_URL}
+  SOCIAL_FEDERATION_HOSTED: "false"
+  APP_BASE_URL: https://demo.autobrainservice.app
+  REGO_LOOKUP_URL: ${REGO_LOOKUP_URL}
+  REGO_LOOKUP_API_KEY: ${REGO_LOOKUP_API_KEY}
+  SECRET_KEY: ${SECRET_KEY}
+  CORS_ALLOWED_ORIGINS: "[]"
+
+x-backend-base: &backend-base
+  image: ${DOCKERHUB_USERNAME:-cannonfodder151}/autobrain-backend:${IMAGE_TAG}
+  restart: unless-stopped
+  environment:
+    <<: *core-env
+    POSTGRES_HOST: postgres
+    POSTGRES_USER: ${POSTGRES_USER}
+    POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    POSTGRES_DB: ${POSTGRES_DB}
+    CELERY_BROKER_URL: redis://redis:6379/1
+    CELERY_RESULT_BACKEND: redis://redis:6379/2
+    MINIO_BUCKET: ${MINIO_BUCKET}
+    MINIO_PUBLIC_ENDPOINT: https://demo.autobrainservice.app
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp
+      - /var/run/postgresql
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - demo-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7.2.5-alpine@sha256:6aaf3f5e6bc8a592fbfe2cccf19eb36d27c39d12dab4f4b01556b7449e7b1f44
+    restart: unless-stopped
+    # Demo has no password (LAN-only, matching the Default stack on EP2).
+    command: ["redis-server"]
+    volumes:
+      - demo-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+    volumes:
+      - demo-minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    <<: *backend-base
+    # init-minio -> bootstrap (alembic upgrade head + admin/demo seed) -> celery + uvicorn
+    command: >-
+      sh -c "/init-minio.sh
+      && python -m app.db.bootstrap
+      && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &)
+      && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    expose:
+      - "8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  ai:
+    image: ${DOCKERHUB_USERNAME:-cannonfodder151}/autobrain-ai:${IMAGE_TAG}
+    restart: unless-stopped
+    environment:
+      API_KEY: ${MARKET_DATA_API_KEY}
+      AI_ROUTER_URL: ${AI_ROUTER_URL}
+      AI_ROUTER_API_KEY: ${AI_ROUTER_API_KEY}
+      AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY}
+    expose:
+      - "8000"
+      - "8001"
+    depends_on:
+      backend:
+        condition: service_started
+
+  frontend:
+    image: ${DOCKERHUB_USERNAME:-cannonfodder151}/autobrain-frontend:demo
+    restart: unless-stopped
+    # 8089 is what NPM proxy host 70 forwards demo.autobrainservice.app to.
+    ports:
+      - "8089:8080"
+    environment:
+      BACKEND_URL: http://backend:8000
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- \"${BACKEND_URL:-http://backend:8000}/health\" | grep -q '\"status\":\"ok\"'"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      - backend
+
+# Fresh volume names on purpose: the deleted stack's orphaned
+# `autobrain-demo_{postgres,redis,minio}-data` volumes carry an
+# unknown (pre-deletion) password, so reusing them would leave the
+# new Postgres/MinIO creds unable to unlock the old data dirs.
+# Demo data is disposable and re-seeded on boot (DEMO_MODE), so
+# starting clean is correct and cheaper than recovering it.
+volumes:
+  demo-postgres-data:
+  demo-redis-data:
+  demo-minio-data:
