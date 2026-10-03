@@ -277,7 +277,7 @@ class Settings(BaseSettings):
     IAP_APPLE_ISSUER_ID: str = ""              # App Store Connect API key issuer id
     IAP_APPLE_KEY_ID: str = ""                 # App Store Connect API key id
     IAP_APPLE_PRIVATE_KEY: str = ""            # App Store Connect API key .p8 PEM (secret)
-    IAP_APPLE_BUNDLE_ID: str = "com.autobrainservice.app"
+    IAP_APPLE_BUNDLE_ID: str = "com.autobrain.autobrain"
     # Verify-on-refresh (AUT-617): GET /auth/me re-validates the stored store
     # purchase token against the store API when the entitlement is already
     # expired or within this many days of expiring. Keeps renewals/refunds
