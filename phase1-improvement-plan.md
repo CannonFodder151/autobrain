@@ -44,7 +44,7 @@ Dev/Prod already consolidated: backend runs uvicorn (API:8000) + uvicorn (AI gat
 
 ### Child Issues to Create
 
-- `AUT-XXXX` Merge market-data scraper into backend Celery (hosted)
+- `AUT-3843` Merge market-data scraper into backend Celery (hosted) — **implemented on feat/AUT-4113-market-data-celery**
 - `AUT-XXXX` Consolidate autobrain-backup + backup-agent into single backup service
 - `AUT-XXXX` Verify container count reduction end-to-end on EP5 (smoke test)
 
