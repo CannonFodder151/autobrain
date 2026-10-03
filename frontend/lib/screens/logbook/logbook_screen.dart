@@ -165,7 +165,8 @@ class _LogbookScreenState extends State<LogbookScreen> {
 
   Future<Map<String, double>?> _gps() async {
     try {
-      return await getCurrentPosition();
+      final result = await getCurrentPosition();
+      return result.coordinates;
     } catch (_) {
       return null;
     }
