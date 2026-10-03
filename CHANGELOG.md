@@ -10,6 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+- fix(backend): use pgvector native type binding in search.py — replaced string interpolation with `pgvector.sqlalchemy.Vector` type for safe embedding parameter binding, avoiding 22P02 errors on dimension mismatches. Added asyncpg codec registration in session.py for binary protocol support.
 
 ## [0.3.305] - 2026-10-03
 
