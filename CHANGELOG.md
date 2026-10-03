@@ -12,6 +12,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Fixed (AUT-5318)
+- fix(backend): `_ensure_next_service` dropped the local `list_completed_services` import in #888, so `NameError` broke every odometer-triggered auto-suggest (any fuel or logbook write on a vehicle with auto-suggest on and no scheduled service) with a 500. Restores the import; verified by replaying both write paths against a scratch DB with the AI gateway forced down.
 - fix(backend): auto-suggested service was never created for most vehicles. `_ensure_next_service` (AUT-1275) kept only completed services whose `service_type` was one of ten canonical types, returned early when the vehicle had no service history at all, and silently gave up when the AI gateway was unreachable — so adding a fuel or logbook entry created no scheduled service for a car with only "repair"/"tyres"/"custom" records, a car with no logged services, or during any AI outage. All completed services now count as history, history is no longer required, and a deterministic manufacturer interval (measured gap between past services, else 20,000 km / 12 months — the same baseline as the ai/ service-prediction fallback) creates the suggestion whenever the gateway does not answer. Adds `deterministic_next_due()` + `backend/tests/test_aut5318_deterministic_next_due.py` (no DB) and an end-to-end case in `backend/tests/test_odometer_priority.py` (gateway down, repair-only history, zero history).
 
 ## [0.3.305] - 2026-10-03
