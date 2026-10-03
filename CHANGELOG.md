@@ -11,6 +11,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-5063)
+- fix(security): depublish the compromised `demo@autobrainservice.app` / `demo`
+  credential literal (CWE-798). `DEMO_PASSWORD` defaulted to `"demo"` in
+  `backend/app/core/config.py`, so any `DEMO_MODE=true` run without an explicit
+  `DEMO_PASSWORD` re-seeded the old demo password; the literal also shipped in
+  `README.md`, `.env.example`, `docs/` and the Flutter login screen.
+  `seed_demo()` / `reset_demo()` now fail closed — empty `DEMO_PASSWORD` skips
+  and logs `demo_seed_skipped_no_password` / `demo_reset_skipped_no_password`
+  instead of creating an account with a blank/default password, and
+  `reset_demo()` skips before deleting so a reset can never wipe the demo
+  environment for good. Adds the fail-closed cases to
+  `backend/tests/test_seed_reset_demo.py`. No redeploy: AUT-2409 keeps deploys
+  hosted-only and the demo stack is down (AUT-5057).
+
 ## [0.3.307] - 2026-10-03
 
 ### Fixed (AUT-5318)

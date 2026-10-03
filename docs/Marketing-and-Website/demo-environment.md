@@ -4,7 +4,7 @@
 
 The demo instance is a **public, read/write AutoBrain environment** at `demo.autobrainservice.app` running on the **Demo stack** (Portainer endpoint 2 = Portainer-Host). It is separate from the Default and Hosted stacks.
 
-**Credentials:** `demo@autobrainservice.app` / `demo` (configurable via `DEMO_EMAIL`/`DEMO_PASSWORD`/`DEMO_DISPLAY_NAME` env vars).
+**Credentials:** login is `demo@autobrainservice.app`; the password is **not stored in this repo** — it is distributed via the Paperclip secret `demo/demo-account-password` and injected into the demo stack as `DEMO_PASSWORD` (alongside `DEMO_EMAIL`/`DEMO_DISPLAY_NAME`). With `DEMO_MODE=true` and `DEMO_PASSWORD` empty, demo seeding fails closed — no account is created (AUT-5063).
 
 **Purpose:** Let prospects try AutoBrain without signing up. Also used by QA for regression testing.
 

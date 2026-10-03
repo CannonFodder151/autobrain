@@ -92,6 +92,15 @@ async def seed_demo() -> None:
     if not settings.DEMO_MODE:
         return
     email = settings.DEMO_EMAIL.strip().lower()
+    # AUT-5063: fail closed — never create the demo account with a
+    # blank/default password.
+    if not settings.DEMO_PASSWORD:
+        logger.warning(
+            "demo_seed_skipped_no_password",
+            email=email,
+            hint="set DEMO_PASSWORD (secret: demo/demo-account-password)",
+        )
+        return
     async with SessionLocal() as db:
         existing = await db.scalar(select(User).where(User.email == email))
         if existing:
@@ -122,6 +131,15 @@ async def reset_demo() -> None:
     if not settings.DEMO_MODE:
         return
     email = settings.DEMO_EMAIL.strip().lower()
+    # AUT-5063: fail closed — a reset we cannot re-seed would delete
+    # the demo environment, so skip it when the password is unset.
+    if not settings.DEMO_PASSWORD:
+        logger.warning(
+            "demo_reset_skipped_no_password",
+            email=email,
+            hint="set DEMO_PASSWORD (secret: demo/demo-account-password)",
+        )
+        return
     async with SessionLocal() as db:
         user = await db.scalar(select(User).where(User.email == email))
         if not user:
