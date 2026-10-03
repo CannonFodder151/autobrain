@@ -16,6 +16,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed (AUT-5541)
 - fix(valuation): the car Valuation tool compared cars of the wrong model year — a 2009 Toyota Crown was being valued off 2019 Crowns. Two causes: `market-data`'s `carsguide._filter_year` fell back to the **whole unfiltered listing set** whenever the requested year matched fewer than 3 results (which is exactly what a rare-year car hits), and the backend then aggregated that mixed set into the median. Year filtering now widens in tiers (0 → 1 → 3 → 5 years, first tier with 3 listings wins) and returns nothing past ±5, so a thin same-year sample surfaces as an honest "no market data" instead of a confidently wrong number. `market_data._build` applies the same filter server-side so a provider that ignores the requested year can no longer poison the median. `advisor.value.find_comparables` now year-checks each *listing* (a cache row for one model year can hold listings from another — the row-level filter was not enough) and sorts by nearest model year instead of newest-year-first, which is what put a 2019 Crown at the top of a 2009 car's comparison set. Adds `backend/tests/test_aut5541_comparables_year.py` and extends the `market-data` self-check.
 
+### Fixed (AUT-5063)
+- fix(security): depublish the compromised `demo@autobrainservice.app` / `demo`
+  credential literal (CWE-798). `DEMO_PASSWORD` defaulted to `"demo"` in
+  `backend/app/core/config.py`, so any `DEMO_MODE=true` run without an explicit
+  `DEMO_PASSWORD` re-seeded the old demo password; the literal also shipped in
+  `README.md`, `.env.example`, `docs/` and the Flutter login screen.
+  `seed_demo()` / `reset_demo()` now fail closed — empty `DEMO_PASSWORD` skips
+  and logs `demo_seed_skipped_no_password` / `demo_reset_skipped_no_password`
+  instead of creating an account with a blank/default password, and
+  `reset_demo()` skips before deleting so a reset can never wipe the demo
+  environment for good. Adds the fail-closed cases to
+  `backend/tests/test_seed_reset_demo.py`. No redeploy: AUT-2409 keeps deploys
+  hosted-only and the demo stack is down (AUT-5057).
 ## [0.3.308] - 2026-10-04
 
 ### Fixed (AUT-5433)
