@@ -270,6 +270,28 @@ jobs:
             --build-arg API_BASE_URL=${API_BASE_URL} --build-arg WS_BASE_URL=${WS_BASE_URL} --build-arg CARTO_API_KEY=${CARTO_API_KEY} \
             -f docker/frontend/Dockerfile .
 
+      # AUT-5261: the Demo tier had NO frontend build. `API_BASE_URL` is baked
+      # into the Flutter bundle at build time, so the Demo stack needs its own
+      # image — `:default` is compiled against default.autobrainservice.app and
+      # `:hosted` against hosted.autobrainservice.app. Neither is correct for
+      # demo.autobrainservice.app. The last :demo image on EP2 was built
+      # 2026-09-28 with hosted's base URL, so the only pre-existing :demo
+      # artifact pointed Demo traffic at the Hosted backend.
+      - name: Build and push demo-tier frontend image (linux/amd64)
+        if: steps.version_only.outputs.skip != 'true'
+        env:
+          API_BASE_URL: https://demo.autobrainservice.app/api/v1
+          WS_BASE_URL: wss://demo.autobrainservice.app/ws
+          CARTO_API_KEY: ${{ secrets.CARTO_API_KEY || '' }}   # AUT-4690
+        run: |
+          set -euo pipefail
+          : "${CARTO_API_KEY:?GitHub secret CARTO_API_KEY is unset or empty — the frontend build requires it (AUT-4690)}"
+          echo "==> building autobrain-frontend:demo-amd64"
+          docker buildx build --platform linux/amd64 --push \
+            -t "cannonfodder151/autobrain-frontend:demo-amd64" \
+            --build-arg API_BASE_URL=${API_BASE_URL} --build-arg WS_BASE_URL=${WS_BASE_URL} --build-arg CARTO_API_KEY=${CARTO_API_KEY} \
+            -f docker/frontend/Dockerfile .
+
   publish-manifest:
     # Tag the amd64 images as the default platform manifest (AUT-967).
     # Multi-arch manifests (amd64+arm64) are built by build-hosted.yml when
@@ -326,6 +348,11 @@ jobs:
           docker buildx imagetools create \
             -t "cannonfodder151/autobrain-frontend:default" \
             "cannonfodder151/autobrain-frontend:default-amd64"
+          # AUT-5261: promote the demo-tier amd64 image to the :demo tag
+          echo "==> manifest autobrain-frontend:demo"
+          docker buildx imagetools create \
+            -t "cannonfodder151/autobrain-frontend:demo" \
+            "cannonfodder151/autobrain-frontend:demo-amd64"
 
   sync-changelog:
     needs: publish-manifest
