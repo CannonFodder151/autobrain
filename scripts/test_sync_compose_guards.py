@@ -78,5 +78,15 @@ problems = sync.verify_running(FakeArgs(), services, attempts=1, delay=0)
 assert ("s-frontend-1", "stuck in state created") in problems, problems
 assert any("'postgres' has no running container" in w for _, w in problems), problems
 
+# AUT-4981: the exit-5 recovery command must name the real orphan container,
+# not print a literal "<NAME>" placeholder an operator has to guess at.
+clash_names = [name for name, _, _ in clashes]
+cmd = sync.recovery_delete_cmd(FakeArgs(), clash_names)
+assert "<NAME>" not in cmd, cmd
+for name in clash_names:
+    assert f"/docker/containers/{name}?force=true&v=true" in cmd, cmd
+# One DELETE line per clashing container.
+assert cmd.count("curl -X DELETE") == len(clash_names), cmd
+
 print("OK: sync-compose guards")
 sys.exit(0)

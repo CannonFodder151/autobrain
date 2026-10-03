@@ -10,6 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+- deploy(sync): `scripts/sync-compose-to-portainer.py` now prints the real orphan
 
 ## [0.3.306] - 2026-10-03
 
