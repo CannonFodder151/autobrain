@@ -150,12 +150,20 @@ async def iap_webhook_apple(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """App Store Server Notifications v2 (JWS-signed signedPayload)."""
-    if not iap.apple_configured():
-        raise HTTPException(status_code=503, detail=_IAP_NOT_CONFIGURED)
+    """App Store Server Notifications v2 (JWS-signed signedPayload).
+
+    The signedPayload verifies locally against the pinned Apple Root
+    CA G3 (AUT-5358), so this receiver must stay up without App Store
+    Connect credentials — registering the Server Notifications URL
+    before the Issuer ID / Key ID / .p8 land must not 503, or Apple
+    can disable the URL. Re-verification against the App Store API
+    remains credential-gated inside iap.refresh_entitlement.
+    """
     try:
         body = await request.json()
     except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    if not isinstance(body, dict):
         raise HTTPException(status_code=400, detail="Invalid JSON body")
     signed = body.get("signedPayload")
     if not signed:
