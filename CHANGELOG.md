@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.307] - 2026-10-03
+
 ### Fixed (AUT-5318)
 - fix(backend): `_ensure_next_service` lost its function-local `list_completed_services` import in #888, so the AUT-5318 auto-suggest raised `NameError` and returned 500 on every odometer-triggered suggestion — i.e. adding a fuel or logbook entry to a vehicle with auto-suggest on and no scheduled service still created no service item. Restores the import.
 
