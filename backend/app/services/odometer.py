@@ -134,6 +134,8 @@ async def _ensure_next_service(db: AsyncSession, vehicle: Vehicle) -> None:
     # filter kept only canonical types, so a vehicle whose records are
     # "repair"/"tyres"/"custom" (or that has none at all) produced an
     # empty history and no service item was ever created.
+    from app.services.service_records import list_completed_services
+
     history = await list_completed_services(db, vehicle.id)
 
     from app.services.ai_client import predict_service
