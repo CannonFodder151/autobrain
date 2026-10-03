@@ -30,6 +30,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   `create_all` (AUT-5122). Retention stays owned by autobrain-backup
   (AUT-5136); regression tests cover the `/ingest` path, the awaited
   push and the retention-ownership contract.
+- fix(backup): `logbook_entries.vehicle_type` missing on hosted breaks the
+  hourly off-site backup (AUT-5267). Same drift class as the
+  `devices.vehicle_type` repair above, different table: the
+  `create_all` fallback hosted booted through cannot add a column to an
+  existing table, so the four AUT-2705 PHEV columns never landed there and
+  `serialize_all()` raised `UndefinedColumnError` on every run from the
+  2026-10-02 19:43Z deploy onwards. New idempotent migration
+  `aut5267_logbook_veh_type` adds whichever of the four are missing, so it
+  is a no-op on every environment that already has them. Also adds a
+  repo-wide guard test so no stdlib logger can again be called with
+  structlog-style kwargs (the defect above cost six hours of silently
+  failed production backups).
 
 - fix(fuel): disable the SA (SAFPIS) feed (AUT-5072).
   `FUEL_SA_ENABLED: "true"` was set in both compose files

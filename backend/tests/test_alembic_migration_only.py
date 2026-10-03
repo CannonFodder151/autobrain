@@ -140,3 +140,38 @@ def test_pending_revision_actually_applies(fresh_db):
         _sql(fresh_db, "select to_regclass('public.fuel_price_snapshots') is not null")
     ), "head revision did not create fuel_price_snapshots"
     assert asyncio.run(_sql(fresh_db, "select version_num from alembic_version")) == _head()
+
+
+def test_aut5267_logbook_vehicle_type_drift_repaired(fresh_db):
+    """AUT-5267: the AUT-2705 logbook columns must survive a `create_all`-era host.
+
+    ``create_all`` cannot add a column to an existing table, so hosted (stamped
+    at ``aut4925_missing_tables``) never got the columns AUT-2705 declared. The
+    ORM still selects them, so ``serialize_all`` raised
+    ``UndefinedColumnError: column logbook_entries.vehicle_type does not exist``
+    and the hourly off-site backup failed every hour.
+
+    Reproduce the drift (drop the columns from a create_all-built schema), then
+    assert ``upgrade head`` puts them back.
+    """
+    _create_all(fresh_db)
+    _alembic(fresh_db, "stamp", "aut4925_missing_tables")
+    asyncio.run(_exec(
+        fresh_db,
+        "ALTER TABLE logbook_entries "
+        "DROP COLUMN IF EXISTS vehicle_type, "
+        "DROP COLUMN IF EXISTS ev_distance_km, "
+        "DROP COLUMN IF EXISTS ice_distance_km, "
+        "DROP COLUMN IF EXISTS charge_added_kwh",
+    ))
+    _alembic(fresh_db, "upgrade", "head")
+    present = set(asyncio.run(_sql(
+        fresh_db,
+        "SELECT coalesce(array_agg(column_name), '{}') FROM information_schema.columns "
+        "WHERE table_name = 'logbook_entries'",
+    )))
+    missing = {
+        "vehicle_type", "ev_distance_km", "ice_distance_km", "charge_added_kwh",
+    } - present
+    assert not missing, f"upgrade head did not restore logbook_entries columns: {sorted(missing)}"
+    assert asyncio.run(_sql(fresh_db, "select version_num from alembic_version")) == _head()
