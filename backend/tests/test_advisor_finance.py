@@ -30,6 +30,8 @@ from app.schemas.advisor import (  # noqa: E402
     AdvisorFinanceModeFinance,
     AdvisorFinanceModeLease,
     AdvisorFinanceModeNovated,
+    TimeLeftLoanData,
+    TimeLeftLoanRequest,
 )
 from app.services.advisor import (  # noqa: E402
     LEASE_MAX_TERM_MONTHS,
@@ -41,6 +43,7 @@ from app.services.advisor import (  # noqa: E402
     _lease_residual_pct,
     _loan_monthly_payment,
     compute_finance_plan,
+    compute_loan_time_left,
 )
 
 
@@ -267,3 +270,144 @@ def test_self_check_hand_rolled_matches_helper_for_simple_case() -> None:
     assert fin.total_cost == 24_000.0
     assert len(fin.amortization) == 24
     assert all(row.payment == 1000.0 for row in fin.amortization)
+
+
+# --- loan time-left (AUT-3589) ----------------------------------------------
+
+def test_loan_time_left_zero_balance_returns_zero_periods() -> None:
+    res = compute_loan_time_left(
+        remaining_amount=0.0,
+        annual_rate_pct=7.5,
+        repayment_frequency="monthly",
+        repayment_amount=500.0,
+    )
+    data = TimeLeftLoanData(**res)
+    assert data.periods == 0
+    assert data.note is not None
+    assert "already paid off" in data.note.lower()
+
+
+def test_loan_time_left_zero_rate_monthly() -> None:
+    # 12,000 remaining, 0% rate, $500/month -> 24 months exactly.
+    res = compute_loan_time_left(
+        remaining_amount=12_000.0,
+        annual_rate_pct=0.0,
+        repayment_frequency="monthly",
+        repayment_amount=500.0,
+    )
+    data = TimeLeftLoanData(**res)
+    assert data.periods == 24
+    assert data.periods_per_year == 12
+    assert data.total_interest == 0.0
+    assert data.total_paid == 12_000.0
+    assert data.note is None
+
+
+def test_loan_time_left_zero_rate_fortnightly() -> None:
+    # 13,000 remaining, 0% rate, $500/fortnight -> 26 fortnights = 1 year.
+    res = compute_loan_time_left(
+        remaining_amount=13_000.0,
+        annual_rate_pct=0.0,
+        repayment_frequency="fortnightly",
+        repayment_amount=500.0,
+    )
+    data = TimeLeftLoanData(**res)
+    assert data.periods == 26
+    assert data.periods_per_year == 26
+    assert data.total_paid == 13_000.0
+
+
+def test_loan_time_left_with_interest_monthly() -> None:
+    # Standard amortisation: P=20,000, 6% p.a., $500/month.
+    # Period rate = 0.5%, interest_month1 = 100. Principal_paid = 400.
+    # Hand-rolled loop gives ~48 months.
+    res = compute_loan_time_left(
+        remaining_amount=20_000.0,
+        annual_rate_pct=6.0,
+        repayment_frequency="monthly",
+        repayment_amount=500.0,
+    )
+    data = TimeLeftLoanData(**res)
+    assert data.periods is not None
+    assert 40 <= data.periods <= 55
+    assert data.total_interest > 0
+    assert data.total_paid > 20_000.0
+
+
+def test_loan_time_left_with_fees() -> None:
+    # 10,000 remaining, 0% rate, $1000/month + $50 fee -> effective $950/mo principal
+    # 10,000 / 950 = 10.53 periods -> 11 periods.
+    res = compute_loan_time_left(
+        remaining_amount=10_000.0,
+        annual_rate_pct=0.0,
+        repayment_frequency="monthly",
+        repayment_amount=1_000.0,
+        fees_per_period=50.0,
+    )
+    data = TimeLeftLoanData(**res)
+    assert data.periods == 11
+    assert data.total_fees == 550.0
+    assert data.total_paid == 10_550.0
+
+
+def test_loan_time_left_repayment_too_low_returns_none() -> None:
+    # 10,000 at 12% p.a. monthly -> first interest = 100.
+    # Repayment of $50 + $10 fee = $60 < $100 -> never pays off.
+    res = compute_loan_time_left(
+        remaining_amount=10_000.0,
+        annual_rate_pct=12.0,
+        repayment_frequency="monthly",
+        repayment_amount=50.0,
+        fees_per_period=10.0,
+    )
+    data = TimeLeftLoanData(**res)
+    assert data.periods is None
+    assert data.note is not None
+    assert "never decrease" in data.note.lower()
+
+
+def test_loan_time_left_zero_repayment_returns_none() -> None:
+    res = compute_loan_time_left(
+        remaining_amount=10_000.0,
+        annual_rate_pct=7.5,
+        repayment_frequency="monthly",
+        repayment_amount=0.0,
+    )
+    data = TimeLeftLoanData(**res)
+    assert data.periods is None
+    assert data.note is not None
+
+
+def test_loan_time_left_max_periods_cap() -> None:
+    # Tiny repayment that would take > 1200 periods.
+    res = compute_loan_time_left(
+        remaining_amount=100_000.0,
+        annual_rate_pct=0.0,
+        repayment_frequency="weekly",
+        repayment_amount=10.0,
+        max_periods=100,
+    )
+    data = TimeLeftLoanData(**res)
+    assert data.periods is None
+    assert "not paid off within 100 periods" in (data.note or "")
+
+
+def test_loan_time_left_schema_validation() -> None:
+    req = TimeLeftLoanRequest(
+        remaining_amount=10_000.0,
+        annual_rate_pct=7.5,
+        repayment_frequency="monthly",
+        repayment_amount=500.0,
+    )
+    assert req.fees_per_period == 0.0
+
+    res = compute_loan_time_left(
+        remaining_amount=10_000.0,
+        annual_rate_pct=7.5,
+        repayment_frequency="monthly",
+        repayment_amount=500.0,
+    )
+    data = TimeLeftLoanData(**res)
+    assert data.periods is not None
+    assert data.periods_per_year == 12
+    assert data.repayment_frequency == "monthly"
