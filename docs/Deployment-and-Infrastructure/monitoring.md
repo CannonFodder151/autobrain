@@ -47,6 +47,15 @@ uptime monitor:
 - Service status → `#status` channel; incidents → `#incidents` channel
   (Deployment team owns triage).
 - The `backup` service sends email alerts on backup failure/corruption.
+- **AUT-5134:** `scripts/hosted-health-watch.sh` (systemd timer, every
+  2 min) posts to Discord via the n8n Reporter when a container's
+  `RestartCount` grows, when a running container is not `healthy`,
+  or when it leaves the running state — plus one embed on recovery.
+  See "Health watchdog" in the deployment guide.
+- **AUT-5134:** the backend/AI entrypoints run `preflight-secrets.sh`
+  as uid 1000 before any secret is read: a lost read/traverse perm on
+  the host secrets dir exits 1 in seconds with one actionable line,
+  instead of crash-looping silently.
 
 ## Tracing (future)
 

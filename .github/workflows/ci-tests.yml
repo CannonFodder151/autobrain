@@ -167,6 +167,15 @@ jobs:
           python scripts/check-compose-consolidation.py
           python -m unittest scripts/test_check_compose_consolidation.py -v
 
+      # AUT-5134: fail fast on a lost secrets-dir read/traverse perm,
+      # and alert when a hosted container restart-loops or leaves
+      # running (healthy). Both are shell self-checks — no docker.
+      - name: secrets preflight self-check (AUT-5134)
+        run: sh scripts/test-preflight-secrets.sh
+
+      - name: hosted health watchdog self-check (AUT-5134)
+        run: bash scripts/test-hosted-health-watch.sh
+
   # AUT-5088: hosted booted without `alembic upgrade head`, so every
   # migration-only change was dead code in production. The compose guard in
   # release-scripts catches a deleted migration step; this job proves the chain
