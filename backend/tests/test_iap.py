@@ -25,7 +25,9 @@ from app.models.user import User  # noqa: E402
 from app.services import billing as svc  # noqa: E402
 from app.services import iap  # noqa: E402
 
-PRODUCT_MONTHLY = "com.autobrainservice.app.enthusiast.monthly"
+# AUT-1152 shortened the enthusiast ids for Google Play's character limit; these
+# must match billing.IAP_PRODUCTS or plan_for_iap_product() rejects them.
+PRODUCT_MONTHLY = "enthusiast_monthly"
 PRODUCT_GARAGE = "com.autobrainservice.app.garage.yearly"
 
 
@@ -98,8 +100,8 @@ def test_catalog_enabled_with_google(monkeypatch) -> None:
     data = iap.catalog()
     assert data["enabled"] is True
     ids = {(p["product_id"], p["platform"]) for p in data["products"]}
-    assert ("com.autobrainservice.app.enthusiast.monthly", "android") in ids
-    assert ("com.autobrainservice.app.enthusiast.monthly", "ios") in ids
+    assert (PRODUCT_MONTHLY, "android") in ids
+    assert (PRODUCT_MONTHLY, "ios") in ids
     by_id = {p["product_id"]: p for p in data["products"]}
     assert by_id[PRODUCT_GARAGE]["plan"] == "garage"
     assert by_id[PRODUCT_GARAGE]["billing"] == "yearly"
