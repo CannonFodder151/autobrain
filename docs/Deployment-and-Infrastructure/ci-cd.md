@@ -52,6 +52,57 @@ Manual workflow for one-off tags: input `tag` (default `hosted`), `platforms`,
 `api_base_url`, `ws_base_url`. Pushes to GHCR, not Docker Hub. Used for ad-hoc
 builds (e.g. a staging tag or a platform-limited test).
 
+### Hosted deploy window (AUT-5172 / AUT-2409)
+
+The hosted stack (Portainer endpoint 5, Oracle Cloud) is production, and
+AUT-2409 confines hosted deploys to the nightly **03:00–04:00 AEST** window.
+
+- `compose-pin` runs on every merge to `main`. It still bumps the
+  `docker-compose.hosted.yml` digest pins and pushes the commit `[skip ci]`,
+  but `scripts/sync-compose-to-portainer.py` **skips the Portainer PUT outside
+  the window** (exit 0, `SKIP: …` in the log, zero API calls). A merge at any
+  other hour therefore cannot recreate production containers. Pins stay bumped
+  in git and the next in-window deploy applies them.
+- The gate lives in the script, not the workflow, so every caller is covered —
+  not just `compose-pin`. It applies to `--endpoint 5` only; other endpoints
+  (e.g. EP2 `9router`) carry no window policy and stay hand-updatable.
+- **Override:** `ALLOW_OUT_OF_WINDOW=true` (exported, or the `secrets.*` env
+  entry on the dispatch job) permits an out-of-window deploy. Only the
+  Deployment Lead sets it, and only for a board-approved deploy.
+- A `workflow_dispatch` of this workflow *is* the approved deploy action — the
+  job sets `ALLOW_OUT_OF_WINDOW=true` on dispatch, so the in-window 03:00
+  deploy path keeps working while push-triggered merges do not redeploy.
+- Proof: `scripts/test_sync_compose_to_portainer.py::TestDeployWindowGate`
+  (23:00 AEST makes no API call; `ALLOW_OUT_OF_WINDOW=true` PUTs; EP2 still
+  PUTs out of window) — run by the `compose-sync-script` CI job.
+
+### Nightly hosted deploy (AUT-5186)
+
+`build-hosted.yml` also runs on `schedule: cron "0 17 * * *"` — 17:00 UTC is
+03:00 AEST (AEST is a fixed UTC+10, no DST), the start of the window. That job
+(`nightly-hosted-sync`) is the automatic deploy path AUT-5172 removed from
+`push`:
+
+- It **only syncs**. It never builds: every other job in the workflow is
+  gated `github.event_name != 'schedule'`, so the nightly run cannot rebuild
+  images or re-cut a release. It pulls the `:hosted` manifests already on
+  ghcr.io and PUTs `docker-compose.hosted.yml` to Portainer endpoint 5 with
+  `pullImage=true` (the script default).
+- It sets **no** `ALLOW_OUT_OF_WINDOW`, so the window gate above still
+  applies. A cron that fires late or early (GitHub schedules are best-effort)
+  logs `SKIP: … outside the AUT-2409 hosted deploy window` and exits 0
+  without touching EP5 — a misfire skips rather than redeploys. Proof:
+  `scripts/test_sync_compose_to_portainer.py::TestNightlyHostedSync`
+  (`test_cron_misfire_out_of_window_skips_and_logs_no_digest`).
+- The run log records what it rolled out, one line per service:
+  `applied: backend -> ghcr.io/…@sha256:…`. Read the run log to audit a
+  nightly deploy; no other artifact records the applied digests.
+- It runs on a GitHub-hosted runner and holds its own concurrency group, so a
+  slow multi-arch build on `main` cannot push the deploy past the window.
+- Window is 1 hour and cron is best-effort: if the nightly run is skipped,
+  the pins stay bumped in git and the next
+  `workflow_dispatch` (which sets the override) applies them.
+
 ## 3. Mobile sync (`sync-mobile.yml`)
 
 On any `main` push touching shared Flutter lineage (`frontend/lib`,

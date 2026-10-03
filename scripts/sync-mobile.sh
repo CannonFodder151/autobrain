@@ -86,6 +86,25 @@ git checkout -- lib/core/auth_state.dart lib/core/config.dart \
   lib/services/iap_service.dart \
   lib/services/car/car_kit_trip_monitor.dart \
   lib/services/car/car_kit_service.dart 2>/dev/null || true
+
+# --- Part-directive guard (AUT-5205) --------------------------------------
+# lib/core/models.dart is synced verbatim, so a mobile-only
+# models/*.dart (e.g. vass.dart) survives the copy while its `part`
+# directive does not — every symbol in it goes undefined and analyze
+# explodes (274 errors). Fail on the orphan instead: every
+# models/*.dart on disk must be pulled into the library, and every
+# `part` the library declares must resolve to a file on disk.
+if [[ -f lib/core/models.dart ]]; then
+  while IFS= read -r p; do
+    [[ -f "lib/core/$p" ]] || { echo "::error::lib/core/$p is a part of lib/core/models.dart but the file is missing in the synced tree" >&2; exit 1; }
+  done < <(grep -oE "^part '[^']+';" lib/core/models.dart | sed -E "s/^part '([^']+)';/\1/")
+  for f in lib/core/models/*.dart; do
+    [[ -e "$f" ]] || continue
+    base="$(basename "$f")"
+    grep -q "^part 'models/$base';" lib/core/models.dart || { echo "::error::$f is not referenced by a part directive in lib/core/models.dart — add the directive in BOTH repos or delete the file" >&2; exit 1; }
+  done
+fi
+
 cp -a "$FRONT/assets/." assets/ 2>/dev/null || true
   cp "$ROOT/CHANGELOG.md" CHANGELOG.md
 

@@ -10,6 +10,120 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+
+### Fixed (AUT-5306)
+- docker(backend): merged `origin/main` into `feat/AUT-4113-market-data-celery` (PR #777), resolving the `docker/backend/Dockerfile` conflict — keeps AUT-4718's `python:3.13.16-slim-trixie@sha256:6906dca8…` base repin (clears the `image-scan` HIGH/CRITICAL findings from the stale 3.13.15 digest) together with AUT-3843's Playwright Chromium layer (`ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright` after the backend `pip install`, `chown -R autobrain:autobrain /ms-playwright`, and the chrome-sandbox re-SUID gate).
+
+## [0.3.305] - 2026-10-03
+
+### Fixed (AUT-5268)
+- fix(backend): migration `f7e8d9c0b1a2` called `PGInspector.get_constraints`, which does not exist in SQLAlchemy, so every `alembic upgrade head` raised `AttributeError` at that revision, fell back to `create_all` and left `alembic_version` stuck at two rows (EP2 Default). It now reflects the UNIQUE constraint via `get_unique_constraints` and no-ops when the constraint or the `passkey_credentials` table is absent (idempotent + offline-safe); adds `backend/tests/test_f7e8d9c0b1a2_passkey_unique.py` covering create / already-exists / downgrade / missing-table / offline paths.
+
+## [0.3.304] - 2026-10-03
+
+### Fixed (AUT-2203)
+- fix(backend): `test_aut2203_station_annotations.py` constructed `FuelStats` with `avg_litres_per_fill` instead of the declared `avg_fill_litres` field, so 2 of its 7 tests raised a pydantic `ValidationError` and the `cost_per_km` / `avg_fill_cost` coverage the issue asked for never actually ran on `main`
+
+## [0.3.303] - 2026-10-03
+
+### Added
+- Demo-tier frontend image build (`cannonfodder151/autobrain-frontend:demo`) in `dockerhub-publish.yml` (AUT-5261). The Demo stack had no frontend build job: `API_BASE_URL` is compiled into the Flutter bundle, so Demo needed its own image and the only pre-existing `:demo` artifact was built 2026-09-28 with Hosted's API base.
+
+## [0.3.302] - 2026-10-02
+- fix(fuel): disable the SA (SAFPIS) feed (AUT-5072).
+  `FUEL_SA_ENABLED: "true"` was set in both compose files
+  (AUT-2610) with a seeded `fuel_sa_api_key` secret, but no
+  `ingest_sa_*` function exists — `ingest_all_fuel()` only
+  loops `wa`, `nsw`, `vic`, `qld`, so SA was nominally enabled
+  and silently produced zero stations forever. The SAFPIS
+  Direct API host `fppdirectapi.safuelpricinginformation.com.au`
+  is NXDOMAIN (verified against the authoritative nameserver via
+  public DoH) and the AUT-2372 research doc lists the production
+  URL as "to be confirmed from registration" — no subscriber
+  token was ever contracted. Building the ingester would have
+  reproduced the AUT-4143 VIC dead-feed failure mode. Both
+  `docker-compose.hosted.yml` and `docker-compose.prod.yml` now
+  set `FUEL_SA_ENABLED: "false"` (same pattern as VIC/AUT-4976);
+  the secret file stays mounted so re-enabling is a one-line flip
+  once an aggregator is contracted. `/fuel/stations` and
+  `/fuel/attribution` advertise only `wa`/`nsw`/`qld`, so SA
+  coverage is not advertised. Guarded by
+  `backend/tests/test_fuel_feed_flags.py`.
+
+## [0.3.301] - 2026-10-02
+
+### Fixed (AUT-5131)
+- security(ci): corrected the `.trivyignore` reachability rationale for
+  `CVE-2026-103111` (pcre2 OOB write). The old condition-2 paragraph
+  claimed the nginx base image "ships no JIT-enabled pcre2 build for our
+  config" — false: the pinned `nginxinc/nginx-unprivileged:stable-alpine`
+  binary (nginx 1.30.5-r1, pcre2 10.48-r0) links `libpcre2-8.so.0` and
+  imports `pcre2_jit_compile_8` (plus `pcre2_compile_8`,
+  `pcre2_match_8`, `pcre2_pattern_info_8`) from its `.dynsym`, which is
+  the proof that PCRE2 JIT is compiled in. The suppression itself is
+  unchanged and stays approved: condition 1 (attacker-controlled regex)
+  fails independently — nginx only matches the static
+  `location ~ ^/(autobrain-assets|autobrainservice-assets)/` literal —
+  and CPython 3.13 links no pcre2 at all. No entry added or dropped;
+  the 2026-11-30 re-check date stands. Comment-only change, no runtime
+  effect.
+
+### Fixed (AUT-4718)
+- security(ci,docker): repinned the two base images that were failing the
+  `Security — base image CVE scan (trivy)` gate on `main`, and dropped the
+  `.trivyignore` entries the bumps made redundant. The gate had been red on `main`
+  since 2026-09-26, so every open PR looked like it had a regression.
+  - `nginxinc/nginx-unprivileged:stable-alpine` → `@sha256:ed04ec1f…`
+    (Alpine 3.24.2, `libexpat` 2.8.5-r0, `libuuid` 2.42.3-r1). Clears
+    `CVE-2026-93990`, `CVE-2026-66046` and `CVE-2026-76641` (libexpat) plus all
+    seven util-linux/libuuid and the `CVE-2026-80256` placeholder findings.
+  - `python:3.13.15-slim-trixie` → `python:3.13.16-slim-trixie@sha256:6906dca8…`
+    (Debian 13.7). Clears `CVE-2026-75804` / `CVE-2026-84782` (OpenSSL QUIC/DTLS),
+    `CVE-2026-41992` (gzip), `CVE-2026-11822` / `CVE-2026-11824` (libsqlite3-0) and
+    seven `perl-base` findings, and carries openssl `3.5.7-1~deb13u3` on both the
+    amd64 and arm64 manifests.
+  - All three nginx pins had drifted onto three *different* digests
+    (`docker/frontend/Dockerfile` built `44275388…`, `trivy-image-scan.yml` scanned
+    the amd64-only manifest `ee1643ae…`, and `libexpat-version-check.yml` watched
+    `45ce1e2e…`). All three now pin the same multi-arch index, so the scan again
+    covers the arm64 frontend we actually build.
+- security(ci): added three time-boxed `.trivyignore` entries, each with its
+  reachability argument, for CVEs whose fixes are published upstream but not yet in
+  any published image: `CVE-2026-103111` (pcre2 OOB write — needs an
+  attacker-controlled regex *and* JIT; CPython links no pcre2 and our nginx PCRE
+  patterns are static), and `CVE-2026-97687` / `CVE-2026-97689` (urllib3 2.7.0 as
+  pip's vendored copy — build-time only; the runtime HTTP stack is httpx).
+  Re-check 2026-11-30.
+- fix(ci): `trivy-image-scan.yml` passed `scanner: vuln` to
+  `aquasecurity/trivy-action@v0.36.0`, which does not accept that input (it is
+  `scanners`). GitHub logged `Unexpected input(s) 'scanner'` on all three scan
+  steps and dropped the value.
+- fix(ci): `libexpat-version-check.yml` compared a per-arch manifest digest
+  (`regctl image digest --platform linux/amd64`) against `PINNED_DIGEST`, which holds
+  the multi-arch index digest, so `unchanged` was never true and the daily job
+  re-filed a duplicate Paperclip issue on every run. It now resolves the index
+  digest, and its threshold is raised to 2.8.5-r0.
+- Verified 2026-10-02 with trivy 0.70.0 against the edited `.trivyignore`: all three
+  pinned base images return 0 findings at HIGH/CRITICAL with `--ignore-unfixed`
+  (exit 0 each).
+
+## [0.3.300] - 2026-10-02
+- fix(ci): restore automatic deploys for the **Demo** and **Default** tiers.
+  AUT-2409 narrowed `DEFAULT_TIERS` in `scripts/upgrade-instances.sh` to
+  Hosted-only, so neither EP2 stack was ever redeployed again and demo
+  (`demo.autobrainservice.app`) went 502 and stayed down. The full
+  Demo → Default → Hosted promotion chain is back in the defaults, still
+  health-gated per tier (AUT-107). Hosted keeps its 03:00–04:00 AEST window
+  (AUT-2409 / AUT-5172); scope a `deploy-instances.yml` dispatch with the new
+  `tiers` input to honour it.
+
+## [0.3.299] - 2026-10-02
+- fix(backend): `backup_offsite_hourly` now wraps `run_backup_offsite()` in the
+  persistent-loop `_run()` wrapper. Before the fix the async function was passed
+  bare, so the coroutine was never executed and the hourly off-site backup never
+  ran.
+
+## [0.3.298] - 2026-10-02
 - fix(backup): the backend no longer runs a second retention engine against the
   off-site backup store. `backup_offsite.py::_apply_tiered_retention()` pruned
   by file **age** (via `_tier_for_age`) while `autobrain-backup` prunes by

@@ -16,7 +16,7 @@
 # The promotion order + per-tier health gating live inside the script (AUT-107);
 # a tier that fails health blocks promotion to the next tier.
 
-name: Upgrade hosted instance only (AUT-2409)
+name: Upgrade instance chain (AUT-4982)
 
 on:
   workflow_run:
@@ -30,6 +30,10 @@ on:
         description: Why (e.g. manual upgrade-path run by the Deployment Lead)
         required: false
         default: manual dispatch
+      tiers:
+        description: 'Override the promotion chain, pipe-separated "name|endpoint|health|req_env" (AUT-4982). Blank = demo -> default -> hosted.'
+        required: false
+        default: ''
 
 concurrency:
   group: upgrade-instances
@@ -94,7 +98,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: "Upgrade hosted instance only (AUT-2409: hosted-only deploys, 03:00-04:00 AEST window)"
+      - name: "Upgrade instance tier chain (AUT-4982: demo -> default -> hosted)"
+        env:
+          UPGRADE_TIERS: ${{ inputs.tiers }}
         run: ./scripts/upgrade-instances.sh
 
       - name: Report status to Discord
@@ -107,4 +113,4 @@ jobs:
           fi
           curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
             -H "Content-Type: application/json" \
-            -d "{\"channel\":\"status\",\"title\":\"AutoBrain instances upgrade — $STATE\",\"description\":\"Hosted (EP5) only via the upgrade path (AUT-2409). Demo/default stacks are off-limits.\",\"color\":\"$COLOR\",\"author\":\"Deployment Lead\",\"fields\":[{\"name\":\"Trigger\",\"value\":\"${{ github.event_name }}\",\"inline\":true},{\"name\":\"State\",\"value\":\"$STATE\",\"inline\":true},{\"name\":\"Run\",\"value\":\"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\",\"inline\":false}]}"
+            -d "{\"channel\":\"status\",\"title\":\"AutoBrain instances upgrade — $STATE\",\"description\":\"Promotion chain via the upgrade path (AUT-4982): Demo -> Default -> Hosted, each health-gated.\",\"color\":\"$COLOR\",\"author\":\"Deployment Lead\",\"fields\":[{\"name\":\"Trigger\",\"value\":\"${{ github.event_name }}\",\"inline\":true},{\"name\":\"State\",\"value\":\"$STATE\",\"inline\":true},{\"name\":\"Run\",\"value\":\"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\",\"inline\":false}]}"

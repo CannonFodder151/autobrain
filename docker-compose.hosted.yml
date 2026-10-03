@@ -164,7 +164,7 @@ services:
     # AUT-3153: the standalone Celery worker+beat service is merged into this
     # container. The backend image already carries the worker dependencies and
     # its default CMD runs the same topology as docker-compose.prod.yml.
-    image: ghcr.io/cannonfodder151/autobrain-backend:hosted@sha256:28c1747959feed67ac58075692de0d49c9f0ffcabddf6734fe0e2a4628fa7464
+    image: ghcr.io/cannonfodder151/autobrain-backend:hosted@sha256:d3a359af2ad0c04292a60cb34701d644d1cc058cdb90a2b83b4c4111c0567e34
     restart: unless-stopped
     # AUT-5088: `alembic upgrade head` runs first and its failure is fatal.
     # Without it, bootstrap's `create_all` fallback silently swallowed every
@@ -202,10 +202,16 @@ services:
       # the secrets anchor below mounts ${SECRETS_DIR} read-only, so the file
       # resolves when seed-secrets.sh provisions fuel_qld_api_key.
       FUEL_QLD_API_KEY_FILE: /run/secrets/fuel_qld_api_key
-      # AUT-2610: SA SAFPIS ingester (AUT-2406). Same Informed Sources subscriber
-      # token as QLD; secret file provisioned via seed-secrets.sh.
+      # AUT-2610/AUT-5072: SA SAFPIS ingester. The SAFPIS Direct API
+      # host (fppdirectapi.safuelpricinginformation.com.au, per the
+      # AUT-2372 research doc) is NXDOMAIN — the production base URL
+      # was only ever "to be confirmed from registration" and no
+      # subscriber token was ever contracted. FUEL_SA_ENABLED stays
+      # false until an aggregator is contracted; the secret file
+      # stays mounted so the feed can be re-enabled with a one-line
+      # flag flip (same pattern as VIC/AUT-4976).
       FUEL_SA_API_KEY_FILE: /run/secrets/fuel_sa_api_key
-      FUEL_SA_ENABLED: "true"
+      FUEL_SA_ENABLED: "false"
       AI_GATEWAY_API_KEY_FILE: /run/secrets/ai_gateway_api_key
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@autobrain.io}
       ADMIN_DISPLAY_NAME: AutoBrain Admin
@@ -338,7 +344,7 @@ services:
       - "8000"
 
   frontend:
-    image: ghcr.io/cannonfodder151/autobrain-frontend:hosted@sha256:e28ce22c9c5fe62589b3ed9f92ffe1dfa8c205dcc4d060e429a0a04bea59086c
+    image: ghcr.io/cannonfodder151/autobrain-frontend:hosted@sha256:0a0ee9f49dae5b6cc44a456b46e5240514719f45e6a6622740e2b7f1324cb605
     # AUT-2087: pinned to the verified arm64 child manifest digest of the
     # autobrain-frontend :hosted OCI image index. Earlier pin
     # (`@sha256:8937c2bb…`) targeted an arm64 image whose nginx + busybox

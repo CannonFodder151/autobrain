@@ -1,7 +1,7 @@
 # AUT-1735: bump off vulnerable python:3.12-slim; pin base by digest.
-# AUT-2656: pin the multi-arch index (3.13.15-slim-trixie) — the prior digest
+# AUT-2656: pin the multi-arch index (3.13.16-slim-trixie) — the prior digest
 # was amd64-only and broke the arm64 build with exec format error.
-FROM python:3.13.15-slim-trixie@sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285
+FROM python:3.13.16-slim-trixie@sha256:6906dca82c0e83d5994bbf2e7fc33e6b63ce3e7f27c30eafd01dfabeb3c90bf3
 
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 

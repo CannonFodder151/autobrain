@@ -23,6 +23,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from datetime import datetime
 from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location(
@@ -114,19 +115,31 @@ class SyncComposeTestBase(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def run_main(self, responder, extra_args=()):
-        """Run main() with urlopen routed by responder; returns (rc, out, err)."""
+    def run_main(self, responder, extra_args=(), env=None, in_window=True,
+                 endpoint=5):
+        """Run main() with urlopen routed by responder; returns (rc, out, err).
+
+        Defaults to inside the AUT-5172 deploy window so the pre-existing
+        cases keep testing their own subject; the gate has its own class below.
+        """
         out, err = io.StringIO(), io.StringIO()
         argv = ["sync-compose-to-portainer.py",
                 "--stack", "autobrain-hosted",
-                "--endpoint", "5",
+                "--endpoint", str(endpoint),
                 "--file", self.compose_file,
                 "--portainer-url", "https://portainer.example.com",
                 "--api-key", "test-key", *extra_args]
         old_argv, old_out, old_err = sys.argv, sys.stdout, sys.stderr
         sys.argv, sys.stdout, sys.stderr = argv, out, err
         try:
-            with patch("urllib.request.urlopen", responder):
+            with contextlib.ExitStack() as stack:
+                stack.enter_context(
+                    patch("urllib.request.urlopen", responder))
+                stack.enter_context(patch.object(
+                    scp, "in_deploy_window", lambda: in_window))
+                for key, value in (env or {}).items():
+                    stack.enter_context(patch.dict(
+                        os.environ, {key: value}, clear=False))
                 rc = scp.main()
         finally:
             sys.argv, sys.stdout, sys.stderr = old_argv, old_out, old_err
@@ -270,6 +283,110 @@ class TestVerifyRunning(SyncComposeTestBase):
         self.assertEqual([w for _, w in problems if "stuck" in w],
                          ["stuck in state created"])
 
+
+class TestDeployWindowGate(SyncComposeTestBase):
+    """AUT-5172: a merge at 23:00 AEST must not redeploy the hosted stack."""
+
+    def test_window_hours(self):
+        at = lambda h, m=0: datetime(2026, 10, 2, h, m, tzinfo=scp.AEST)
+        self.assertFalse(scp.in_deploy_window(at(2, 59)))
+        self.assertTrue(scp.in_deploy_window(at(3, 0)))
+        self.assertTrue(scp.in_deploy_window(at(3, 59)))
+        self.assertFalse(scp.in_deploy_window(at(4, 0)))
+        # 23:00 AEST == 13:00 UTC, the observed AUT-5172 redeploy time.
+        self.assertFalse(scp.in_deploy_window(at(23, 0)))
+        self.assertFalse(scp.in_deploy_window(at(13, 0)))
+
+    def test_out_of_window_makes_no_api_call(self):
+        r = _Responder(self.healthy_routes([
+            _container("autobrain-hosted-backend-1", "backend"),
+            _container("autobrain-hosted-frontend-1", "frontend"),
+        ]))
+
+        rc, out, _ = self.run_main(r, in_window=False)
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(r.calls, [])
+        self.assertIn("SKIP", out)
+        self.assertIn("03:00-04:00 AEST", out)
+        self.assertIn("left untouched", out)
+
+    def test_override_env_permits_sync(self):
+        r = _Responder(self.healthy_routes([
+            _container("autobrain-hosted-backend-1", "backend"),
+            _container("autobrain-hosted-frontend-1", "frontend"),
+        ]))
+
+        for value in ("true", "1", "YES"):
+            with self.subTest(value=value):
+                r.calls.clear()
+                rc, _, _ = self.run_main(
+                    r, env={"ALLOW_OUT_OF_WINDOW": value}, in_window=False)
+                self.assertEqual(rc, 0)
+                self.assertIn("PUT", r.methods_for("/api/stacks/42"))
+
+    def test_gate_is_hosted_endpoint_only(self):
+        """EP2 (9router) has no AUT-2409 window and stays hand-updatable."""
+        r = _Responder(self.healthy_routes([
+            _container("autobrain-hosted-backend-1", "backend"),
+            _container("autobrain-hosted-frontend-1", "frontend"),
+        ]))
+
+        _, out, _ = self.run_main(r, in_window=False, endpoint=2)
+
+        self.assertNotIn("SKIP", out)
+        self.assertIn("PUT", r.methods_for("/api/stacks/42"))
+
+    def test_no_override_no_put(self):
+        r = _Responder(self.healthy_routes([
+            _container("autobrain-hosted-backend-1", "backend"),
+            _container("autobrain-hosted-frontend-1", "frontend"),
+        ]))
+
+        rc, _, _ = self.run_main(
+            r, env={"ALLOW_OUT_OF_WINDOW": "false"}, in_window=False)
+
+        self.assertEqual(rc, 0)
+        self.assertNotIn("PUT", r.methods_for("/api/stacks/42"))
+
+class TestNightlyHostedSync(SyncComposeTestBase):
+    """AUT-5186: nightly-hosted-sync cron — in-window applies, misfire skips."""
+
+    def _r(self):
+        return _Responder(self.healthy_routes([
+            _container("autobrain-hosted-backend-1", "backend"),
+            _container("autobrain-hosted-frontend-1", "frontend"),
+        ]))
+
+    def test_in_window_logs_applied_digest_per_service(self):
+        # The cron job sets no ALLOW_OUT_OF_WINDOW, so with the gate closed by
+        # the real clock this only runs at 03:00-04:00 AEST.
+        r = self._r()
+
+        rc, out, _ = self.run_main(r, in_window=True)
+
+        self.assertEqual(rc, 0)
+        self.assertIn("PUT", r.methods_for("/api/stacks/42"))
+        self.assertIn("applied: backend -> ghcr.io/x/backend@sha256:aaa", out)
+        self.assertIn("applied: frontend -> ghcr.io/x/frontend@sha256:bbb", out)
+
+    def test_cron_misfire_out_of_window_skips_and_logs_no_digest(self):
+        # GitHub cron can fire late or early. Outside the window the run must
+        # skip rather than redeploy production, and must not claim a digest.
+        import os as _os
+        saved = _os.environ.pop("ALLOW_OUT_OF_WINDOW", None)
+        try:
+            r = self._r()
+
+            rc, out, _ = self.run_main(r, in_window=False)
+
+            self.assertEqual(rc, 0)
+            self.assertEqual(r.calls, [])
+            self.assertIn("SKIP", out)
+            self.assertNotIn("applied:", out)
+        finally:
+            if saved is not None:
+                _os.environ["ALLOW_OUT_OF_WINDOW"] = saved
 
 if __name__ == "__main__":
     unittest.main()

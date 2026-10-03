@@ -6,6 +6,14 @@ this pushes the updated StackFileContent into the running Portainer stack so
 the next deploy uses the freshly published digests — closing the drift
 between git and Portainer without a manual operator action.
 
+AUT-5172: the hosted stack (endpoint 5) is production, and AUT-2409 confines
+hosted deploys to the nightly 03:00-04:00 AEST window. compose-pin runs on
+every merge to main, so the sync silently redeployed production whenever
+anyone merged. The window gate lives here — not in the workflow — so every
+caller is covered. Outside the window this exits 0 without touching
+Portainer; pins stay bumped in git and the next in-window deploy applies them.
+Set ALLOW_OUT_OF_WINDOW=true for a board-approved out-of-window deploy.
+
 Usage:
   python3 scripts/sync-compose-to-portainer.py \
       --stack autobrain-hosted --endpoint 5 --file docker-compose.hosted.yml
@@ -17,8 +25,28 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime, timedelta, timezone
 
 import yaml
+
+# AEST is a fixed UTC+10 with no DST, so a fixed offset avoids a tzdata dep.
+AEST = timezone(timedelta(hours=10))
+WINDOW_START_HOUR = 3
+WINDOW_END_HOUR = 4
+# The hosted stack only. The window is a hosted-deploy policy (AUT-2409); the
+# EP2 `9router` stack has no such policy and must stay hand-updatable.
+HOSTED_ENDPOINT = 5
+
+
+def in_deploy_window(now=None):
+    """True inside the AUT-2409 hosted deploy window (03:00-04:00 AEST)."""
+    return WINDOW_START_HOUR <= (now or datetime.now(AEST)).hour < WINDOW_END_HOUR
+
+
+def out_of_window_allowed():
+    """Explicit override for a board-approved out-of-window hosted deploy."""
+    return os.environ.get("ALLOW_OUT_OF_WINDOW", "").strip().lower() in (
+        "1", "true", "yes")
 
 
 def _api(args, path, method="GET", body=None, timeout=30):
@@ -68,6 +96,13 @@ def compose_services_and_ports(content):
         if found:
             ports[name] = found
     return set(services), ports
+
+
+def compose_image_refs(content):
+    """AUT-5186: {service: image ref} — the digest pins this PUT applies."""
+    doc = yaml.safe_load(content) or {}
+    return {name: (spec or {}).get("image", "<no image>")
+            for name, spec in (doc.get("services") or {}).items()}
 
 
 def endpoint_containers(args):
@@ -132,6 +167,19 @@ def main():
     ap.add_argument("--pull-image", action="store_true", default=True,
                     help="force a pull so the new digest is fetched (default: true)")
     args = ap.parse_args()
+
+    # AUT-5172: gate before any network call so a gated run has zero effect.
+    # Hosted endpoint only — the window is a hosted-deploy policy, and other
+    # endpoints (e.g. EP2 `9router`) stay hand-updatable at any hour.
+    if (args.endpoint == HOSTED_ENDPOINT
+            and not in_deploy_window() and not out_of_window_allowed()):
+        print(f"SKIP: {datetime.now(AEST):%Y-%m-%d %H:%M} AEST is outside the "
+              f"AUT-2409 hosted deploy window "
+              f"({WINDOW_START_HOUR:02d}:00-{WINDOW_END_HOUR:02d}:00 AEST); "
+              f"stack {args.stack!r} left untouched")
+        print("Set ALLOW_OUT_OF_WINDOW=true only for a board-approved "
+              "out-of-window deploy.")
+        return 0
 
     if not args.api_key:
         print("ERROR: PORTAINER_API_KEY not set", file=sys.stderr)
@@ -248,6 +296,11 @@ def main():
 
     print(f"stack={args.stack} id={stack_id} endpoint={args.endpoint} updated")
     print(f"verified: {len(services)} services running, no stuck containers")
+    # AUT-5186: audit trail for the nightly 03:00 AEST deploy — one line per
+    # service with the digest the stack now runs. The run log is the only
+    # record once the workflow is no longer tied to a human dispatch.
+    for name, ref in sorted(compose_image_refs(content).items()):
+        print(f"applied: {name} -> {ref}")
     return 0
 
 
