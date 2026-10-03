@@ -10,6 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+- feat(vehicle): add `is_financed` field to Vehicle model and conditionally show Finance button in the home screen feature grid
 
 ## [0.3.305] - 2026-10-03
 
