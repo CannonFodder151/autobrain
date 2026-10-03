@@ -1,6 +1,11 @@
 #!/bin/bash
 set -u
 
+# AUT-5134: fail fast (one actionable line, exit 1) when the bind-mounted
+# secrets dir lost its read/traverse perms — before the loader tries to
+# read any *_FILE and the container dies in a silent restart loop.
+/usr/local/bin/preflight-secrets.sh || exit $?
+
 # AUT-1533: load secret-class env vars from *_FILE files before services start.
 . /usr/local/bin/lib-load-secrets.sh
 
