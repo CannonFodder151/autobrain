@@ -39,7 +39,7 @@ jobs:
           set -euo pipefail
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
-      - name: Run pytest smoke (model metadata + alembic heads)
+      - name: Run pytest smoke (alembic heads + AI merged-image layout)
         run: |
           set -euo pipefail
           # AUT-2277 regression guard only. Runs the offline alembic-graph +
@@ -47,6 +47,14 @@ jobs:
           # be broken by unrelated test-module rot (e.g. AUT-2201/2203 station
           # annotation tests, which still pull in app.api.v1.fuel and are out
           # of scope here).
+          #
+          # AUT-4788: also run the AI gateway merged-image layout guard. The
+          # Hosted gateway was dark for 5 releases (v0.3.276 -> v0.3.287)
+          # because ai/app ships as `ai_app` while absolute `app.*` imports
+          # resolved to the BACKEND package. This job is blocking (no `|| true`)
+          # and runs on every push/PR, so ai/**, docker/backend/Dockerfile and
+          # docker-compose*.yml changes cannot ship that break green again.
           python -m pytest \
             tests/test_alembic_heads.py \
+            ../ai/tests/test_merged_image_layout.py \
             -q

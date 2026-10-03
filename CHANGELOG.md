@@ -10,6 +10,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+- ci: the AI merged-image layout guard (`ai/tests/test_merged_image_layout.py`)
+- deploy: `scripts/post-deploy-smoke.sh` now probes `GET /ai/v1/modules` and
+- deploy: the `docker-compose.hosted.yml` frontend healthcheck now also probes
 
 ## [0.3.306] - 2026-10-03
 
