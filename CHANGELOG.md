@@ -10,6 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+- feat(cost-tracking): add categorized cost tracking & analytics dashboard for track day expenses with CSV export
 
 ## [0.3.305] - 2026-10-03
 
