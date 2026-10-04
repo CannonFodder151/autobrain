@@ -132,6 +132,85 @@ fails with `502 hub not configured` (AUT-532) — make sure the env reaches the
 Only the frontend publishes a port; all internal services stay on the Compose
 network.
 
+## Where each stack gets its configuration (AUT-5515)
+
+Two different models are in use. They look the same from Portainer's stack list
+but behave very differently under `scripts/sync-compose-to-portainer.py`, and
+picking the wrong one is how the dev box ended up unrolloutable.
+
+| Stack | Endpoint | Compose file (git) | Config source | Portainer stack Env |
+|-------|----------|--------------------|---------------|---------------------|
+| `autobrain-hosted` | 5 | `docker-compose.hosted.yml` | Portainer stack Env (49 vars) for required `${VAR}` interpolation, plus `*_FILE` secret binds | **49 vars — populated** |
+| `autobrain-dev` | 6 | `docker-compose.dev-box.yml` | inline `environment:` + `*_FILE` binds from `${SECRETS_DIR:-/var/snap/docker/common/secrets}` | **0 — intentionally empty** |
+| `autobrain-backup` | 2 | *(hand-managed, EP2)* | inline `environment:` + bind mounts under `/srv/autobrain-backup` | **0 — intentionally empty** |
+
+**`autobrain-hosted` (EP5)** interpolates `${VAR}` that Portainer must supply, so
+its stack Env is load-bearing. That is the stack the AUT-4778 bug hit: the sync
+script read Env from `GET /api/stacks/{id}/file`, which returns only
+`StackFileContent`, so every sync sent `Env: []`, compose then failed on
+`${POSTGRES_USER:?...}` with HTTP 500, and the stack lost its config.
+
+**`autobrain-dev` (EP6) and `autobrain-backup` (EP2)** never interpolate a var
+that has to come from Portainer Env — every interpolation is `${VAR:-default}`
+form, so the compose renders correctly with an empty Env. Secrets reach the
+process a different way: compose points `*_FILE` at `/run/secrets/<name>`, which
+is bind-mounted read-only from the host secrets dir, and
+`docker/lib-load-secrets.sh` (baked into the images) reads those files into
+process env at start. **No secret value is ever visible in `docker inspect`,
+`GET /api/stacks/{id}`, or a stack Env.**
+
+To confirm which model a stack uses before syncing it, read the stack and check
+the compose values:
+
+```bash
+curl -s -H "X-API-Key: $PORTAINER_API_KEY" \
+  "https://portainer.nathanmartina.com/api/stacks/<ID>" | python3 -m json.tool | grep -A2 '"Env"'
+curl -s -H "X-API-Key: $PORTAINER_API_KEY" \
+  "https://portainer.nathanmartina.com/api/stacks/<ID>/file" | python3 -c 'import sys,json; print(json.load(sys.stdin)["StackFileContent"])'
+```
+
+### Syncing a stack whose Env is legitimately empty
+
+The sync script refuses to run when `Env` is empty, because for a stack like
+`autobrain-hosted` that would wipe its configuration. For the self-configuring
+stacks the refusal is a false positive — nothing is being wiped. Use the
+explicit opt-in, never a silent downgrade:
+
+```bash
+# EP6 dev box (8 services, git source of truth)
+python3 scripts/sync-compose-to-portainer.py \
+    --stack autobrain-dev --endpoint 6 \
+    --file docker-compose.dev-box.yml --allow-empty-env
+
+# EP5 hosted — no flag; Env is populated and the AUT-2409 03:00-04:00 AEST
+# window gate applies
+python3 scripts/sync-compose-to-portainer.py \
+    --stack autobrain-hosted --endpoint 5 \
+    --file docker-compose.hosted.yml
+```
+
+Verify with `curl -s http://10.0.3.39:8090/health` → `"version":"0.3.x"`.
+
+### Do not sync the wrong compose file into a stack
+
+`docker-compose.yml` is the **local developer** file — it has `build:` sections,
+`env_file: .env`, required `${AI_GATEWAY_API_KEY:?...}` interpolation, and
+publishes on `127.0.0.1:8000` / `127.0.0.1:8080`. Pointing the sync at it for
+`autobrain-dev` either fails on the required interpolation or replaces the
+8-service dev topology with 5 services and moves the frontend off `:8090`. Match
+the file to the stack:
+
+| Stack | File |
+|-------|------|
+| `autobrain-dev` (EP6) | `docker-compose.dev-box.yml` |
+| `autobrain-hosted` (EP5) | `docker-compose.hosted.yml` |
+| local development | `docker-compose.yml` (never a Portainer stack) |
+
+Until AUT-5515, `docker-compose.dev-box.yml` did not exist — the dev stack's
+compose lived only inside Portainer, so there was no way to roll the dev box
+forward from git. That, not the empty Env, was the reason dev sat on 0.3.307
+while main was on 0.3.308.
+
 ## Prerequisites
 
 - Linux host with Docker 24+ and Docker Compose v2.

@@ -1,0 +1,230 @@
+# AutoBrain DEV-BOX stack (EP6, 10.0.3.39) — hardened per AUT-1533/AUT-1536 (EP5 parity).
+# Merged AUT-1242 topology kept: postgres, redis, minio, backend (API+worker+beat), ai, frontend,
+# market-data, rego-lookup.
+# Secret-class values are bind-mounted from /var/snap/docker/common/secrets (root:1000, 0640) and loaded
+# into process env at start by docker/lib-load-secrets.sh baked into the images. They never
+# appear in `docker inspect`. Seeded via scripts/seed-secrets.sh before this deploy.
+#
+# AUT-5515 — this file is now the git source of truth for Portainer stack 109
+# (`autobrain-dev`). It used to exist only inside Portainer, so there was no way
+# to roll the dev box forward from git. Retrieved verbatim from
+# GET /api/stacks/109/file and committed; sync it with:
+#
+#   python3 scripts/sync-compose-to-portainer.py \
+#       --stack autobrain-dev --endpoint 6 --file docker-compose.dev-box.yml \
+#       --allow-empty-env
+#
+# Do NOT point that command at `docker-compose.yml` — that is the local-developer
+# file (build: + env_file: .env + ${AI_GATEWAY_API_KEY:?...}), not this stack.
+#
+# WHY `--allow-empty-env` IS REQUIRED: this stack uses no Portainer stack Env at
+# all, and must not. Non-secret config is inline in each service's `environment:`
+# block; secrets arrive as `*_FILE` paths into /run/secrets, bind-mounted read-only
+# from ${SECRETS_DIR}. The only interpolation here is `${VAR:-default}` form, so an
+# empty Env is correct and nothing is wiped by a sync. Portainer Env stays empty.
+#
+# Digests are the multi-arch `:hosted` index digests that CI publishes and that
+# docker-compose.hosted.yml pins, so EP6 (amd64) resolves the amd64 manifest from
+# the same release EP5 (arm64) runs.
+
+x-secrets: &secrets
+  volumes:
+    - type: bind
+      source: ${SECRETS_DIR:-/var/snap/docker/common/secrets}
+      target: /run/secrets
+      read_only: true
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: autobrain
+      POSTGRES_DB: autobrain
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - type: bind
+        source: /var/snap/docker/common/secrets/postgres_password
+        target: /run/secrets/postgres_password
+        read_only: true
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U autobrain"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["/bin/sh", "-c", "exec redis-server --requirepass \"$(cat /run/secrets/redis_password)\""]
+    volumes:
+      - redis-data:/data
+      - type: bind
+        source: /var/snap/docker/common/secrets/redis_password
+        target: /run/secrets/redis_password
+        read_only: true
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$(cat /run/secrets/redis_password)\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    restart: unless-stopped
+    entrypoint: >
+      /bin/sh -c "
+      minio server /data --console-address ':9001' &
+      MINIO_PID=$$!;
+      trap 'kill -TERM $${MINIO_PID} 2>/dev/null' TERM INT;
+      until mc alias set local http://localhost:9000 "$(cat /run/secrets/minio_access_key)" "$(cat /run/secrets/minio_secret_key)" >/dev/null 2>&1 && mc ready local >/dev/null 2>&1; do sleep 2; done;
+      mc mb -p local/autobrain-assets 2>/dev/null || true;
+      mc anonymous set none local/autobrain-assets 2>/dev/null || true;
+      echo '[minio] bucket init complete';
+      trap - TERM INT;
+      wait $${MINIO_PID}
+      "
+    environment:
+      MINIO_ROOT_USER_FILE: /run/secrets/minio_access_key
+      MINIO_ROOT_PASSWORD_FILE: /run/secrets/minio_secret_key
+    volumes:
+      - minio-data:/data
+      - type: bind
+        source: /var/snap/docker/common/secrets/minio_access_key
+        target: /run/secrets/minio_access_key
+        read_only: true
+      - type: bind
+        source: /var/snap/docker/common/secrets/minio_secret_key
+        target: /run/secrets/minio_secret_key
+        read_only: true
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    image: ghcr.io/cannonfodder151/autobrain-backend:hosted@sha256:1d083b462cf076b38ef667979300d97d4de3d0eca216667f6452f0b773787b09
+    restart: unless-stopped
+    command: sh -c "/init-minio.sh && python -m app.db.bootstrap && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    environment:
+      ENVIRONMENT: development
+      PYTHONPATH: /app
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: autobrain
+      POSTGRES_DB: autobrain
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      SECRET_KEY_FILE: /run/secrets/backend_secret_key
+      MINIO_ENDPOINT: minio:9000
+      MINIO_BUCKET: autobrain-assets
+      MINIO_ACCESS_KEY_FILE: /run/secrets/minio_access_key
+      MINIO_SECRET_KEY_FILE: /run/secrets/minio_secret_key
+      REDIS_PASSWORD_FILE: /run/secrets/redis_password
+      MINIO_PUBLIC_ENDPOINT: http://10.0.3.39:8090
+      AI_LOCAL_BASE_URL: http://ai:8001
+      AI_ROUTER_URL: http://10.0.3.17:20128/v1
+      AI_ROUTER_API_KEY_FILE: /run/secrets/ai_router_api_key
+      AI_ROUTER_MODEL: General-Use
+      AI_ROUTER_TIMEOUT_SECONDS: '120'
+      AI_GATEWAY_API_KEY_FILE: /run/secrets/ai_gateway_api_key
+      ADMIN_API_KEY_FILE: /run/secrets/admin_api_key
+      ADMIN_EMAIL: admin@autobrain.io
+      ADMIN_DISPLAY_NAME: AutoBrain Admin
+      ADMIN_INITIAL_PASSWORD_FILE: /run/secrets/admin_initial_password
+      SMTP_HOST: nathanmartina-com.mail.protection.outlook.com
+      SMTP_PORT: '25'
+      SMTP_USE_TLS: 'true'
+      SMTP_USERNAME_FILE: /run/secrets/smtp_username
+      SMTP_PASSWORD_FILE: /run/secrets/smtp_password
+      SMTP_FROM_EMAIL: no-reply@autobrainservice.app
+      SMTP_FROM_NAME: AutoBrain
+      APP_BASE_URL: http://10.0.3.39:8090
+      MFA_ENFORCED: 'true'
+      LOGIN_MAX_ATTEMPTS: '5'
+      LOGIN_WINDOW_SECONDS: '10800'
+      SELF_SIGNUP_ENABLED: 'false'
+      MARKET_DATA_URL: http://market-data:8000
+      MARKET_DATA_API_KEY_FILE: /run/secrets/market_data_api_key
+      REGO_LOOKUP_URL: http://rego-lookup:8000/lookup
+      REGO_LOOKUP_API_KEY_FILE: /run/secrets/rego_lookup_api_key
+      SOCIAL_FEDERATION_HUB_URL: ${SOCIAL_FEDERATION_HUB_URL:-https://hub.autobrainservice.app}
+      SOCIAL_FEDERATION_HOSTED: ${SOCIAL_FEDERATION_HOSTED:-false}
+      IAP_GOOGLE_SERVICE_ACCOUNT_JSON_FILE: /run/secrets/iap_google_service_account_json
+      IAP_GOOGLE_PACKAGE_NAME: com.autobrainservice.app
+    <<: *secrets
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    expose:
+      - '8000'
+
+  ai:
+    image: ghcr.io/cannonfodder151/autobrain-ai:hosted@sha256:9fa343e67481fb0e4930c2226015d783abd48cde0b9baf3ddc90dbf9ad15caa1
+    restart: unless-stopped
+    shm_size: "256m"
+    environment:
+      AI_ROUTER_URL: http://10.0.3.17:20128/v1
+      AI_ROUTER_API_KEY_FILE: /run/secrets/ai_router_api_key
+      AI_GATEWAY_API_KEY_FILE: /run/secrets/ai_gateway_api_key
+      API_KEY_FILE: /run/secrets/market_data_api_key
+    <<: *secrets
+    expose:
+      - '8000'
+      - '8001'
+
+  market-data:
+    image: ghcr.io/cannonfodder151/autobrain-market-data:hosted
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: development
+      API_KEY_FILE: /run/secrets/market_data_api_key
+    <<: *secrets
+    expose:
+      - '8000'
+
+  rego-lookup:
+    image: ghcr.io/cannonfodder151/rego-lookup-api:hosted
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: development
+      # AUT-5530: key material lives only in the seeded secret file, never in
+      # this repo. backend reads the same file via docker/lib-load-secrets.sh;
+      # the rego-lookup image does not bake that loader (main.py reads
+      # os.getenv("API_KEY") and start.sh execs the CMD untouched), so the shim
+      # below exports it first. ponytail: duplicates the image CMD (update both
+      # if the port ever moves); drop the override once the image loads
+      # *_FILE natively — see the rego-lookup-api API_KEY_FILE support issue.
+      API_KEY_FILE: /run/secrets/rego_lookup_api_key
+    command:
+      - /bin/sh
+      - -c
+      - 'test -s "$$API_KEY_FILE" || { echo "rego-lookup: missing/empty secret $$API_KEY_FILE" >&2; exit 1; }; export API_KEY="$$(cat "$$API_KEY_FILE")"; exec uvicorn main:app --host 0.0.0.0 --port 8000'
+    <<: *secrets
+    expose:
+      - '8000'
+
+  frontend:
+    image: ghcr.io/cannonfodder151/autobrain-frontend:hosted@sha256:a5d32e8c35a45772b854d68954077dc040f9470f0c5d83d564650783ea0ab538
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
+    ports:
+      - '8090:8080'
+    depends_on:
+      - backend
+      - ai
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:

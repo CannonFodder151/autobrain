@@ -8,11 +8,16 @@ AUT-4678: services referenced by the F2 loops are optional after the AUT-3153
 merge (there is no standalone `ai` service any more) — index them only when
 present so a service removal degrades coverage instead of crashing the guard.
 """
+import glob
+import re
 import sys
 
 import yaml
 
 COMPOSE = "docker-compose.hosted.yml"
+# AUT-5530: the dev-box file (added by AUT-5515) was never scanned, so a 40-char
+# rego key reached a public-repo commit. Only the hosted structural asserts below
+# stay hosted-only; the plain-secret scan now covers every compose file.
 SECRET_FILES = {
     "postgres_password", "redis_password", "minio_access_key", "minio_secret_key",
     "backend_secret_key", "ai_router_api_key", "ai_gateway_api_key",
@@ -45,6 +50,26 @@ PLAIN_FORBIDDEN = {  # secret-class keys that must not appear as plain env in ap
 
 def env_of(svc):
     return (svc or {}).get("environment") or {}
+
+# AUT-5530: secret-class keys are matched by SHAPE, not by a
+# hand-maintained key list — the dev-box file calls its key plain
+# `API_KEY`, which no fixed list had. Anything named API_KEY or
+# *_API_KEY/_KEY/_PASSWORD/_SECRET/_TOKEN with a literal value is
+# key material; `${VAR:-default}` interpolation is config, not a secret.
+PLAIN_SECRET_KEY_RE = re.compile(r"^(?:API_KEY|[A-Z0-9_]+(?:_API_KEY|_KEY|_PASSWORD|_SECRET|_TOKEN))$")
+
+def plain_secrets(svcs):
+    """{service: sorted([env keys])} carrying literal key material."""
+    found = {}
+    for name, svc in (svcs or {}).items():
+        plain = sorted(
+            k for k, v in env_of(svc).items()
+            if PLAIN_SECRET_KEY_RE.match(k)
+            and isinstance(v, str) and v and not v.startswith("${")
+        )
+        if plain:
+            found[name] = plain
+    return found
 
 
 def present(svcs, names):
@@ -100,6 +125,15 @@ def main():
         plain = PLAIN_FORBIDDEN & set(env_of(svcs[svc_name]))
         if plain:
             errors.append(f"{svc_name} still carries plain secret env: {sorted(plain)}")
+
+    # AUT-5530: the same invariant for every compose file in the repo,
+    # so a new compose file cannot reintroduce plaintext key material
+    # (exactly what happened on the dev-box rollout branch).
+    for path in sorted(glob.glob("docker-compose*.yml")):
+        with open(path) as f:
+            doc = yaml.safe_load(f) or {}
+        for svc_name, keys in plain_secrets(doc.get("services") or {}).items():
+            errors.append(f"{path}: {svc_name} carries plain secret env: {keys}")
 
     # F2: *_FILE references point at seeded files.
     for svc_name in present(svcs, SECRET_SERVICES):

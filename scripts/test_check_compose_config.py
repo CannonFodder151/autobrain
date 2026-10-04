@@ -58,6 +58,47 @@ class TestSecretFileSet(unittest.TestCase):
                     unknown.append(f"{name}:{k}")
         self.assertEqual(unknown, [])
 
+class TestPlainSecretScan(unittest.TestCase):
+    """AUT-5530: plaintext key material in any compose file is a FAIL."""
+
+    def test_shape_matcher_finds_the_aut_5530_key(self):
+        # synthetic value — never the real (now-revoked) key material
+        svcs = {"rego-lookup": {"environment": {
+            "ENVIRONMENT": "development",
+            "API_KEY": "unit-test-key-not-real-material",
+        }}}
+        self.assertEqual(
+            ccc.plain_secrets(svcs), {"rego-lookup": ["API_KEY"]})
+
+    def test_backend_plain_rego_key_is_flagged(self):
+        svcs = {"backend": {"environment": {
+            "REGO_LOOKUP_API_KEY": "x" * 40,
+        }}}
+        self.assertEqual(
+            ccc.plain_secrets(svcs), {"backend": ["REGO_LOOKUP_API_KEY"]})
+
+    def test_interpolation_and_non_secret_keys_are_not_flagged(self):
+        svcs = {"frontend": {"environment": {
+            "SOCIAL_FEDERATION_HUB_URL": "${SOCIAL_FEDERATION_HUB_URL:-x}",
+            "LOGIN_MAX_ATTEMPTS": "5",
+            "API_KEY_FILE": "/run/secrets/rego_lookup_api_key",
+            "REGO_LOOKUP_API_KEY_FILE": "/run/secrets/rego_lookup_api_key",
+        }}}
+        self.assertEqual(ccc.plain_secrets(svcs), {})
+
+    def test_every_compose_file_in_repo_is_clean(self):
+        import glob
+        import yaml
+        dirty = []
+        for path in sorted(glob.glob(os.path.join(REPO, "docker-compose*.yml"))):
+            with open(path) as f:
+                doc = yaml.safe_load(f) or {}
+            dirty += [f"{os.path.basename(path)}:{n}:{k}"
+                      for n, ks in ccc.plain_secrets(doc.get("services") or {}).items()
+                      for k in ks]
+        self.assertEqual(dirty, [])
+
+
 
 if __name__ == "__main__":
     unittest.main()

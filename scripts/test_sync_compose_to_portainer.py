@@ -201,7 +201,30 @@ class TestEnvPreservation(SyncComposeTestBase):
 
         self.assertEqual(rc, 3)
         self.assertIn("would wipe it", err)
+        self.assertIn("--allow-empty-env", err)
         self.assertNotIn("PUT", r.methods_for("/api/stacks/42"))
+
+    def test_allow_empty_env_syncs_without_wiping_anything(self):
+        """AUT-5515: a self-configuring stack (inline `environment:` +
+        read-only secret-file binds, no required ${VAR}) has an
+        legitimately-empty Env. --allow-empty-env is the explicit
+        opt-in that lets the sync through; the PUT still carries Env: []
+        so nothing is invented or wiped."""
+        routes = self.healthy_routes([
+            _container("autobrain-dev-backend-1", "backend"),
+            _container("autobrain-dev-frontend-1", "frontend"),
+        ])
+        routes[("GET", "/api/stacks/42")] = {"Id": 42, "Env": []}
+        r = _Responder(routes)
+
+        rc, out, err = self.run_main(r, extra_args=("--allow-empty-env",))
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(r.last_body("PUT")["Env"], [])
+        self.assertIn("PUT", r.methods_for("/api/stacks/42"))
+        self.assertIn("WARNING", err)
+        self.assertIn("--allow-empty-env", err)
+        self.assertIn("verified:", out)
 
 
 class TestPortCollisionGuard(SyncComposeTestBase):
