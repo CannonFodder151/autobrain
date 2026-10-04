@@ -14,6 +14,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed (AUT-5306)
 - docker(backend): merged `origin/main` into `feat/AUT-4113-market-data-celery` (PR #777), resolving the `docker/backend/Dockerfile` conflict — keeps AUT-4718's `python:3.13.16-slim-trixie@sha256:6906dca8…` base repin (clears the `image-scan` HIGH/CRITICAL findings from the stale 3.13.15 digest) together with AUT-3843's Playwright Chromium layer (`ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright` after the backend `pip install`, `chown -R autobrain:autobrain /ms-playwright`, and the chrome-sandbox re-SUID gate).
 
+## [0.3.308] - 2026-10-04
+
+### Fixed (AUT-5433)
+- fix(backend): the hourly off-site backup task `app.workers.tasks.backup_offsite_hourly` crashed on **every** run with `TypeError: Logger._log() got an unexpected keyword argument 'reason'` — `app/services/backup_offsite.py` built a stdlib `logging.getLogger` but every call site passes structlog-style kwargs (`reason=`, `filename=`, `status=`, `error=`, `pushed=` …), so the first `logger.info` of the run raised before any push was attempted. Affecting EP2 Default (backend 0.3.305) and EP5 Hosted (0.3.307), i.e. off-site backups had not been pushing at all. The module now uses the project's `get_logger` structlog logger like every other service. The existing test could not catch it: pytest's logging plugin attaches a root handler, which makes `setup_logging()`'s `logging.basicConfig()` a no-op so the level stayed `WARNING` and `logger.info()` short-circuited before `_log()` ran — the suite now forces `INFO` and asserts the structlog-kwarg call path.
+
+## [0.3.307] - 2026-10-03
+
+### Fixed (AUT-5318)
+- fix(backend): `_ensure_next_service` lost its function-local `list_completed_services` import in #888, so the AUT-5318 auto-suggest raised `NameError` and returned 500 on every odometer-triggered suggestion — i.e. adding a fuel or logbook entry to a vehicle with auto-suggest on and no scheduled service still created no service item. Restores the import.
+
+## [0.3.306] - 2026-10-03
+
+### Fixed (AUT-5318)
+- fix(backend): auto-suggested service was never created for most vehicles. `_ensure_next_service` (AUT-1275) kept only completed services whose `service_type` was one of ten canonical types, returned early when the vehicle had no service history at all, and silently gave up when the AI gateway was unreachable — so adding a fuel or logbook entry created no scheduled service for a car with only "repair"/"tyres"/"custom" records, a car with no logged services, or during any AI outage. All completed services now count as history, history is no longer required, and a deterministic manufacturer interval (measured gap between past services, else 20,000 km / 12 months — the same baseline as the ai/ service-prediction fallback) creates the suggestion whenever the gateway does not answer. Adds `deterministic_next_due()` + `backend/tests/test_aut5318_deterministic_next_due.py` (no DB) and an end-to-end case in `backend/tests/test_odometer_priority.py` (gateway down, repair-only history, zero history).
+
 ## [0.3.305] - 2026-10-03
 
 ### Fixed (AUT-5268)

@@ -11,7 +11,7 @@ what happens when a user back-fills a past fuel receipt or past logbook trip.
 PATCH /vehicles/{id} also routes through this module (AUT-1275 QA fix).
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +24,36 @@ _VALID_SERVICE_TYPES = frozenset({
     "scheduled", "tyre_rotation", "air_filter", "brake_fluid", "coolant",
     "transmission", "spark_plugs", "timing_belt", "brake_pads", "battery",
 })
+
+# Deterministic manufacturer interval for a scheduled service — mirrors the
+# ai/ service-prediction fallback (20,000 km / 12 months) so the suggestion is
+# the same whether or not the AI gateway answered (AUT-5318).
+_DEFAULT_INTERVAL_KM = 20_000
+_DEFAULT_INTERVAL_DAYS = 365
+_MIN_MEANINGFUL_GAP_KM = 5_000
+
+
+def deterministic_next_due(history: list[ServiceRecord], odo: int) -> tuple[int, date]:
+    """Next-due km + date from past services alone — no AI, no gateway.
+
+    AUT-5318: the auto-suggest used to bail out entirely when the AI gateway was
+    unreachable, so a fuel or logbook write silently created no service item.
+    Deterministic-first: the interval comes from the measured gap between
+    services, else the manufacturer default.
+    """
+    points = sorted({s.odometer_km for s in history if s.odometer_km})
+    interval_km = _DEFAULT_INTERVAL_KM
+    if len(points) >= 2:
+        gaps = [b - a for a, b in zip(points, points[1:]) if b - a >= _MIN_MEANINGFUL_GAP_KM]
+        if gaps:
+            interval_km = round(sum(gaps) / len(gaps))
+    next_km = points[-1] + interval_km if points else ((odo // interval_km) + 1) * interval_km
+
+    due_in_days = _DEFAULT_INTERVAL_DAYS
+    last_date = max((s.service_date for s in history if s.service_date), default=None)
+    if last_date is not None:
+        due_in_days = max(_DEFAULT_INTERVAL_DAYS - (date.today() - last_date).days, 0)
+    return next_km, date.today() + timedelta(days=due_in_days)
 
 
 async def _newest_logbook_entry(db: AsyncSession, vehicle_id: str) -> LogEntry | None:
@@ -67,10 +97,10 @@ async def sync_odometer(
 
 async def _ensure_next_service(db: AsyncSession, vehicle: Vehicle) -> None:
     """Board follow-up (AUT-1275): when the odo moves and no scheduled service
-    has been set yet, derive the next one from the vehicle's past scheduled
-    services via the deterministic-first prediction module. Only creates when
-    auto-suggest is on and history exists — the due-check then fires when that
-    prediction's threshold is reached.
+    has been set yet, derive the next one from the vehicle's past services via
+    the deterministic-first prediction module — AI first, deterministic interval
+    when the gateway is down (AUT-5318). Creates regardless of history; the
+    due-check then fires when that prediction's threshold is reached.
 
     Concurrency (QA fix): a Postgres advisory lock serialises the
     check-then-insert so two simultaneous odo writes cannot both create a
@@ -100,21 +130,21 @@ async def _ensure_next_service(db: AsyncSession, vehicle: Vehicle) -> None:
     if scheduled:
         return
 
+    # AUT-5318: every completed service is usable history. The old
+    # filter kept only canonical types, so a vehicle whose records are
+    # "repair"/"tyres"/"custom" (or that has none at all) produced an
+    # empty history and no service item was ever created.
     from app.services.service_records import list_completed_services
 
-    history = [
-        s for s in await list_completed_services(db, vehicle.id)
-        if s.service_type in _VALID_SERVICE_TYPES
-    ]
-    if not history:
-        return
+    history = await list_completed_services(db, vehicle.id)
+
     from app.services.ai_client import predict_service
 
-    last = history[-1]
+    last = history[-1] if history else None
     payload = {
         "service_type": "scheduled",
         "odometer_km": vehicle.odometer_km or 0,
-        "last_service_km": last.odometer_km,
+        "last_service_km": last.odometer_km if last else None,
         "make": vehicle.make or "",
         "model": vehicle.model or "",
         "year": vehicle.year or date.today().year,
@@ -131,7 +161,18 @@ async def _ensure_next_service(db: AsyncSession, vehicle: Vehicle) -> None:
     }
     result = await predict_service(payload)
     if not result:
-        return
+        # AUT-5318: gateway unreachable — fall back to the deterministic
+        # interval instead of silently creating nothing.
+        next_km, next_due = deterministic_next_due(history, vehicle.odometer_km or 0)
+        result = {
+            "service_type": "scheduled",
+            "next_due_km": next_km,
+            "next_due_date": next_due.isoformat(),
+            "reason": (
+                "Auto-suggested from past service records "
+                "(deterministic interval — AI gateway unavailable)"
+            ),
+        }
     svc_type = str(result.get("service_type") or "scheduled")
     if svc_type not in _VALID_SERVICE_TYPES:
         svc_type = "scheduled"

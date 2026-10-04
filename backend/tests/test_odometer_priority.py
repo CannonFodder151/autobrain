@@ -154,6 +154,84 @@ async def test_fuel_past_entry_cannot_roll_back_odo_and_suggests_service() -> No
 
 
 @pytest.mark.asyncio
+async def test_aut5318_suggestion_created_without_history_or_gateway(monkeypatch) -> None:
+    """AUT-5318: the auto-suggest must create the service item even when
+    the vehicle has no canonical completed-service history (only
+    non-standard types / nothing at all) and the AI gateway is
+    unreachable — deterministic interval, never a silent skip."""
+    async def _gateway_down(payload: dict) -> None:
+        return None
+    import app.services.ai_client
+    monkeypatch.setattr(app.services.ai_client, "predict_service", _gateway_down)
+
+    suffix = uuid.uuid4().hex[:8]
+    async with SessionLocal() as db:
+        user = User(
+            email=f"a5318-{suffix}@example.com", display_name="A5318",
+            hashed_password=hash_password("hunter22"), max_vehicles=3,
+        )
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+        # Only a non-canonical completed record — previously filtered out,
+        # so no service item was ever created.
+        vehicle = Vehicle(user_id=user.id, nickname="Repair Car",
+                          auto_suggest_service=True, odometer_km=18_000)
+        db.add(vehicle)
+        await db.commit()
+        await db.refresh(vehicle)
+        token = create_access_token(user.id)
+        vid = vehicle.id
+        db.add(ServiceRecord(
+            vehicle_id=vid, service_date="2025-01-10", odometer_km=10_000,
+            service_type="repair", status="completed",
+        ))
+        await db.commit()
+
+        # No history at all on this second vehicle.
+        bare = Vehicle(user_id=user.id, nickname="Bare Car",
+                       auto_suggest_service=True, odometer_km=5_000)
+        db.add(bare)
+        await db.commit()
+        await db.refresh(bare)
+        bare_id = bare.id
+    client = AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Fuel entry moves the odo past a used reading — item must appear.
+    resp = await client.post(
+        f"/api/v1/vehicles/{vid}/fuel",
+        json={"fill_date": "2026-08-01", "odometer_km": 22_000,
+              "litres": 50.0, "price_per_litre": 1.6, "total_cost": 80.0},
+        headers=headers,
+    )
+    assert resp.status_code == 201, resp.text
+    async with SessionLocal() as db:
+        created = list((await db.scalars(select(ServiceRecord).where(
+            ServiceRecord.vehicle_id == vid, ServiceRecord.status == "scheduled",
+        ))).all())
+        assert len(created) == 1, "repair-only history must still suggest a service"
+        assert created[0].next_due_km == 30_000, created[0].next_due_km
+        assert "deterministic" in (created[0].ai_prediction or "").lower()
+
+    # A vehicle with zero service history gets the manufacturer baseline.
+    resp = await client.post(
+        f"/api/v1/vehicles/{bare_id}/fuel",
+        json={"fill_date": "2026-08-01", "odometer_km": 22_000,
+              "litres": 40.0, "price_per_litre": 1.6, "total_cost": 64.0},
+        headers=headers,
+    )
+    assert resp.status_code == 201, resp.text
+    async with SessionLocal() as db:
+        created = list((await db.scalars(select(ServiceRecord).where(
+            ServiceRecord.vehicle_id == bare_id, ServiceRecord.status == "scheduled",
+        ))).all())
+        assert len(created) == 1, "no-history vehicle must still suggest a service"
+        assert created[0].next_due_km == 40_000, created[0].next_due_km
+    await client.aclose()
+
+
+@pytest.mark.asyncio
 async def test_auto_suggest_off_creates_no_suggestion() -> None:
     suffix = uuid.uuid4().hex[:8]
     async with SessionLocal() as db:
