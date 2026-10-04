@@ -1,6 +1,9 @@
 # Per-Post OG Image & Author Bio Schema (AUT-3115)
 
-Status: **implemented** on branch `feature/per-post-og-image-author-bio`, pending merge.
+Status: **implemented**. The implementation, branch, and commit `22b4d8c`
+live in the private `autobrainservice-website` repo — this mirror carries
+the workflow and the schema only, so verify the branch state there before
+quoting a merge status in copy.
 
 ## Overview
 
@@ -36,7 +39,7 @@ Blog post slug  →  Section lookup  →  Accent color  →  Render card  →  a
 ### Implementation
 
 - Generated images are **committed to the repo** (not generated at runtime)
-- 33 images created in commit `22b4d8c` (AUT-3115)
+- 33 images generated in commit `22b4d8c` (AUT-3115, website repo)
 - Rendered via Pillow (Python), zero external dependencies
 - Height updated from 400 to 630 for optimal LinkedIn/Facebook/Twitter rendering
 
@@ -199,5 +202,7 @@ The About page (`about.html`) also contains a `Person` node in its `@graph`:
 
 ## Related Docs
 
-- [Social Image Generation (LinkedIn/Facebook)](./social-image-generation.md) — runtime social card generator for posts
-- [Marketing & Website Index](./index.md) — section overview
+- [Social Image Generation](./social-image-generation.md) — runtime social card generator for posts
+- [Website Documentation](./website.md) — site pages, OG meta, deploy
+- [Content Calendar](./content-calendar.md) — approval gates and campaign schedule
+- [Marketing & Website Index](./index.md) — section overview, sanitisation rules

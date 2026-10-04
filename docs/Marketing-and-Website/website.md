@@ -2,12 +2,12 @@
 
 ## Overview
 
-The marketing website lives at **autobrainservice.app** and is a separate repository: **CannonFodder151/autobrainservice-website** (private). It is a static site (vanilla HTML/CSS/JS) deployed to the hosted VM via NGINX. The site does **not** use a build step or framework — every page is a `.html` file.
+The marketing website lives at **autobrainservice.app** and is a separate repository: **CannonFodder151/autobrainservice-website** (private). It is a static site (vanilla HTML/CSS/JS) served by nginx on the hosted VM. The site does **not** use a build step or framework — every page is a `.html` file.
 
 **Domain:** `autobrainservice.app` (Cloudflare DNS, managed by Deployment team).  
 **Subdomains:**
 - `demo.autobrainservice.app` — demo instance
-- `hub.autobrainservice.app` — federation hub (when live)
+- `hub.autobrainservice.app` — federation hub (deployed as the `hub` service in `docker-compose.hosted.yml`, licensed free on AutoBrain-Hosted)
 
 ## Repository Structure
 
@@ -51,11 +51,12 @@ autobrainservice-website/
 
 ## Deployment
 
-- **Target:** Hosted VM — Portainer NGINX-Host endpoint
-- **Method:** Static files served by NGINX container. No build pipeline.
-- **SSL:** Cloudflare Full (strict) + Let's Encrypt on NGINX.
+- **Target:** Hosted VM (`<HOSTED_VM_IP>`) — the public nginx endpoint, fronted by Cloudflare.
+- **Method:** Static files served by nginx. No build pipeline, no bundler, no framework runtime.
+- **SSL:** Cloudflare edge TLS; origin certificate terminates at the nginx container.
 - **Cache headers:** `Cache-Control: public, max-age=31536000, immutable` for `/assets/*`; `no-cache` for HTML.
-- **Deploy process:** Push to `main` → Deployment team runs `docker compose pull && docker compose up -d` on NGINX-Host, or uses Portainer "Redeploy" on the stack. No CI/CD pipeline for this repo.
+- **Deploy process:** Push to `main` → the Deployment team redeploys the site container on the hosted VM. The marketing site is **not** part of `docker-compose.hosted.yml` (that file is the AutoBrain app stack — backend, worker, Postgres, MinIO, hub); the static site is deployed separately from the `autobrainservice-website` repo.
+- **No CI/CD for this repo.** Deployment is an operator action, so confirm the deploy with the Deployment team rather than assuming a push went live.
 
 ## SEO & Social Metadata
 
@@ -68,23 +69,26 @@ autobrainservice-website/
 ## Content Ownership & Workflow
 
 - **Source of truth:** `autobrainservice-website` repo (`main` branch).
-- **Marketing copy changes:** CMO agent drafts → human CMO approves in Discord `#marketing` via n8n Reporter embed → CMO agent commits to repo → Deployment team deploys.
-- **Phase 1 marketing refresh branch:** `phase1/cmo-marketing-refresh` (tracks updated copy for all pages).
-- **Blog posts:** Drafted in Outline → approved in Discord `#marketing` → committed as `.html` in `blog/` + per-post OG image in `assets/blog/og/`.
-- **Lead capture:** `lead.js` posts to n8n webhook (`<INTERNAL_N8N_BASE_URL>/webhook/lead`) → creates Discord thread in `#support` + logs to Outline.
+- **Marketing copy changes:** CMO agent drafts → human CMO approves in Discord `#marketing` via n8n Reporter embed with the **full publishable content inline** → CMO agent commits to repo → Deployment team deploys.
+- **Approval-first:** no auto-publish and no auto-schedule. Gates are spelled out in [Content Calendar](./content-calendar.md).
+- **Blog posts:** Drafted in Outline → approved in Discord `#marketing` → committed as `.html` in `blog/` + per-post OG image in `assets/blog/og/`. See [Per-Post OG Image Workflow](./per-post-og-image-workflow.md).
+- **Lead capture:** `lead.js` posts to an n8n webhook (internal host, configured per environment — not pinned in docs) → creates a Discord thread in `#support` + logs to Outline.
 
 ## Analytics & Tracking
 
 - **No Google Analytics / third-party trackers.** Privacy-first.
-- **Server-side logs:** NGINX access logs only (IP anonymised).
-- **Custom events:** Lead form submits, demo clicks, GitHub clicks tracked via n8n webhook to Outline.
+- **Server-side logs:** nginx access logs only, with IPs anonymised. Query patterns in [Growth Metrics](./growth-metrics.md).
+- **Custom events:** Lead form submits, demo clicks, and GitHub clicks are forwarded to n8n for Discord/Outline logging. There is no client-side event tracker to instrument.
 
 ## Related Docs
 
 - [Demo Environment](./demo-environment.md) — demo.autobrainservice.app ops
 - [Social Media Strategy](./social.md) — social channels, Buffer workflow
-- [Content Calendar](./content-calendar.md) — scheduled campaigns
+- [Content Calendar](./content-calendar.md) — scheduled campaigns and approval gates
+- [Phase 1 Social Calendar](./phase1-social-calendar.md) — Phase 1 launch schedule
 - [Growth Metrics](./growth-metrics.md) — KPIs, funnel, Buffer analytics
 - [Per-Post OG Image Workflow](./per-post-og-image-workflow.md) — AUT-3115 image generation
+- [Community Garage](./community-garage.md) — federation model and hub pricing
+- [Container Architecture](../Engineering/container-architecture.md) — the AutoBrain app stack this site fronts
 
-Source: `autobrainservice-website` repo + Phase 1 marketing refresh branch `phase1/cmo-marketing-refresh`.
+Source: `autobrainservice-website` repo; approval policy in the root `AGENTS.md`; marketing mirror policy in [Marketing & Website Index](./index.md).

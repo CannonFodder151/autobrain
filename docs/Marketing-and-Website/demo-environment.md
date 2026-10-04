@@ -18,7 +18,7 @@ The demo instance is a **public, read/write AutoBrain environment** at `demo.aut
 | **Compose file** | `docker-compose.yml` (not `.hosted.yml` or `.prod.yml`) |
 | **Backend** | Runs with `DEMO_MODE=true` |
 | **Frontend** | Flutter web build (same as other stacks) |
-| **AI router** | 9Router on `<INTERNAL_9ROUTER_URL>` (shared with Default) |
+| **AI router** | 9Router at `<INTERNAL_9ROUTER_URL>` (shared with Default) |
 | **Database** | Postgres (shared instance with Default stack, separate DB) |
 | **MinIO** | Shared instance, separate bucket prefix |
 | **Public URL** | `https://demo.autobrainservice.app` |
@@ -35,20 +35,23 @@ When `DEMO_MODE=true` (in `backend/app/core/config.py`):
    - Fuel logs, service records, OBD codes, receipts, valuations
    - **≥15 Issues Blog posts** with replies (AUT-712)
    - Social builds (Community Garage) — local only, no federation
-3. **Reset capability:** `DEMO_RESET=true` on boot wipes and re-seeds the demo user (used when seed data changes). `reset_demo()` clears `vehicle_shares` and issue-blog data first to avoid FK crashes (AUT-521).
-4. **No federation:** Demo instance does **not** register with the federation hub. Community Garage shows only local demo builds.
-5. **Premium entitlement:** Demo account has read-only Community Garage access (curated feed); write routes reject demo role.
+4. **Reset capability:** `DEMO_RESET=true` on boot wipes and re-seeds the demo user (used when seed data changes). `reset_demo()` clears `vehicle_shares` and issue-blog data first to avoid FK crashes (AUT-521).
+5. **No federation:** Demo instance does **not** register with the federation hub. Community Garage shows only local demo builds.
+6. **Premium entitlement:** The demo user is seeded with `role='demo'` and `free_account=False`, so it **keeps read-only Community Garage access** (its curated demo feed). Social write routes reject it via `require_premium_write`, which chains to `require_write` and rejects the demo role. Both guards live in `backend/app/api/deps.py`; only `free_account=True` (a free-tier account) is locked out of Community Garage entirely.
 
 ## Demo Stack Differences
 
 | Setting | Demo | Default | Hosted |
 |---------|------|---------|--------|
 | `DEMO_MODE` | `true` | `false` | `false` |
-| `SOCIAL_FEDERATION_HOSTED` | `false` | `false` | `true` |
-| Federation hub | Not registered | Optional | Auto-registered (free license) |
-| Data persistence | Ephemeral (reset on demand) | Persistent | Persistent (backed up) |
-| Public access | Yes (no auth wall) | Auth required | Auth required |
-| Backups | None | Nightly (autobrain-backup) | Nightly + offsite |
+| `SOCIAL_FEDERATION_HOSTED` | `false` | `false` | `true` (licensed free on the hub) |
+| Federation hub | Not registered | Optional (`SOCIAL_FEDERATION_HOSTED=false`) | Auto-registered |
+| Compose file | `docker-compose.yml` | `docker-compose.prod.yml` | `docker-compose.hosted.yml` |
+| Services | — | postgres, redis, minio, backend, frontend | 9 long-running (adds dongle-server, hub, 9router, backup) |
+| Data persistence | Ephemeral (reset on demand) | Persistent | Persistent |
+| Backups | None | Operator-managed | `backup` service (hourly snapshot in Celery beat, AUT-3827) + offsite |
+
+Backups and data-persistence expectations for the hosted stack come from the Deployment team; the demo instance is disposable by design and gets none.
 
 ## Reset & Maintenance
 
@@ -62,19 +65,23 @@ When `DEMO_MODE=true` (in `backend/app/core/config.py`):
 - **Shared Postgres/MinIO with Default:** Resource contention possible. Demo is lower priority.
 - **No backups:** Demo data is disposable.
 - **Rate limits:** Demo users hit the same API rate limits as real users.
-- **AI calls:** Go through shared 9Router; demo traffic counts against the same quota.
+- **AI calls:** The demo account is seeded read-only, and AI modules reject the demo role (`require_ai` in `backend/app/api/deps.py`), so demo visitors do not consume AI-router quota.
 - **No email/SMTP:** Password reset, notifications disabled for demo.
 
 ## QA Usage
 
-- `backend/tests/health_demo.test.py` — HTTP smoke tests against live demo URL.
+- `backend/tests/test_seed_reset_demo.py` — validates FK-safe reset ordering (sqlite).
 - `backend/tests/test_demo_fuel_seed.py` — validates fuel seed data.
+- `backend/tests/test_health_demo.py` — health endpoint env reporting.
+- `backend/tests/health_demo.test.py` — HTTP smoke tests against the live demo URL (opt-in; skipped by default).
 - Run locally: `DEMO_MODE=true pytest backend/tests/test_seed_reset_demo.py -q` (sqlite).
 
 ## Related Docs
 
 - [Website Documentation](./website.md) — marketing site (separate repo)
 - [Community Garage](./community-garage.md) — demo shows local-only social
-- [Deployment Docs](../Deployment-and-Infrastructure/) — stack definitions
+- [Growth Metrics](./growth-metrics.md) — demo is the mid-funnel metric; how to count it
+- [Deployment & Infrastructure](../Deployment-and-Infrastructure/index.md) — stack definitions
+- [Container Architecture](../Engineering/container-architecture.md) — service-level runtime
 
-Source: `docker-compose.yml`, `backend/app/core/config.py`, `backend/app/db/seed.py`, `backend/tests/test_seed_reset_demo.py`.
+Source: `docker-compose.yml`, `backend/app/core/config.py`, `backend/app/db/seed.py`, `backend/app/api/deps.py`, `backend/tests/test_seed_reset_demo.py`.
