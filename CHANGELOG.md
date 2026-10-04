@@ -11,6 +11,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-5515)
+- deploy(dev): give the EP6 dev box a rollout path from git. `docker-compose.dev-box.yml` is committed for the first time — the `autobrain-dev` Portainer stack's compose existed only inside Portainer, so no `sync-compose-to-portainer.py` run could ever have worked and dev sat on backend 0.3.307 while main was 0.3.308 (which is how AUT-5433's backup crash stayed unexercised on the dev box). `scripts/sync-compose-to-portainer.py` gains an explicit `--allow-empty-env` flag: `Env: []` is correct for stacks that configure themselves with inline `environment:` + read-only `*_FILE` binds out of `${SECRETS_DIR}`, so the AUT-4778 wipe guard was a false positive there. Default refusal is unchanged, so the AUT-4778 bug on `autobrain-hosted` stays protected. `docs/Deployment-and-Infrastructure/deployment-guide.md` gains a "Where each stack gets its configuration" table covering all three stacks. Rolled the dev box to 0.3.308 (backend + frontend on the multi-arch `:hosted` index digests CI publishes) — `/health` on 10.0.3.39:8090 verified.
+- Note: the original ticket assumed stack 109/84 needed their Portainer `Env` seeded. They do not — neither stack interpolates a var that must come from Portainer Env, so nothing was missing and seeding would have invented a second source of truth (and for `autobrain-backup` would have moved a live API key into the stack record). Documented the real config model instead.
+
 ## [0.3.308] - 2026-10-04
 
 ### Fixed (AUT-5433)

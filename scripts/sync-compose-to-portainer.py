@@ -166,6 +166,12 @@ def main():
     ap.add_argument("--api-key", default=os.environ.get("PORTAINER_API_KEY"))
     ap.add_argument("--pull-image", action="store_true", default=True,
                     help="force a pull so the new digest is fetched (default: true)")
+    ap.add_argument("--allow-empty-env", action="store_true",
+                    help="permit syncing a stack whose Portainer Env is empty. "
+                         "Only for stacks that need no ${VAR} interpolation "
+                         "because they configure themselves with inline compose "
+                         "environment + read-only secret-file binds (AUT-5515: "
+                         "autobrain-dev on EP6, autobrain-backup on EP2)")
     args = ap.parse_args()
 
     # AUT-5172: gate before any network call so a gated run has zero effect.
@@ -215,9 +221,26 @@ def main():
         current = json.load(r)
     env = current.get("Env") or []
     if not env:
-        print("ERROR: stack env is empty — refusing to sync (would wipe it)",
+        # AUT-5515: Env: [] is legitimate for the stacks that configure
+        # themselves — inline `environment:` values plus read-only *FILE binds
+        # out of ${SECRETS_DIR} (autobrain-dev on EP6, autobrain-backup on EP2).
+        # Nothing is wiped in that case, so the AUT-4778 guard is a false
+        # positive and it made the dev box unsyncable. Keep the default refusal
+        # — an empty Env on a stack that *does* interpolate is the AUT-4778 bug
+        # — and make the exception an explicit, loud flag rather than a silent
+        # downgrade of the guard.
+        if not args.allow_empty_env:
+            print("ERROR: stack env is empty — refusing to sync (would wipe it)",
+                  file=sys.stderr)
+            print("If this stack configures itself from inline compose "
+                  "environment + secret-file binds, re-run with "
+                  "--allow-empty-env.", file=sys.stderr)
+            return 3
+        print("WARNING: stack env is empty — proceeding because "
+              "--allow-empty-env was passed; no env is being wiped. Confirm "
+              "the incoming compose interpolates no ${VAR} that must come from "
+              "Portainer Env, or compose will fail (or start empty).",
               file=sys.stderr)
-        return 3
 
     # AUT-4946: refuse BEFORE the PUT if a host port this compose needs is
     # held by a container from a service the new compose drops. Portainer's
