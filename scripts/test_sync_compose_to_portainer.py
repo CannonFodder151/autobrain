@@ -15,10 +15,12 @@ number of calls (the health poll repeats), and an ordered list silently went
 stale the moment PR #852 added the verification calls.
 """
 import contextlib
+import email
 import importlib.util
 import io
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -59,11 +61,13 @@ class _Responder:
     def __init__(self, routes):
         self.routes = routes
         self.calls = []
+        self.call_headers = []
 
     def __call__(self, req, timeout=None):
         method = getattr(req, "method", None) or "GET"
         url = req.full_url
         self.calls.append((method, url, req.data))
+        self.call_headers.append((method, url, dict(req.headers)))
         # Longest fragment first: "/api/stacks/42" must win over "/api/stacks".
         for (route_method, fragment), payload in sorted(
                 self.routes.items(), key=lambda kv: -len(kv[0][1])):
@@ -85,6 +89,19 @@ class _Responder:
                 return json.loads(data)
         raise AssertionError(f"no {method} body recorded")
 
+    def headers_for(self, method, fragment):
+        for (m, u, h) in reversed(self.call_headers):
+            if m == method and fragment in u:
+                return h
+        raise AssertionError(f"no {method} to {fragment}")
+
+    def last_raw_body(self, method):
+        """Undecoded request body (for multipart posts)."""
+        for (m, _, data) in reversed(self.calls):
+            if m == method and data is not None:
+                return data
+        raise AssertionError(f"no {method} body recorded")
+
 
 class _FakeResponse:
     def __init__(self, body):
@@ -99,6 +116,21 @@ class _FakeResponse:
     def __exit__(self, *exc):
         return False
 
+
+def _multipart_fields(body, content_type):
+    """Parse a multipart/form-data body into {name: value}."""
+    m = re.search(r"boundary=(\S+)", content_type)
+    assert m, content_type
+    msg = email.message_from_bytes(
+        b"Content-Type: " + content_type.encode()
+        + b"\r\nMIME-Version: 1.0\r\n\r\n" + body)
+    out = {}
+    for part in msg.walk():
+        if part.get_content_maintype() == "multipart":
+            continue
+        name = part.get_param("name", header="content-disposition")
+        out[name] = part.get_payload(decode=True).decode()
+    return out
 
 class SyncComposeTestBase(unittest.TestCase):
 
@@ -387,6 +419,105 @@ class TestNightlyHostedSync(SyncComposeTestBase):
         finally:
             if saved is not None:
                 _os.environ["ALLOW_OUT_OF_WINDOW"] = saved
+
+class TestCreateStack(SyncComposeTestBase):
+    """AUT-5582: --create posts a new stack when none exists.
+
+    The create route is a POST (not the PUT the sync path uses), the
+    initial env comes only from --env-file, and the same post-deploy
+    health gate + digest audit must run — a freshly created stack is
+    exactly the one you cannot afford to come up broken.
+    """
+
+    MISSING_STACK_ROUTES = {
+        ("GET", "/api/stacks"): [],  # no stack named autobrain-demo yet
+    }
+
+    def _env_file(self):
+        path = os.path.join(self.tmp, "stack.env")
+        with open(path, "w") as f:
+            f.write("# comment\nPOSTGRES_USER=autobrain\n"
+                    "POSTGRES_PASSWORD=hunter2\n")
+        return path
+
+    def _routes(self, containers):
+        routes = dict(self.MISSING_STACK_ROUTES)
+        routes[("POST", "/api/stacks/create/standalone/file")] = {
+            "Id": 43, "Name": "autobrain-demo"}
+        routes[("GET", "/docker/containers/json")] = containers
+        return routes
+
+    def test_create_posts_stack_with_env_file_and_audits(self):
+        r = _Responder(self._routes([
+            _container("autobrain-demo-backend-1", "backend"),
+            _container("autobrain-demo-frontend-1", "frontend"),
+        ]))
+
+        rc, out, _ = self.run_main(
+            r, extra_args=["--create", "--env-file", self._env_file(),
+                           "--stack", "autobrain-demo"])
+
+        self.assertEqual(rc, 0)
+        # Portainer 2.39 takes a multipart upload, not the JSON POST the old
+        # docs show (that route is 405 behind the reverse proxy).
+        self.assertEqual([u for u in r.urls("POST")],
+                         ["https://portainer.example.com/api/stacks/create/"
+                          "standalone/file?endpointId=5"])
+        post_headers = r.headers_for("POST", "/api/stacks/create")
+        ct = next(v for k, v in post_headers.items() if k.lower() == "content-type")
+        fields = _multipart_fields(r.last_raw_body("POST"), ct)
+        self.assertEqual(fields["Name"], "autobrain-demo")
+        self.assertEqual(json.loads(fields["Env"]), [
+            {"name": "POSTGRES_USER", "value": "autobrain"},
+            {"name": "POSTGRES_PASSWORD", "value": "hunter2"},
+        ])
+        with open(self.compose_file) as f:
+            self.assertIn(f.read(), fields["file"])
+        self.assertIn("created", out)
+        self.assertIn("id=43", out)
+        self.assertIn("created", out)
+        self.assertIn("verified: 2 services running", out)
+        self.assertIn("applied: backend -> ghcr.io/x/backend@sha256:aaa", out)
+
+    def test_create_refuses_without_env_file(self):
+        r = _Responder(self._routes([]))
+
+        rc, _, err = self.run_main(
+            r, extra_args=["--create", "--stack", "autobrain-demo"])
+
+        self.assertEqual(rc, 7)
+        self.assertIn("--env-file", err)
+        self.assertEqual(r.methods_for("/api/stacks"), ["GET"])
+
+    def test_create_refuses_when_orphan_holds_wanted_port(self):
+        r = _Responder(self._routes([
+            _container("autobrain-demo-backend-1", "backend", ports=[8000]),
+            _container("autobrain-demo-frontend-1", "frontend", ports=[80]),
+            _container("autobrain-ghost-1", "ghost", ports=[80]),
+        ]))
+
+        rc, _, err = self.run_main(
+            r, extra_args=["--create", "--env-file", self._env_file(),
+                           "--stack", "autobrain-demo"])
+
+        self.assertEqual(rc, 5)
+        self.assertIn("host port collision", err)
+        self.assertEqual(r.methods_for("/api/stacks"), ["GET"])
+
+    def test_create_reports_unhealthy_stack(self):
+        r = _Responder(self._routes([
+            _container("autobrain-demo-backend-1", "backend", state="created"),
+        ]))
+
+        # verify_running is patched to avoid sleeping through its 20 x 5s poll.
+        with patch.object(scp, "verify_running", return_value=[
+                ("/autobrain-demo-backend-1", "stuck in state created")]):
+            rc, _, err = self.run_main(
+                r, extra_args=["--create", "--env-file", self._env_file(),
+                               "--stack", "autobrain-demo"])
+
+        self.assertEqual(rc, 6)
+        self.assertIn("is NOT healthy", err)
 
 if __name__ == "__main__":
     unittest.main()

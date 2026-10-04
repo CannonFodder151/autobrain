@@ -1,0 +1,238 @@
+# AutoBrain DEMO stack — Portainer stack "autobrain-demo" (EP2, Portainer-Host 10.0.3.17).
+# Public demo: https://demo.autobrainservice.app (demo@autobrainservice.app / demo).
+#
+# AUT-5582: this file is the Demo instance's only definition. Until it
+# existed, the Demo stack ran as six plain containers — invisible to every
+# compose- and stack-driven redeploy (scripts/upgrade-instances.sh resolves
+# the tier by Portainer stack name and skipped it), and a hand-recreate
+# (AUT-5491, AUT-5555) came back with NO compose DNS aliases
+# (Networks.*.Aliases == None): the backend could not resolve
+# postgres/redis/minio/ai and frontend nginx (resolver 127.0.0.11) could
+# not resolve backend, so every proxied path returned 502. `extra_hosts`
+# cannot fix this — the embedded Docker resolver ignores /etc/hosts.
+# Compose-managed recreation is what restores the aliases; nothing else does.
+#
+# Deployed as the Portainer stack `autobrain-demo` on endpoint 2 so the
+# documented promotion path works again (deployment-guide.md release
+# checklist + scripts/upgrade-instances.sh). Keep the CLI copy at
+# /opt/autobrain-demo/docker-compose.demo.yml byte-identical to this file
+# (its neighbour /opt/autobrain-demo/.env holds the same values as the
+# Portainer stack env) so the recovery path is plain:
+#   cd /opt/autobrain-demo && docker compose up -d
+#
+# Project name is pinned and is load-bearing: the `plate-api-scraper`
+# stack joins this stack's network as an EXTERNAL network
+# (autobrain-demo_default) and the backend resolves it for rego lookups.
+#
+# All images are pinned by digest — a redeploy must never silently pull a
+# different base image into the tier that gates every other promotion.
+#
+# Architecture note: Demo still runs the PRE-AUT-2000 topology (a separate
+# `ai` container beside `backend`), unlike docker-compose.prod.yml /
+# docker-compose.hosted.yml where the AI gateway runs inside the backend
+# image. Reproduced as-is on purpose: a topology change is a migration, not
+# a compose landing. DEMO_MODE=true is what makes /health report
+# "env":"demo".
+#
+# Required in .env / the Portainer stack env (never in this file — the repo
+# is public):
+#   POSTGRES_PASSWORD MINIO_ACCESS_KEY MINIO_SECRET_KEY SECRET_KEY
+#   AI_GATEWAY_API_KEY AI_ROUTER_API_KEY MARKET_DATA_API_KEY REGO_LOOKUP_API_KEY
+# Demo runs Redis WITHOUT auth, so the redis URLs carry no password.
+
+name: autobrain-demo
+
+x-router-env: &router-env
+  # Corporate 9Router on the EP2 LAN (OpenAI-compatible). Demo/Default use
+  # the LAN instance; the hosted stack uses its own stack-local 9router
+  # because 10.0.3.17 is unreachable from Oracle Cloud (see
+  # docker-compose.hosted.yml) — do NOT "fix" this to match hosted.
+  AI_ROUTER_URL: ${AI_ROUTER_URL:-http://10.0.3.17:20128/v1}
+  AI_ROUTER_API_KEY: ${AI_ROUTER_API_KEY:?AI_ROUTER_API_KEY must be set in .env}
+
+services:
+  postgres:
+    # AUT-5582: these six digests are the ones EP2 actually runs. They are NOT
+    # copied from docker-compose.prod.yml / docker-compose.hosted.yml — those
+    # pin different content (the prod pgvector digest resolves on EP2 to a
+    # *different* local image, and the prod ai/backend/frontend digests are
+    # absent here, so compose would have pulled unknown images into the tier).
+    # Each pin below was read back from EP2 (`GET /docker/images/{id}/json`
+    # -> RepoDigests) and verified to resolve to the running container's
+    # ImageID, so recreating the stack cannot silently change a version.
+    image: pgvector/pgvector@sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-autobrain}
+      POSTGRES_DB: ${POSTGRES_DB:-autobrain}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      # -h 127.0.0.1 so the probe needs no container DNS (AUT-4038).
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER:-autobrain}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis@sha256:520775a41a63e77e06c73e35d2fd9cc15921a609516818796b4ecbb813078bc7
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY must be set in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY must be set in .env}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PRE-AUT-2000 topology (see header): the AI gateway as its own
+  # container; the backend reaches it over the compose network.
+  ai:
+    image: cannonfodder151/autobrain-ai@sha256:03656882722b9fb140c48a2536e97ddd5b054e4660c284bcd3abddfd30d2a527
+    restart: unless-stopped
+    user: autobrain
+    working_dir: /app
+    environment:
+      <<: *router-env
+      # Bearer key callers must present (the backend sends it as
+      # MARKET_DATA_API_KEY — same value, two names, one secret).
+      API_KEY: ${MARKET_DATA_API_KEY:?MARKET_DATA_API_KEY must be set in .env}
+      AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:?AI_GATEWAY_API_KEY must be set in .env}
+    expose:
+      - "8000"
+      - "8001"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8001/health && curl -fsS http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  backend:
+    image: cannonfodder151/autobrain-backend@sha256:63ff74f9a66f7ec449d2c2fc7e71a125e48a6430079f06310aed0dfc3087f93a
+    restart: unless-stopped
+    user: autobrain
+    working_dir: /app
+    # Boot order is load-bearing: wait for MinIO, bring the schema up,
+    # start Celery worker+beat in the background, then the API in the
+    # foreground. Mirrors the image CMD; kept explicit so a redeploy is
+    # byte-stable.
+    command: sh -c "/init-minio.sh && python -m app.db.bootstrap && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    environment:
+      <<: *router-env
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      PYTHONPATH: /app
+      # DEMO_MODE is what /health reports as "env":"demo".
+      DEMO_MODE: "true"
+      SELF_SIGNUP_ENABLED: "false"
+      APP_BASE_URL: ${APP_BASE_URL:-https://demo.autobrainservice.app}
+      # Presigned-object URLs must be browser-reachable via the frontend.
+      MINIO_PUBLIC_ENDPOINT: ${APP_BASE_URL:-https://demo.autobrainservice.app}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_BUCKET: ${MINIO_BUCKET:-autobrain-assets}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY must be set in .env}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY must be set in .env}
+      # No redis auth on this tier, so these URLs carry no password.
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-autobrain}
+      POSTGRES_DB: ${POSTGRES_DB:-autobrain}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in .env}
+      # Separate AI gateway container (see header).
+      AI_LOCAL_BASE_URL: http://ai:8001
+      AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:?AI_GATEWAY_API_KEY must be set in .env}
+      AI_ROUTER_MODEL: ${AI_ROUTER_MODEL:-General-Use}
+      AI_ROUTER_TIMEOUT_SECONDS: 120
+      # The 9Router does not serve the bare embedding alias; use the full route.
+      EMBEDDING_MODEL: openrouter/openai/text-embedding-3-small
+      MARKET_DATA_URL: http://ai:8000
+      MARKET_DATA_API_KEY: ${MARKET_DATA_API_KEY:?MARKET_DATA_API_KEY must be set in .env}
+      # rego-lookup is the `plate-api-scraper` Portainer stack on this host,
+      # which joins this stack's network as an external network.
+      REGO_LOOKUP_URL: ${REGO_LOOKUP_URL:-http://plate-api-scraper:8000/lookup}
+      REGO_LOOKUP_API_KEY: ${REGO_LOOKUP_API_KEY:?REGO_LOOKUP_API_KEY must be set in .env}
+      SOCIAL_FEDERATION_HUB_URL: ${SOCIAL_FEDERATION_HUB_URL:-https://hub.autobrainservice.app}
+      SOCIAL_FEDERATION_HOSTED: "false"
+      # FUEL_*_ENABLED mirrors the pre-existing Demo config (true with no
+      # keys provisioned): the beat logs a FuelFeedError per poll and the
+      # map stays empty. Set to "false" if that noise is unwanted.
+      FUEL_NSW_ENABLED: "true"
+      FUEL_VIC_ENABLED: "true"
+      FUEL_SA_ENABLED: "true"
+      SMTP_HOST: ${SMTP_HOST:-nathanmartina-com.mail.protection.outlook.com}
+      SMTP_PORT: ${SMTP_PORT:-25}
+      SMTP_USE_TLS: "true"
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-no-reply@autobrainservice.app}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-AutoBrain}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@autobrainservice.app}
+      ADMIN_DISPLAY_NAME: ${ADMIN_DISPLAY_NAME:-AutoBrain Admin}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      ai:
+        condition: service_started
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  frontend:
+    image: ghcr.io/cannonfodder151/autobrain-frontend@sha256:40cb83b04885abd1eea7cc16ec581a7cbc559a9c3cb711fdaaa5af581c7df1b7
+    restart: unless-stopped
+    user: nginx
+    environment:
+      # nginx proxies /api, /ws and /ai to this upstream. The service name
+      # resolves ONLY through compose DNS aliases — a hand-created container
+      # has no alias here and nginx 502s every proxied path (AUT-5555).
+      BACKEND_URL: http://backend:8000
+    ports:
+      # Host 8089 is the demo vhost upstream (EP3 nginx -> 10.0.3.17:8089).
+      - "8089:8080"
+    healthcheck:
+      # Probe the backend upstream, not just nginx: nginx-only probes hid
+      # dead backends behind a healthy frontend (AUT-2389).
+      test: ["CMD-SHELL", "wget -qO- \"${BACKEND_URL:-http://backend:8000}/health\" | grep -q '\"status\":\"ok\"'"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  # Keep the <project>_*-data names: the 2026-10-04 outage left these
+  # intact and the restore reused them — renaming them would orphan the
+  # demo data (PG17 database, redis dump, MinIO buckets).
+  postgres-data:
+  redis-data:
+  minio-data:
