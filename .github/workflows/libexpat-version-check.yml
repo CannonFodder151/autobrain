@@ -11,6 +11,12 @@ name: libexpat fix-detect (nginx frontend, AUT-2126)
 # so `unchanged` was never true and it re-filed a duplicate issue daily; it now
 # resolves the index digest.
 #
+# AUT-5574: every scheduled run since at least 2026-09-15 died in step 1 —
+# regctl was installed to root-owned /usr/local/bin while the self-hosted
+# runner runs as non-root, so curl exited 23 writing the binary out. The
+# `if: always()` Discord step then failed too on a blank webhook URL and
+# masked the real result. Both fixed; the guard now actually runs.
+#
 # Manual run: ok. Daily schedule: 07:30 UTC (off-hours to avoid contention
 # with the weekly 07:00 Mon scan in trivy-image-scan.yml).
 #
@@ -49,10 +55,18 @@ jobs:
             aarch64|arm64) REGCTL_ARCH=arm64 ;;
             *) echo "unsupported arch: $ARCH"; exit 1 ;;
           esac
+          # AUT-5574: the self-hosted runner executes as non-root
+          # (administrator) and cannot write to root-owned /usr/local/bin —
+          # curl downloaded the binary then failed with exit 23 writing it
+          # out, killing the job before any check ran. Install into the
+          # runner's own temp dir and expose it via GITHUB_PATH instead.
+          BIN_DIR="${RUNNER_TEMP}/bin"
+          mkdir -p "$BIN_DIR"
           curl -fsSL "https://github.com/regclient/regclient/releases/latest/download/regctl-linux-${REGCTL_ARCH}" \
-            -o /usr/local/bin/regctl
-          chmod +x /usr/local/bin/regctl
-          regctl version
+            -o "${BIN_DIR}/regctl"
+          chmod +x "${BIN_DIR}/regctl"
+          echo "${BIN_DIR}" >> "$GITHUB_PATH"
+          "${BIN_DIR}/regctl" version
 
       - name: Resolve current stable-alpine digest
         id: digest
@@ -154,7 +168,7 @@ jobs:
           FIXED: ${{ steps.gate.outputs.fixed }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
           if [ "$UNCHANGED" = "true" ]; then
             TITLE="libexpat fix-detect: pinned digest unchanged (libexpat 2.8.3-r0 still vulnerable)"
             COLOR="0x95A5A6"
@@ -168,7 +182,31 @@ jobs:
             COLOR="0xFEE75C"
             DESC="New digest but libexpat not yet at the fix threshold. Will retry tomorrow."
           fi
-          curl -s -X POST "$DISCORD_REPORT_WEBHOOK" \
+          # AUT-5574: when the webhook secret resolves to an empty string, curl
+          # receives a blank URL argument and exits 2 ("option ... is unknown").
+          # This step runs `if: always()`, so it turned every run red even when
+          # the check itself passed. Skip cleanly when unset, and never let the
+          # report mask the job's real result.
+          if [ -z "${DISCORD_REPORT_WEBHOOK:-}" ]; then
+            echo "::warning::DISCORD_REPORT_WEBHOOK secret is empty — skipping Discord report"
+            exit 0
+          fi
+          PAYLOAD="$(TITLE="$TITLE" COLOR="$COLOR" DESC="$DESC" RUN_URL="$RUN_URL" python3 - <<'PY'
+          import json, os
+          print(json.dumps({
+              "channel": "ops",
+              "title": os.environ["TITLE"],
+              "description": os.environ["DESC"],
+              "color": os.environ["COLOR"],
+              "author": "libexpat fix-detect",
+              "fields": [
+                  {"name": "Run", "value": os.environ["RUN_URL"], "inline": True},
+                  {"name": "Threshold", "value": "2.8.4-r0", "inline": True},
+              ],
+          }))
+          PY
+          )"
+          curl -fsS --max-time 30 -X POST "$DISCORD_REPORT_WEBHOOK" \
             -H "Content-Type: application/json" \
-            -d "$(jq -nc --arg c ops --arg t "$TITLE" --arg col "$COLOR" --arg u "$RUN_URL" --arg d "$DESC" \
-              '{channel:$c,title:$t,description:$d,color:$col,author:"libexpat fix-detect",fields:[{name:"Run",value:$u,inline:true},{name:"Threshold",value:"2.8.4-r0",inline:true}]}')"
+            -d "$PAYLOAD" \
+            || echo "::warning::Discord report failed (non-fatal)"
