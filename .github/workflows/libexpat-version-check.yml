@@ -11,6 +11,14 @@ name: libexpat fix-detect (nginx frontend, AUT-2126)
 # so `unchanged` was never true and it re-filed a duplicate issue daily; it now
 # resolves the index digest.
 #
+# AUT-5574: every scheduled run since at least 2026-09-15 died in step 1 —
+# regctl was installed to root-owned /usr/local/bin while the self-hosted
+# runner runs as non-root, so curl exited 23 writing the binary out. The
+# `if: always()` Discord step then failed too on a blank webhook URL and
+# masked the real result. regctl is fixed below; the Discord step now carries
+# the stronger http(s)-only guard from PR #929 (AUT-5690), which this branch
+# is rebased onto.
+#
 # Manual run: ok. Daily schedule: 07:30 UTC (off-hours to avoid contention
 # with the weekly 07:00 Mon scan in trivy-image-scan.yml).
 #
@@ -49,10 +57,18 @@ jobs:
             aarch64|arm64) REGCTL_ARCH=arm64 ;;
             *) echo "unsupported arch: $ARCH"; exit 1 ;;
           esac
+          # AUT-5574: the self-hosted runner executes as non-root
+          # (administrator) and cannot write to root-owned /usr/local/bin —
+          # curl downloaded the binary then failed with exit 23 writing it
+          # out, killing the job before any check ran. Install into the
+          # runner's own temp dir and expose it via GITHUB_PATH instead.
+          BIN_DIR="${RUNNER_TEMP}/bin"
+          mkdir -p "$BIN_DIR"
           curl -fsSL "https://github.com/regclient/regclient/releases/latest/download/regctl-linux-${REGCTL_ARCH}" \
-            -o /usr/local/bin/regctl
-          chmod +x /usr/local/bin/regctl
-          regctl version
+            -o "${BIN_DIR}/regctl"
+          chmod +x "${BIN_DIR}/regctl"
+          echo "${BIN_DIR}" >> "$GITHUB_PATH"
+          "${BIN_DIR}/regctl" version
 
       - name: Resolve current stable-alpine digest
         id: digest
@@ -154,7 +170,7 @@ jobs:
           FIXED: ${{ steps.gate.outputs.fixed }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
           if [ "$UNCHANGED" = "true" ]; then
             TITLE="libexpat fix-detect: pinned digest unchanged (libexpat 2.8.3-r0 still vulnerable)"
             COLOR="0x95A5A6"
