@@ -227,6 +227,13 @@ jobs:
       # stdlib unittest only — ubuntu-latest ships no pytest.
       - name: sync-compose-to-portainer.py regression tests
         run: python3 scripts/test_sync_compose_to_portainer.py -v
+
+      # AUT-5396: the nightly sync gate SKIPped two nights because the
+      # schedule dispatcher starts cron runs 2.6-4.2h late. The cron now
+      # fires at 12:30Z and the job sleeps to the 17:00Z window edge;
+      # this guard replays the wait step against synthetic clocks.
+      - name: nightly-hosted-sync wait step regression tests
+        run: python3 scripts/test_nightly_sync_wait.py -v
   # AUT-4718: the base-image CVE gate went red on `main` for a week because the
   # Dockerfile pin and the trivy scan env had drifted onto different nginx digests —
   # the gate was not scanning the image we build. This stdlib-only guard asserts the

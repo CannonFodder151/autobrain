@@ -6,8 +6,19 @@ on:
   # AUT-5186: nightly 03:00 AEST (17:00 UTC, no DST) — the start of the
   # AUT-2409 hosted deploy window. Only the nightly-hosted-sync job runs on
   # schedule; it applies the pins the push path already bumped in git.
+  #
+  # AUT-5396: the cron fires 2.5h BEFORE the window opens, not at it.
+  # GitHub's schedule dispatcher starts scheduled runs 2.6–4.2h after the
+  # cron fires (observed 2026-10-02T21:10Z and 2026-10-03T19:40Z for a
+  # 17:00Z cron), so a cron at 17:00Z always started PAST the window and
+  # the sync gate SKIPped two nights running while EP5 stayed on a broken
+  # pin. Firing at 12:30Z keeps the start inside 15:06–16:42Z even at the
+  # worst observed delay, and the nightly-hosted-sync wait step below holds
+  # the job at the 17:00Z boundary. Deploys still happen ONLY inside
+  # 03:00–04:00 AEST — the gate in scripts/sync-compose-to-portainer.py
+  # remains the enforcement; this only fixes when the job wakes up.
   schedule:
-    - cron: "0 17 * * *"
+    - cron: "30 12 * * *"
   workflow_dispatch:
     inputs:
       tag:
@@ -441,6 +452,11 @@ jobs:
     # No ALLOW_OUT_OF_WINDOW here, so the script's own AUT-5172 gate still
     # applies: a delayed or misfired cron that lands outside 03:00-04:00
     # AEST logs `SKIP:` and returns 0 without touching EP5.
+    #
+    # AUT-5396: the wait step below exists because the schedule dispatcher
+    # starts runs hours after the cron fires. It sleeps until 17:00Z when
+    # the job starts early and FAILS LOUDLY when the job starts past 18:00Z
+    # (the old behaviour was a green CI run that silently did nothing).
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     # Own group so the nightly sync is never queued behind an in-flight
@@ -456,6 +472,41 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
+
+      - name: Wait for the AUT-2409 deploy window (03:00-04:00 AEST)
+        # AUT-5396: sleep until 17:00Z (03:00 AEST) when the schedule
+        # dispatcher woke this job early, so the sync below lands inside the
+        # window. If the job woke up past 18:00Z (04:00 AEST) the window is
+        # already gone — fail instead of a silent green SKIP, because a
+        # green nightly run that deploys nothing is exactly how EP5 stayed on
+        # a broken pin for two nights.
+        run: |
+          set -euo pipefail
+          python3 - <<'EOF'
+          from datetime import datetime, timedelta, timezone
+
+          AEST = timezone(timedelta(hours=10))
+          now = datetime.now(timezone.utc)
+          start = now.replace(hour=17, minute=0, second=0, microsecond=0)
+          end = start + timedelta(hours=1)
+          print(f"job started {now:%Y-%m-%d %H:%M}Z "
+                f"({now.astimezone(AEST):%H:%M} AEST)")
+          if now >= end:
+              print(f"::error::started at/after {end:%H:%M}Z — the "
+                    f"03:00-04:00 AEST deploy window has closed and the sync "
+                    f"gate would SKIP. EP5 is NOT updated by this run; "
+                    f"re-dispatch in the next window or deploy with "
+                    f"ALLOW_OUT_OF_WINDOW=true under a board approval.")
+              raise SystemExit(1)
+          if now < start:
+              wait = (start - now).total_seconds()
+              print(f"sleeping {wait/60:.0f} min for the window to open at "
+                    f"{start:%H:%M}Z")
+              import time
+              time.sleep(wait)
+          print(f"in window at {datetime.now(timezone.utc):%H:%M}Z "
+                f"({datetime.now(timezone.utc).astimezone(AEST):%H:%M} AEST)")
+          EOF
 
       - name: Sync docker-compose.hosted.yml into Portainer EP5
         # The script prints one `applied: <service> -> <image>@sha256:...`
