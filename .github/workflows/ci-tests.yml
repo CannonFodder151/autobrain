@@ -55,6 +55,24 @@ jobs:
         run: |
           pytest tests/test_health_demo.py -v --maxfail=1 --tb=short
 
+      - name: Collect backend tests (no silent import errors)
+        working-directory: backend
+        env:
+          DATABASE_URL: "postgresql+asyncpg://autobrain:autobrain@localhost:5432/autobrain"
+          SECRET_KEY: "ci-test-secret"
+          ENVIRONMENT: "development"
+          POSTGRES_USER: "ci-test-postgres-user"
+          POSTGRES_PASSWORD: "ci-test-postgres-password"
+          POSTGRES_DB: "ci-test-postgres-db"
+          MINIO_ACCESS_KEY: "ci-test-minio-access-key"
+          MINIO_SECRET_KEY: "ci-test-minio-secret-key"
+          MINIO_BUCKET: "ci-test-minio-bucket"
+        run: |
+          # AUT-5356: the full-suite step below ends in `|| true`, so a test
+          # module that fails to import is silently skipped and its coverage
+          # never runs. Collection errors must fail the build instead.
+          pytest --collect-only -q
+
       - name: Run full backend test suite
         working-directory: backend
         env:
