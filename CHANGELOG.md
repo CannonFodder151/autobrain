@@ -29,6 +29,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   environment for good. Adds the fail-closed cases to
   `backend/tests/test_seed_reset_demo.py`. No redeploy: AUT-2409 keeps deploys
   hosted-only and the demo stack is down (AUT-5057).
+### Fixed (AUT-5529)
+- fix(security): strip `DEMO_PASSWORD` before the fail-closed check in
+  `seed_demo()` / `reset_demo()` (CWE-798 / CWE-521). A whitespace-only value
+  (`DEMO_PASSWORD=" "`, e.g. a secret pasted with stray whitespace) is truthy,
+  so the empty-string guard let it through and seeded a demo account whose
+  password was a single space — guessable for anyone holding the public demo
+  email. Both guards now strip first, and `seed_demo()` hashes the stripped
+  value so a padded secret still matches what the operator types (as
+  `seed_admin()` already did). Whitespace-only regression cases added to
+  `backend/tests/test_seed_reset_demo.py`.
+
 ## [0.3.308] - 2026-10-04
 
 ### Fixed (AUT-5433)

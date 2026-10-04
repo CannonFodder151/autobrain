@@ -123,6 +123,59 @@ async def test_reset_demo_fails_closed_without_password() -> None:
 
 
 @pytest.mark.asyncio
+async def test_seed_demo_fails_closed_with_whitespace_password() -> None:
+    """A whitespace-only DEMO_PASSWORD must not create an account (AUT-5529).
+
+    `DEMO_PASSWORD=" "` is truthy, so the empty-string guard alone let it
+    through and seeded a demo account whose password is a single space —
+    guessable for anyone holding the public demo email.
+    """
+    saved = settings.DEMO_PASSWORD
+    settings.DEMO_PASSWORD = "   "
+    try:
+        await _reset_schema()
+        await seed_demo()
+
+        async with SessionLocal() as db:
+            demo = await db.scalar(
+                select(User).where(User.email == "demo@test.local")
+            )
+            assert demo is None, "seed_demo created an account with a whitespace-only DEMO_PASSWORD"
+    finally:
+        settings.DEMO_PASSWORD = saved
+
+
+@pytest.mark.asyncio
+async def test_reset_demo_fails_closed_with_whitespace_password() -> None:
+    """A whitespace-only DEMO_PASSWORD must not trigger a reset (AUT-5529).
+
+    Same fail-closed rule as the empty case: a reset we cannot re-seed with a
+    real password would wipe the demo environment for good.
+    """
+    await _reset_schema()
+    await seed_demo()
+
+    async with SessionLocal() as db:
+        demo = await db.scalar(select(User).where(User.email == "demo@test.local"))
+        seeded_hash = demo.hashed_password
+
+    saved = settings.DEMO_PASSWORD
+    settings.DEMO_PASSWORD = "   "
+    try:
+        await reset_demo()
+    finally:
+        settings.DEMO_PASSWORD = saved
+
+    async with SessionLocal() as db:
+        demo = await db.scalar(select(User).where(User.email == "demo@test.local"))
+        assert demo is not None, "reset_demo wiped the demo account with a whitespace-only DEMO_PASSWORD"
+        # "The account is still there" also holds if reset wiped it and re-seeded
+        # a whitespace-password account, so pin the hash: bcrypt salts a fresh hash
+        # on every seed, so an unchanged hash means the reset was skipped.
+        assert demo.hashed_password == seeded_hash, "reset_demo re-seeded the demo account with a whitespace-only DEMO_PASSWORD"
+
+
+@pytest.mark.asyncio
 async def test_reset_demo_clears_shares(monkeypatch) -> None:
     monkeypatch.setattr(
         "app.db.seed._upload_demo_image",

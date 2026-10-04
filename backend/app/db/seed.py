@@ -94,7 +94,12 @@ async def seed_demo() -> None:
     email = settings.DEMO_EMAIL.strip().lower()
     # AUT-5063: fail closed — never create the demo account with a
     # blank/default password.
-    if not settings.DEMO_PASSWORD:
+    # AUT-5529: a whitespace-only value (" ") is truthy, so strip before the
+    # check — it would seed a demo account whose password is a single space.
+    # Strip once and hash the stripped value so a secret pasted with stray
+    # padding still matches what the operator types (as seed_admin does).
+    demo_password = settings.DEMO_PASSWORD.strip()
+    if not demo_password:
         logger.warning(
             "demo_seed_skipped_no_password",
             email=email,
@@ -109,7 +114,7 @@ async def seed_demo() -> None:
         demo = User(
             email=email,
             display_name=settings.DEMO_DISPLAY_NAME,
-            hashed_password=hash_password(settings.DEMO_PASSWORD),
+            hashed_password=hash_password(demo_password),
             role="demo",
             max_vehicles=8,
         )
@@ -133,7 +138,8 @@ async def reset_demo() -> None:
     email = settings.DEMO_EMAIL.strip().lower()
     # AUT-5063: fail closed — a reset we cannot re-seed would delete
     # the demo environment, so skip it when the password is unset.
-    if not settings.DEMO_PASSWORD:
+    # AUT-5529: strip first, so a whitespace-only password is treated as unset.
+    if not settings.DEMO_PASSWORD.strip():
         logger.warning(
             "demo_reset_skipped_no_password",
             email=email,
