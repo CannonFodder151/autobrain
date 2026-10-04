@@ -10,6 +10,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+- feat(ops): detect #marketing approval decisions from text (AUT-4535, AUT-5450).
+  Approval monitoring only read emoji reactions, so Nathan's text
+  approvals ("Approved", "I approve all", "Approve all") were never
+  seen — AUT-3989 and AUT-4507 both sat unanswered. New
+  `scripts/approval_watcher.py` polls `GET /channels/{id}/messages`,
+  resolves the target `AUT-XXXX` per message (own text, the message
+  it replies to, else the nearest preceding bot post), and reports
+  text and reaction decisions for any approval task in the channel.
+  `scripts/test_approval_watcher.py` covers the text path, target
+  resolution for already-posted tasks, and no-double-apply on repoll.
 - fix(fuel): disable the SA (SAFPIS) feed (AUT-5072).
   `FUEL_SA_ENABLED: "true"` was set in both compose files
   (AUT-2610) with a seeded `fuel_sa_api_key` secret, but no
