@@ -118,6 +118,42 @@ wait_health() {
   done
 }
 
+# AUT-5455: version parity gate. The Flutter web bundle bakes /version.json
+# (generated from frontend/pubspec.yaml version:) at build time; the backend
+# reports APP_VERSION from backend/app/core/config.py. Those two sources drift
+# independently: AUT-240 skips the image publish on version-only pushes, and the
+# Default/Demo tiers deploy the frontend from a floating :default / :demo tag
+# while the backend is pinned to a version tag. When they drift, the served
+# frontend is stale relative to the backend image and the min-app-version gate
+# the client reads from version.json silently accepts app builds the current
+# backend was never tested against. Fail the tier loudly instead of promoting a
+# drifted stack. Health-only gating is not enough: /health stays 200 regardless.
+check_version_parity() {
+  local health_url="$1"
+  local base vj_url health_json vj_json hv vv
+  base="$(printf '%s' "$health_url" | sed -E 's#^(https?://[^/]+).*#\1#')"
+  vj_url="$base/version.json"
+  # Health was already gated by wait_health; a transient fetch miss here must
+  # not double-fail the tier.
+  health_json="$(curl -fsS --max-time 10 "$health_url" 2>/dev/null)" || return 0
+  vj_json="$(curl -fsS --max-time 10 "$vj_url" 2>/dev/null)" || {
+    fail "   version.json not served at $vj_url — frontend bundle missing its version manifest (AUT-5455)"
+    return 1
+  }
+  hv="$(printf '%s' "$health_json" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version",""))' 2>/dev/null)"
+  vv="$(printf '%s' "$vj_json"     | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version",""))' 2>/dev/null)"
+  if [ -z "$hv" ] || [ -z "$vv" ]; then
+    fail "   could not parse version from /health or /version.json (health='$hv' version.json='$vv') (AUT-5455)"
+    return 1
+  fi
+  if [ "$hv" != "$vv" ]; then
+    fail "   VERSION PARITY FAIL: /health=$hv but /version.json=$vv — frontend bundle stale vs backend image (AUT-5455)"
+    return 1
+  fi
+  log "   version parity ok (backend=frontend=$hv)"
+  return 0
+}
+
 OVERALL=0
 while IFS= read -r line; do
   line="$(echo "$line" | tr -d '[:space:]')"
@@ -131,7 +167,12 @@ while IFS= read -r line; do
 
   if [ "$DRY_RUN" = "1" ]; then
     log "   dry-run: skip redeploy"
-    if wait_health "$health"; then log "   healthy ($health)"; else fail "   UNHEALTHY ($health)"; OVERALL=1; fi
+    if wait_health "$health"; then
+      log "   healthy ($health)"
+      if ! check_version_parity "$health"; then OVERALL=1; fi
+    else
+      fail "   UNHEALTHY ($health)"; OVERALL=1
+    fi
     continue
   fi
 
@@ -161,7 +202,13 @@ PY
   log "   redeploy result: $result"
 
   if wait_health "$health"; then
-    log "   healthy ($health) — promote"
+    log "   healthy ($health) — checking version parity (AUT-5455)"
+    if ! check_version_parity "$health"; then
+      fail "   version parity gate failed — STOPPING promotion (AUT-5455)"
+      OVERALL=1
+      break
+    fi
+    log "   promote"
   else
     fail "   UNHEALTHY ($health) after redeploy — STOPPING promotion"
     OVERALL=1
