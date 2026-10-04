@@ -36,4 +36,8 @@ jobs:
         run: flutter pub get
       - name: Desktop layout assertions (${{ matrix.width }})
         working-directory: frontend
-        run: flutter test test/desktop_layout_test.dart -r expanded
+        # ponytail: lists test files explicitly rather than running all of
+        # frontend/test. 11 tests on main already fail (see AUT-5160), so
+        # `flutter test` would redden every PR for pre-existing breakage.
+        # Switch to a bare `flutter test` once main's suite is green.
+        run: flutter test test/desktop_layout_test.dart test/login_logo_test.dart -r expanded

@@ -187,6 +187,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   plus `scripts/test_check_compose_config.py` on compose/script changes, so
   the guards can no longer rot unnoticed.
 
+
+### Fixed (AUT-4327)
+- test(frontend): add a regression test asserting the login logo renders inside a
+  circular, black-background container and uses `BoxFit.contain`, so a
+  non-square logo asset cannot silently stretch again. The layout fix itself
+  already landed; this guards it.
+- test(frontend): scope the login-logo regression test to the `ClipOval` subtree.
+  `find.byType(Container).first` resolved to the gradient `Scaffold.body`
+  Container, so the test failed for the wrong reason. Also add the test to
+  `visual_regression.yml`, which previously never executed it.
+
 ## [0.3.296] - 2026-10-02
 
 ### Fixed (AUT-5032)
