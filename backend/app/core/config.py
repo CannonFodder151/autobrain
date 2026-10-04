@@ -182,7 +182,7 @@ class Settings(BaseSettings):
     BACKUP_OFFSITE_URL: str = ""              # e.g. http://autobrain-backup:8080
     BACKUP_OFFSITE_GUI_KEY: str = ""          # X-Gui-Key (kept for admin/ops calls against the store)
     BACKUP_OFFSITE_GUI_KEY_FILE: str = ""     # secret-file fallback
-    BACKUP_OFFSITE_INGEST_KEY: str = ""       # X-Ingest-Key for /api/backup/ingest
+    BACKUP_OFFSITE_INGEST_KEY: str = ""       # X-Ingest-Key for /ingest
     BACKUP_OFFSITE_INGEST_KEY_FILE: str = ""  # secret-file fallback
     BACKUP_OFFSITE_INSTANCE: str = ""         # instance id appended as ?instance= to all calls
 

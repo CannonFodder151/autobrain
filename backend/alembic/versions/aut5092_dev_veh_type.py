@@ -18,9 +18,17 @@ but ``alembic_version.version_num`` is ``varchar(32)`` — the stamp raised
 ``StringDataRightTruncationError``, bootstrap fell back to ``create_all`` and this
 repair never applied. Ids must stay <= 32 chars (guarded by
 ``tests/test_alembic_heads.py::test_alembic_revision_ids_fit_version_column``).
+
+AUT-5612: ``downgrade()`` used to drop ``vehicle_type`` whenever it merely
+existed, which is a data-loss path on precisely the database this migration
+exists to repair: on a create_all-built DB the column is *already there*, so
+``upgrade()`` is a no-op that never created it and a rollback destroyed real
+data. ``upgrade()`` now tags the column it adds with ``_MARKER`` and
+``downgrade()`` drops only a column carrying that marker. A column without the
+marker was not created here and is left alone.
 """
 
-from typing import Sequence, Union
+from typing import Any, Sequence, Union
 
 import sqlalchemy as sa
 from alembic import context, op
@@ -30,21 +38,29 @@ down_revision: Union[str, Sequence[str], None] = "aut3448_fuel_price_snapshots"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
+# Stamped on the column when this revision is the one that created it, so
+# downgrade() can tell "ours" from "pre-existing drift".
+_MARKER = "created-by-aut5092_dev_veh_type"
 
-def _has_column(table: str, column: str) -> bool:
+
+def _columns(table: str) -> list[dict[str, Any]]:
     if context.is_offline_mode():
-        return False
+        return []
     insp = sa.inspect(op.get_bind())
-    return table in insp.get_table_names() and column in {
-        c["name"] for c in insp.get_columns(table)
-    }
+    if table not in insp.get_table_names():
+        return []
+    return insp.get_columns(table)
 
 
 def upgrade() -> None:
-    if not _has_column("devices", "vehicle_type"):
-        op.add_column("devices", sa.Column("vehicle_type", sa.String(8), nullable=True))
+    if "vehicle_type" not in {c["name"] for c in _columns("devices")}:
+        op.add_column(
+            "devices",
+            sa.Column("vehicle_type", sa.String(8), nullable=True, comment=_MARKER),
+        )
 
 
 def downgrade() -> None:
-    if _has_column("devices", "vehicle_type"):
+    col = next((c for c in _columns("devices") if c["name"] == "vehicle_type"), None)
+    if col is not None and col.get("comment") == _MARKER:
         op.drop_column("devices", "vehicle_type")

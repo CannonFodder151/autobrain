@@ -11,6 +11,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-5612)
+- `devices.vehicle_type` rollback data loss: `aut5092_dev_veh_type` is a no-op
+  on the hosted `create_all` database it exists to repair (the column is already
+  there), yet its `downgrade()` dropped the column anyway, destroying real data
+  on rollback. `upgrade()` now stamps the column it adds with a provenance
+  marker (`COMMENT ON COLUMN`) and `downgrade()` drops only a column carrying
+  that marker — a pre-existing column is left alone, while a genuine rollback of
+  a column this revision created still drops it. Covered by
+  `tests/test_alembic_heads.py` (offline) and two new cases in
+  `tests/test_alembic_migration_only.py` (real Postgres, `alembic-migrations` CI
+  job).
+- `BACKUP_OFFSITE_INGEST_KEY`'s docstring still said `/api/backup/ingest`, an
+  endpoint that 404s; the value is the `X-Ingest-Key` for `/ingest`.
+
 ## [0.3.311] - 2026-10-04
 
 ### Changed (AUT-5532)

@@ -17,6 +17,7 @@ AUT-2277) before pytest collection fails or startup blows up.
 """
 
 from pathlib import Path
+from typing import Any
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
@@ -62,6 +63,88 @@ def test_alembic_revision_ids_fit_version_column() -> None:
         "alembic revision ids must be <= 32 chars (alembic_version.version_num "
         f"is varchar(32)): {too_long}"
     )
+
+
+def test_aut5092_downgrade_only_drops_a_column_it_created(monkeypatch) -> None:
+    """AUT-5612: ``downgrade()`` must not drop a column it never added.
+
+    On the hosted ``create_all`` fallback DB this revision repairs,
+    ``vehicle_type`` is *already there*, so ``upgrade()`` is a no-op. A rollback
+    that dropped it anyway destroyed real data. The column comment is the
+    provenance stamp: drop only when the marker is there.
+    """
+    import importlib.util
+    from types import SimpleNamespace
+
+    import sqlalchemy as sa
+
+    path = BACKEND_DIR / "alembic" / "versions" / "aut5092_dev_veh_type.py"
+    spec = importlib.util.spec_from_file_location("_aut5092_migration", path)
+    assert spec and spec.loader, f"failed to load spec for {path}"
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)  # noqa: S602 — trusted local file
+
+    class _FakeInspector:
+        def __init__(self, columns: list[dict[str, Any]]) -> None:
+            self._columns = columns
+
+        def get_table_names(self) -> list[str]:
+            return ["devices"]
+
+        def get_columns(self, table: str) -> list[dict[str, Any]]:
+            assert table == "devices"
+            return self._columns
+
+    class _FakeOp:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str, Any]] = []
+
+        def get_bind(self) -> None:
+            return None
+
+        def add_column(self, table: str, column: Any) -> None:
+            self.calls.append(("add", table, column))
+
+        def drop_column(self, table: str, column: str) -> None:
+            self.calls.append(("drop", table, column))
+
+    def _run(columns: list[dict[str, Any]], direction: str) -> list[tuple[str, str, Any]]:
+        """Stub only the migration module's own globals (monkeypatch undoes them)."""
+        op = _FakeOp()
+        monkeypatch.setattr(mod, "op", op)
+        monkeypatch.setattr(
+            mod, "context", SimpleNamespace(is_offline_mode=lambda: False)
+        )
+        monkeypatch.setattr(
+            mod,
+            "sa",
+            SimpleNamespace(
+                Column=sa.Column,
+                String=sa.String,
+                inspect=lambda _bind: _FakeInspector(columns),
+            ),
+        )
+        getattr(mod, direction)()
+        return op.calls
+
+    drifted = [{"name": "id"}, {"name": "vehicle_type"}]  # pre-existing, unmarked
+
+    # upgrade() on the drifted DB is a no-op — it did not create the column.
+    assert _run(drifted, "upgrade") == []
+
+    # downgrade() must therefore leave it (and its data) alone.
+    assert (
+        _run(drifted, "downgrade") == []
+    ), "AUT-5612: rollback dropped a column it never added"
+
+    # On a DB without the column, upgrade() adds it and stamps the marker...
+    added = _run([{"name": "id"}], "upgrade")
+    assert [c[:2] for c in added] == [("add", "devices")]
+    assert added[0][2].comment == mod._MARKER
+
+    # ...and downgrade() of that same column is allowed to drop it.
+    marked = [{"name": "id"}, {"name": "vehicle_type", "comment": mod._MARKER}]
+    assert [c[:2] for c in _run(marked, "downgrade")] == [("drop", "devices")]
 
 
 def test_no_duplicate_table_names() -> None:
