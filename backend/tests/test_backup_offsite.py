@@ -21,13 +21,42 @@ os.environ.setdefault("MARKET_DATA_URL", "")
 os.environ.setdefault("MARKET_DATA_API_KEY", "")
 
 import asyncio  # noqa: E402
+import logging  # noqa: E402
 
 import httpx  # noqa: E402
 
 from app.core.logging import setup_logging  # noqa: E402
 from app.services import backup_offsite  # noqa: E402
 
-setup_logging()  # backup_offsite logs with structlog kwargs; stdlib logger rejects them
+setup_logging()
+# AUT-5433: pytest's logging plugin attaches a root handler before collection,
+# so setup_logging()'s logging.basicConfig() is a no-op and the root level
+# stays WARNING — logger.info() then short-circuits before _log() ever runs.
+# Force INFO so the structlog-kwarg call path below is genuinely exercised.
+logging.getLogger().setLevel(logging.INFO)
+
+
+def test_logger_accepts_structlog_kwargs():
+    """AUT-5433 regression: the hourly task crashed every single run.
+
+    `app.workers.tasks.backup_offsite_hourly` died with
+    `TypeError: Logger._log() got an unexpected keyword argument 'reason'`
+    because the module used a stdlib `logging.getLogger` while every call site
+    passes structlog-style kwargs. Affected the disabled-guard paths (line 52/55)
+    and the success/failure paths, i.e. all of them.
+    """
+    backup_offsite.logger.info("offsite_backup_skipped", reason="BACKUP_OFFSITE_ENABLED is False")
+    backup_offsite.logger.error("offsite_backup_skipped", reason="BACKUP_OFFSITE_URL not configured")
+    backup_offsite.logger.info("offsite_push_ok", filename="f.json", status=200)
+    backup_offsite.logger.error("offsite_push_failed", filename="f.json", error="boom")
+    backup_offsite.logger.info(
+        "offsite_backup_done",
+        filename="f.json",
+        size=1,
+        tables=1,
+        pushed=True,
+        duration_seconds=0.1,
+    )
 
 
 def test_backend_no_longer_owns_offsite_retention():
