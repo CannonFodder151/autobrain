@@ -25,6 +25,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - `BACKUP_OFFSITE_INGEST_KEY`'s docstring still said `/api/backup/ingest`, an
   endpoint that 404s; the value is the `X-Ingest-Key` for `/ingest`.
 
+### Added (AUT-5611)
+- deploy: the Default tier on Portainer endpoint 2 ran as three hand-made containers with no compose definition anywhere in the repo (`ai` on a floating `:latest-amd64`, `backend` tag-pinned to `0.3.308` but with zero network aliases and no compose labels, `frontend` on a floating `:default`), so nothing stack-driven could redeploy it — `scripts/upgrade-instances.sh` resolved the tier by a Portainer stack named `autobrain`, which did not exist, and the Default step of the promotion chain failed silently, while Watchtower (nightly 04:00 AEST, all containers) recreated them outside any redeploy path. Adds `docker-compose.default.yml` as the tier's only definition (all three images digest-pinned to the digests EP2 was already running, `restart: unless-stopped`, `autobrain_default` joined as an external network with explicit `ai`/`backend`/`frontend` aliases) and adds `scripts/check-default-compose.py` as a structural guard wired into `compose-checks.yml`. Deployed as Portainer stack `autobrain-default` (id 137) with zero image drift; `default.autobrainservice.app/health` returns 200.
+
+### Added (AUT-5582)
+- deploy: the Demo tier on Portainer endpoint 2 ran as six hand-made containers with no compose file anywhere on the host and no Portainer stack, so every redeploy was an archaeology exercise and a hand-recreate silently lost the compose DNS aliases — backend could not resolve postgres/redis/minio and frontend nginx could not resolve backend, i.e. 502 on every proxied path. Adds `docker-compose.demo.yml` as the tier's only definition (project name pinned to `autobrain-demo` so the existing volumes and the `autobrain-demo_default` network the `plate-api-scraper` stack joins are reused; all six images digest-pinned to the ImageIDs EP2 actually runs, so the recreate changed nothing), `sync-compose-to-portainer.py --create --env-file` (Portainer 2.39 has no JSON stack-create route, so creation posts the multipart form the UI posts to `/stacks/create/standalone/file`), and `check_demo_compose.py` as a deployability gate (every `${VAR}` resolves, digest pins, project name, volume names, no literal secrets) since no docker CLI can reach EP2 to run `compose config`. Deployed as Portainer stack `autobrain-demo` (id 136), all six services healthy with aliases restored.
+
 ### Fixed (AUT-5356)
 - test(backend): three test modules had been failing at **import** for an unknown number of releases and the coverage they were written for silently never ran — `ci-tests.yml` runs the suite as `pytest … || true`, so a collection error could not fail the build. `tests/test_advisor_value.py` imported `BAND_LOW_RATIO` / `BAND_HIGH_RATIO` / `TRADE_IN_*_RATIO` / `_CONDITION_MULTIPLIER` from `app.services.advisor`, but the AUT-4812 package split moved them into `advisor/value.py` without re-exporting them (also AUT-4812); the package `__init__` now re-exports all six, matching its own "all public names are re-exported" contract. `tests/test_aut2381_arbitration.py` tested an arbitration design that no longer exists (`SourceTrust` / `PriceCandidate` / `_consistency_bonus` / `select_best_price`) — AUT-2386 moved the rule to `app/services/fuel_source_arbitration.py` with authority-dominant scoring and a median spread penalty, so the suite is rewritten against the surviving behaviour (authority ordering, freshness window with naive-timestamp and clock-skew handling, spread penalty, `arbitrate()` determinism, empty input raising). `tests/test_car_check.py` tested `parse_listing_url` / `_verdict` / `_band`, all removed by AUT-2651, and is rewritten against the current scoring helpers, flag builders and the `car_check_fallback` / `validate_car_check_response` contract. `test_advisor_value.py`'s route test monkeypatched the awaited `get_accessible_vehicle` with a sync lambda (surfaced only now that the module collects) and built a vehicle stub without `id`. `pytest --collect-only -q` in `backend/` now exits 0 (825 collected), and `ci-tests.yml` gains a dedicated collect-only step so a future import error fails the build instead of being swallowed by the full suite's `|| true`. No production behaviour change outside the added re-exports.
 
@@ -199,27 +205,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   at the hosted stamp reaches head and that the pending revision performs real
   DDL instead of only bumping a version string.
 - feat(alembic): add migration for `fuel_price_snapshots` — the table was only
-
-### Fixed (AUT-5092)
-- The hourly off-site backup produced zero artifacts while reporting healthy.
-  Four stacked defects, all fixed: `backup_offsite_hourly()` called
-  `run_backup_offsite()` without awaiting the coroutine (Celery logged success
-  in ~1ms); `backup_offsite.py`, `iap.py` and `billing.py` passed structlog
-  kwargs to the stdlib `logger`, so every line raised `TypeError` and masked the
-  real push error; the push targeted `/api/backup/ingest` while
-  `autobrain-backup` serves `/ingest`, so it 404'd; and `serialize_all()` died
-  on the missing `devices.vehicle_type` column (see below).
-- `aut5092_dev_veh_type` now revises `aut3448_fuel_price_snapshots`
-  instead of `aut4925_missing_tables`, keeping a single alembic head. With the
-  fork, `alembic upgrade head` failed with `Multiple head revisions are present`,
-  the backend never booted, and `bootstrap.py` fell back to `create_all` — which
-  never adds a column to an existing table, so `devices.vehicle_type` stayed
-  missing behind a "successful" deploy.
-- That migration's revision id was also renamed to `aut5092_dev_veh_type`
-  (was `aut5092_device_vehicle_type_repair`, 34 chars) because
-  `alembic_version.version_num` is `varchar(32)`: the stamp raised
-  `StringDataRightTruncationError` and the repair never applied anywhere.
-  `tests/test_alembic_heads.py` now asserts every revision id fits that column.
 
 ### Fixed (AUT-4678)
 - `scripts/check-compose-config.py` crashed with `KeyError: 'ai'` on `main`
