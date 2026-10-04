@@ -100,20 +100,27 @@ jobs:
           python3 - gitleaks-report.json <<'PY'
           import json, os, sys
           findings = json.load(open(sys.argv[1]))
+
+          def cell(v):
+              # Untrusted git metadata (filenames, authors): strip control
+              # chars so a crafted finding cannot forge annotation lines in
+              # the log or inject rows into the step-summary table.
+              return "".join(c if c.isprintable() else " " for c in str(v))[:200]
+
           # One ::error annotation per finding → clickable file/line in the
           # PR checks UI. Secrets are already redacted (--redact), so the
           # annotation, summary, and report never carry raw secret values.
           for f in findings:
               print("::error file={},line={}::gitleaks [{}] commit {} by {} — {}".format(
-                  f.get("File", "?"), f.get("StartLine", 0), f.get("RuleID", "?"),
-                  f.get("Commit", "?")[:12], f.get("Author", "?"), f.get("Fingerprint", "?")))
+                  cell(f.get("File", "?")), f.get("StartLine", 0), cell(f.get("RuleID", "?")),
+                  f.get("Commit", "?")[:12], cell(f.get("Author", "?")), cell(f.get("Fingerprint", "?"))))
           lines = ["## Gitleaks findings — %d leak(s)" % len(findings), "",
                    "| Rule | File:Line | Commit | Author | Fingerprint |",
                    "| --- | --- | --- | --- | --- |"]
           for f in findings:
               lines.append("| %s | %s:%s | `%s` | %s | `%s` |" % (
-                  f.get("RuleID", ""), f.get("File", ""), f.get("StartLine", ""),
-                  f.get("Commit", "")[:12], f.get("Author", ""), f.get("Fingerprint", "")))
+                  cell(f.get("RuleID", "")), cell(f.get("File", "")), f.get("StartLine", ""),
+                  f.get("Commit", "")[:12], cell(f.get("Author", "")), cell(f.get("Fingerprint", ""))))
           md = "\n".join(lines) + "\n"
           summary = os.environ.get("GITHUB_STEP_SUMMARY")
           if summary:
