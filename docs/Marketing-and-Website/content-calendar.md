@@ -6,19 +6,22 @@ The content calendar tracks all planned marketing assets across channels. Source
 
 ## Phase 1 Marketing Refresh (AUT-3972)
 
-**Status:** Draft — pending human CMO approval  
+**Status:** Approved by the human CMO — published schedule in [phase1-social-calendar.md](./phase1-social-calendar.md)  
 **Owner:** CMO agent  
 **Parent:** AUT-3968  
 
 ### Narrative Pillars
 
-| Pillar | One line | Proof point |
-|--------|----------|-------------|
-| **Simpler** | Fewer containers, easier to run | 9 → 8 long-running containers; worker merged into backend |
-| **Vectorised** | Your data is searchable in your own DB | 1536-dim embeddings, pgvector, `AI_ENABLED` toggle |
-| **Deterministic-first** | Works even when AI is down | `enhance()` pattern; `model: rule-based+ai` / `rule-based-fallback` |
-| **Modular** | Add a feature, not a service | 13 modules, 14 fallbacks, shared `router_utils` |
-| **Docs rebuilt** | Docs stay in sync with code | 8-section mirror + Outline source of truth |
+Counts below are verified against the repo. Re-check with `graft` or by reading the cited files before reusing them in published copy.
+
+| Pillar | One line | Proof point | Verify in |
+|--------|----------|-------------|-----------|
+| **Simpler** | Fewer containers, easier to run | Hosted stack consolidated **12 → 9** long-running containers (AUT-3153/3810/3824/3827); Celery worker+beat merged into `backend` | `docker-compose.hosted.yml`, `docs/Deployment-and-Infrastructure/container-consolidation-migration.md` |
+| **Vectorised** | Your data is searchable in your own DB | pgvector embeddings, `EMBEDDING_DIMENSION=1536`, HNSW indexes, `AI_ENABLED=false` forces deterministic-only | `backend/app/core/config.py`, `backend/app/services/vector_search.py` |
+| **Deterministic-first** | Works even when AI is down | `enhance()` pattern in the AI gateway; every module has a fallback | `ai/app/router_client.py`, `ai/app/fallbacks/` |
+| **Modular** | Add a feature, not a service | **12** AI modules, **12** fallback files (11 module fallbacks + shared `utils.py`), shared `router_utils` | `ai/app/modules/`, `ai/app/fallbacks/` |
+| **Non-root by default** | Harder to break out of | Every stack service runs `read_only`, `cap_drop: ALL`, non-root | `docs/Engineering/container-architecture.md` |
+| **Docs rebuilt** | Docs stay in sync with code | Section mirrors in `docs/`, Outline source of truth, stale-content checks in CI | `docs/`, `.github/workflows/` |
 
 ### Week 1 (Launch Week)
 
@@ -38,7 +41,7 @@ The content calendar tracks all planned marketing assets across channels. Source
 | Date | Channel | Asset | Hook | CTA |
 |------|---------|-------|------|-----|
 | W2-D2 | Blog follow-up | "How the `enhance()` pattern keeps your valuations honest" | Resale numbers are immutable; 9Router can't touch them | /ai-data.html |
-| W2-D3 | LinkedIn | Case-styled post | "9 containers → 8: what consolidating your stack actually saves" | /selfhost.html |
+| W2-D3 | LinkedIn | Case-styled post | "12 containers → 9: what consolidating your stack actually saves" | /selfhost.html |
 | W2-D4 | Twitter/X | Single image | "Your data, vectorised: search your garage in plain English" | /selfhost.html |
 | W2-D5 | Discord #support | Embed | FAQ: "Does AutoBrain work without an AI router?" | — |
 
@@ -75,7 +78,7 @@ The content calendar tracks all planned marketing assets across channels. Source
 | Asset | Location |
 |-------|----------|
 | Website copy | `autobrainservice-website` repo, branch `phase1/cmo-marketing-refresh` |
-| Blog draft | `drafts/AUT-3971-phase1-outcomes-blog.md` |
+| Blog draft | Outline (internal-only) — draft blog post AUT-3971 |
 | Social queue | Outline "Social Queue" doc |
 | Facts / proof points | `autobrain` repo — `ai/app/router_client.py`, `ai/app/fallbacks/`, `backend/app/services/vector_search.py`, `docker-compose.hosted.yml`, `docs/Deployment-and-Infrastructure/container-consolidation-migration.md`, `phase1-improvement-plan.md` |
 
@@ -87,4 +90,12 @@ The content calendar tracks all planned marketing assets across channels. Source
 | Mobile app release (autobrain-mobile) | iOS TestFlight / Play Store internal | Repo split in progress (AUT-2230) |
 | Hosted pricing update | New tier announcement | Planning |
 
-Source: Phase 1 content calendar (AUT-3972), AUT-3968 parent.
+## Related Docs
+
+- [Phase 1 Social Calendar](./phase1-social-calendar.md) — the approved Phase 1 launch schedule
+- [Social Media Strategy](./social.md) — channels and approval gates
+- [Growth Metrics](./growth-metrics.md) — KPIs this calendar is measured against
+- [Website Documentation](./website.md) — where the copy lands
+- [Marketing & Website Index](./index.md) — section overview, sanitisation rules
+
+Source: Phase 1 content calendar (AUT-3972), AUT-3968 parent; counts verified against `docker-compose.hosted.yml`, `ai/app/modules/`, `backend/app/core/config.py`.

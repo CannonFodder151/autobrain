@@ -1,6 +1,6 @@
-# Community Garage — Feature Concept & Workflows (AUT-294)
+# Community Garage — Feature & Workflows (AUT-294)
 
-> **STATUS: APPROVED by board 2026-08-11 (plan rev 7).** This page captures the approved concept, workflows, and decisions for the Community Garage federated social layer. Implementation is gated until current in-flight jobs + QA/security testing are green (req 15). Marketing runs as "coming soon" only.
+> **STATUS: Board-approved concept (2026-08-11, plan rev 7).** Backend, federation client, and the hub service (`hub` in `docker-compose.hosted.yml`, `hub.autobrainservice.app`) are implemented in the main repo; the hub relay lives in the private repo `autobrain-federation-hub` (AUT-333). Marketing runs as "coming soon" only until the QA/security gate (P3) clears. This page captures the approved concept, workflows, and decisions.
 
 ## 1. Idea
 
@@ -124,6 +124,18 @@ Branch: `feat/community-garage`. No mobile app release until P4 completes.
 
 ## 9. Gating
 
-Feature is **not actioned** until: (a) all current in-flight jobs complete, and (b) QA/security testing of the current stack is green. Implementation child issues are parked in `backlog` until this gate clears. **Exception:** the marketing campaign (website teaser, blog post, socials) is active now — "coming soon" only, never presented as live.
+Public launch waits on the P3 QA/security gate. The backend and hub
+service are already deployed in the hosted stack (`docker-compose.hosted.yml`),
+and federation is resilient by design — hub failures are logged and never
+break the local feed (`backend/app/social/federation.py`). Marketing runs
+"coming soon" only, and is never presented as live until the gate clears.
 
-Source: [AUT-294](<INTERNAL_PAPERCLIP_URL>/AUT/issues/AUT-294) — plan document (rev 7, approved).
+## Related Docs
+
+- [Demo Environment](./demo-environment.md) — demo does not register with the hub
+- [Social Media Strategy](./social.md) — Community Garage teaser campaign
+- [Container Architecture](../Engineering/container-architecture.md) — `hub` service in the hosted stack
+- [Growth Metrics](./growth-metrics.md) — WAHI and federation licensing metrics
+- [Documentation Policy](../Company/documentation-policy.md) — mirror rules
+
+Source: [AUT-294](<INTERNAL_PAPERCLIP_URL>/AUT/issues/AUT-294) — plan document (rev 7, approved); `backend/app/social/`, `backend/app/api/v1/social.py`, `docker-compose.hosted.yml`.
