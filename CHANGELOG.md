@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-5460)
+- fix(frontend, nginx): the login rate limiter counted **one failure bucket for every visitor on the internet**. Public traffic reaches the frontend container through the host nginx-proxy-manager, and `proxy_set_header X-Real-IP $remote_addr` sent the *proxy's* address upstream, so the backend's `client_ip()` returned the proxy IP for every request — measured live on hosted as `login:fail:ip:172.18.0.3`. Five failed logins from anyone (or one visitor fat-fingering five times) then locked out **all** users for three hours, which is the customer "could not reach the server" report in AUT-3858. The frontend nginx now restores the true client from Cloudflare's `CF-Connecting-IP` using the `realip` module, trusting that header only from peers on the internal docker bridge pool — an off-proxy request keeps its real address, so a public client can never spoof it. Adds `backend/tests/test_nginx_real_ip.py` (block present, trusted proxies are private-only, real-IP declared before the forwarded `X-Real-IP`, no client-supplied header trusted).
+
 ## [0.3.308] - 2026-10-04
 
 ### Fixed (AUT-5433)
