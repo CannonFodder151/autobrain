@@ -156,6 +156,20 @@ def verify_running(args, services, attempts=20, delay=5):
             [(n, f"stuck in state {st}") for n, st in stuck])
 
 
+def recovery_delete_cmd(args, names):
+    """RECOVERY snippet: one destructive DELETE per *actual* container name.
+
+    AUT-4981: this used to print a literal "<NAME>" placeholder, so the
+    operator had to guess which container the guard had just detected.
+    """
+    return "\n".join(
+        f"  curl -X DELETE \"{args.portainer_url}/api/endpoints/"
+        f"{args.endpoint}/docker/containers/{n}?force=true&v=true\" \\\n"
+        "    -H \"X-API-Key: $PORTAINER_API_KEY\""
+        for n in names
+    )
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--stack", required=True)
@@ -240,9 +254,10 @@ def main():
                   f"needs, but {svc!r} is not a service in the incoming compose",
                   file=sys.stderr)
         print("RECOVERY (destructive — run by hand, then re-run this sync):\n"
-              f"  curl -X DELETE \"{args.portainer_url}/api/endpoints/"
-              f"{args.endpoint}/docker/containers/<NAME>?force=true&v=true\" \\\n"
-              f"    -H \"X-API-Key: $PORTAINER_API_KEY\"", file=sys.stderr)
+              f"{recovery_delete_cmd(args, [name for name, _, _ in clashes])}\n"
+              "Check the endpoint again before deleting: only the containers "
+              "listed above are orphans.",
+              file=sys.stderr)
         return 5
 
     body = {
@@ -287,9 +302,7 @@ def main():
         for name, why in problems:
             print(f"  {name}: {why}", file=sys.stderr)
         print("RECOVERY (destructive — run by hand):\n"
-              f"  curl -X DELETE \"{args.portainer_url}/api/endpoints/"
-              f"{args.endpoint}/docker/containers/<NAME>?force=true&v=true\" \\\n"
-              "    -H \"X-API-Key: $PORTAINER_API_KEY\"\n"
+              f"{recovery_delete_cmd(args, [n for n, _ in problems if n])}\n"
               "then re-run this script (or redeploy the stack from Portainer).",
               file=sys.stderr)
         return 6
