@@ -164,8 +164,9 @@ def main():
     ap.add_argument("--portainer-url", default=os.environ.get(
         "PORTAINER_URL", "https://portainer.nathanmartina.com"))
     ap.add_argument("--api-key", default=os.environ.get("PORTAINER_API_KEY"))
-    ap.add_argument("--pull-image", action="store_true", default=True,
-                    help="force a pull so the new digest is fetched (default: true)")
+    ap.add_argument("--pull-image", action=argparse.BooleanOptionalAction, default=True,
+                    help="force a pull so the new digest is fetched (default: true); "
+                         "use --no-pull-image to skip")
     args = ap.parse_args()
 
     # AUT-5172: gate before any network call so a gated run has zero effect.

@@ -11,6 +11,7 @@ Usage: python3 scripts/update-compose-pins.py \
         [--file docker-compose.hosted.yml]
 """
 import argparse
+import os
 import re
 import sys
 from pathlib import Path
@@ -41,8 +42,9 @@ def main():
             print(f"ERROR: expected svc=digest, got {a!r}", file=sys.stderr)
             return 2
         k, v = a.split("=", 1)
-        if not v.startswith("sha256:"):
-            print(f"ERROR: digest for {k} must be sha256:..., got {v!r}", file=sys.stderr)
+        if not re.fullmatch(r"sha256:[a-f0-9]{64}", v):
+            print(f"ERROR: digest for {k} must be sha256:<64 hex chars>, got {v!r}",
+                  file=sys.stderr)
             return 2
         pins[k] = v
 
@@ -73,5 +75,37 @@ def main():
     return 0
 
 
+def _test_digest_validation():
+    import io
+    import contextlib
+    from unittest.mock import patch
+
+    # Test malformed digest with backreference
+    for bad in ["sha256:abc\\1", "sha256:nothex", "sha256:", "sha256:ggg"]:
+        args = ["script", f"backend={bad}"]
+        with patch.object(sys, "argv", args):
+            buf = io.StringIO()
+            with contextlib.redirect_stderr(buf):
+                rc = main()
+            assert rc == 2, f"expected exit 2 for {bad}, got {rc}"
+            assert "ERROR" in buf.getvalue()
+
+    # Test valid digest passes validation
+    valid = "sha256:" + "a" * 64
+    args = ["script", f"backend={valid}"]
+    with patch.object(sys, "argv", args):
+        with patch("pathlib.Path.read_text", return_value="image: ghcr.io/cannonfodder151/autobrain-backend:hosted@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"):
+            with patch("pathlib.Path.write_text"):
+                buf = io.StringIO()
+                with contextlib.redirect_stderr(buf):
+                    rc = main()
+                assert rc in (0, 1), f"valid digest should pass, got {rc}"
+
+    print("digest validation tests passed")
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    if os.environ.get("TEST_DIGEST_VALIDATION") == "1":
+        _test_digest_validation()
+    else:
+        sys.exit(main())
