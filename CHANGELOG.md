@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.310] - 2026-10-04
+
 ### Changed (AUT-5532)
 - fix(frontend): the login screen's logo-circle drop shadow still used the deprecated `Colors.black.withOpacity(0.30)`, which emits a `deprecated_member_use` analyzer info (`'withOpacity' is deprecated … Use .withValues() to avoid precision loss`) on every `flutter analyze` run. Swapped to `Colors.black.withValues(alpha: 0.30)` — same rendered shadow (the two differ only in 8-bit rounding of the alpha channel), deprecation cleared. Cosmetic only, no behaviour change; raised during QA re-review of PR #787 (AUT-5524).
 
