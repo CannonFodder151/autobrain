@@ -13,16 +13,16 @@ snapshots deleted on the first full day of hourly pushes. One owner, one
 policy.
 """
 
-import logging
 import time
 from datetime import datetime, timezone
 
 import httpx
 
 from app.core.config import settings
+from app.core.logging import get_logger
 from app.services.backup import dump_backup, serialize_all
 
-logger = logging.getLogger("autobrain.backup_offsite")
+logger = get_logger("autobrain.backup_offsite")
 
 
 async def _push_offsite(payload: bytes, filename: str) -> bool:
