@@ -221,6 +221,11 @@ class Settings(BaseSettings):
     PAPERCLIP_API_KEY: str = ""  # long-lived agent key or service token
     PAPERCLIP_COMPANY_ID: str = ""  # AutoBrain company UUID in Paperclip control plane
 
+    # AUT-5137: best-effort ops webhook fired when boot aborts because
+    # `alembic upgrade head` failed against a non-empty database. Empty = log
+    # line only (the container still exits non-zero and crash-loops).
+    BOOT_ALERT_WEBHOOK_URL: str = ""
+
     # Self-service signup (hosted). When enabled, anyone can register a
     # Free-tier account via POST /auth/signup. Self-hosted instances keep
     # admin-only provisioning by leaving this off.
