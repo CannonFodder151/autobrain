@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-5261, AUT-5057)
+- fix(deploy): restore the `autobrain-demo` stack definition on `main`. The AUT-5261 squash merge (#884) captured only the CI half of the branch (head `9c70b31f`), so `docker-compose.demo.yml` never reached `main` and the EP2 Demo tier has had no deployable definition since. `DEMO_PASSWORD` is now injected per-environment instead of the hardcoded `demo` literal (AUT-5057).
+
 ## [0.3.308] - 2026-10-04
 
 ### Fixed (AUT-5433)
