@@ -1,0 +1,38 @@
+name: ARM64 runner keepalive
+
+# AUT-5463: the single self-hosted ARM64 runner (gh-runner-autobrain-arm64,
+# Oracle VM, Portainer EP5) sits behind the GitHub Actions broker over a
+# long-lived WebSocket. Measured 2026-09-27..2026-10-04 (EP5 container
+# logs): real broker drops happen only while the runner is idle (3 drops in
+# 7.09 days, at 36/81/326 min idle — 0.42/day), and every job-end shows a
+# benign listener rotation logged as BrokerServer ERR. No job was ever
+# interrupted mid-flight. This job caps the idle gap below the shortest
+# observed drop threshold (36 min) by giving the broker regular message
+# traffic, and doubles as a canary: if the runner cannot pick up a job, the
+# run stays queued and CI Queue Guard (ci-queue-guard.yml) surfaces it.
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: arm64-runner-keepalive
+  cancel-in-progress: false
+
+jobs:
+  keepalive:
+    runs-on: [self-hosted, linux, ARM64]
+    timeout-minutes: 5
+    steps:
+      - name: Broker keepalive + arch canary (AUT-2097)
+        run: |
+          set -euo pipefail
+          got="$(uname -m)"
+          if [ "$got" != "aarch64" ]; then
+            echo "::error::arm64 runner reports uname -m=$got — broker session is not on real arm64"
+            exit 1
+          fi
+          echo "==> keepalive ok: uname -m=$got at $(date -u +%FT%TZ)"
