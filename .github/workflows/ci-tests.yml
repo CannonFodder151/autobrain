@@ -23,6 +23,8 @@ permissions:
 jobs:
   pytest:
     name: pytest
+    # AUT-5755: fork PRs must never reach the self-hosted fleet.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, linux, x64, vm2]
     timeout-minutes: 15
     steps:
@@ -113,6 +115,8 @@ jobs:
   # 0-job `failure` on every push and the deploy signal is silently lost (AUT-4911).
   workflow-yaml:
     name: workflow yaml parse
+    # AUT-5755: fork PRs must never reach the self-hosted fleet.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, linux, x64, vm2]
     timeout-minutes: 5
     steps:
@@ -144,6 +148,8 @@ jobs:
   # build arg (AUT-4824). The check needs no docker daemon, so run it on every PR.
   carto-build-arg:
     name: carto build-arg propagation
+    # AUT-5755: fork PRs must never reach the self-hosted fleet.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, linux, x64, vm2]
     timeout-minutes: 5
     steps:
@@ -167,6 +173,8 @@ jobs:
   # were dropped unnoticed by PR #832. Needs pyyaml, no docker daemon.
   release-scripts:
     name: release script self-checks
+    # AUT-5755: fork PRs must never reach the self-hosted fleet.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, linux, x64, vm2]
     timeout-minutes: 5
     steps:
@@ -194,6 +202,8 @@ jobs:
   # postgres image.
   alembic-migrations:
     name: alembic upgrade head (hosted-shaped DB + pending revision DDL)
+    # AUT-5755: fork PRs must never reach the self-hosted fleet.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, linux, x64, vm2]
     timeout-minutes: 15
     services:
@@ -237,6 +247,8 @@ jobs:
   # ordered mock list predated the new API calls. Pure stdlib, no docker.
   compose-sync-script:
     name: compose sync script self-checks
+    # AUT-5755: fork PRs must never reach the self-hosted fleet.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, linux, x64, vm2]
     timeout-minutes: 5
     steps:
@@ -259,6 +271,8 @@ jobs:
   # lacks a justification. No docker daemon needed.
   base-image-pins:
     name: base image pin consistency
+    # AUT-5755: fork PRs must never reach the self-hosted fleet.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, linux, x64, vm2]
     timeout-minutes: 5
     steps:

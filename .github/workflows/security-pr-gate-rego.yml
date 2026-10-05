@@ -26,6 +26,8 @@ concurrency:
 jobs:
   pip-audit:
     name: pip-audit — rego-lookup-api
+    # AUT-5755: fork PRs must never reach the self-hosted fleet.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
@@ -41,7 +43,8 @@ jobs:
 
   report-status:
     name: Report gate result to Discord #status
-    if: always()
+    # AUT-5755: fork PRs must never reach the self-hosted fleet.
+    if: (always()) && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     needs: [pip-audit]
     runs-on: [self-hosted, linux, x64]
     steps:
