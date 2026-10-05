@@ -27,7 +27,7 @@ jobs:
     # bursts, starving dockerhub-publish/build-hosted. ubuntu-latest frees both
     # self-hosted runners for real build work. The repo-level concurrency group
     # above still cancels a prior in-flight wait on a newer push.
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, vm2]
     # 15 min settle + bounded webhook attempts (~2.5 min worst case)
     # + Discord alert must fit inside the ceiling. The old 20 min
     # budget left ~5 min for up to 6 *unbounded* curl attempts, so a
