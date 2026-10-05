@@ -48,6 +48,7 @@ def _enforce_entitlement(user):
 def _vehicle(*, year: int | None = 2018, odo: int | None = 80_000, condition: str = "good",
              make: str = "Toyota", model: str = "Corolla") -> SimpleNamespace:
     return SimpleNamespace(
+        id="v1",
         year=year, odometer_km=odo, condition=condition, make=make, model=model,
         vehicle_type="car",
     )
@@ -231,8 +232,11 @@ async def test_advisor_replace_route_envelope(monkeypatch) -> None:
         }
 
     monkeypatch.setattr(advisor_mod, "compute_replace", _fake_compute_replace)
+    async def _fake_get_accessible_vehicle(db, vid, user):
+        return fake_vehicle
+
     monkeypatch.setattr(advisor_mod, "get_accessible_vehicle",
-                        lambda db, vid, user: fake_vehicle)
+                        _fake_get_accessible_vehicle)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
