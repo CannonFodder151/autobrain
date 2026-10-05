@@ -315,6 +315,55 @@ def verify_running(args, services, attempts=20, delay=5):
             [(n, f"stuck in state {st}") for n, st in stuck])
 
 
+def verify_only(args, content, attempts=20, delay=5):
+    """Read-only health gate (AUT-5774).
+
+    Runs check_port_collisions + verify_running against the compose file and
+    the live endpoint, WITHOUT issuing the Portainer PUT. Exits 0 only when
+    the stack is healthy (all services running, no stuck containers, no port
+    collisions). Used by the nightly runbook step 3 as a pre-deploy gate.
+    """
+    services, wanted_ports = compose_services_and_ports(content)
+    flat_wanted = {p for ps in wanted_ports.values() for p in ps}
+
+    try:
+        clashes = check_port_collisions(args, services, flat_wanted)
+    except urllib.error.HTTPError as e:
+        print(f"WARNING: could not read endpoint containers -> HTTP {e.code}; "
+              "skipping the pre-verify orphan check", file=sys.stderr)
+        clashes = []
+    if clashes:
+        print(f"ERROR: verify-only FAILED — host port collision with orphans on "
+              f"endpoint {args.endpoint}:", file=sys.stderr)
+        for name, svc, ports in clashes:
+            print(f"  {name} (service {svc!r}) holds host port(s) "
+                  f"{', '.join(str(p) for p in ports)} that the compose needs, "
+                  f"but {svc!r} is not a service in the compose",
+                  file=sys.stderr)
+        return 5
+
+    try:
+        problems = verify_running(args, services, attempts=attempts, delay=delay)
+    except urllib.error.HTTPError as e:
+        print(f"ERROR: verify-only FAILED — could not read endpoint containers "
+              f"-> HTTP {e.code}", file=sys.stderr)
+        return 4
+
+    if problems:
+        print(f"ERROR: verify-only FAILED — stack {args.stack!r} is NOT healthy:",
+              file=sys.stderr)
+        for name, why in problems:
+            print(f"  {name}: {why}", file=sys.stderr)
+        return 1
+
+    print(f"verify-only: stack={args.stack} endpoint={args.endpoint} "
+          f"OK — {len(services)} services running, no stuck containers, "
+          f"no port collisions")
+    for name, ref in sorted(compose_image_refs(content).items()):
+        print(f"verified: {name} -> {ref}")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--stack", required=True)
@@ -333,7 +382,23 @@ def main():
     ap.add_argument("--stack-type", type=int, default=COMPOSE_STACK_TYPE,
                     help="Portainer stack type for --create "
                          f"(default: {COMPOSE_STACK_TYPE})")
+    ap.add_argument("--verify-only", action="store_true",
+                    help="AUT-5774: read-only health gate — run check_port_collisions "
+                         "and verify_running WITHOUT issuing the Portainer PUT. "
+                         "Exits 0 only when the stack is healthy. Used by the "
+                         "nightly runbook step 3 as a pre-deploy gate.")
     args = ap.parse_args()
+
+    # AUT-5774: --verify-only is read-only (no PUT, no stack mutation), so it
+    # skips the AUT-2409 deploy window gate — the gate exists to prevent writes
+    # outside the window, and there are none here.
+    if args.verify_only:
+        if not args.api_key:
+            print("ERROR: PORTAINER_API_KEY not set", file=sys.stderr)
+            return 2
+        with open(args.file) as f:
+            content = f.read()
+        return verify_only(args, content)
 
     # AUT-5172: gate before any network call so a gated run has zero effect.
     # Hosted endpoint only — the window is a hosted-deploy policy, and other
