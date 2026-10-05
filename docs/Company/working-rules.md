@@ -11,8 +11,12 @@
 ## Git & PR Workflow
 
 - **Branching** — All changes on branches off `main`. Never push directly to `main`.
-- **PRs** — Open PR for every change. Squash-merge after QA + Security + OCR approval (auto-merge enabled per AUT-2230).
-- **Never leave approved PRs open** — Once checks pass, merge immediately.
+- **PRs** — Open PR for every change. Squash-merge after QA + Security + OCR approval, using the AUT-2230 gate script (AUT-5561). Never arm GitHub auto-merge: `allow_auto_merge` is `false` on this repo, and the gate enforces QA **and** Security at the exact head, which a one-approval auto-merge cannot.
+  ```bash
+  node .agents/skills/pr-gardening/scripts/merge-gated.mjs \
+    --repo CannonFodder151/autobrain --pr NUMBER --origin AUT-NNN
+  ```
+- **Never leave approved PRs open** — Once the gate reports both roles clean, merge immediately.
 - **Deploy after merge** — Deploy to all servers (dev box + AutoBrain-Hosted) after merge.
 - **Post-deploy QA mandatory** — Every deployment requires QA verification (AUT-3624). Deployment not complete until QA signs off.
 
