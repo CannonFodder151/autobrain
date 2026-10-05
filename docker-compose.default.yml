@@ -145,7 +145,7 @@ services:
       # AUT-5611: backend had NO network aliases at all as a hand-made
       # container. The alias is what keeps backend/ai resolvable after any
       # recreate (watchtower included), and it is asserted by
-      # scripts/check_default_compose.py.
+      # scripts/check-default-compose.py.
       default:
         aliases: [backend]
     healthcheck:
