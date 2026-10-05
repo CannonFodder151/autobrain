@@ -40,9 +40,10 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     if (_isDemo) {
-      // Demo build auto-fills the read-only demo account.
+      // Demo build pre-fills the read-only demo account email only. The
+      // password is never shipped in the bundle (AUT-5063) — the demo
+      // operator distributes it via the demo/demo-account-password secret.
       _email.text = 'demo@autobrainservice.app';
-      _password.text = 'demo';
     }
     // Focus + select the email field so web autofill always lands in it.
     WidgetsBinding.instance.addPostFrameCallback((_) {

@@ -15,7 +15,7 @@ os.environ["DATABASE_URL"] = "sqlite+aiosqlite:////tmp/autobrain-seed-fuel-test.
 os.environ["SECRET_KEY"] = "test-secret"
 os.environ["DEMO_MODE"] = "true"
 os.environ["DEMO_EMAIL"] = "demo@test.local"
-os.environ["DEMO_PASSWORD"] = "demo"
+os.environ["DEMO_PASSWORD"] = "test-demo-password-123"
 os.environ["DEMO_DISPLAY_NAME"] = "Demo Garage"
 os.environ["POSTGRES_USER"] = "autobrain"
 os.environ["POSTGRES_PASSWORD"] = "autobrain"
@@ -41,7 +41,7 @@ from app.models.user import User  # noqa: E402
 
 settings.DEMO_MODE = True
 settings.DEMO_EMAIL = "demo@test.local"
-settings.DEMO_PASSWORD = "demo"
+settings.DEMO_PASSWORD = "test-demo-password-123"
 settings.DEMO_DISPLAY_NAME = "Demo Garage"
 
 engine = create_async_engine("sqlite+aiosqlite:////tmp/autobrain-seed-fuel-test.db")

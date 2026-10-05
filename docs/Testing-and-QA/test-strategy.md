@@ -11,7 +11,7 @@ Define how AutoBrain is tested across the backend, AI gateway and frontend, what
 | Environment | Where | Purpose |
 |-------------|-------|---------|
 | Dev box | `10.0.3.39` (Portainer endpoint 6, PaperClip-AutoBrain-Dev-Box) | Primary test target for agent test passes |
-| Demo | `demo.autobrainservice.app` (demo@autobrainservice.app / demo) | Promotion tier 1 |
+| Demo | `demo.autobrainservice.app` (login `demo@autobrainservice.app`; password via Paperclip secret `demo/demo-account-password`) | Promotion tier 1 |
 | Default | Default deployment tier | Promotion tier 2 |
 | Hosted | `hosted.autobrainservice.app` (Oracle VM 152.69.188.133, Portainer endpoint 5) | Production |
 
