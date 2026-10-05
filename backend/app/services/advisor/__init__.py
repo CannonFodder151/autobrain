@@ -35,6 +35,7 @@ from app.services.advisor.replace import (  # noqa: F401
     age_years,
     new_used_premium,
     _clamp_horizon,
+    compute_replace,
 )
 
 from app.services.advisor.upgrade import (  # noqa: F401
