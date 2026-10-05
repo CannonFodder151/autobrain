@@ -235,7 +235,7 @@ jobs:
     # AUT-5171: registry/git-only job — no image build, no self-hosted
     # dockerd dependency. GitHub-hosted so the release tail can never
     # starve behind PR gate jobs on the contended x64 vm2 pool.
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, vm2]
     permissions:
       contents: read
       packages: write
@@ -302,7 +302,7 @@ jobs:
     # AUT-5171: registry/git-only job — no image build, no self-hosted
     # dockerd dependency. GitHub-hosted so the release tail can never
     # starve behind PR gate jobs on the contended x64 vm2 pool.
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, vm2]
     permissions:
       contents: write
     env:
@@ -387,7 +387,7 @@ jobs:
     # AUT-5171: registry/git-only job — no image build, no self-hosted
     # dockerd dependency. GitHub-hosted so the release tail can never
     # starve behind PR gate jobs on the contended x64 vm2 pool.
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, vm2]
     permissions:
       contents: write
     env:
@@ -458,7 +458,7 @@ jobs:
     # the job starts early and FAILS LOUDLY when the job starts past 18:00Z
     # (the old behaviour was a green CI run that silently did nothing).
     if: github.event_name == 'schedule'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, vm2]
     # Own group so the nightly sync is never queued behind an in-flight
     # ~20 min multi-arch build and pushed past the end of the window.
     concurrency:
