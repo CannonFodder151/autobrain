@@ -423,6 +423,9 @@ services:
 # "HTTP Error 500" -- the real Portainer body ("compose build operation failed:
 # ghcr.io/cannonfodder151/autobrain-gh-runner:arm64-latest is also unpublished,
 # so the service could never have started on EP5 regardless.
+#
+# AUT-5714: it then lived only inside Portainer, so stack 123 drifted with
+# nothing to review it. Its definition now lives in `docker-compose.runner.yml`.
   # 9Router AI router (AUT-473). Published on `0.0.0.0:20128` so it is reachable
   # on the host's public interface, but the host firewall (`fw-keeper`) restricts
   # :20128 to the allow-listed dev egress IP (`122.199.30.128`, see

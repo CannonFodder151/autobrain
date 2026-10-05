@@ -1,0 +1,63 @@
+# AUT-5714: source of truth for the EP5 self-hosted ARM64 GitHub Actions
+# runner (Portainer stack 123, endpoint 5). AUT-4911 pulled the runner out of
+# docker-compose.hosted.yml because Portainer cannot build a service image for a
+# remote endpoint with no uploaded build context, and the wrapper image it
+# referenced (autobrain-gh-runner:arm64-latest) was never published.
+#
+# That left the runner defined ONLY inside Portainer, so stack 123 had drifted
+# from the repo with nobody able to review it. This file is that record: apply
+# it to stack 123 on EP5 (endpoint 5). It is deliberately NOT driven by
+# scripts/sync-compose-to-portainer.py — that script targets the
+# `autobrain-hosted` app stack and enforces the AUT-2409 deploy window, while
+# this container serves no customer traffic.
+#
+# AUT-5714 (the change that matters): the entrypoint used to `exec ./run.sh`.
+# run.sh runs `bin/Runner.Listener run` as a *foreground child* and traps no
+# signals, so bash became PID 1 and Docker's SIGTERM died there — the .NET
+# runner never saw it and Docker SIGKILLed the process group on the default
+# 10s grace, tearing down any in-flight job with no cancellation record.
+# `exec ./bin/Runner.Listener run` makes the runner itself PID 1, so SIGTERM
+# reaches Runner.cs's handler and JobDispatcher.ShutdownAsync() cancels the job
+# cleanly through GitHub instead. Runner.Listener returns exit code 4 after a
+# self-update; `restart: unless-stopped` restarts the container onto the new
+# version, which is what run.sh's retry loop was doing anyway.
+version: "3.8"
+
+services:
+  gh-runner-autobrain-arm64:
+    image: ghcr.io/actions/actions-runner:latest
+    container_name: gh-runner-autobrain-arm64
+    environment:
+      - REPO_URL=https://github.com/CannonFodder151/autobrain
+      - RUNNER_NAME=gh-runner-autobrain-arm64
+      - RUNNER_TOKEN=${RUNNER_TOKEN}
+      - RUNNER_LABELS=autobrain,arm64,hosted
+      - EPHEMERAL=false
+      - DISABLE_AUTO_UPDATE=false
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - gh-runner-data:/home/runner/_work
+    entrypoint:
+      - bash
+      - -c
+      - >-
+        cd /home/runner &&
+        { [ -f .runner ] ||
+        ./config.sh --url "$$REPO_URL" --token "$$RUNNER_TOKEN" --name "$$RUNNER_NAME" --labels "$$RUNNER_LABELS" --unattended --replace; } &&
+        exec ./bin/Runner.Listener run
+    # AUT-5714: the runner's own unload path is bounded by
+    # Constants.Runner.ExitOnUnloadTimeout (30s), so anything past that is
+    # headroom for cancelling the job and reaping the worker. Without this,
+    # Docker's 10s default is shorter than the runner's own shutdown and
+    # SIGKILLs mid-drain.
+    stop_grace_period: 2m
+    restart: unless-stopped
+    networks:
+      - autobrain-hosted_default
+
+volumes:
+  gh-runner-data:
+
+networks:
+  autobrain-hosted_default:
+    external: true

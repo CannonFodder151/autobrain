@@ -185,6 +185,13 @@ jobs:
           python scripts/check-compose-consolidation.py
           python -m unittest scripts/test_check_compose_consolidation.py -v
 
+      # AUT-5714: the EP5 ARM64 runner stack defined only `exec ./run.sh`,
+      # leaving bash as PID 1 so a `docker stop` SIGKILLed any in-flight
+      # hosted build instead of letting Runner.Listener drain it. Needs
+      # pyyaml and bash, no docker daemon.
+      - name: ARM64 runner compose drains on stop (AUT-5714)
+        run: python -m unittest scripts/test_runner_compose_stop_drain.py -v
+
   # AUT-5088: hosted booted without `alembic upgrade head`, so every
   # migration-only change was dead code in production. The compose guard in
   # release-scripts catches a deleted migration step; this job proves the chain
