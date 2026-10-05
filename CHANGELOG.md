@@ -13,6 +13,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed (AUT-5639)
 - fix(backend): `GET /api/v1/advisor/replace` 500ed for every caller, and the next build of the backend could not boot at all. AUT-3916 (`389213ca`, Sep 26) deleted the legacy `backend/app/services/advisor.py` — which held `compute_replace` — and rewired `app/api/v1/advisor.py` to import it from the new `app.services.advisor` package, but the function was never moved into the package, so the package never exported it. The 500 stayed invisible for ~9 days because `ci-tests.yml` runs the suite as `pytest … || true` and `tests/test_advisor_replace.py` skips its route tests when `app.main` fails to import (they had never actually run: the module's fake vehicle had no `id` and `get_accessible_vehicle` was patched with a sync lambda, both now fixed). AUT-5639's PR #915 added the missing import line, which turned the latent breakage into a hard `ImportError` at boot for every process that imports `app.main` — i.e. main went red and any image built from it would crash-loop. This restores `compute_replace` in `app/services/advisor/replace.py` (verbatim from the deleted legacy module — deterministic, no AI/no network: used cost = current private-sale mid, new cost = mid × documented `new_used_premium(age)`, gap = replacement − current − trade-in mid, `surplus` on a non-positive gap) and re-exports it from `app/services/advisor/__init__.py`. `tests/test_advisor_replace.py` now runs instead of skipping (15 passed, 0 skipped; 834 tests collect clean) and pins the export with a new `test_compute_replace_is_exported`, so a future dropped export fails collection at CI time instead of in production.
+### Fixed (AUT-5132)
+- fix(deploy): the nightly hosted deploy to EP5 stack 122 was a **silent
+  no-op**. Stack 122 is an inline Portainer stack (`GitConfig: null`) with
+  every image digest-pinned, so `pullImage: true` re-resolves an immutable
+  digest and can never move a pin; and the compose-pin sync step in
+  `build-hosted.yml` was gated on a *digest* having changed, so a
+  compose-only edit (the #870 `alembic` pre-step) never reached the stack
+  even though the diff looked correct. `scripts/sync-compose-to-portainer.py`
+  now asserts, after every sync and on a read-only `--verify-only` pass, that
+  each running container's `RepoDigests` (`/images/{id}/json`) contains the
+  digest this compose pins and that its `command`/`entrypoint` matches what the
+  compose declares — interpolated against the stack env first, because compose
+  interpolates before the value reaches the container. A HTTP 200 from
+  Portainer is no longer treated as evidence that the change shipped; drift
+  exits 7. The sync step's `changed` gate is replaced by
+  `always() && steps.bump.outcome == 'success'`. Covered by 28 tests in
+  `scripts/test_sync_compose_to_portainer.py` and documented in
+  `docs/Deployment-and-Infrastructure/deployment-guide.md`
+  ("Stack 122 (`autobrain-hosted`) is an INLINE, digest-pinned stack").
 
 ### Fixed (AUT-5137)
 - fix(backend): `app.db.bootstrap` failed open on a failed `alembic upgrade` — it caught *every* migration error and degraded to `Base.metadata.create_all`, which never alters an existing table. So a migration that only adds a column (or any bad DDL, permission error, truncation, stale revision id, or forked head) silently did nothing while boot proceeded and the deploy reported success — schema drift surfacing hours later as an application error far from the deploy. This is the class behind the hosted `devices.vehicle_type` miss (AUT-5122, a `StringDataRightTruncationError` stamping a 34-char id into `varchar(32)` meant the repair never applied) and the AUT-4925 head fork in AUT-5114; both were swallowed by the one `except`. The fallback is now scoped to a genuinely fresh database (`information_schema` reports zero tables in `public`, i.e. an un-stamped schema with nothing to drift from); every other failure aborts startup. Before aborting, bootstrap emits a structured `migration_failed_startup_aborted` error log line and POSTs the same payload to a new optional `BOOT_ALERT_WEBHOOK_URL` ops webhook (best-effort, 5s timeout, never raises, so alerting can never mask the abort). A database whose state cannot be inspected at all also fails closed rather than guessing. Because the container command is `sh -c '… && python -m app.db.bootstrap && …'`, the raise now exits the container instead of handing a healthy-looking boot to uvicorn — this is a deliberate behaviour change: a broken migration will now crash-loop the backend instead of serving traffic against a drifted schema, which is the point. Regression tests in `backend/tests/test_aut5137_bootstrap_fail_closed.py` drive the alembic CLI seam and the engine seam (no live postgres needed) and **fail on the pre-fix code** with `DID NOT RAISE`; they cover abort-on-non-empty-db (plus the log line, the alert, and both `head`/`heads` attempts), the still-working fresh-database `create_all` fallback, fail-closed on an uninspectable database, and that a clean upgrade never probes the schema at all.
