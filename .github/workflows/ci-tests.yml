@@ -23,7 +23,7 @@ permissions:
 jobs:
   pytest:
     name: pytest
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -113,7 +113,7 @@ jobs:
   # 0-job `failure` on every push and the deploy signal is silently lost (AUT-4911).
   workflow-yaml:
     name: workflow yaml parse
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
@@ -144,7 +144,7 @@ jobs:
   # build arg (AUT-4824). The check needs no docker daemon, so run it on every PR.
   carto-build-arg:
     name: carto build-arg propagation
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
@@ -167,7 +167,7 @@ jobs:
   # were dropped unnoticed by PR #832. Needs pyyaml, no docker daemon.
   release-scripts:
     name: release script self-checks
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
@@ -194,7 +194,7 @@ jobs:
   # postgres image.
   alembic-migrations:
     name: alembic upgrade head (hosted-shaped DB + pending revision DDL)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     timeout-minutes: 15
     services:
       postgres:
@@ -237,7 +237,7 @@ jobs:
   # ordered mock list predated the new API calls. Pure stdlib, no docker.
   compose-sync-script:
     name: compose sync script self-checks
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
@@ -259,7 +259,7 @@ jobs:
   # lacks a justification. No docker daemon needed.
   base-image-pins:
     name: base image pin consistency
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
