@@ -78,7 +78,25 @@ if [[ "$COMMIT" == "1" ]]; then
   # Tag the release commit so `git tag --list` and the GitHub releases API
   # can see a real v* tag instead of just a CHANGELOG line (AUT-2055).
   if git tag -l "v$NEXT" | grep -q .; then
-    echo "==> tag v$NEXT already exists — skipping"
+    # AUT-5676: a tag whose commit is NOT an ancestor of HEAD is debris
+    # from an earlier cut whose main push was rejected (GH006) — tags are
+    # not covered by branch protection, so the tag push landed even though
+    # the commit never did (refs/tags/v0.3.312 pointed at an unmerged
+    # commit for hours). Re-point it at this cut; leaving it would wedge
+    # the version floor with every later run logging "tag already exists —
+    # skipping" over a commit that never reached main.
+    if git merge-base --is-ancestor "v$NEXT^{commit}" HEAD; then
+      echo "==> tag v$NEXT already exists — skipping"
+    else
+      echo "==> tag v$NEXT points at $(git rev-parse --short "v$NEXT^{commit}") which is not on main — re-pointing it at this release"
+      git tag -f -a "v$NEXT" -m "Release v$NEXT (auto-bump, AUT-2055)" HEAD
+      echo "==> re-tagged v$NEXT"
+      if git push --force origin "v$NEXT" 2>/dev/null; then
+        echo "==> pushed tag v$NEXT"
+      else
+        echo "==> tag push failed (will be created via API in publish workflow)"
+      fi
+    fi
   else
     git tag -a "v$NEXT" -m "Release v$NEXT (auto-bump, AUT-2055)" HEAD
     echo "==> tagged v$NEXT"
