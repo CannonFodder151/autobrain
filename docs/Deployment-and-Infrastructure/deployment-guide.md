@@ -290,10 +290,14 @@ upgrade path):
   Deployment team (agent upgrade to a 2.45-compatible version, or fall back to
   SSH `docker compose up -d` on the Oracle VM) — see AUT-1847.
 - The HostED Portainer stack env must carry the required non-secret vars
-  (`POSTGRES_USER`, `POSTGRES_DB`) and the Paperclip identity
-  (`PAPERCLIP_API_KEY`, `CI_TRIAGE_WEBHOOK_SECRET`). `docker-compose.hosted.yml`
+  (`POSTGRES_USER`, `POSTGRES_DB`). `docker-compose.hosted.yml`
   now defaults the DB vars so a redeploy never fails at interpolation even if
-  the env is incomplete.
+  the env is incomplete. (AUT-5718: the CI triage receiver and its
+  `CI_TRIAGE_*`/`PAPERCLIP_*` stack env wiring were removed — CI triage is
+  woken by the Paperclip routine trigger fired from
+  `ci-triage-webhook.yml` via the GitHub secret `CI_TRIAGE_WEBHOOK_URL`,
+  so the stack no longer needs `PAPERCLIP_API_KEY` or
+  `CI_TRIAGE_WEBHOOK_SECRET`.)
 - Secret path (AUT-1853): `docker-compose.hosted.yml` defaults `SECRETS_DIR` to
   `/data/autobrain/secrets`. The HostED Portainer stack env should set
   `SECRETS_DIR=/data/autobrain/secrets` (or rely on the compose default); never
