@@ -3,8 +3,10 @@ name: build-backend-arm64-only
 # AUT-2506 / AUT-2382 follow-up: rebuild only autobrain-backend for arm64
 # and push as :hosted-arm64. The full build-hosted.yml is blocked because the
 # frontend arm64 SUID step (AUT-2258) fails on the arm64 Playwright build.
-# Backend is a pure Python image (no Playwright) so it builds cleanly on qemu
-# arm64 on the GitHub-hosted ubuntu-latest runner.
+# Backend is a pure Python image (no Playwright) so it builds cleanly under
+# qemu. AUT-5654: GitHub-hosted runners are in outage, so this now targets the
+# self-hosted ARM64 runner (gh-runner-autobrain-arm64), where linux/arm64 is
+# native and qemu is never needed.
 #
 # Trigger: workflow_dispatch (manual). Once this push completes, Portainer stack
 # 83 redeploy with pullImage:true will pick up the new :hosted-arm64 digest.
@@ -21,7 +23,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, ARM64]
     permissions:
       contents: read
       packages: write

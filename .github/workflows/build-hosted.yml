@@ -232,10 +232,10 @@ jobs:
     # AUT-5186: the nightly cron only syncs pins (nightly-hosted-sync);
     # it must never rebuild or re-pin images.
     if: github.event_name != 'pull_request' && github.event_name != 'schedule'
-    # AUT-5171: registry/git-only job — no image build, no self-hosted
-    # dockerd dependency. GitHub-hosted so the release tail can never
-    # starve behind PR gate jobs on the contended x64 vm2 pool.
-    runs-on: ubuntu-latest
+    # AUT-5171/AUT-5654: registry/git-only job — no image build. Moved
+    # off GitHub-hosted runners (GitHub-hosted outage); the vm2 pool owns
+    # the docker/registry tooling these jobs need.
+    runs-on: [self-hosted, linux, x64, vm2]
     permissions:
       contents: read
       packages: write
@@ -299,10 +299,10 @@ jobs:
     # AUT-5186: the nightly cron only syncs pins (nightly-hosted-sync);
     # it must never rebuild or re-pin images.
     if: github.event_name != 'pull_request' && github.event_name != 'schedule'
-    # AUT-5171: registry/git-only job — no image build, no self-hosted
-    # dockerd dependency. GitHub-hosted so the release tail can never
-    # starve behind PR gate jobs on the contended x64 vm2 pool.
-    runs-on: ubuntu-latest
+    # AUT-5171/AUT-5654: registry/git-only job — no image build. Moved
+    # off GitHub-hosted runners (GitHub-hosted outage); the vm2 pool owns
+    # the docker/registry tooling these jobs need.
+    runs-on: [self-hosted, linux, x64, vm2]
     permissions:
       contents: write
     env:
@@ -384,10 +384,10 @@ jobs:
     # AUT-5186: the nightly cron only syncs pins (nightly-hosted-sync);
     # it must never rebuild or re-pin images.
     if: github.event_name != 'pull_request' && github.event_name != 'schedule'
-    # AUT-5171: registry/git-only job — no image build, no self-hosted
-    # dockerd dependency. GitHub-hosted so the release tail can never
-    # starve behind PR gate jobs on the contended x64 vm2 pool.
-    runs-on: ubuntu-latest
+    # AUT-5171/AUT-5654: registry/git-only job — no image build. Moved
+    # off GitHub-hosted runners (GitHub-hosted outage); the vm2 pool owns
+    # the docker/registry tooling these jobs need.
+    runs-on: [self-hosted, linux, x64, vm2]
     permissions:
       contents: write
     env:
@@ -458,7 +458,10 @@ jobs:
     # the job starts early and FAILS LOUDLY when the job starts past 18:00Z
     # (the old behaviour was a green CI run that silently did nothing).
     if: github.event_name == 'schedule'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, vm2]
+    # AUT-5654: bound the pre-window sleep — a self-hosted runner slot is
+    # scarce, so the wait-for-17:00Z step can never hold one indefinitely.
+    timeout-minutes: 120
     # Own group so the nightly sync is never queued behind an in-flight
     # ~20 min multi-arch build and pushed past the end of the window.
     concurrency:

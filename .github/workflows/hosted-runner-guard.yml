@@ -1,0 +1,36 @@
+name: Hosted Runner Guard
+
+# AUT-5654: every GitHub-hosted job in this repo fails in 3-6
+# seconds with zero steps executed and no log — the only evidence
+# is the check-run annotation "The job was not started because
+# recent account payments have failed or your spending limit needs
+# to be increased". The six jobs that depended on hosted runners
+# were moved to the self-hosted fleet by AUT-5654; this workflow is
+# the tripwire that stops a new one being added silently. It has to
+# gate pull requests, because a workflow file added on a branch
+# would otherwise not fail until it merged.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hosted-runner-guard
+  cancel-in-progress: true
+
+jobs:
+  no-hosted-runners:
+    name: No workflow targets a GitHub-hosted runner
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Guard self-check
+        run: python3 scripts/test_check_hosted_runners.py
+
+      - name: No GitHub-hosted runner references
+        run: python3 scripts/check_hosted_runners.py
