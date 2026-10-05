@@ -208,3 +208,4 @@ volumes:
   postgres-data:
   redis-data:
   minio-data:
+# AUT-5636 canary: app/docker change with no CHANGELOG.md entry — must be blocked by changelog-gate
