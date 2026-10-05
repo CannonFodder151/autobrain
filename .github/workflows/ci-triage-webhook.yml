@@ -31,6 +31,9 @@ jobs:
     # 15 min settle + bounded webhook attempts (~2.5 min worst case)
     # + Discord alert must fit inside the ceiling. The old 20 min
     # budget left ~5 min for up to 6 *unbounded* curl attempts, so a
+    # 15 min settle + a single bounded webhook attempt (100s,
+    # AUT-5694) must fit inside the ceiling. The old 20 min
+    # budget left ~5 min for up to 6 *unbounded* curl attempts, so a
     # hung control-plane response ate the whole job and GitHub killed
     # it as `cancelled` — silently losing the triage wake (AUT-5668).
     timeout-minutes: 30
@@ -49,17 +52,33 @@ jobs:
           payload=$(jq -n --arg repo "$GITHUB_REPOSITORY" --arg ref "$GITHUB_REF" '{event:"push",repo:$repo,ref:$ref}')
 
           echo "Firing CI triage webhook to $CI_TRIAGE_WEBHOOK_URL"
-          # --max-time bounds the *whole* attempt, not just the TCP
-          # connect: --connect-timeout alone lets a server that accepts
-          # the connection and then stays silent (the degraded
-          # Paperclip control plane, AUT-5567) block forever. Bounded
-          # attempts make the worst case ~2.5 min, inside the window.
-          response=$(curl -sS --retry 3 --retry-delay 5 --retry-all-errors \
-            --connect-timeout 15 --max-time 30 \
+          # AUT-5694: the receiver is Paperclip's public routine
+          # trigger ("CI Triage" routine), which accepts the
+          # POST and returns 202 with the routine run. Under
+          # the control-plane degradation (AUT-5567) Paperclip
+          # accepted the POST 30-51s after send, so --max-time
+          # 30 gave up seconds before the 202 arrived and the
+          # job read as `failure` while the wake had in fact
+          # landed. Evidence, run 37268628848: curl gave up
+          # 05:55:03.27Z, Paperclip recorded the delivery at
+          # 05:55:04.54Z and created the routine run at
+          # 05:55:15.29Z. All four attempts fired the routine
+          # (05:53:18Z, 05:53:58Z, 05:54:49Z, 05:55:15Z)
+          # and every one was coalesced.
+          #
+          # No --retry. Every attempt above returned HTTP 000
+          # to curl yet still landed, so a retry is never
+          # safe — not even on a timeout (AUT-5567 rule 3).
+          # Idempotency-Key makes an accidental re-fire return
+          # the original run instead of creating a second
+          # triage issue, and the routine coalesces anyway.
+          response=$(curl -sS \
+            --connect-timeout 15 --max-time 100 \
             -w "\nHTTP_CODE:%{http_code}" \
             -X POST "$CI_TRIAGE_WEBHOOK_URL" \
             -H "Authorization: Bearer $CI_TRIAGE_WEBHOOK_SECRET" \
             -H "Content-Type: application/json" \
+            -H "Idempotency-Key: ci-triage-${GITHUB_RUN_ID}" \
             -d "$payload") || true
 
           http_code=$(echo "$response" | grep -E '^HTTP_CODE:' | cut -d: -f2)
@@ -70,9 +89,25 @@ jobs:
             exit 0
           fi
 
+          # 409 = this exact delivery was already replayed, so the
+          # routine already has this run. Delivered.
+          if [[ "$http_code" == "409" ]]; then
+            echo "✅ CI triage webhook already delivered (HTTP 409 replay)"
+            exit 0
+          fi
+
+          # AUT-5567: openresty returns 504 at its 90s ceiling but
+          # the write may have committed after the proxy gave up.
+          # Never re-POST a 504 — that is how four routine runs were
+          # fired for one delivery above. Warn, then treat as sent.
+          if [[ "$http_code" == "504" ]]; then
+            echo "::warning::CI triage webhook hit the 90s proxy ceiling (HTTP 504); per AUT-5567 the delivery may have committed — not retrying"
+            exit 0
+          fi
+
           # Loud failure: a lost triage wake must read as `failure`
           # with an annotation, not as `cancelled` (AUT-5668).
-          echo "::error::CI triage webhook undeliverable after 3 attempts (HTTP ${http_code:-none}): ${body:-<empty response>}"
+          echo "::error::CI triage webhook undeliverable (HTTP ${http_code:-none}): ${body:-<empty response>}"
           if [[ -n "${DISCORD_REPORT_WEBHOOK:-}" ]]; then
             discord_payload=$(jq -n \
               --arg title "CI Triage Webhook Failed" \
