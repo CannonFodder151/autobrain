@@ -302,6 +302,11 @@ services:
     networks:
       default:
         ipv4_address: 172.18.0.15
+        # AUT-5623: the frontend proxies /ai/ to `ai:8001` (see
+        # docker/frontend/nginx.conf). Here the gateway is the `ai_app.main:app`
+        # co-process on :8001 inside THIS container, so `ai` must resolve to it.
+        # Without the alias the frontend's /ai/* routes 502 with "host not found".
+        aliases: [backend, ai]
     # AUT-3810 Phase 1a: market-data scraper moved into backend Celery tasks;
     # shm_size needed for Chromium (Playwright) in scraper tasks.
     shm_size: "256m"
