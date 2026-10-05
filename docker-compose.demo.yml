@@ -1,5 +1,5 @@
 # AutoBrain DEMO stack — Portainer stack "autobrain-demo" (EP2, Portainer-Host 10.0.3.17).
-# Public demo: https://demo.autobrainservice.app (demo@autobrainservice.app / demo).
+# Public demo: https://demo.autobrainservice.app (login: demo@autobrainservice.app; password via the Paperclip secret demo/demo-account-password, set as DEMO_PASSWORD).
 #
 # AUT-5582: this file is the Demo instance's only definition. Until it
 # existed, the Demo stack ran as six plain containers — invisible to every
@@ -140,6 +140,10 @@ services:
       PYTHONPATH: /app
       # DEMO_MODE is what /health reports as "env":"demo".
       DEMO_MODE: "true"
+      # Secret: Paperclip secret demo/demo-account-password. Required so the
+      # demo stack fails closed at start instead of silently skipping demo
+      # seeding (AUT-5063); seed_demo()/reset_demo() skip when it is empty.
+      DEMO_PASSWORD: ${DEMO_PASSWORD:?DEMO_PASSWORD must be set (Paperclip secret demo/demo-account-password)}
       SELF_SIGNUP_ENABLED: "false"
       APP_BASE_URL: ${APP_BASE_URL:-https://demo.autobrainservice.app}
       # Presigned-object URLs must be browser-reachable via the frontend.
