@@ -246,6 +246,16 @@ jobs:
       - name: sync-compose-to-portainer.py regression tests
         run: python3 scripts/test_sync_compose_to_portainer.py -v
 
+      # AUT-5669: the pin bump's monotonic guard + provenance
+      # (update-compose-pins.py) and the deploy-by-digest refusal
+      # (sync-compose-to-portainer.py) are otherwise unguarded code
+      # paths. Pure stdlib + a temp git repo, no docker, no pyyaml.
+      - name: compose pin guard regression tests
+        run: python3 scripts/test_update_compose_pins.py
+
+      - name: compose deploy guard regression tests
+        run: python3 scripts/test_sync_compose_guards.py
+
       # AUT-5396: the nightly sync gate SKIPped two nights because the
       # schedule dispatcher starts cron runs 2.6-4.2h late. The cron now
       # fires at 12:30Z and the job sleeps to the 17:00Z window edge;
