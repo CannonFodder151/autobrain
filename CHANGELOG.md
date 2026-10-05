@@ -10,7 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
-- fix(backend): merge four alembic migration heads (a3661engineers, aut3005_fuel_price_snapshots, aut3612_track_car_support, aut4032_booking_requests_quotes_earnings) into single head via merge revision m3rge07; add missing migration aut3588_vehicle_is_financed (from feature branch) and remove stray duplicate revision a1b2c3d4e5f6_add_track_maintenance_fields.py; restores `alembic upgrade head` single-head path for CI smoke test
+- fix(backend): merge the two real alembic heads (m3rge07 trunk head + new aut3588_vehicle_is_financed) via merge revision m3rge08; add migration aut3588_vehicle_is_financed (vehicles.is_financed, from feature branch). The earlier m3rge07_merge_four_heads mergepoint referenced three revisions that never landed on main and reused the m3rge07 revision id already taken by m3rge07_merge_engineers_and_passkeys, which broke the head graph; it is replaced by m3rge08 so `alembic upgrade head` has a single resolution path for the CI smoke test
 
 ## [0.3.296] - 2026-10-02
 
