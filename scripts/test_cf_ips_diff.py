@@ -81,7 +81,8 @@ class TestCfIpsDiff(unittest.TestCase):
             real = os.path.join(
                 REPO, "docker", "frontend", "nginx.conf"
             )
-            text = open(real).read()
+            with open(real) as f:
+                text = f.read()
             text = text.replace(
                 "set_real_ip_from 198.41.128.0/17;", "# set_real_ip_from 198.41.128.0/17;"
             )
@@ -102,7 +103,8 @@ class TestCfIpsDiff(unittest.TestCase):
             real = os.path.join(
                 REPO, "docker", "frontend", "nginx.conf"
             )
-            text = open(real).read()
+            with open(real) as f:
+                text = f.read()
             # Append a bogus range that Cloudflare never published.
             text += "\n    set_real_ip_from 203.0.113.0/24;\n"
             with open(conf, "w") as f:
