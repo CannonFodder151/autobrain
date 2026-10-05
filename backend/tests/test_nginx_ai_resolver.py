@@ -9,6 +9,11 @@ lifetime, so any AI-gateway container recreate (new IP) turns every
 VARIABLE `proxy_pass` to force request-time re-resolution; /ai/ must
 do the same.
 
+A variable `proxy_pass` also does NOT strip the /ai/ location prefix the
+way a literal one does — it forwards the directive URI verbatim, so
+`/ai/health` would arrive as `/`. The block therefore rewrites the prefix
+explicitly before proxying (AUT-5623, QA review AUT-5752).
+
 Also asserts the topology contract that makes `ai:8001` correct on
 every tier: Demo/Default run a dedicated `ai` service, while
 hosted/prod/dev run the gateway as an `ai_app.main:app` co-process on
@@ -19,20 +24,17 @@ from pathlib import Path
 REPO = Path(__file__).parents[2]
 NGINX_CONF = REPO / "docker" / "frontend" / "nginx.conf"
 
-
 def _strip_comments(conf: str) -> str:
     """Drop whole-line comments so prose quoting a bad form cannot fail a test."""
     return "\n".join(
         line for line in conf.splitlines() if not line.strip().startswith("#")
     )
 
-
 def _ai_block(conf: str) -> str:
     conf = _strip_comments(conf)
     start = conf.index("location /ai/")
     end = conf.index("\n    }", start)
     return conf[start:end]
-
 
 def test_ai_upstream_uses_variable_not_literal():
     """The /ai/ proxy_pass must go through a variable, not a literal host."""
@@ -43,18 +45,30 @@ def test_ai_upstream_uses_variable_not_literal():
         "gateway recreate (AUT-5623)"
     )
     assert "set $ai http://ai:8001;" in block
-    assert "proxy_pass $ai/;" in block
+    assert "proxy_pass $ai;" in block
 
+def test_ai_prefix_is_rewritten_not_stripped_by_proxy_pass():
+    """The /ai/ prefix must be stripped by an explicit rewrite, not by
+    proxy_pass.
 
-def test_ai_prefix_strip_preserved():
-    """The trailing slash keeps /ai/ stripped before it reaches the gateway.
-
-    The gateway serves /health and /v1/{module} with no /ai prefix, so
-    /ai/health must arrive as /health.
+    A variable `proxy_pass` forwards the directive URI verbatim, so
+    `proxy_pass $ai/;` would send `/ai/health` as `/` — the gateway has no
+    `/` route and returns 404. The block must rewrite ^/ai(/.*)$ to $1
+    and proxy with no URI in the directive (AUT-5623, AUT-5752).
     """
     block = _ai_block(NGINX_CONF.read_text())
-    assert "proxy_pass $ai/;" in block, "trailing slash required for /ai/ strip"
-
+    assert "rewrite ^/ai(/.*)$ $1 break;" in block, (
+        "/ai/ must rewrite the prefix away before proxying, because a "
+        "variable proxy_pass does not strip the location prefix"
+    )
+    assert "proxy_pass $ai;" in block, (
+        "with a rewrite in place, proxy_pass must carry no URI so the "
+        "changed URI is forwarded"
+    )
+    assert "proxy_pass $ai/;" not in block, (
+        "the variable form with a trailing slash forwards the directive "
+        "URI verbatim and defeats the prefix strip"
+    )
 
 def test_gateway_host_is_resolvable_on_every_tier():
     """`ai` must resolve on each tier, and only where it is a co-process.
@@ -98,9 +112,8 @@ def test_gateway_host_is_resolvable_on_every_tier():
                 "to resolve (AUT-5623)"
             )
 
-
 if __name__ == "__main__":
     test_ai_upstream_uses_variable_not_literal()
-    test_ai_prefix_strip_preserved()
+    test_ai_prefix_is_rewritten_not_stripped_by_proxy_pass()
     test_gateway_host_is_resolvable_on_every_tier()
     print("All AUT-5623 /ai/ resolver self-checks passed")
