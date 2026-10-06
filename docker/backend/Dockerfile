@@ -43,8 +43,11 @@ RUN chmod +x /init-minio.sh
 
 # AUT-1533: *_FILE secret loader wraps the CMD so credentials arrive via
 # bind-mounted files instead of plain env vars.
-COPY docker/entrypoint.sh docker/lib-load-secrets.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/lib-load-secrets.sh
+# AUT-5134: preflight-secrets.sh runs first and exits 1 with one actionable
+# line when the bind-mounted secrets dir lost its read/traverse perms.
+COPY docker/entrypoint.sh docker/lib-load-secrets.sh docker/preflight-secrets.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/lib-load-secrets.sh \
+    /usr/local/bin/preflight-secrets.sh
 
 USER autobrain
 

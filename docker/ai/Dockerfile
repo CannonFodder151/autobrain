@@ -28,8 +28,11 @@ COPY ai/app ./app
 COPY market-data ./market-data
 COPY docker/ai/entrypoint.sh /entrypoint.sh
 # AUT-1533: *_FILE secret loader, sourced by /entrypoint.sh.
-COPY docker/lib-load-secrets.sh /usr/local/bin/lib-load-secrets.sh
-RUN chmod +x /entrypoint.sh /usr/local/bin/lib-load-secrets.sh
+# AUT-5134: preflight runs before the loader so a lost read/traverse
+# perm on the secrets dir exits 1 with one actionable line.
+COPY docker/lib-load-secrets.sh docker/preflight-secrets.sh /usr/local/bin/
+RUN chmod +x /entrypoint.sh /usr/local/bin/lib-load-secrets.sh \
+    /usr/local/bin/preflight-secrets.sh
 
 RUN useradd -m -u 1000 autobrain \
     && chown -R autobrain:autobrain /app \
