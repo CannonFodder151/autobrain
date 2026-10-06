@@ -7,18 +7,16 @@ on:
   # AUT-2409 hosted deploy window. Only the nightly-hosted-sync job runs on
   # schedule; it applies the pins the push path already bumped in git.
   #
-  # AUT-5396: the cron fires 2.5h BEFORE the window opens, not at it.
-  # GitHub's schedule dispatcher starts scheduled runs 2.6–4.2h after the
-  # cron fires (observed 2026-10-02T21:10Z and 2026-10-03T19:40Z for a
-  # 17:00Z cron), so a cron at 17:00Z always started PAST the window and
-  # the sync gate SKIPped two nights running while EP5 stayed on a broken
-  # pin. Firing at 12:30Z keeps the start inside 15:06–16:42Z even at the
-  # worst observed delay, and the nightly-hosted-sync wait step below holds
-  # the job at the 17:00Z boundary. Deploys still happen ONLY inside
+  # AUT-5396: the cron fires well before the window opens. GitHub's
+  # schedule dispatcher started runs 2.6–4.2h after the cron fired in early
+  # Oct 2026, but on 2026-10-05 the delay was ~8h (cron 12:30Z -> job
+  # 20:38Z, AUT-5792). Firing at 08:30Z keeps the start inside the window
+  # even with large delays, and the nightly-hosted-sync wait step holds the
+  # job at the 17:00Z boundary. Deploys still happen ONLY inside
   # 03:00–04:00 AEST — the gate in scripts/sync-compose-to-portainer.py
   # remains the enforcement; this only fixes when the job wakes up.
   schedule:
-    - cron: "30 12 * * *"
+    - cron: "30 8 * * *"
   workflow_dispatch:
     inputs:
       tag:
