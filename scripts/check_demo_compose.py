@@ -9,7 +9,8 @@ that would otherwise fail at POST /api/stacks time:
   2. every service, network alias, volume and healthcheck the Demo stack needs
      is present, with the image digests pinned to what EP2 currently runs.
 
-Run: python3 reports/check_demo_compose.py <compose> <env-file>
+Run: python3 scripts/check_demo_compose.py [<compose> <env-file>]
+With no args, defaults to docker-compose.demo.yml + .env.example (CI gate).
 Exit 0 = deployable.
 """
 import re
@@ -20,7 +21,11 @@ import yaml
 VARS = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(:?[-?])?([^}]*)\}")
 
 def main():
-    compose_path, env_path = sys.argv[1], sys.argv[2]
+    if len(sys.argv) > 3:
+        print("usage: check_demo_compose.py [<compose> <env-file>]", file=sys.stderr)
+        return 2
+    compose_path = sys.argv[1] if len(sys.argv) >= 2 else "docker-compose.demo.yml"
+    env_path = sys.argv[2] if len(sys.argv) == 3 else ".env.example"
     text = open(compose_path).read()
     doc = yaml.safe_load(text)
 
@@ -34,14 +39,24 @@ def main():
     problems = []
 
     # 1. interpolation. op is ":" followed by "-", "?" or nothing.
+    # A var is "set" if the operator's env file declares it at all (even as an
+    # empty placeholder in .env.example) — the ? marker means the operator
+    # must fill it, not that the check must re-derive it.
     for name, op, arg in VARS.findall(text):
         mode = op[1:] if op.startswith(":") else op
-        if name in env and env[name] != "":
+        if name in env:
             continue
         if mode == "-":
             continue        # any default (even empty) covers unset
         # mode "?" (required) and "" (bare ${VAR}) both fail unset.
         problems.append(f"${{{name}}} is not set in the env file")
+
+    # 1b. de-duplicate (a required var referenced in two services is one ask).
+    raw = problems
+    problems = []
+    for p in raw:
+        if p not in problems:
+            problems.append(p)
 
     # 2. shape the Demo tier depends on
     services = doc.get("services") or {}
@@ -94,6 +109,23 @@ def main():
         for key, value in (spec.get("environment") or {}).items():
             if re.search(r"(PASSWORD|SECRET|API_KEY)", key) and not str(value).startswith("${"):
                 problems.append(f"{svc}: {key} looks like a literal secret")
+
+    # AUT-5686: DEMO_PASSWORD must be REQUIRED (no default) in the backend env.
+    # A defaulted or absent DEMO_PASSWORD lets the tier boot with the code
+    # default, which is exactly how the burned `demo` credential survived.
+    backend_env = services.get("backend", {}).get("environment") or {}
+    demo_pw = backend_env.get("DEMO_PASSWORD")
+    if demo_pw is None:
+        problems.append("backend: DEMO_PASSWORD is not set (seed_demo fails closed → no demo login)")
+    elif not isinstance(demo_pw, str) or not demo_pw.startswith("${") or demo_pw.startswith("${DEMO_PASSWORD:-"):
+        problems.append(f"backend: DEMO_PASSWORD must be required-interpolated (${{DEMO_PASSWORD:?...}}), got {demo_pw!r}")
+
+    # AUT-5686: no literal demo credential anywhere in the compose file. The
+    # header comment is the only place the email may appear, and only as a
+    # reference to the public login, never as a usable password.
+    for needle in ("demo@autobrainservice.app / demo", "DEMO_PASSWORD=demo", "DEMO_PASSWORD: demo"):
+        if needle in text:
+            problems.append(f"literal demo credential found: {needle!r}")
 
     if problems:
         print("FAIL")
