@@ -63,7 +63,7 @@ jobs:
     if: github.event_name != 'pull_request' && github.event_name != 'schedule' && github.ref == 'refs/heads/main'
     runs-on: [self-hosted, linux, x64, vm2]
     permissions:
-      contents: write
+      contents: read
     steps:
       # Use actions/checkout so the GITHUB_TOKEN is persisted by the
       # credential helper (the manual git init did not authenticate pushes,
@@ -322,7 +322,7 @@ jobs:
     # starve behind PR gate jobs on the contended x64 vm2 pool.
     runs-on: [self-hosted, linux, x64, vm2]
     permissions:
-      contents: write
+      contents: read
     env:
       TAG: ${{ github.event.inputs.tag || 'hosted' }}
       BACKEND_DIGEST: ${{ needs.build-manifest.outputs.backend_digest }}
@@ -405,11 +405,17 @@ jobs:
           # enforce_admins is off, so an admin credential bypasses required
           # checks, and [skip ci] keeps the bump from re-triggering the 13
           # workflows that run on a push to main.
-          # http.extraheader is passed per-invocation with -c, so the token is
-          # never persisted into .git/config.
-          auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_PAT" | base64 -w0)"
+          # Use GIT_ASKPASS to supply credentials — keeps the token out of
+          # argv (not visible in /proc/<pid>/cmdline) and not logged.
+          cat > /tmp/git-askpass.sh <<'EOF'
+          #!/bin/sh
+          printf 'x-access-token:%s' "$GH_PAT"
+          EOF
+          chmod +x /tmp/git-askpass.sh
+          export GIT_ASKPASS=/tmp/git-askpass.sh
+          export GIT_TERMINAL_PROMPT=0
           for i in 1 2 3; do
-            if git -c "http.extraheader=${auth}" push origin main; then
+            if git push origin main; then
               echo "==> compose pins pushed"
               exit 0
             fi
@@ -459,7 +465,7 @@ jobs:
     # starve behind PR gate jobs on the contended x64 vm2 pool.
     runs-on: [self-hosted, linux, x64, vm2]
     permissions:
-      contents: write
+      contents: read
     env:
       BACKEND_DIGEST: ${{ needs.build-manifest.outputs.backend_digest }}
       WORKER_DIGEST: ${{ needs.build-manifest.outputs.worker_digest }}
@@ -498,11 +504,17 @@ jobs:
           git add infra/k8s/ai.yaml infra/k8s/backend.yaml infra/k8s/frontend.yaml infra/k8s/worker.yaml
           git diff --cached --quiet && { echo "==> no staged changes — skipping"; exit 0; }
           git commit -m "chore: bump k8s image pins to freshly built digests [skip ci]"
-          # AUT-5669: same admin-credential push, and the same GH006 that
-          # was being swallowed — see the compose-pin step for the detail.
-          auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_PAT" | base64 -w0)"
+          # AUT-5669/AUT-5756: same admin-credential push via GIT_ASKPASS.
+          # Keeps the token out of argv and logs.
+          cat > /tmp/git-askpass.sh <<'EOF'
+          #!/bin/sh
+          printf 'x-access-token:%s' "$GH_PAT"
+          EOF
+          chmod +x /tmp/git-askpass.sh
+          export GIT_ASKPASS=/tmp/git-askpass.sh
+          export GIT_TERMINAL_PROMPT=0
           for i in 1 2 3; do
-            if git -c "http.extraheader=${auth}" push origin main; then
+            if git push origin main; then
               echo "==> k8s pins pushed"
               exit 0
             fi

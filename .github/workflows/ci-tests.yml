@@ -256,6 +256,13 @@ jobs:
       - name: compose deploy guard regression tests
         run: python3 scripts/test_sync_compose_guards.py
 
+      # AUT-5756: CI credential scope guard — fails if a workflow references a
+      # repo/org-wide credential for a push to a protected branch, or if a job
+      # that pushes via secrets.*_PAT declares permissions: contents: write.
+      # Pure stdlib, no docker.
+      - name: CI credential scope guard
+        run: python3 scripts/check-ci-credential-scope.py
+
       # AUT-5396: the nightly sync gate SKIPped two nights because the
       # schedule dispatcher starts cron runs 2.6-4.2h late. The cron now
       # fires at 12:30Z and the job sleeps to the 17:00Z window edge;

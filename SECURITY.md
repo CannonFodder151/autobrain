@@ -39,3 +39,22 @@ Only the latest release (`main` branch) receives security patches. The hosted in
 - Dependabot/Snyk scans are not currently automated — manual review on release
 - Python dependencies pinned in `requirements.txt`
 - Base images updated on each release build
+
+## CI credential policy
+
+### GH_PAT (GitHub Personal Access Token)
+
+- **Scope:** Fine-grained PAT scoped to `CannonFodder151/autobrain` only
+- **Permissions:** Contents: Read and write (nothing else — no Workflows, no Admin, no org scope)
+- **Rotation owner:** CTO (Nathan Martina)
+- **Rotation cadence:** Quarterly or on suspected compromise
+- **Usage:** Used by `build-hosted.yml` compose-pin and k8s-pin jobs to push digest bumps to protected `main` branch (bypasses required status checks via `enforce_admins: false`)
+- **Credential delivery:** Passed via `GIT_ASKPASS` environment variable — never in argv, never in logs
+- **Job token permissions:** Jobs using GH_PAT declare `permissions: contents: read` (least privilege — the PAT performs the write, not the job token)
+
+### GHCR_PAT (GitHub Container Registry PAT)
+
+- **Scope:** Fine-grained PAT scoped to `CannonFodder151/autobrain-*` packages
+- **Permissions:** Packages: Read and write
+- **Rotation owner:** CTO (Nathan Martina)
+- **Usage:** Used by build jobs to push images to ghcr.io
