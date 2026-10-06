@@ -313,9 +313,9 @@ a new IP returns 502 until npm is restarted.
 Durable fix already applied to `docker-compose.hosted.yml` and the live
 `autobrain-hosted` stack:
 
-- the default network declares `subnet: 172.18.0.0/16` / `gateway: 172.18.0.1`
+- the default network declares `subnet: <INTERNAL_DOCKER_SUBNET>` / `gateway: <INTERNAL_GATEWAY_IP>`
   (matches the live network, so compose never recreates it);
-- the `frontend` service pins `ipv4_address: 172.18.0.14`.
+- the `frontend` service pins `ipv4_address: <INTERNAL_FRONTEND_IP>`.
 
 Any frontend recreate keeps the same IP, so npm's cached value stays correct
 and the site stays up with **no npm restart** (verified: full frontend container
@@ -382,7 +382,7 @@ surfaces directly to the internet. Fixed and enforced via compose:
   from the host's public interface. It is locked down by the host firewall
   (`fw-keeper`, see docs/security.md): ingress on `:20128` is allowed only from
   the allow-listed dev egress IP (`<DEV_EGRESS_IP>`) and the internal docker
-  subnet (`172.18.0.0/16`); everything else is dropped. Backend/ai call it over
+  subnet (`<INTERNAL_DOCKER_SUBNET>`); everything else is dropped. Backend/ai call it over
   the docker network (`http://9router:20128/v1`), which is unaffected by the host
   binding. The internal-subnet allow is required because backend consumes this
   service directly. Data volume `9router-data` is **external** (created by the

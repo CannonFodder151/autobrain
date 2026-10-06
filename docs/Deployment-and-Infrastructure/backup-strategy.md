@@ -56,7 +56,7 @@ backend loads them into process env at startup, so they never appear in
 ("Secret-file pattern & broker auth").
 
 **Network:** `backup` runs on the `autobrain-hosted` stack's default Docker
-network (`172.18.0.0/16`). The backend reaches the GUI at
+network (`<INTERNAL_DOCKER_SUBNET>`). The backend reaches the GUI at
 `http://backup:8080` — **any `BACKUP_OFFSITE_URL` override left on the EP5
 stack env must be updated from `http://autobrain-backup:8080` to
 `http://backup:8080` when the AUT-3944 rename lands**, or hourly pushes fail

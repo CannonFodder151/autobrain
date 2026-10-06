@@ -1,5 +1,29 @@
 # Security Considerations
 
+Sanitised public mirror of the internal Outline "Security Considerations"
+page. Per-instance values (IPs, subnets, keys) live only in Outline — see
+[Documentation Policy](../Company/documentation-policy.md).
+
+## Stack & runtime (current)
+
+- **Database:** PostgreSQL 17 on the `pgvector/pgvector:pg17` image
+  (pg16→pg17 bump, AUT-1749). Vector columns power hybrid search
+  (embeddings) — see [Vector Store](../Engineering/ai/vector.md) and the
+  [Vector Store Schema](https://outline.nathanmartina.com) (Outline).
+- **Containers:** all application services run as **non-root**
+  (`autobrain` uid 1000) with `read_only: true`, `cap_drop: [ALL]` and
+  `tmpfs` mounts for writable paths. See
+  [Container Architecture](../Engineering/container-architecture.md) and
+  [System Overview](../Engineering/system-overview.md).
+- **Federation:** the Community Garage **federation hub** (`hub` service,
+  AUT-333) runs from the private `autobrain-federation-hub` repo and a
+  private GHCR image; this repo holds deploy config only.
+- **Secrets at runtime:** secret-class values live as host files
+  (`${SECRETS_DIR:-/data/autobrain/secrets}/<name>`, `root:1000`, mode
+  `0640`), bind-mounted read-only at `/run/secrets`. Values never appear
+  in `docker inspect` or `/proc/*/environ`. See
+  [Secret-file pattern & broker auth](#secret-file-pattern--broker-auth-aut-1533).
+
 ## Authentication & sessions
 
 - Passwords hashed with bcrypt (`passlib`), pinned `bcrypt==4.0.1` for compatibility.
@@ -34,8 +58,8 @@
 - `.env` never committed (`.gitignore`). Template at `.env.example` has
   placeholder values only.
 - `SECRET_KEY` must be a long random string in production.
-- Kubernetes secrets (`infra/k8s/config.yaml`) contain placeholders only —
-  replace at install, never commit real values.
+- Stack secrets are injected via the `*_FILE` pattern (below) or the
+  Portainer stack env — never hard-coded in compose or code.
 
 ## Git operations (credential-safe cloning)
 
@@ -45,11 +69,12 @@ agent-side `gh` API operations (PR/release automation) — the deployed server
 runtime makes NO authenticated GitHub calls and holds no token (AUT-461).
 
 Private-repo CLONES use **SSH read-only deploy keys**, not a PAT (AUT-461):
+
 - Read-only deploy keys (`agent-deploy-key-readonly`) are registered on
   `autobrain-mobile`, `autobrainservice-website`, `rego-lookup-api`.
-- Per-repo keypairs live in `~/.ssh/autobrain_{mobile,website,rego}_deploy`;
-  `~/.ssh/config` maps alias hosts (`github-ab-mobile`, `github-ab-website`,
-  `github-ab-rego`) to github.com with `IdentitiesOnly yes`.
+- Per-repo keypairs live under `~/.ssh/`; `~/.ssh/config` maps alias hosts
+  (`github-ab-mobile`, `github-ab-website`, `github-ab-rego`) to github.com
+  with `IdentitiesOnly yes`.
 - `git config --global url.…insteadOf` rewrites the plain HTTPS URLs of the
   three private repos to those SSH aliases, so cloning with the plain HTTPS URL
   still works and needs no token.
@@ -64,7 +89,7 @@ All git operations MUST follow this procedure:
   (gh credential helper) — the token never appears in any URL.
 - **Never** use `https://<user>:<token>@github.com/...` — git persists the
   remote URL (token included) into `<repo>/.git/config`, leaking the secret to
-  disk (see [AUT-323](/AUT/issues/AUT-323)).
+  disk (see [AUT-323](https://paperclip.nathanmartina.com/AUT/issues/AUT-323)).
 - Purge scratch clones with `rm -rf` when done; never leave clones in `/tmp`.
 
 **Recovery (if a token already leaked into a clone):**
@@ -74,10 +99,11 @@ All git operations MUST follow this procedure:
    This includes `[branch "..."]` blocks whose `remote` line holds a full URL.
 2. Expire reflogs so the token is not persisted under `.git/logs`:
    `git reflog expire --expire=now --all`.
-3. Regression-check all workspace clones — this must return nothing:
-   `grep -rnE '@github\.com' /paperclip/instances/default/workspaces/*/*/.git/config /paperclip/instances/default/projects/*/*/*/.git/config`
-4. If the leaked token was still live at exposure time, rotate it (exposed-on-disk
-   equals compromised); see [AUT-474](/AUT/issues/AUT-474).
+3. Regression-check all workspace clones for any `@github.com` credential URL —
+   this must return nothing.
+4. If the leaked token was still live at exposure time, rotate it
+   (exposed-on-disk equals compromised); see
+   [AUT-474](https://paperclip.nathanmartina.com/AUT/issues/AUT-474).
 
 ## AI router
 
@@ -101,7 +127,9 @@ All git operations MUST follow this procedure:
 - Prod runs behind nginx; only :80 exposed. Internal services are not
   published.
 - CORS is locked to configured origins in production (empty = same-origin).
-- Hosted instance enforces MFA, rate-limits auth endpoints (`LOGIN_MAX_ATTEMPTS=5`, `LOGIN_WINDOW_SECONDS=10800`), and runs behind a Cloudflare-reverse-proxied domain.
+- Hosted instance enforces MFA, rate-limits auth endpoints
+  (`LOGIN_MAX_ATTEMPTS=5`, `LOGIN_WINDOW_SECONDS=10800`), and runs behind a
+  Cloudflare-reverse-proxied domain.
 
 ### Hosted host: Portainer agent exposure (AUT-472)
 
@@ -110,8 +138,8 @@ reachable from the public internet (full Docker control = container escape /
 secrets exfiltration). It is restricted by source at the host firewall:
 
 - Allowed source for `tcp/9001`: the Portainer server egress IP
-  `<DEV_EGRESS_IP>/32` (dev box / Portainer-Host network; currently
-  `122.199.30.128`). Everything else is dropped.
+  `<DEV_EGRESS_IP>/32` (dev box / Portainer-Host network). Everything else is
+  dropped.
 - Enforced by the `fw-keeper` container (image `autobrain-fw-keeper:1`,
   `network_mode: host`, `privileged`, `restart: unless-stopped`) **deployed
   directly on the hosted host via Portainer** (not defined in this repo's
@@ -134,15 +162,14 @@ secrets exfiltration). It is restricted by source at the host firewall:
 ### `9Router` AI router `:20128` (AUT-473, AUT-1754) — NOT internet-exposed
 
 **Classification: source-restricted, NOT internet-accessible.** This port is
-reachable only from the dev egress IP `<DEV_EGRESS_IP>/32` (currently
-`122.199.30.128`) and the internal docker subnet `172.18.0.0/16`. Every other
-source is dropped at the host firewall. Any security scan that reports `:20128`
-as "accessible from the internet" is a **false positive** — it is almost always
-because the scan was launched from `<DEV_EGRESS_IP>` (the allow-listed dev
-egress IP / Portainer server egress), which is *supposed* to reach the port.
-"Open from the scanning host's public IP" ≠ "open from the internet." Do not
-file or escalate this as an internet-exposure finding; treat it as the intended
-allow-listed egress path.
+reachable only from the dev egress IP `<DEV_EGRESS_IP>/32` and the internal
+docker subnet `<INTERNAL_DOCKER_SUBNET>`. Every other source is dropped at the
+host firewall. Any security scan that reports `:20128` as "accessible from the
+internet" is a **false positive** — it is almost always because the scan was
+launched from `<DEV_EGRESS_IP>` (the allow-listed dev egress IP / Portainer
+server egress), which is *supposed* to reach the port. "Open from the scanning
+host's public IP" ≠ "open from the internet." Do not file or escalate this as
+an internet-exposure finding; treat it as the intended allow-listed egress path.
 
 Unlike `:9001`, `:20128` is also consumed **internally** by the `backend`
 (`AI_ROUTER_URL=http://9router:20128/v1`), so the firewall must additionally
@@ -153,7 +180,7 @@ silently breaks `backend → 9router` (SYN times out across the bridge).
   `http://<HOSTED_VM_IP>:20128/v1` **only** from the allow-listed
   `<DEV_EGRESS_IP>`. From any other internet source the connection is dropped.
 - `DOCKER-USER` (forward/DNAT path), in this order:
-  1. `--dport 20128 -s 172.18.0.0/16 -j ACCEPT` (internal docker subnet — required)
+  1. `--dport 20128 -s <INTERNAL_DOCKER_SUBNET> -j ACCEPT` (internal docker subnet — required)
   2. `--dport 20128 -s <DEV_EGRESS_IP> -j ACCEPT` (dev egress IP)
   3. `--dport 20128 -j DROP` (everything else)
 - `INPUT` (docker-proxy/local path for the published port):
@@ -171,9 +198,9 @@ silently breaks `backend → 9router` (SYN times out across the bridge).
   allow-listed only so the docker-bridge traffic that `DOCKER-USER` sees is not
   dropped.
 - Defense-in-depth pending: OCI-level Security List ingress rule to restrict
-  `tcp/20128` to `<DEV_EGRESS_IP>/32` (and the internal subnet) at the VCN layer
-  (same as `:9001`). Needs OCI console access; the host `fw-keeper` rule above
-  is the current enforcement.
+  `tcp/20128` to `<DEV_EGRESS_IP>/32` (and the internal subnet) at the VCN
+  layer (same as `:9001`). Needs OCI console access; the host `fw-keeper` rule
+  above is the current enforcement.
 
 ## Data protection
 
@@ -188,18 +215,15 @@ Stack-config hardening from the AUT-1486/AUT-1498 audit. Applies to
 
 ### How it works
 
-- Secret-class values live in `${SECRETS_DIR:-/data/autobrain/secrets}/<name>` on
-  the host (`root:1000`, mode `0640`). The dir is bind-mounted read-only at
-  `/run/secrets` into `backend`, `worker`, `ai`; postgres/redis/minio mount
-  only the files they need. The bind source honours `${SECRETS_DIR}` — set it
-  in the stack env to override the default. AUT-1853: the default is
+- Secret-class values live in `${SECRETS_DIR:-/data/autobrain/secrets}/<name>`
+  on the host (`root:1000`, mode `0640`). The dir is bind-mounted read-only at
+  `/run/secrets` into `backend`, `worker`, `ai`; postgres/redis/minio mount only
+  the files they need. The bind source honours `${SECRETS_DIR}` — set it in the
+  stack env to override the default. AUT-1853: the default is
   `/data/autobrain/secrets`, NOT `/opt/autobrain/secrets`. The snap dockerd on
   the Oracle VM mounts `/opt` from a read-only core24 squashfs, masking the host
   `/opt`; any bind under `/opt/...` fails with "read-only file system".
-  `/data` sits on the daemon-visible rootfs and is never masked, so hosted no
-  longer depends on the `autobrain-opt-guard.sh` `/opt` remount workaround.
-  (Earlier AUT-1535 noted the Oracle VM rootfs is read-only Core; `/opt` is
-  masked, so secrets live under `/data` instead.)
+  `/data` sits on the daemon-visible rootfs and is never masked.
 - At container start, `docker/lib-load-secrets.sh` exports each `FOO_FILE`
   var's file content as `FOO`, and derives authenticated
   `REDIS_URL`/`CELERY_*_URL` from `/run/secrets/redis_password`
@@ -224,23 +248,6 @@ Stack-config hardening from the AUT-1486/AUT-1498 audit. Applies to
    ping` → PONG; unauthenticated `redis-cli ping` → NOAUTH.
 5. Rotate any secret by rewriting its file and restarting the consuming
    services (broker rotation restarts redis + backend + worker).
-6. **Oracle VM path migration (AUT-1853):** the running AutoBrain-Hosted stack
-   previously seeded secrets into `/opt/autobrain/secrets` and relied on the
-   `autobrain-opt-guard.sh` root-cron job to re-unmask `/opt` inside the snap
-   dockerd mount namespace after every dockerd restart. To make the fix durable:
-   - Provision the daemon-visible dir: `sudo mkdir -p /data/autobrain/secrets &&
-     sudo chmod 0750 /data/autobrain/secrets && sudo chgrp 1000 /data/autobrain/secrets`.
-   - Re-seed from the current stack env dump into `/data/autobrain/secrets`
-     (`seed-secrets.sh /tmp/stack-env.txt /data/autobrain/secrets`). Regenerate
-     the still-EMPTY secrets (Stripe, SMTP, IAP Apple) with real provider
-     credentials — these cannot be recovered by the agent and must be supplied
-     by Nathan before those integrations re-enable.
-   - Ensure the Portainer stack env sets `SECRETS_DIR=/data/autobrain/secrets`
-     (or rely on the compose default) and redeploy via `build-hosted.yml`
-     (images) + Portainer EP5 stack update (`pullImage:true`).
-   - Only after the stack is healthy on `/data/autobrain/secrets`, remove the
-     `/opt` workaround: `sudo rm -f /usr/local/bin/autobrain-opt-guard.sh &&
-     sudo crontab -l | grep -v autobrain-opt-guard | crontab -`.
 
 ### Image tag policy
 
@@ -258,15 +265,22 @@ bump deliberately.
   running container's stale 8086→80 was latent: npm proxies via static IP).
 - Secrets remain readable by root/host users — accepted residual.
 
+## Incident response
+
+See [incident-response.md](./incident-response.md) for the incident runbook
+(severity, triage, comms, postmortem) and the live status/incident channels.
+
 ## Vulnerability reporting
 
 See [SECURITY.md](../../SECURITY.md) for the reporting policy.
 
 ## Hardening checklist
 
-- [ ] Rotate all default credentials (postgres, minio, SECRET_KEY).
+- [x] Rotate all default credentials (postgres, minio, SECRET_KEY).
 - [x] Redis `requirepass` on every stack incl. hosted + dev (AB-INFRA-004, AUT-1533).
 - [x] Secret-class env migrated to `_FILE` files (AUT-1533) — hub/rego-lookup pending.
+- [x] Non-root containers (uid 1000) + `read_only`/`cap_drop` (see Container Architecture).
+- [x] pgvector/pgvector:pg17 pinned by digest (AUT-1749).
 - [ ] Set a real `AI_ROUTER_URL` and key in prod.
 - [ ] Set a real `AI_GATEWAY_API_KEY` (same value for backend + ai services).
 - [ ] Restrict CORS origins.
