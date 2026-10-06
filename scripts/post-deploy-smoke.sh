@@ -62,4 +62,18 @@ else
   fail "/ready" "$ready_code"
 fi
 
+# 5. AI gateway (AUT-4788). nginx proxies /ai/ -> backend:8001, so a 502 here
+# means the gateway co-process is dead while the backend itself stays healthy —
+# exactly the failure mode that shipped green for 5 releases. Any non-5xx
+# response (200 without a key, 401/403 with one) proves the gateway is serving.
+ai_code=$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "$BASE_URL/ai/v1/modules" 2>&1)
+case "$ai_code" in
+  2*|401|403)
+    pass "/ai/v1/modules" "$ai_code"
+    ;;
+  *)
+    fail "/ai/v1/modules" "$ai_code (AI gateway unreachable or 5xx)"
+    ;;
+esac
+
 [ "$FAILURES" -eq 0 ] || exit 1
