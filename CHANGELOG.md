@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Added/Changed (AUT-3246)
+- fix: shared-car fuel save resilience + receipt OCR pre-fill (PR #638)
 
 ### Changed (AUT-5654)
 - ci: moved the last four GitHub-hosted jobs onto the self-hosted vm2 runners, finishing this repo's hosted-runner migration. `visual_regression.yml` (was `ubuntu-latest`) now runs on `[self-hosted, linux, x64, vm2]`; its `subosito/flutter-action@v2` step downloads the Flutter SDK itself, so no pre-installed toolchain is required on the runner. `dockerhub-publish.yml`'s `dedupe-main-queue`, `ci-queue-guard.yml`'s `cancel-orphaned-runs`, and `ci-triage-webhook.yml`'s `fire` also move to `[self-hosted, linux, x64, vm2]`: all three are API-only gates that call `gh api` to cancel superseded/orphaned runs and to fire the triage webhook, and none of them checks out or executes repository code, so they are safe on a persistent runner even under the `pull_request` trigger. `build-hosted.yml`'s matrix already resolved to vm2/ARM64 and is unchanged. After this, no workflow in this repo requests a GitHub-hosted runner.
