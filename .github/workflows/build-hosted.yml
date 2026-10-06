@@ -409,11 +409,23 @@ jobs:
           # never persisted into .git/config.
           auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_PAT" | base64 -w0)"
           for i in 1 2 3; do
-            if git -c "http.extraheader=${auth}" push origin main; then
+            push_output=$(git -c "http.extraheader=${auth}" push origin main 2>&1)
+            push_rc=$?
+            if [ $push_rc -eq 0 ]; then
               echo "==> compose pins pushed"
               exit 0
             fi
+            # AUT-5852: if push fails due to branch protection (GH006), don't fail
+            # the workflow — the pin bump commit is ready but cannot land on main
+            # because [skip ci] bypasses required status checks. Log a warning and
+            # succeed so the next run can retry. The :hosted tag already has the
+            # correct digest from build-manifest.
+            if echo "$push_output" | grep -q "GH006"; then
+              echo "::warning::push rejected by branch protection (GH006) — pin bump commit staged locally but not on main; will retry on next run"
+              exit 0
+            fi
             echo "==> push failed — rebasing onto main and retrying ($i/3)"
+            echo "$push_output"
             git pull --rebase origin main
             git add docker-compose.hosted.yml
             git commit --amend --no-edit || true
@@ -502,11 +514,21 @@ jobs:
           # was being swallowed — see the compose-pin step for the detail.
           auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_PAT" | base64 -w0)"
           for i in 1 2 3; do
-            if git -c "http.extraheader=${auth}" push origin main; then
+            push_output=$(git -c "http.extraheader=${auth}" push origin main 2>&1)
+            push_rc=$?
+            if [ $push_rc -eq 0 ]; then
               echo "==> k8s pins pushed"
               exit 0
             fi
+            # AUT-5852: GH006 branch-protection rejection is not a failure here —
+            # the bump commit is [skip ci] so required status checks cannot run
+            # on it. Warn and succeed; the next run retries.
+            if echo "$push_output" | grep -q "GH006"; then
+              echo "::warning::push rejected by branch protection (GH006) — k8s pin bump commit staged locally but not on main; will retry on next run"
+              exit 0
+            fi
             echo "==> push failed — rebasing onto main and retrying ($i/3)"
+            echo "$push_output"
             git pull --rebase origin main
             git add infra/k8s/ai.yaml infra/k8s/backend.yaml infra/k8s/frontend.yaml infra/k8s/worker.yaml
             git commit --amend --no-edit || true
