@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-5351)
+- fix(ci): the PR merge gate (`merge-gated.mjs`) now rejects PR heads with no merge-base with the base branch. A PR from an orphan/root branch (no common ancestor with `main`) has `status="divergent"` and `behind_by > 0` on the GitHub compare endpoint; the gate now calls `GET /repos/{repo}/compare/{base}...{head}` before merging and aborts if `status === "divergent"`, `behind_by > 0`, or `ahead_by === 0`. This prevents the AUT-5339 main-wipe scenario where `gh pr merge --squash` took an unrelated head tree wholesale. Four unit tests cover the divergent, behind, identical, and normal-ahead cases.
+
 ### Changed (AUT-5654)
 - ci: moved the last four GitHub-hosted jobs onto the self-hosted vm2 runners, finishing this repo's hosted-runner migration. `visual_regression.yml` (was `ubuntu-latest`) now runs on `[self-hosted, linux, x64, vm2]`; its `subosito/flutter-action@v2` step downloads the Flutter SDK itself, so no pre-installed toolchain is required on the runner. `dockerhub-publish.yml`'s `dedupe-main-queue`, `ci-queue-guard.yml`'s `cancel-orphaned-runs`, and `ci-triage-webhook.yml`'s `fire` also move to `[self-hosted, linux, x64, vm2]`: all three are API-only gates that call `gh api` to cancel superseded/orphaned runs and to fire the triage webhook, and none of them checks out or executes repository code, so they are safe on a persistent runner even under the `pull_request` trigger. `build-hosted.yml`'s matrix already resolved to vm2/ARM64 and is unchanged. After this, no workflow in this repo requests a GitHub-hosted runner.
 
