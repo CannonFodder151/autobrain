@@ -366,21 +366,20 @@ jobs:
         if: steps.bump.outputs.changed == 'true'
         env:
           TAG: ${{ github.event.inputs.tag || 'hosted' }}
+          BACKEND_DIGEST: ${{ needs.build-manifest.outputs.backend_digest }}
+          AI_DIGEST: ${{ needs.build-manifest.outputs.ai_digest }}
+          FRONTEND_DIGEST: ${{ needs.build-manifest.outputs.frontend_digest }}
         run: |
           set -euo pipefail
-          for svc in backend frontend; do
+          for svc in backend ai frontend; do
             pinned="$(grep -oP "ghcr\.io/cannonfodder151/autobrain-${svc}:hosted@\Ksha256:[a-f0-9]{64}" docker-compose.hosted.yml | head -1)"
-            tok="$(curl -fsS "https://ghcr.io/token?scope=repository:cannonfodder151/autobrain-${svc}:pull" \
-              | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')"
-            live="$(curl -fsSI -H "Authorization: Bearer ${tok}" \
-              -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json" \
-              "https://ghcr.io/v2/cannonfodder151/autobrain-${svc}/manifests/${TAG}" \
-              | tr -d '\r' | awk -F': ' 'tolower($1)=="docker-content-digest"{print $2}')"
-            if [ -z "${pinned}" ] || [ "${pinned}" != "${live}" ]; then
-              echo "::error::AUT-5669: autobrain-${svc} :hosted=${live:-<unreadable>} but the pin just written is ${pinned:-<none>} — refusing to commit a pin that disagrees with the tag"
+            expected_var="${svc^^}_DIGEST"
+            expected="${!expected_var}"
+            if [ -z "${pinned}" ] || [ "${pinned}" != "${expected}" ]; then
+              echo "::error::AUT-5669: autobrain-${svc} pinned=${pinned:-<none>} but expected digest from build-manifest is ${expected:-<none>}"
               exit 1
             fi
-            echo "==> ${svc}: :hosted == pin (${live})"
+            echo "==> ${svc}: pin == build-manifest (${expected})"
           done
 
       - name: Commit + push pin bump
