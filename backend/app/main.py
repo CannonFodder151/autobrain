@@ -38,8 +38,8 @@ app = FastAPI(
     version=settings.APP_VERSION,
     description="AI-powered car enthusiast companion. REST + WebSocket.",
     lifespan=lifespan,
-    docs_url="/docs" if settings.ENVIRONMENT != "production" else None,
-    redoc_url=None,
+    docs_url="/docs",
+    redoc_url="/redoc",
 )
 
 app.add_middleware(

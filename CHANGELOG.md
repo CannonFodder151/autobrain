@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-5777)
+- fix(nginx): `/docs`, `/openapi.json`, and `/redoc` returned the Flutter SPA shell (200 text/html) instead of the FastAPI documentation on hosted. The frontend nginx catch-all `location /` served index.html for these paths because explicit proxy blocks were missing. Adds `location /docs`, `location = /openapi.json`, and `location /redoc` blocks in `docker/frontend/nginx.conf` that proxy to `backend:8000`. Also enables `docs_url="/docs"` and `redoc_url="/redoc"` in `backend/app/main.py` for all environments (was gated off in production). Verified post-deploy: hosted.autobrainservice.app/docs, /openapi.json, and /redoc now serve Swagger UI, OpenAPI JSON, and ReDoc respectively.
+
 ### Changed (AUT-5654)
 - ci: moved the last four GitHub-hosted jobs onto the self-hosted vm2 runners, finishing this repo's hosted-runner migration. `visual_regression.yml` (was `ubuntu-latest`) now runs on `[self-hosted, linux, x64, vm2]`; its `subosito/flutter-action@v2` step downloads the Flutter SDK itself, so no pre-installed toolchain is required on the runner. `dockerhub-publish.yml`'s `dedupe-main-queue`, `ci-queue-guard.yml`'s `cancel-orphaned-runs`, and `ci-triage-webhook.yml`'s `fire` also move to `[self-hosted, linux, x64, vm2]`: all three are API-only gates that call `gh api` to cancel superseded/orphaned runs and to fire the triage webhook, and none of them checks out or executes repository code, so they are safe on a persistent runner even under the `pull_request` trigger. `build-hosted.yml`'s matrix already resolved to vm2/ARM64 and is unchanged. After this, no workflow in this repo requests a GitHub-hosted runner.
 
