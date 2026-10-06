@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-5846)
+- fix(backend): removed unmaintained `passlib[bcrypt]==1.7.4` from `backend/requirements.txt` and migrated `backend/app/core/security.py` to use `bcrypt` directly (`bcrypt.hashpw` / `bcrypt.checkpw`). passlib 1.7.4 (2020) is the last release and its bcrypt backend has known correctness issues (truncation bugs, version detection). The direct bcrypt API is already pinned (`bcrypt==4.0.1`) and is the OWASP-recommended algorithm. Regression test `tests/test_api.py::test_password_hashing` verifies hash/verify round-trip and wrong-password rejection; full `pytest tests/test_api.py` passes (17/17).
+
 ### Changed (AUT-5654)
 - ci: moved the last four GitHub-hosted jobs onto the self-hosted vm2 runners, finishing this repo's hosted-runner migration. `visual_regression.yml` (was `ubuntu-latest`) now runs on `[self-hosted, linux, x64, vm2]`; its `subosito/flutter-action@v2` step downloads the Flutter SDK itself, so no pre-installed toolchain is required on the runner. `dockerhub-publish.yml`'s `dedupe-main-queue`, `ci-queue-guard.yml`'s `cancel-orphaned-runs`, and `ci-triage-webhook.yml`'s `fire` also move to `[self-hosted, linux, x64, vm2]`: all three are API-only gates that call `gh api` to cancel superseded/orphaned runs and to fire the triage webhook, and none of them checks out or executes repository code, so they are safe on a persistent runner even under the `pull_request` trigger. `build-hosted.yml`'s matrix already resolved to vm2/ARM64 and is unchanged. After this, no workflow in this repo requests a GitHub-hosted runner.
 
