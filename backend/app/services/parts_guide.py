@@ -1,7 +1,7 @@
-"""Supercheap Auto parts-guide lookup, formatted for AutoBrain inventory.
+"""Supercheap Auto parts-guide lookup, formatted for AutoBrain inventory (AUT-4113).
 
 Orchestrates: vehicle resolution (rego+state via the rego-lookup API) →
-SCA category scrape via the self-hosted market-data container → 9Router
+SCA category scrape via local market_scraper (no separate container) → 9Router
 formatting (deterministic classification + AI tidy) → Inventory-shaped JSON.
 
 The result is cached in ``sca_parts_cache`` keyed by (make,model,year) for
@@ -11,14 +11,13 @@ The result is cached in ``sca_parts_cache`` keyed by (make,model,year) for
 import json
 from datetime import datetime, timedelta, timezone
 
-import httpx
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.core.logging import get_logger
 from app.models.sca_parts import SCAPartsCache
 from app.services import ai_client
+from app.services.market_scraper import search_sca
 from app.services.rego import lookup_rego
 
 logger = get_logger(__name__)
@@ -48,10 +47,7 @@ async def lookup_vehicle(rego: str | None, state: str | None,
 
 
 async def _fetch_sca_categories(vehicle: dict) -> dict | None:
-    """POST /sca-parts to the self-hosted market-data container."""
-    if not settings.MARKET_DATA_URL:
-        return None
-    url = settings.MARKET_DATA_URL.rstrip("/") + "/sca-parts"
+    """Scrape SCA categories locally via market_scraper.search_sca."""
     payload = {
         "rego": vehicle.get("rego") or "",
         "state": vehicle.get("state") or "",
@@ -59,15 +55,8 @@ async def _fetch_sca_categories(vehicle: dict) -> dict | None:
         "model": vehicle.get("model") or "",
         "year": vehicle.get("year"),
     }
-    headers = {"X-API-Key": settings.MARKET_DATA_API_KEY} if settings.MARKET_DATA_API_KEY else {}
     try:
-        async with httpx.AsyncClient(timeout=60) as client:
-            resp = await client.post(url, json=payload, headers=headers)
-            resp.raise_for_status()
-            data = resp.json()
-            if isinstance(data, dict) and data.get("ok") is False:
-                logger.warning("market_data_sca_degraded", note=data.get("note"))
-            return data
+        return await search_sca(**payload)
     except Exception as exc:
         logger.warning("market_data_sca_failed", error=str(exc))
         return None
