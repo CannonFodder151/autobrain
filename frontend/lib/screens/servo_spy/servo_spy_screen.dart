@@ -14,6 +14,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:geolocator_platform_interface/geolocator_platform_interface.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -170,6 +171,7 @@ class _MapStation {
 class _ServoSpyMapState extends State<_ServoSpyMap> {
   bool _loading = true;
   String? _error;
+  String? _locationError;
   LatLng? _userLoc;
   bool _locationDenied = false;
   List<_MapStation> _stations = const [];
@@ -198,28 +200,25 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
     _bootstrap();
   }
 
-  Future<void> _bootstrap() async {
+  void _bootstrap() async {
     setState(() => _loading = true);
     _error = null;
 
-    final pos = await getCurrentPosition();
+    final result = await getCurrentPosition();
+    final pos = result.coordinates;
     if (pos != null) {
       _userLoc = LatLng(pos['latitude']!, pos['longitude']!);
       _locationDenied = false;
+      _locationError = null;
     } else {
       _locationDenied = true;
+      _locationError = result.errorMessage;
     }
 
     if (!mounted) return;
 
-    if (_userLoc == null) {
-      setState(() {
-        _loading = false;
-        _error = 'Enable location to find nearby stations.';
-      });
-      return;
-    }
-
+    // Even without a GPS fix we still want to show the map — centre it on the
+    // user's last known region (AU default) and fetch stations around that.
     try {
       final api = context.read<AuthState>().api;
       final vData = await api.get('/vehicles') as List;
@@ -248,13 +247,13 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
   }
 
   Future<void> _fetchStations() async {
-    if (_userLoc == null) return;
+    final LatLng center = _userLoc ?? _mapCenter ?? _auCenter;
     setState(() => _loading = true);
     try {
       final api = context.read<AuthState>().api;
       final params = <String, String>{
-        'lat': _userLoc!.latitude.toStringAsFixed(6),
-        'lon': _userLoc!.longitude.toStringAsFixed(6),
+        'lat': center.latitude.toStringAsFixed(6),
+        'lon': center.longitude.toStringAsFixed(6),
         'radius_km': _maxDistanceKm.toInt().toString(),
         'limit': '50',
       };
@@ -349,17 +348,26 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
                     });
                     _fetchStations();
                   },
-                  child: const Text('Apply'),
+child: const Text('Apply'),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-      ),
-    );
-  }
+        );
+      }
+    }
 
-  static const _auCenter = LatLng(-25.2744, 133.7751);
+    bool get _canOpenLocationSettings => _locationError != null &&
+        _locationError!.contains('permanently denied');
+
+    Future<void> _openLocationSettings() async {
+      if (GeolocatorPlatform.instance is GeolocatorPlatform) {
+        await Geolocator.openAppSettings();
+      }
+    }
+
+    static const _auCenter = LatLng(-25.2744, 133.7751);
 
   @override
   Widget build(BuildContext context) {
@@ -401,7 +409,6 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
     ];
     final showEmpty = !_loading &&
         _error == null &&
-        _userLoc != null &&
         _stations.isEmpty;
     return Column(
       children: [
@@ -410,17 +417,29 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
             width: double.infinity,
             color: Colors.amber.withOpacity(0.15),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: const Text(
-              'Location off — showing stations in the selected region. '
-              'Enable location for nearby results.',
-              style: TextStyle(fontSize: 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _locationError ??
+                        'Location off — showing stations in the selected region. '
+                            'Enable location for nearby results.',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+                if (_canOpenLocationSettings)
+                  TextButton(
+                    onPressed: _openLocationSettings,
+                    child: const Text('Settings'),
+                  ),
+              ],
             ),
           ),
         Row(
           children: [
             if (_locationDenied)
               IconButton(
-                tooltip: 'Enable location',
+                tooltip: 'Retry location',
                 icon: const Icon(Icons.location_disabled),
                 onPressed: _bootstrap,
               ),
@@ -783,6 +802,7 @@ class _ServoSpyList extends StatefulWidget {
 class _ServoSpyListState extends State<_ServoSpyList> {
   bool _loading = true;
   String? _error;
+  String? _locationError;
   List<ServoStationRow> _stations = const [];
   List<String> _fuelTypes = List<String>.from(defaultFuelTypes);
   String? _selectedFuelType;
@@ -803,15 +823,15 @@ class _ServoSpyListState extends State<_ServoSpyList> {
     setState(() => _loading = true);
     _error = null;
 
-    _pos = await getCurrentPosition();
+    final result = await getCurrentPosition();
+    _pos = result.coordinates;
     if (_pos == null) {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _error = 'Enable location to find nearby stations.';
-      });
-      return;
+      _locationError = result.errorMessage;
+    } else {
+      _locationError = null;
     }
+
+    if (!mounted) return;
 
     try {
       final data = await _api.get('/vehicles') as List;
@@ -839,12 +859,14 @@ class _ServoSpyListState extends State<_ServoSpyList> {
   }
 
   Future<void> _fetchStations() async {
-    if (_pos == null) return;
+    // Use a default AU center if no GPS fix — stations still load for the map region.
+    final lat = _pos?['latitude'] ?? -25.2744;
+    final lon = _pos?['longitude'] ?? 133.7751;
     setState(() => _loading = true);
     try {
       final params = <String, String>{
-        'lat': _pos!['latitude']!.toStringAsFixed(6),
-        'lon': _pos!['longitude']!.toStringAsFixed(6),
+        'lat': lat.toStringAsFixed(6),
+        'lon': lon.toStringAsFixed(6),
         'radius_km': _maxDistanceKm.toInt().toString(),
       };
       if (_selectedFuelType != null) params['fuel_type'] = _selectedFuelType!;
@@ -956,6 +978,16 @@ class _ServoSpyListState extends State<_ServoSpyList> {
 
     return Column(
       children: [
+        if (_locationError != null)
+          Container(
+            width: double.infinity,
+            color: Colors.amber.withOpacity(0.15),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Text(
+              _locationError!,
+              style: const TextStyle(fontSize: 12),
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
