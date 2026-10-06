@@ -10,6 +10,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+- Deterministic, AI-free rule engine for all compliance checks
+- New Pydantic models: `VehicleLookupRequest/Response`, `VinValidationRequest/Response`, `ModificationChecklistRequest/Response`, `ComplianceAggregationRequest/Response`, `ModificationItem`, `ModificationCreate/Out`
+- New services: `vin_decoder.py`, `vehicle_lookup.py`, `modification_checklist.py`, `compliance_aggregator.py`
+- `GET /api/v1/vass/compliance/aggregate/{precheck_id}` — GET variant for aggregation
+- `GET /api/v1/vass/vehicle-lookup/makes` — list available vehicle makes
+- `GET /api/v1/vass/vehicle-lookup/models/{make}` — list models for a make
+- `GET /api/v1/vass/vehicle-lookup/year-range` — year range for make/model
+- `POST /api/v1/vass/compliance/aggregate` — compliance results aggregation with pass/fail/conditional scoring
+- `POST /api/v1/vass/modification-checklist` — deterministic modification checklist generation with ADR/VSB references
+- `POST /api/v1/vass/vehicle-lookup` — vehicle make/model/year lookup from AU compliance database
+- `POST /api/v1/vass/vin/validate` — 17-character VIN validation with ISO 3779 check digit, WMI lookup, RHD inference
+- feat(vass): add VASS backend API endpoints + data models
 
 ### Changed (AUT-5654)
 - ci: moved the last four GitHub-hosted jobs onto the self-hosted vm2 runners, finishing this repo's hosted-runner migration. `visual_regression.yml` (was `ubuntu-latest`) now runs on `[self-hosted, linux, x64, vm2]`; its `subosito/flutter-action@v2` step downloads the Flutter SDK itself, so no pre-installed toolchain is required on the runner. `dockerhub-publish.yml`'s `dedupe-main-queue`, `ci-queue-guard.yml`'s `cancel-orphaned-runs`, and `ci-triage-webhook.yml`'s `fire` also move to `[self-hosted, linux, x64, vm2]`: all three are API-only gates that call `gh api` to cancel superseded/orphaned runs and to fire the triage webhook, and none of them checks out or executes repository code, so they are safe on a persistent runner even under the `pull_request` trigger. `build-hosted.yml`'s matrix already resolved to vm2/ARM64 and is unchanged. After this, no workflow in this repo requests a GitHub-hosted runner.
