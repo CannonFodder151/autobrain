@@ -46,4 +46,5 @@ playwright-stealth==2.0.3
 # Test/dev
 pytest==9.1.1
 pytest-asyncio==1.3.0
+aiosqlite==0.21.0     # async sqlite driver for tests/* modules that build a sqlite+aiosqlite engine at import (AUT-5356 collect-only gate)
 ruff==0.8.6

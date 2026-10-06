@@ -11,6 +11,11 @@ from app.services.advisor.value import (  # noqa: F401
     _MAX_VALUE,
     CURRENCY,
     _CONDITION_MULTIPLIER,
+    TRADE_IN_LOW_RATIO,
+    TRADE_IN_MID_RATIO,
+    TRADE_IN_HIGH_RATIO,
+    BAND_LOW_RATIO,
+    BAND_HIGH_RATIO,
     condition_multiplier,
     km_adjustment,
     _band,
@@ -30,6 +35,7 @@ from app.services.advisor.replace import (  # noqa: F401
     age_years,
     new_used_premium,
     _clamp_horizon,
+    compute_replace,
 )
 
 from app.services.advisor.upgrade import (  # noqa: F401

@@ -131,7 +131,10 @@ class Settings(BaseSettings):
     # Demo mode: seeds a read-only demo account + sample data. No AI, no writes.
     DEMO_MODE: bool = False
     DEMO_EMAIL: str = "demo@autobrainservice.app"
-    DEMO_PASSWORD: str = "demo"
+    # No default: the demo password is a secret (Paperclip
+    # `demo/demo-account-password`), never a literal in code. seed_demo /
+    # reset_demo fail closed when it is empty (AUT-5063).
+    DEMO_PASSWORD: str = ""
     DEMO_DISPLAY_NAME: str = "Demo Garage"
     # One-shot demo reseed: wipe + regenerate the demo data on startup
     # (used when the seed changes so existing instances get new sample data).
@@ -168,7 +171,7 @@ class Settings(BaseSettings):
     APP_BASE_URL: str = "http://localhost:8000"
 
     # Versioning (local only; the GitHub update check was removed — AUT-461)
-    APP_VERSION: str = "0.3.308"  # mirror frontend/pubspec.yaml version
+    APP_VERSION: str = "0.3.311"  # mirror frontend/pubspec.yaml version
 
     # Scheduled backup (daily). When set, beats stores a full JSON snapshot to MinIO.
     BACKUP_ENABLED: bool = True
@@ -220,6 +223,11 @@ class Settings(BaseSettings):
     PAPERCLIP_API_URL: str = ""  # e.g. https://paperclip.nathanmartina.com
     PAPERCLIP_API_KEY: str = ""  # long-lived agent key or service token
     PAPERCLIP_COMPANY_ID: str = ""  # AutoBrain company UUID in Paperclip control plane
+
+    # AUT-5137: best-effort ops webhook fired when boot aborts because
+    # `alembic upgrade head` failed against a non-empty database. Empty = log
+    # line only (the container still exits non-zero and crash-loops).
+    BOOT_ALERT_WEBHOOK_URL: str = ""
 
     # Self-service signup (hosted). When enabled, anyone can register a
     # Free-tier account via POST /auth/signup. Self-hosted instances keep

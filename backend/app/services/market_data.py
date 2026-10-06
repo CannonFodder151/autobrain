@@ -23,6 +23,14 @@ logger = get_logger(__name__)
 
 CACHE_TTL_HOURS = 24
 
+# AUT-5541: a provider may ignore the year we send it, and a thin same-year
+# sample used to widen into the whole model line (a 2009 Crown valued off
+# 2019 Crowns). Aggregate only same-year listings, widening in tiers to keep
+# rare models valued, and report no data rather than a wrong decade.
+MIN_SAMPLE = 3
+MAX_WINDOW_YEARS = 5
+YEAR_TIERS = (0, 1, 3, MAX_WINDOW_YEARS)
+
 
 def _to_float(value) -> float | None:
     if value is None:
@@ -90,6 +98,22 @@ def _dig(obj, key: str):
     return None
 
 
+def _same_year(listings: list[dict], year: int | None) -> list[dict]:
+    """Listings close enough in model year to be a genuine comparable.
+
+    Tiers 0 -> 1 -> 3 -> 5 years, taking the first tier with MIN_SAMPLE
+    entries. Returns [] past MAX_WINDOW_YEARS so the caller degrades to the
+    no-market-data state instead of averaging a different decade.
+    """
+    if year is None:
+        return listings
+    for window in YEAR_TIERS:
+        tier = [l for l in listings if l.get("year") and abs(l["year"] - year) <= window]
+        if len(tier) >= MIN_SAMPLE:
+            return tier
+    return [l for l in listings if l.get("year") and abs(l["year"] - year) <= MAX_WINDOW_YEARS]
+
+
 def _aggregate(listings: list[dict]) -> dict:
     prices = sorted(p["price"] for p in listings if p.get("price") is not None)
     n = len(prices)
@@ -139,7 +163,7 @@ async def get_market_data(
             return _serialise(row, stale=False)
 
     provider = await _fetch_provider(query, make_l, model_l, year, vehicle_type)
-    data = _build(provider)
+    data = _build(provider, year)
     await _store(db, make_l, model_l, year, data)
     return data
 
@@ -164,10 +188,15 @@ async def search_market(db: AsyncSession, q: str, refresh: bool = False) -> dict
     return data
 
 
-def _build(provider: dict | None) -> dict:
+def _build(provider: dict | None, year: int | None = None) -> dict:
     if provider and provider.get("listings"):
-        data = {"source": provider.get("source", "provider"), "listings": provider["listings"]}
-        data.update(_aggregate(provider["listings"]))
+        listings = _same_year(provider["listings"], year)
+        if not listings:
+            return _fallback(
+                f"no listings within {MAX_WINDOW_YEARS} years of {year}"
+            )
+        data = {"source": provider.get("source", "provider"), "listings": listings}
+        data.update(_aggregate(listings))
         return data
     return _fallback("no live data available")
 

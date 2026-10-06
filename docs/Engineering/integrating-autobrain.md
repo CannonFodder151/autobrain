@@ -35,9 +35,12 @@ installations use their own `APP_BASE_URL`, so swap the host in every example.
 curl https://hosted.autobrainservice.app/health
 
 # 2. Log in as a user to get a token
+#    The demo password is a secret — read it from the Paperclip secret
+#    `demo/demo-account-password` (AUT-5063). Substitute your own account
+#    if you are not authenticating as the demo user.
 curl -s -X POST https://hosted.autobrainservice.app/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"demo@autobrainservice.app","password":"demo"}'
+  -d '{"email":"demo@autobrainservice.app","password":"<DEMO_PASSWORD>"}'
 
 # 3. Call an authenticated endpoint with that token
 curl -s https://hosted.autobrainservice.app/api/v1/auth/me \
@@ -77,8 +80,10 @@ Sets: email + password in, tokens out.
 ```bash
 curl -s -X POST https://hosted.autobrainservice.app/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"demo@autobrainservice.app","password":"demo"}'
+  -d '{"email":"demo@autobrainservice.app","password":"<DEMO_PASSWORD>"}'
 ```
+
+`<DEMO_PASSWORD>` is the demo account password, held in the Paperclip secret `demo/demo-account-password` and set as the `DEMO_PASSWORD` env var on the demo stack — it is never committed (AUT-5063).
 
 When the account has no MFA, you get a token pair with the user object:
 

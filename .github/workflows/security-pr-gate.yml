@@ -24,12 +24,25 @@ jobs:
   # (2) gitleaks detect on every PR — block on findings (AUT-1746).
   # Runs gitleaks directly (not the gitleaks-action) so the gate depends only on
   # the checked-out `.gitleaks.toml` config, not on extra tokens/SARIF perms.
+  #
+  # AUT-5531: PR runs scan only the commit range under review
+  # (`pull_request.base.sha..HEAD`). gitleaks' default (no --log-opts)
+  # scans every fetched ref, so a secret on ANY branch failed every
+  # unrelated open PR — observed 2026-10-04 when PR #900 failed purely
+  # on commit d744758 from PR #899's branch. A leak now blocks only the
+  # branch that introduced it; push-to-main sweeps main's full history,
+  # and workflow_dispatch remains the on-demand all-refs sweep, so any
+  # leak that reaches main is caught the moment it lands.
   gitleaks:
     name: Gitleaks — secret detection
     runs-on: [self-hosted, linux, x64]
+    outputs:
+      findings: ${{ steps.report.outputs.count }}
     steps:
       - uses: actions/checkout@v4
         with:
+          # Full history: the PR range needs the base sha, and the
+          # push-to-main full-history sweep needs every commit.
           fetch-depth: 0
       - name: Install gitleaks
         run: |
@@ -38,12 +51,95 @@ jobs:
             | tar xz -C "$HOME/.local/bin" gitleaks
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Gitleaks detect — fail on any finding
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          set -euo pipefail
-          # Whole-repo scan with the repo-root `.gitleaks.toml` (vendored default
-          # ruleset + AutoBrain allowlist of known non-secret fixtures). Exits
-          # non-zero on any real finding → blocks the PR.
-          gitleaks detect --source=. --config=.gitleaks.toml --redact --exit-code 1
+          set -uo pipefail
+          REPORT="gitleaks-report.json"
+          LOG_OPTS=()
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            # AUT-5531: scope the scan to the commits this PR introduces.
+            # If the base sha cannot be resolved, fall back to the wider
+            # full-history scan — the gate must never scan narrower than
+            # intended (fail-closed for coverage).
+            if [ -n "${PR_BASE_SHA:-}" ] && git rev-parse --verify --quiet "${PR_BASE_SHA}^{commit}" >/dev/null; then
+              LOG_OPTS=(--log-opts="${PR_BASE_SHA}..HEAD")
+            else
+              echo "::warning::PR base ${PR_BASE_SHA:-<unset>} not resolvable; running full-history scan instead"
+            fi
+          elif [ "$EVENT_NAME" = "push" ]; then
+            # Push to main: full history of main (every commit reachable
+            # from HEAD), so pre-existing main leaks still surface
+            # (AUT-5531 AC2). Scoped to main rather than all refs on
+            # purpose — an unmerged branch's leak must not block main
+            # pushes; that branch is blocked on its own PR, and the
+            # all-refs sweep stays available via workflow_dispatch.
+            LOG_OPTS=(--log-opts="HEAD")
+          fi
+          # workflow_dispatch: no --log-opts → all-refs sweep of the whole
+          # repo, for on-demand incident triage. --redact keeps raw secret
+          # values out of logs and the report.
+          rc=0
+          gitleaks detect --source=. --config=.gitleaks.toml --redact --exit-code 1 \
+            ${LOG_OPTS[@]+"${LOG_OPTS[@]}"} \
+            --report-format json --report-path "$REPORT" || rc=$?
+          # rc 1 = findings (detailed by the report step); any other
+          # non-zero exit is a real failure and fails the step as-is.
+          exit "$rc"
+      - name: Emit gitleaks findings report (AUT-5531)
+        if: always()
+        id: report
+        run: |
+          set -uo pipefail
+          if [ ! -s gitleaks-report.json ]; then
+            echo "count=0" >> "$GITHUB_OUTPUT"
+            echo "gitleaks: no findings"
+            exit 0
+          fi
+          python3 - gitleaks-report.json <<'PY'
+          import json, os, sys
+          findings = json.load(open(sys.argv[1]))
+
+          def cell(v):
+              # Untrusted git metadata (filenames, authors): strip control
+              # chars so a crafted finding cannot forge annotation lines in
+              # the log or inject rows into the step-summary table.
+              return "".join(c if c.isprintable() else " " for c in str(v))[:200]
+
+          # One ::error annotation per finding → clickable file/line in the
+          # PR checks UI. Secrets are already redacted (--redact), so the
+          # annotation, summary, and report never carry raw secret values.
+          for f in findings:
+              print("::error file={},line={}::gitleaks [{}] commit {} by {} — {}".format(
+                  cell(f.get("File", "?")), f.get("StartLine", 0), cell(f.get("RuleID", "?")),
+                  f.get("Commit", "?")[:12], cell(f.get("Author", "?")), cell(f.get("Fingerprint", "?"))))
+          lines = ["## Gitleaks findings — %d leak(s)" % len(findings), "",
+                   "| Rule | File:Line | Commit | Author | Fingerprint |",
+                   "| --- | --- | --- | --- | --- |"]
+          for f in findings:
+              lines.append("| %s | %s:%s | `%s` | %s | `%s` |" % (
+                  cell(f.get("RuleID", "")), cell(f.get("File", "")), f.get("StartLine", ""),
+                  f.get("Commit", "")[:12], cell(f.get("Author", "")), cell(f.get("Fingerprint", ""))))
+          md = "\n".join(lines) + "\n"
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary:
+              with open(summary, "a") as fh:
+                  fh.write(md)
+          else:
+              print(md)
+          gh_out = os.environ.get("GITHUB_OUTPUT")
+          if gh_out:
+              with open(gh_out, "a") as fh:
+                  fh.write("count=%d\n" % len(findings))
+          PY
+      - name: Upload gitleaks report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report
+          path: gitleaks-report.json
+          if-no-files-found: ignore
 
   # (4) trivy config (misconfig) on every Dockerfile build target (AUT-1746).
   # Fails on HIGH/CRITICAL misconfig. NOTE: trivy 0.74 has no docker-compose
@@ -458,8 +554,9 @@ jobs:
           COLOR: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit-direct.result == 'success' && needs.pip-audit-resolved.result == 'success' && needs.flutter-audit.result == 'success' && needs.compose-config-diff.result == 'success' && needs.pin-guard.result == 'success') && '0x57F287' || '0xED4245' }}
           TITLE: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit-direct.result == 'success' && needs.pip-audit-resolved.result == 'success' && needs.flutter-audit.result == 'success' && needs.compose-config-diff.result == 'success' && needs.pin-guard.result == 'success') && 'PR security gate clean' || 'PR security gate found issues' }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GITLEAKS_FINDINGS: ${{ needs.gitleaks.outputs.findings || 'n/a' }}
         run: |
           curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
             -H "Content-Type: application/json" \
-            -d "$(jq -nc --arg c status --arg t "$TITLE" --arg col "$COLOR" --arg u "$RUN_URL" \
-              '{channel:$c,title:$t,description:"AUT-1746 PR gate: gitleaks + trivy config + pip-audit (direct + resolved tree) + flutter osv-scanner (pubspec.lock) + compose env-var diff (AUT-2390).",color:$col,author:"Security Scan",fields:[{name:"Scope",value:"secrets, IaC, python (direct+transitive), flutter, compose-env",inline:true},{name:"Run",value:$u,inline:true}]}')"
+            -d "$(jq -nc --arg c status --arg t "$TITLE" --arg col "$COLOR" --arg u "$RUN_URL" --arg g "$GITLEAKS_FINDINGS" \
+              '{channel:$c,title:$t,description:"AUT-1746 PR gate: gitleaks + trivy config + pip-audit (direct + resolved tree) + flutter osv-scanner (pubspec.lock) + compose env-var diff (AUT-2390).",color:$col,author:"Security Scan",fields:[{name:"Scope",value:"secrets, IaC, python (direct+transitive), flutter, compose-env",inline:true},{name:"Gitleaks findings",value:$g,inline:true},{name:"Run",value:$u,inline:true}]}')"

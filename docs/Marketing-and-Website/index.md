@@ -11,39 +11,37 @@ Website, demo, social, growth.
 | [social.md](./social.md) | Social media strategy & Buffer workflow |
 | [social-image-generation.md](./social-image-generation.md) | Social image generation pipeline (deterministic-first) |
 | [per-post-og-image-workflow.md](./per-post-og-image-workflow.md) | Per-post OG image workflow & author bio schema (AUT-3115) |
-| [community-garage.md](./community-garage.md) | Community Garage feature docs (federated social) |
+| [community-garage.md](./community-garage.md) | Community Garage feature docs (federated social, monetization) |
 | [content-calendar.md](./content-calendar.md) | Marketing content calendar & approval gates |
+| [phase1-social-calendar.md](./phase1-social-calendar.md) | Phase 1 launch social schedule (AUT-3972) |
 | [growth-metrics.md](./growth-metrics.md) | Growth KPIs, funnel, Buffer analytics, reporting |
 
-## Section Map
+## Related Sections
 
-```
-Marketing & Website (this folder)
-├── website.md                    ← NEW
-├── demo-environment.md           ← NEW
-├── social.md                     ← REPLACED (was Community Garage API)
-├── social-image-generation.md    ← REFRESHED (AUT-163 verified)
-├── per-post-og-image-workflow.md ← EXISTING (AUT-3115)
-├── community-garage.md           ← EXISTING (AUT-294, board-approved)
-├── content-calendar.md           ← NEW (from AUT-3972)
-└── growth-metrics.md             ← NEW
-```
+- [Engineering](../Engineering/index.md) — architecture, database schema, AI modules
+- [Deployment & Infrastructure](../Deployment-and-Infrastructure/index.md) — compose stacks, per-instance secrets
+- [Company](../Company/index.md) — documentation policy, decisions
+- [Business Reviews](../Business-Reviews/index.md) — sales pack, positioning claims
+
+## Finding the code
+
+Marketing facts are verified against the backend, not memory. Use the repo context graph (Graft — see the root `AGENTS.md`): `graft map` to orient, `graft ask "<question>"` to locate the code, `graft callers <symbol>` for the call graph, `graft grep "<literal>"` for an exhaustive search.
+
+Reach for it before writing a claim. Buffer channel IDs, product-metric SQL, container counts, and module counts in this section have all been wrong at some point; `graft ask "buffer channels"` and a check against `backend/app/models/` catch that in seconds.
 
 ## Sync Policy
 
-- **Source of truth:** Outline (AutoBrain collection).
-- **Mirror:** This `docs/Marketing-and-Website/` directory.
-- **Update rule:** Every Outline change → same-PR repo mirror update. Every repo change → Outline update (CMO agent).
-- **Phase 1 refresh:** All docs updated in branch `feat/AUT-4050-docs-refresh` (this PR).
-- **Outline doc IDs:**
-  - Marketing & Website parent: `/doc/FImUvTds57`
-  - Social media strategy: `/doc/cSv134C6XL`
-  - Social image generation: `/doc/PvXJk9RxL1`
-  - Community Garage: `/doc/Uuu2hCFXFY`
+- **Source of truth:** Outline (AutoBrain collection, internal-only).
+- **Mirror:** This `docs/Marketing-and-Website/` directory, public and sanitised.
+- **Update rule:** Every Outline change → same-PR repo mirror update. Every repo change → Outline update (CMO agent). See [Documentation Policy](../Company/documentation-policy.md).
+- Every metric, count, ID, and status in this section carries a source line at the bottom of its page. If a claim cannot be verified against the repo or a live API, it does not belong here.
 
-## Related Repos
+## Sanitisation
 
-- `CannonFodder151/autobrainservice-website` — marketing site (private)
-- `CannonFodder151/autobrain` — main monorepo (this docs mirror)
-- `autobrainservice.app` — production website
-- `demo.autobrainservice.app` — demo environment
+Every page here is a **public mirror**. Instance IPs are placeholders, and per-instance credentials (Buffer org/channel IDs, Stripe keys, API keys, DB/MinIO secrets) are held in internal Outline — never in this repo. Read per-instance values from Buffer or the secrets store at use time rather than pasting them into docs.
+
+Marketing copy is drafted here but **published only after the human CMO approves it in Discord `#marketing`** with the full publishable content inline. Approval gates live in [content-calendar.md](./content-calendar.md).
+
+---
+
+*Last updated: 2026-10-04 | Owner: CMO | Review cadence: Monthly | Next review: 2026-11-04*

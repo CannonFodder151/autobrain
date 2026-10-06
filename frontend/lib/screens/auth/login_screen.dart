@@ -40,9 +40,10 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     if (_isDemo) {
-      // Demo build auto-fills the read-only demo account.
+      // Demo build pre-fills the read-only demo account email only. The
+      // password is never shipped in the bundle (AUT-5063) — the demo
+      // operator distributes it via the demo/demo-account-password secret.
       _email.text = 'demo@autobrainservice.app';
-      _password.text = 'demo';
     }
     // Focus + select the email field so web autofill always lands in it.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -183,7 +184,11 @@ class _LoginScreenState extends State<LoginScreen> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [scheme.primary, scheme.primary.withOpacity(0.75), scheme.secondary.withOpacity(0.6)],
+            colors: [
+              scheme.primary,
+              scheme.primary.withValues(alpha: 0.75),
+              scheme.secondary.withValues(alpha: 0.6),
+            ],
           ),
         ),
         child: SafeArea(
@@ -204,7 +209,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.30),
+                              color: Colors.black.withValues(alpha: 0.30),
                               blurRadius: 24,
                               offset: const Offset(0, 8),
                             ),
@@ -246,7 +251,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       borderRadius: BorderRadius.circular(24),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.18),
+                          color: Colors.black.withValues(alpha: 0.18),
                           blurRadius: 32,
                           offset: const Offset(0, 12),
                         ),

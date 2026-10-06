@@ -8,6 +8,7 @@ How code gets from a branch to running production services.
 |----------|---------|--------|
 | `dockerhub-publish.yml` | push to `main` (or manual dispatch) | `cannonfodder151/autobrain-{backend,ai,frontend}:latest` + `:hosted` images on Docker Hub; CHANGELOG sync to the marketing site |
 | `build-hosted.yml` | manual (`workflow_dispatch`) | `ghcr.io/cannonfodder151/autobrain-{backend,ai,frontend}:<tag>` multi-arch images |
+| `arm64-runner-keepalive.yml` | every 30 min (`schedule`) | no artifacts — keeps the EP5 ARM64 runner's broker session exercised and canaries the runner |
 | `sync-mobile.yml` | push to `main` touching `frontend/`, `CHANGELOG.md`, `bump-version.sh`, `sync-mobile.sh` (or manual) | `autobrain-mobile` lineage + version sync, dispatches the mobile release pipeline |
 | `release-mobile.yml` *(in `autobrain-mobile`)* | manual dispatch with a `version` input | Signed `.aab` + draft GitHub Release + Discord `#changelog`/`#updates` |
 
@@ -102,6 +103,36 @@ AUT-2409 confines hosted deploys to the nightly **03:00–04:00 AEST** window.
 - Window is 1 hour and cron is best-effort: if the nightly run is skipped,
   the pins stay bumped in git and the next
   `workflow_dispatch` (which sets the override) applies them.
+
+### ARM64 runner broker keepalive (AUT-5463)
+
+`arm64` builds are the only leg of `build-hosted.yml` that has exactly one
+runner: `gh-runner-autobrain-arm64`, containerised on the Oracle Cloud VM
+(Portainer endpoint 5). That runner talks to the GitHub Actions broker over a
+long-lived WebSocket, and EP5 container logs for 2026-09-27 → 2026-10-04 show
+the failure mode that looks alarming but is not:
+
+- 3 real broker drops in 7.09 days (**0.42/day**, one per ~57 h), all while the
+  runner was **idle** (36 / 81 / 326 min after the previous job ended). The
+  runner backs off ~6–15 s, retries, and reconnects — no session restart, no
+  job impact.
+- 59 `BrokerServer` `SocketException (125)` bursts in the same window land at
+  job end: the message listener cancels its in-flight long-poll and rotates it.
+  One per completed job, all 59 jobs still finished.
+- 0 jobs were interrupted mid-flight (59 jobs / 624 job-minutes). The only
+  session restarts in the window are GitHub's daily 03:00 UTC
+  `RunnerRefreshConfigMessage`, which the runner defers until the job dispatcher
+  is idle.
+- `RestartCount=0` for the container across the whole window — none of the
+  154 "restarts" in the AUT-3822 sweep were container restarts.
+
+`arm64-runner-keepalive.yml` therefore runs a 5-line no-op job on
+`[self-hosted, linux, ARM64]` every 30 min. It caps the idle gap below the
+shortest observed drop threshold and gives the broker regular message traffic;
+it is not a retry mechanism (nothing to retry — no drop has hit a running job).
+The job also re-asserts `uname -m == aarch64`, the AUT-2097 canary, so a runner
+replaced by a qemu-shimmed x86 host fails loudly instead of shipping
+mis-labelled manifests.
 
 ## 3. Mobile sync (`sync-mobile.yml`)
 

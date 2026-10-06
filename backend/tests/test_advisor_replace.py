@@ -20,6 +20,7 @@ os.environ.setdefault("MINIO_ACCESS_KEY", "test-minio-access-key")
 os.environ.setdefault("MINIO_SECRET_KEY", "test-minio-secret-key")
 os.environ.setdefault("MINIO_BUCKET", "test-minio-bucket")
 
+import inspect  # noqa: E402
 from datetime import date  # noqa: E402
 from types import SimpleNamespace  # noqa: E402
 
@@ -27,6 +28,7 @@ import pytest  # noqa: E402
 from fastapi import HTTPException  # noqa: E402
 
 from app.services.advisor import (  # noqa: E402
+    compute_replace,
     NEW_USED_PREMIUM_MAX,
     REPLACE_DEFAULT_HORIZON_MONTHS,
     REPLACE_HORIZON_MAX_MONTHS,
@@ -48,12 +50,17 @@ def _enforce_entitlement(user):
 def _vehicle(*, year: int | None = 2018, odo: int | None = 80_000, condition: str = "good",
              make: str = "Toyota", model: str = "Corolla") -> SimpleNamespace:
     return SimpleNamespace(
-        year=year, odometer_km=odo, condition=condition, make=make, model=model,
-        vehicle_type="car",
+        id="v1", year=year, odometer_km=odo, condition=condition, make=make,
+        model=model, vehicle_type="car",
     )
 
 
 # --- pure helpers ----------------------------------------------------------
+
+def test_compute_replace_is_exported() -> None:
+    # app/api/v1/advisor.py imports this name from the package; if
+    # the export is dropped the whole app fails to boot, so pin it.
+    assert inspect.iscoroutinefunction(compute_replace)
 
 def test_age_years_basic() -> None:
     v = _vehicle(year=date.today().year - 7)
@@ -231,8 +238,11 @@ async def test_advisor_replace_route_envelope(monkeypatch) -> None:
         }
 
     monkeypatch.setattr(advisor_mod, "compute_replace", _fake_compute_replace)
+    async def _fake_accessible(db, vid, user):
+        return fake_vehicle
+
     monkeypatch.setattr(advisor_mod, "get_accessible_vehicle",
-                        lambda db, vid, user: fake_vehicle)
+                        _fake_accessible)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:

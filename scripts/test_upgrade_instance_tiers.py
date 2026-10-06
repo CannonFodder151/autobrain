@@ -16,9 +16,13 @@ SCRIPT = os.path.join(REPO, "scripts", "upgrade-instances.sh")
 WORKFLOW = os.path.join(REPO, ".github", "workflows", "deploy-instances.yml")
 
 # name, Portainer endpoint id, health URL path — the board-mandated order (AUT-107).
+# AUT-5611: the Default tier's stack is `autobrain-default`
+# (docker-compose.default.yml), deliberately not `autobrain` — that
+# name is the host compose project that owns the Default
+# postgres/redis/minio (see scripts/upgrade-instances.sh).
 EXPECTED_CHAIN = [
     ("autobrain-demo", "2", "https://demo.autobrainservice.app/health"),
-    ("autobrain", "2", "https://default.autobrainservice.app/health"),
+    ("autobrain-default", "2", "https://default.autobrainservice.app/health"),
     ("autobrain-hosted", "5", "https://hosted.autobrainservice.app/health"),
 ]
 

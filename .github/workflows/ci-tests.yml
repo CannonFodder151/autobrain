@@ -23,7 +23,7 @@ permissions:
 jobs:
   pytest:
     name: pytest
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, vm2]
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -54,6 +54,24 @@ jobs:
           MINIO_BUCKET: "ci-test-minio-bucket"
         run: |
           pytest tests/test_health_demo.py -v --maxfail=1 --tb=short
+
+      - name: Collect backend tests (no silent import errors)
+        working-directory: backend
+        env:
+          DATABASE_URL: "postgresql+asyncpg://autobrain:autobrain@localhost:5432/autobrain"
+          SECRET_KEY: "ci-test-secret"
+          ENVIRONMENT: "development"
+          POSTGRES_USER: "ci-test-postgres-user"
+          POSTGRES_PASSWORD: "ci-test-postgres-password"
+          POSTGRES_DB: "ci-test-postgres-db"
+          MINIO_ACCESS_KEY: "ci-test-minio-access-key"
+          MINIO_SECRET_KEY: "ci-test-minio-secret-key"
+          MINIO_BUCKET: "ci-test-minio-bucket"
+        run: |
+          # AUT-5356: the full-suite step below ends in `|| true`, so a test
+          # module that fails to import is silently skipped and its coverage
+          # never runs. Collection errors must fail the build instead.
+          pytest --collect-only -q
 
       - name: Run full backend test suite
         working-directory: backend
@@ -95,7 +113,7 @@ jobs:
   # 0-job `failure` on every push and the deploy signal is silently lost (AUT-4911).
   workflow-yaml:
     name: workflow yaml parse
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, vm2]
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
@@ -126,7 +144,7 @@ jobs:
   # build arg (AUT-4824). The check needs no docker daemon, so run it on every PR.
   carto-build-arg:
     name: carto build-arg propagation
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, vm2]
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
@@ -149,7 +167,7 @@ jobs:
   # were dropped unnoticed by PR #832. Needs pyyaml, no docker daemon.
   release-scripts:
     name: release script self-checks
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, vm2]
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
@@ -176,7 +194,7 @@ jobs:
   # postgres image.
   alembic-migrations:
     name: alembic upgrade head (hosted-shaped DB + pending revision DDL)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, vm2]
     timeout-minutes: 15
     services:
       postgres:
@@ -219,7 +237,7 @@ jobs:
   # ordered mock list predated the new API calls. Pure stdlib, no docker.
   compose-sync-script:
     name: compose sync script self-checks
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, vm2]
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
@@ -227,6 +245,23 @@ jobs:
       # stdlib unittest only — ubuntu-latest ships no pytest.
       - name: sync-compose-to-portainer.py regression tests
         run: python3 scripts/test_sync_compose_to_portainer.py -v
+
+      # AUT-5669: the pin bump's monotonic guard + provenance
+      # (update-compose-pins.py) and the deploy-by-digest refusal
+      # (sync-compose-to-portainer.py) are otherwise unguarded code
+      # paths. Pure stdlib + a temp git repo, no docker, no pyyaml.
+      - name: compose pin guard regression tests
+        run: python3 scripts/test_update_compose_pins.py
+
+      - name: compose deploy guard regression tests
+        run: python3 scripts/test_sync_compose_guards.py
+
+      # AUT-5396: the nightly sync gate SKIPped two nights because the
+      # schedule dispatcher starts cron runs 2.6-4.2h late. The cron now
+      # fires at 12:30Z and the job sleeps to the 17:00Z window edge;
+      # this guard replays the wait step against synthetic clocks.
+      - name: nightly-hosted-sync wait step regression tests
+        run: python3 scripts/test_nightly_sync_wait.py -v
   # AUT-4718: the base-image CVE gate went red on `main` for a week because the
   # Dockerfile pin and the trivy scan env had drifted onto different nginx digests —
   # the gate was not scanning the image we build. This stdlib-only guard asserts the
@@ -234,7 +269,7 @@ jobs:
   # lacks a justification. No docker daemon needed.
   base-image-pins:
     name: base image pin consistency
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, vm2]
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4

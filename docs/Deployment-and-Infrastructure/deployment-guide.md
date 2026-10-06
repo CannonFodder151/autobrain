@@ -87,7 +87,7 @@ ever drift apart again.
 | Tier | URL | Host | Images |
 |------|-----|------|--------|
 | Demo | `demo.autobrainservice.app` | Portainer-Host | `cannonfodder151/autobrain-*:latest`, frontend `:demo` |
-| Default | `default.autobrainservice.app` | Portainer-Host | `cannonfodder151/autobrain-*:latest`, frontend `:default` |
+| Default | `default.autobrainservice.app` | Portainer-Host | Portainer stack `autobrain-default` (`docker-compose.default.yml`), all images digest-pinned |
 | Hosted | `hosted.autobrainservice.app` | Oracle Cloud VM | `cannonfodder151/autobrain-*:hosted`, worker `:hosted` |
 
 All three tiers run as standalone Portainer stacks with prebuilt images pulled
