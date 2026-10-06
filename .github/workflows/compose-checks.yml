@@ -4,6 +4,11 @@ name: Compose structural checks
 # nothing ran them. Any change to a compose file or to a check script must now
 # pass them. Kept separate from ci-tests.yml (that one installs the full backend
 # dependency tree; these checks only need pyyaml).
+#
+# AUT-5755: this workflow also owns scripts/check-pr-runner-posture.py, which
+# fails the build if any `pull_request` job drops its fork-PR guard and starts
+# targeting a persistent self-hosted runner again. `.github/workflows/**` is in
+# the path filter so editing a workflow is enough to re-arm the check.
 
 on:
   pull_request:
@@ -11,16 +16,16 @@ on:
       - "docker-compose*.yml"
       - "scripts/check-*.py"
       - "scripts/seed-secrets.sh"
-      - "scripts/test_check_compose_config.py"
-      - ".github/workflows/compose-checks.yml"
+      - "scripts/test_check_*_*.py"
+      - ".github/workflows/**"
   push:
     branches: [main]
     paths:
       - "docker-compose*.yml"
       - "scripts/check-*.py"
       - "scripts/seed-secrets.sh"
-      - "scripts/test_check_compose_config.py"
-      - ".github/workflows/compose-checks.yml"
+      - "scripts/test_check_*_*.py"
+      - ".github/workflows/**"
 
 permissions:
   contents: read
@@ -28,6 +33,8 @@ permissions:
 jobs:
   compose-checks:
     name: compose-checks
+    # AUT-5755: fork PRs must never reach the self-hosted fleet.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, linux, x64, vm2]
     timeout-minutes: 5
     steps:
@@ -49,5 +56,7 @@ jobs:
             echo "::endgroup::"
           done
 
-      - name: Regression test for the compose check
-        run: python3 -m unittest scripts.test_check_compose_config -v
+      - name: Regression tests for the structural checks
+        run: |
+          python3 -m unittest scripts.test_check_compose_config -v
+          python3 -m unittest scripts.test_check_pr_runner_posture -v

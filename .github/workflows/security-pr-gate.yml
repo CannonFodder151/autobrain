@@ -35,6 +35,8 @@ jobs:
   # leak that reaches main is caught the moment it lands.
   gitleaks:
     name: Gitleaks — secret detection
+    # AUT-5755: fork PRs must never reach the self-hosted fleet.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, linux, x64]
     outputs:
       findings: ${{ steps.report.outputs.count }}
@@ -150,6 +152,8 @@ jobs:
   # security-scan.yml pin/image guards. Revisit when trivy ships compose support.
   trivy-config:
     name: Trivy config — Dockerfile misconfig
+    # AUT-5755: fork PRs must never reach the self-hosted fleet.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
@@ -195,6 +199,8 @@ jobs:
   # security-scan.yml for the same reason, so we know it works.
   pip-audit-direct:
     name: pip-audit — python dependency CVEs (direct deps)
+    # AUT-5755: fork PRs must never reach the self-hosted fleet.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
@@ -249,6 +255,8 @@ jobs:
   # venv creation, no ensurepip needed.
   pip-audit-resolved:
     name: pip-audit — resolved tree (transitive CVE drift, AUT-1189)
+    # AUT-5755: fork PRs must never reach the self-hosted fleet.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, linux, x64, vm2]
     steps:
       - uses: actions/checkout@v4
@@ -281,6 +289,8 @@ jobs:
   # ecosystem-aware vuln source for Dart/Flutter), gated to fail on HIGH/CRITICAL.
   flutter-audit:
     name: Flutter — osv-scanner (pubspec.lock)
+    # AUT-5755: fork PRs must never reach the self-hosted fleet.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
@@ -327,6 +337,8 @@ jobs:
   # until production hits the empty field.
   compose-config-diff:
     name: "Compose config diff — env-var rename detector (AUT-2390)"
+    # AUT-5755: fork PRs must never reach the self-hosted fleet.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
@@ -508,6 +520,8 @@ jobs:
   # `:latest` tags cannot re-appear in compose without a digest pin.
   pin-guard:
     name: "Pin guard — every compose image: must carry @sha256"
+    # AUT-5755: fork PRs must never reach the self-hosted fleet.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@v4
@@ -544,7 +558,8 @@ jobs:
           echo "OK: every compose image: reference carries an @sha256 digest (AUT-1881)."
   report-status:
     name: Report gate result to Discord #status
-    if: always()
+    # AUT-5755: fork PRs must never reach the self-hosted fleet.
+    if: (always()) && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     needs: [gitleaks, trivy-config, pip-audit-direct, pip-audit-resolved, flutter-audit, compose-config-diff, pin-guard]
     runs-on: [self-hosted, linux, x64]
     steps:

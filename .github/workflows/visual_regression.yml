@@ -19,6 +19,8 @@ permissions:
 jobs:
   desktop-tests:
     name: Desktop layout — ${{ matrix.width }}
+    # AUT-5755: fork PRs must never reach the self-hosted fleet.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, linux, x64, vm2]
     strategy:
       fail-fast: false

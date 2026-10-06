@@ -31,6 +31,8 @@ jobs:
     # non-blocking (continue-on-error + 10min step timeout + AUT-1814
     # auto-approve + AUT-1805 15min job timeout), so a 9Router stall or
     # runner hang degrades to a neutral advisory, never a block.
+    # AUT-5755: fork PRs must never reach the self-hosted fleet.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, linux, x64]
     permissions:
       contents: read
