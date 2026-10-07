@@ -431,8 +431,6 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
 
   void _openFilter() {
     String fuel = _selectedFuelType ?? (_fuelTypes.isNotEmpty ? _fuelTypes.first : '91');
-// Filter now only fuel type; distance removed
-    String fuel = _selectedFuelType ?? (_fuelTypes.isNotEmpty ? _fuelTypes.first : '91');
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1137,7 +1135,7 @@ class _ServoSpyListState extends State<_ServoSpyList> {
     }
   }
 
-void _openFilter() {
+  void _openFilter() {
     String fuel = _selectedFuelType ?? (_fuelTypes.isNotEmpty ? _fuelTypes.first : '91');
     ServoSortMetric metric = _sortMetric;
 
