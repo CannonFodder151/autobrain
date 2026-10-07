@@ -12,6 +12,7 @@ on:
       - "scripts/check-*.py"
       - "scripts/seed-secrets.sh"
       - "scripts/test_check_compose_config.py"
+      - "scripts/test_check_demo_compose.py"
       - ".github/workflows/compose-checks.yml"
   push:
     branches: [main]
@@ -20,6 +21,7 @@ on:
       - "scripts/check-*.py"
       - "scripts/seed-secrets.sh"
       - "scripts/test_check_compose_config.py"
+      - "scripts/test_check_demo_compose.py"
       - ".github/workflows/compose-checks.yml"
 
 permissions:
@@ -48,6 +50,14 @@ jobs:
             python3 "$f"
             echo "::endgroup::"
           done
+        # AUT-5686: check_demo_compose.py is the only check that needs the
+        # compose file + an env file, so it is invoked with its args here and
+        # excluded from the bare loop above (it now takes optional args).
 
-      - name: Regression test for the compose check
-        run: python3 -m unittest scripts.test_check_compose_config -v
+      - name: Check the demo compose is deployable as written
+        run: |
+          set -e
+          python3 scripts/check_demo_compose.py docker-compose.demo.yml .env.example
+
+      - name: Regression test for the compose checks
+        run: python3 -m unittest scripts.test_check_compose_config scripts.test_check_demo_compose -v
