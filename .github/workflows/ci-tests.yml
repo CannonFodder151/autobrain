@@ -86,7 +86,7 @@ jobs:
           MINIO_SECRET_KEY: "ci-test-minio-secret-key"
           MINIO_BUCKET: "ci-test-minio-bucket"
         run: |
-          pytest -v --maxfail=1 --tb=short || true
+          pytest -v --maxfail=1 --tb=short
 
       - name: Notify Discord on failure
         if: failure()
