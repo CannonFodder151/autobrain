@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-5936)
+- fix(frontend): `favourite_stations_screen.dart` referenced `FuelPriceWatchlist` without importing `core/models.dart`, causing a compile error (`Type 'FuelPriceWatchlist' not found`) that failed the visual-regression CI on branches `fix/aut-5920-pr-based-pin-bumps` and `AUT-4556-servo-saver-map-improvements`. Added the missing import.
+
 ### Changed (AUT-4556)
 - feat(frontend): servo-spy map improvements — removed the distance slider, added station clustering (nearby stations grouped on the map), and added a Favourites tab to view saved fuel stations.
 

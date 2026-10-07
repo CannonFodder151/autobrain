@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/api_client.dart';
 import '../../core/auth_state.dart';
+import '../../core/models.dart';
 import '../../services/fuel_prices_api.dart';
 import 'servo_spy_station_history_screen.dart';
 
