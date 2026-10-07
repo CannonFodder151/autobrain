@@ -92,6 +92,47 @@ def _to_text(entity_type: str, data: dict) -> str:
         ]
         return " ".join(p for p in parts if p)
 
+    if entity_type == "fuel_price":
+        return " ".join(
+            p for p in [
+                data.get("state", ""),
+                data.get("station_name", ""),
+                data.get("brand", ""),
+                data.get("fuel_type", ""),
+                str(data.get("price", "")),
+            ]
+            if p
+        )
+
+    if entity_type == "device":
+        return " ".join(
+            p for p in [
+                data.get("name", ""),
+            ]
+            if p
+        )
+
+    if entity_type == "market_listing":
+        return " ".join(
+            p for p in [
+                data.get("make", ""),
+                data.get("model", ""),
+                str(data.get("year", "")),
+            ]
+            if p
+        )
+
+    if entity_type == "vehicle":
+        return " ".join(
+            p for p in [
+                data.get("nickname", ""),
+                data.get("make", ""),
+                data.get("model", ""),
+                str(data.get("year", "")),
+            ]
+            if p
+        )
+
     return ""
 
 
