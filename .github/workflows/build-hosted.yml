@@ -608,3 +608,4 @@ jobs:
             --stack autobrain-hosted \
             --endpoint 5 \
             --file docker-compose.hosted.yml
+# trigger
