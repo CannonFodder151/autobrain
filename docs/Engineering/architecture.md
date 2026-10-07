@@ -35,12 +35,13 @@
 - **Prod:** `docker-compose.prod.yml` behind nginx frontend container. Backend
   image runs API + AI gateway + Celery worker+beat in one container (see
   `docker/backend/Dockerfile`).
-- **Hosted:** `docker-compose.hosted.yml` — 10 containers (postgres, redis, minio,
-  backend, dongle-server, frontend, hub, 9router, backup, gh-runner).
+- **Hosted:** `docker-compose.hosted.yml` — 9 containers (postgres, redis, minio,
+  backend, dongle-server, frontend, hub, 9router, backup).
   Prebuilt GHCR images (multi-arch amd64+arm64), Stripe billing, self-service
   signup, Portainer-managed on Oracle Cloud ARM64. The AI gateway runs inside
   the `backend` container on :8001 (AUT-3153); market-data scraper runs as Celery
-  tasks in backend (AUT-3810). All services run as non-root (uid 1000).
+  tasks in backend (AUT-3810). Application services run as non-root (backend/ai as
+  `autobrain` uid 1000, frontend as `nginx`).
 - **Kubernetes:** `infra/k8s/*` deployments + services + secrets.
 - **Bare metal:** `infra/systemd/*` units (container-backed).
 
