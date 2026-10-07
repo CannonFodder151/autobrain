@@ -60,7 +60,10 @@ jobs:
     # stay pinned to the Oracle VM arm64 runner below.
     # AUT-5186: a schedule run lands on refs/heads/main too, so exclude it
     # explicitly — the nightly sync must not cut a release.
-    if: github.event_name != 'pull_request' && github.event_name != 'schedule' && github.ref == 'refs/heads/main'
+    # AUT-5904: skip this job (and thus the whole workflow) when the push is a
+    # pin bump commit (compose-pin or k8s-pin) or an auto-bump commit so we
+    # don't re-build images.
+    if: github.event_name != 'pull_request' && github.event_name != 'schedule' && github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, 'chore: bump hosted compose pins') && !contains(github.event.head_commit.message, 'chore: bump k8s image pins') && !contains(github.event.head_commit.message, 'chore: release') && !contains(github.event.head_commit.message, 'auto-bump')
     runs-on: [self-hosted, linux, x64, vm2]
     permissions:
       contents: write
@@ -395,18 +398,16 @@ jobs:
           set -euo pipefail
           git add docker-compose.hosted.yml
           git diff --cached --quiet && { echo "==> no staged changes — skipping"; exit 0; }
-          git commit -m "chore: bump hosted compose pins to freshly built digests [skip ci]"
-          # AUT-5669: main is branch-protected and requires the
-          # changelog-gate status check. This bump commit is [skip ci], so
-          # that check cannot report on it and the app GITHUB_TOKEN push was
-          # rejected with GH006 on every run — while the retry loop below
-          # swallowed the rejection and the job went green, leaving :hosted
-          # moving and the pin frozen. Push with the admin PAT instead:
-          # enforce_admins is off, so an admin credential bypasses required
-          # checks, and [skip ci] keeps the bump from re-triggering the 13
-          # workflows that run on a push to main.
-          # http.extraheader is passed per-invocation with -c, so the token is
-          # never persisted into .git/config.
+          git commit -m "chore: bump hosted compose pins to freshly built digests"
+          # AUT-5904: main is branch-protected and requires the changelog-gate
+          # status check. Previously this commit used [skip ci] to avoid
+          # re-triggering the workflow, but that caused GH006 because the
+          # required check never runs on [skip ci] commits. Now we omit
+          # [skip ci] and instead skip the workflow via the auto-bump job's
+          # `if` condition when the commit message contains this string.
+          # Push with the admin PAT (enforce_admins=false so admin bypasses
+          # required checks). http.extraheader is passed per-invocation with -c,
+          # so the token is never persisted into .git/config.
           auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_PAT" | base64 -w0)"
           for i in 1 2 3; do
             push_output=$(git -c "http.extraheader=${auth}" push origin main 2>&1)
@@ -415,14 +416,9 @@ jobs:
               echo "==> compose pins pushed"
               exit 0
             fi
-            # AUT-5852: if push fails due to branch protection (GH006), don't fail
-            # the workflow — the pin bump commit is ready but cannot land on main
-            # because [skip ci] bypasses required status checks. Log a warning and
-            # succeed so the next run can retry. The :hosted tag already has the
-            # correct digest from build-manifest.
             if echo "$push_output" | grep -q "GH006"; then
-              echo "::warning::push rejected by branch protection (GH006) — pin bump commit staged locally but not on main; will retry on next run"
-              exit 0
+              echo "::error::push rejected by branch protection (GH006) — admin PAT should bypass with enforce_admins=false"
+              exit 1
             fi
             echo "==> push failed — rebasing onto main and retrying ($i/3)"
             echo "$push_output"
@@ -430,9 +426,6 @@ jobs:
             git add docker-compose.hosted.yml
             git commit --amend --no-edit || true
           done
-          # AUT-5669: the old loop ended here on a successful
-          # `git commit --amend`, so the job reported success with the bump
-          # never on main. Fail loudly instead.
           echo "::error::could not push the hosted compose pin bump after 3 attempts — docker-compose.hosted.yml on main is now behind the :hosted tag (AUT-5669)"
           exit 1
 
@@ -509,9 +502,10 @@ jobs:
           set -euo pipefail
           git add infra/k8s/ai.yaml infra/k8s/backend.yaml infra/k8s/frontend.yaml infra/k8s/worker.yaml
           git diff --cached --quiet && { echo "==> no staged changes — skipping"; exit 0; }
-          git commit -m "chore: bump k8s image pins to freshly built digests [skip ci]"
-          # AUT-5669: same admin-credential push, and the same GH006 that
-          # was being swallowed — see the compose-pin step for the detail.
+          git commit -m "chore: bump k8s image pins to freshly built digests"
+          # AUT-5904: same fix as compose-pin — omit [skip ci] so the required
+          # changelog-gate check runs, and skip the workflow via the auto-bump
+          # job's `if` condition when the commit message contains this string.
           auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_PAT" | base64 -w0)"
           for i in 1 2 3; do
             push_output=$(git -c "http.extraheader=${auth}" push origin main 2>&1)
@@ -520,12 +514,9 @@ jobs:
               echo "==> k8s pins pushed"
               exit 0
             fi
-            # AUT-5852: GH006 branch-protection rejection is not a failure here —
-            # the bump commit is [skip ci] so required status checks cannot run
-            # on it. Warn and succeed; the next run retries.
             if echo "$push_output" | grep -q "GH006"; then
-              echo "::warning::push rejected by branch protection (GH006) — k8s pin bump commit staged locally but not on main; will retry on next run"
-              exit 0
+              echo "::error::push rejected by branch protection (GH006) — admin PAT should bypass with enforce_admins=false"
+              exit 1
             fi
             echo "==> push failed — rebasing onto main and retrying ($i/3)"
             echo "$push_output"
