@@ -14,6 +14,16 @@ on:
 permissions:
   contents: read
 
+# The two nginx guards below are path-filtered: they only need to run when the
+# trust boundary (docker/frontend/*.conf) or the guard itself changes. A stale
+# Cloudflare range list is inert (the real peer is the docker-bridge proxy), so
+# the drift check must not silently skip on an unrelated PR.
+
+# Digest-pinned frontend nginx image — same pin as trivy-image-scan.yml; the
+# `nginx -t` job validates config syntax against the image that actually ships.
+env:
+  NGINX_FRONTEND_IMAGE: 'nginxinc/nginx-unprivileged:stable-alpine@sha256:ed04ec1ff34502c339ee5c3ae3f855442398edc1d05591e2b98981dcbbd20b1e'
+
 # Never let two runs of the same ref race; newest wins (same pattern as the
 # other security workflows).
 concurrency:
@@ -542,17 +552,116 @@ jobs:
             exit 1
           fi
           echo "OK: every compose image: reference carries an @sha256 digest (AUT-1881)."
+
+  # (7) AUT-5695: Cloudflare edge-range drift guard. The `set_real_ip_from`
+  # list in docker/frontend/nginx.conf + nginx-proxy.conf is a hand-copied
+  # mirror of https://www.cloudflare.com/ips-v4 + ips-v6. It already drifted
+  # once on main (198.41.128.0/17 was missing) and the stale list is inert
+  # because the real peer is the docker-bridge proxy — so the AUT-3858/AUT-5460
+  # login lockout silently re-opens instead of failing loudly. This job diffs
+  # the confs against the LIVE ranges so a stale list blocks the merge.
+  cf-ips-drift-guard:
+    name: "Cloudflare edge-range drift guard (AUT-5695)"
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Gate — only when the trust boundary or the guard changes
+        id: gate
+        run: |
+          set -uo pipefail
+          # schedule / workflow_dispatch have no diff range — the guard must run
+          # unconditionally on those triggers (that is the whole point: catch
+          # drift on main), so short-circuit to run=true before the range logic.
+          case "${{ github.event_name }}" in
+            schedule|workflow_dispatch) echo "run=true — no diff range on this trigger" >> "$GITHUB_OUTPUT"; exit 0 ;;
+          esac
+          BASE="${{ github.event.pull_request.base.sha || github.event.before }}"
+          if [ -z "$BASE" ]; then BASE="$(git merge-base HEAD origin/main 2>/dev/null || echo HEAD~1)"; fi
+          CHANGED="$(git --name-only "$BASE" "${{ github.sha }}" 2>/dev/null || true)"
+          [ -z "$CHANGED" ] && CHANGED="$(git --name-only HEAD~1 HEAD 2>/dev/null || true)"
+          RELEVANT="$(printf '%s\n' "$CHANGED" | grep -E '^(docker/frontend/(nginx\.conf|nginx-proxy\.conf|security-headers\.inc)|scripts/cf-ips-diff\.sh|scripts/test_cf_ips_diff\.py|backend/tests/test_aut5460_cf_real_ip\.py)' || true)"
+          if [ -z "$RELEVANT" ]; then
+            echo "run=false — no trust-boundary or guard changes" >&2
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "run=true" >> "$GITHUB_OUTPUT"
+          echo "changed: $(printf '%s\n' "$CHANGED" | tr '\n' ' ')"
+      - name: Diff set_real_ip_from against live Cloudflare ranges
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          bash scripts/cf-ips-diff.sh
+
+  # (8) AUT-5695: `nginx -t` against the shipped frontend image. No CI job ever
+  # validated nginx config syntax, which is how a dead second copy of the trust
+  # boundary (docker/frontend/nginx-proxy.conf, referenced by nothing) sat in
+  # the repo for months. A syntax error, a typo'd directive, or a config that
+  # no longer matches the image must fail the gate — not ship.
+  nginx-config-syntax:
+    name: "nginx -t against the frontend image (AUT-5695)"
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Gate — only when the trust boundary or the image changes
+        id: gate
+        run: |
+          set -uo pipefail
+          # schedule / workflow_dispatch have no diff range — the syntax check
+          # must run unconditionally on those triggers (catches a broken conf
+          # on main before the next deploy).
+          case "${{ github.event_name }}" in
+            schedule|workflow_dispatch) echo "run=true — no diff range on this trigger" >> "$GITHUB_OUTPUT"; exit 0 ;;
+          esac
+          BASE="${{ github.event.pull_request.base.sha || github.event.before }}"
+          if [ -z "$BASE" ]; then BASE="$(git merge-base HEAD origin/main 2>/dev/null || echo HEAD~1)"; fi
+          CHANGED="$(git --name-only "$BASE" "${{ github.sha }}" 2>/dev/null || true)"
+          [ -z "$CHANGED" ] && CHANGED="$(git --name-only HEAD~1 HEAD 2>/dev/null || true)"
+          RELEVANT="$(printf '%s\n' "$CHANGED" | grep -E '^(docker/frontend/|docker/frontend/Dockerfile)' || true)"
+          if [ -z "$RELEVANT" ]; then
+            echo "run=false — no frontend config/image changes" >&2
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "run=true" >> "$GITHUB_OUTPUT"
+          echo "changed: $(printf '%s\n' "$CHANGED" | tr '\n' ' ')"
+      - name: Pull digest-pinned frontend nginx image
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          docker pull "$NGINX_FRONTEND_IMAGE"
+      - name: nginx -t (config syntax + includes)
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          # The image's default.conf is overwritten by the repo's config; the
+          # include path must match what the Dockerfile lays down, or this
+          # check validates the wrong file. Run nginx -t inside the image with
+          # the repo's conf + security-headers include mounted in.
+          docker run --rm \
+            -v "$PWD/docker/frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro" \
+            -v "$PWD/docker/frontend/security-headers.inc:/etc/nginx/conf.d/security-headers.inc:ro" \
+            "$NGINX_FRONTEND_IMAGE" \
+            nginx -t
   report-status:
     name: Report gate result to Discord #status
     if: always()
-    needs: [gitleaks, trivy-config, pip-audit-direct, pip-audit-resolved, flutter-audit, compose-config-diff, pin-guard]
+    needs: [gitleaks, trivy-config, pip-audit-direct, pip-audit-resolved, flutter-audit, compose-config-diff, pin-guard, cf-ips-drift-guard, nginx-config-syntax]
     runs-on: [self-hosted, linux, x64]
     steps:
       - name: Report to Discord #status
         env:
-          RESULT: ${{ needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit-direct.result == 'success' && needs.pip-audit-resolved.result == 'success' && needs.flutter-audit.result == 'success' && needs.compose-config-diff.result == 'success' && needs.pin-guard.result == 'success' && 'clean' || 'findings' }}
-          COLOR: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit-direct.result == 'success' && needs.pip-audit-resolved.result == 'success' && needs.flutter-audit.result == 'success' && needs.compose-config-diff.result == 'success' && needs.pin-guard.result == 'success') && '0x57F287' || '0xED4245' }}
-          TITLE: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit-direct.result == 'success' && needs.pip-audit-resolved.result == 'success' && needs.flutter-audit.result == 'success' && needs.compose-config-diff.result == 'success' && needs.pin-guard.result == 'success') && 'PR security gate clean' || 'PR security gate found issues' }}
+          # The two AUT-5695 jobs are path-gated: on an unrelated PR they exit 0 early
+# and report `skipped`, which is NOT a failure. Treat `skipped` as clean for
+# these two only — every other job must be an explicit `success` (a skipped
+# gitleaks run would mean the secret scan never ran, which is a real miss).
+          RESULT: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit-direct.result == 'success' && needs.pip-audit-resolved.result == 'success' && needs.flutter-audit.result == 'success' && needs.compose-config-diff.result == 'success' && needs.pin-guard.result == 'success' && (needs.cf-ips-drift-guard.result == 'success' || needs.cf-ips-drift-guard.result == 'skipped') && (needs.nginx-config-syntax.result == 'success' || needs.nginx-config-syntax.result == 'skipped')) && 'clean' || 'findings' }}
+          COLOR: ${{ ((needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit-direct.result == 'success' && needs.pip-audit-resolved.result == 'success' && needs.flutter-audit.result == 'success' && needs.compose-config-diff.result == 'success' && needs.pin-guard.result == 'success' && (needs.cf-ips-drift-guard.result == 'success' || needs.cf-ips-drift-guard.result == 'skipped') && (needs.nginx-config-syntax.result == 'success' || needs.nginx-config-syntax.result == 'skipped'))) && '0x57F287' || '0xED4245' }}
+          TITLE: ${{ ((needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit-direct.result == 'success' && needs.pip-audit-resolved.result == 'success' && needs.flutter-audit.result == 'success' && needs.compose-config-diff.result == 'success' && needs.pin-guard.result == 'success' && (needs.cf-ips-drift-guard.result == 'success' || needs.cf-ips-drift-guard.result == 'skipped') && (needs.nginx-config-syntax.result == 'success' || needs.nginx-config-syntax.result == 'skipped'))) && 'PR security gate clean' || 'PR security gate found issues' }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           GITLEAKS_FINDINGS: ${{ needs.gitleaks.outputs.findings || 'n/a' }}
         run: |

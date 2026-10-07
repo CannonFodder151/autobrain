@@ -12,6 +12,7 @@ on:
       - "scripts/check-*.py"
       - "scripts/seed-secrets.sh"
       - "scripts/test_check_compose_config.py"
+      - "scripts/test_check_demo_compose.py"
       - ".github/workflows/compose-checks.yml"
   push:
     branches: [main]
@@ -20,6 +21,7 @@ on:
       - "scripts/check-*.py"
       - "scripts/seed-secrets.sh"
       - "scripts/test_check_compose_config.py"
+      - "scripts/test_check_demo_compose.py"
       - ".github/workflows/compose-checks.yml"
 
 permissions:
@@ -51,3 +53,6 @@ jobs:
 
       - name: Regression test for the compose check
         run: python3 -m unittest scripts.test_check_compose_config -v
+
+      - name: Regression test for the demo compose check
+        run: python3 -m unittest scripts.test_check_demo_compose -v
