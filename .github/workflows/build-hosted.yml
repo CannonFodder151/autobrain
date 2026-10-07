@@ -63,7 +63,7 @@ jobs:
     # AUT-5904: skip this job (and thus the whole workflow) when the push is a
     # pin bump commit (compose-pin or k8s-pin) or an auto-bump commit so we
     # don't re-build images.
-    if: github.event_name != 'pull_request' && github.event_name != 'schedule' && github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, 'chore: bump hosted compose pins') && !contains(github.event.head_commit.message, 'chore: bump k8s image pins') && !contains(github.event.head_commit.message, 'chore: release') && !contains(github.event.head_commit.message, 'auto-bump')
+    if: "github.event_name != 'pull_request' && github.event_name != 'schedule' && github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, 'chore: bump hosted compose pins') && !contains(github.event.head_commit.message, 'chore: bump k8s image pins') && !contains(github.event.head_commit.message, 'chore: release') && !contains(github.event.head_commit.message, 'auto-bump')"
     runs-on: [self-hosted, linux, x64, vm2]
     permissions:
       contents: write
