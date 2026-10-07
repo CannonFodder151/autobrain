@@ -36,7 +36,7 @@ jobs:
         run: npm install -g @nanonets/graft
 
       - name: Build Graft graph
-        run: graft build --no-refresh
+        run: graft build
 
       - name: Check Graft freshness
-        run: graft check --no-refresh
+        run: graft check
