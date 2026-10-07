@@ -77,18 +77,12 @@ if [[ "$COMMIT" == "1" ]]; then
   echo "==> committed v$NEXT"
   # Tag the release commit so `git tag --list` and the GitHub releases API
   # can see a real v* tag instead of just a CHANGELOG line (AUT-2055).
+  # AUT-5928: the tag is created locally only; the workflow pushes it after
+  # the PR merges (the PR-based flow cannot push tags to main directly).
   if git tag -l "v$NEXT" | grep -q .; then
     echo "==> tag v$NEXT already exists — skipping"
   else
     git tag -a "v$NEXT" -m "Release v$NEXT (auto-bump, AUT-2055)" HEAD
     echo "==> tagged v$NEXT"
-    # Auto-push the tag if we have push access. If the push fails (shallow
-    # clone, no auth), the publish workflow falls back to creating the
-    # release via the GitHub API (see dockerhub-publish.yml).
-    if git push origin "v$NEXT" 2>/dev/null; then
-      echo "==> pushed tag v$NEXT"
-    else
-      echo "==> tag push failed (will be created via API in publish workflow)"
-    fi
   fi
 fi
