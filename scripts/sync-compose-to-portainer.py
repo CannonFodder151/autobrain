@@ -77,11 +77,15 @@ def report(args, content, services):
         print(f"ERROR: stack {args.stack!r} deployed but is NOT healthy:", file=sys.stderr)
         for name, why in problems:
             print(f"  {name}: {why}", file=sys.stderr)
-        print("RECOVERY (destructive — run by hand):\n"
-              f"  curl -X DELETE \"{args.portainer_url}/api/endpoints/"
-              f"{args.endpoint}/docker/containers/<NAME>?force=true&v=true\" \\\n"
-              "    -H \"X-API-Key: $PORTAINER_API_KEY\"\n"
-              "then re-run this script (or redeploy the stack from Portainer).",
+        print("RECOVERY (destructive — run by hand):", file=sys.stderr)
+        for name, why in problems:
+            if name:
+                print(
+                    f"  curl -X DELETE \"{args.portainer_url}/api/endpoints/"
+                    f"{args.endpoint}/docker/containers/{name}?force=true&v=true\" \\\n"
+                    "    -H \"X-API-Key: $PORTAINER_API_KEY\"",
+                    file=sys.stderr)
+        print("then re-run this script (or redeploy the stack from Portainer).",
               file=sys.stderr)
         return 6
 
@@ -445,10 +449,14 @@ def main():
                   f"{', '.join(str(p) for p in ports)} that the new compose "
                   f"needs, but {svc!r} is not a service in the incoming compose",
                   file=sys.stderr)
-        print("RECOVERY (destructive — run by hand, then re-run this sync):\n"
-              f"  curl -X DELETE \"{args.portainer_url}/api/endpoints/"
-              f"{args.endpoint}/docker/containers/<NAME>?force=true&v=true\" \\\n"
-              f"    -H \"X-API-Key: $PORTAINER_API_KEY\"", file=sys.stderr)
+        print("RECOVERY (destructive — run by hand, then re-run this sync):",
+              file=sys.stderr)
+        for name, svc, ports in clashes:
+            print(
+                f"  curl -X DELETE \"{args.portainer_url}/api/endpoints/"
+                f"{args.endpoint}/docker/containers/{name}?force=true&v=true\" \\\n"
+                f"    -H \"X-API-Key: $PORTAINER_API_KEY\"",
+                file=sys.stderr)
         return 5
 
     body = {
