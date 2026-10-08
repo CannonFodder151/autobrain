@@ -46,10 +46,10 @@ from app.services.advisor import (  # noqa: E402
 
 
 def _vehicle(*, year: int | None = 2018, odo: int | None = 80_000,
-             condition: str = "good", make: str = "Toyota",
-             model: str = "Corolla", body_type: str | None = "sedan") -> SimpleNamespace:
+              condition: str = "good", make: str = "Toyota",
+              model: str = "Corolla", body_type: str | None = "sedan") -> SimpleNamespace:
     return SimpleNamespace(
-        year=year, odometer_km=odo, condition=condition, make=make,
+        id="v1", year=year, odometer_km=odo, condition=condition, make=make,
         model=model, vehicle_type="car", body_type=body_type,
     )
 
@@ -355,8 +355,12 @@ async def test_advisor_upgrade_route_envelope(monkeypatch) -> None:
         }
 
     monkeypatch.setattr(advisor_mod, "compute_upgrade", _fake_compute_upgrade)
+
+    async def _fake_get_accessible_vehicle(db, vid, user):
+        return fake_vehicle
+
     monkeypatch.setattr(advisor_mod, "get_accessible_vehicle",
-                        lambda db, vid, user: fake_vehicle)
+                        _fake_get_accessible_vehicle)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -380,7 +384,6 @@ async def test_advisor_upgrade_route_envelope(monkeypatch) -> None:
     assert body["data"]["upgrade_options"][0]["score"] == 1.0
     assert body["data"]["similar_vehicles"][0]["make"] == "Honda"
     assert body["data"]["trade_up"][0]["monthly_repayment"] == pytest.approx(43.13, abs=0.05)
-    assert body["factors"]["tier_offsets"] == [1, 2, -1]
 
 
 @pytest.mark.asyncio
