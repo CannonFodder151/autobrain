@@ -437,13 +437,14 @@ class _FakeMarketResult:
 async def test_find_upgrade_options_uses_cached_medians(monkeypatch) -> None:
     """Pure-helper test: monkeypatch get_market_data so no real DB / provider."""
     from app.services import advisor as advisor_mod
+    import app.services.market_data as market_data_mod
 
     v = _vehicle(year=date_now_year() - 4)
 
     async def _fake_market(db, make, model, year, vt):
         return _FakeMarketResult(median=20_000 if year == v.year else 22_000).__dict__
 
-    monkeypatch.setattr(advisor_mod, "get_market_data", _fake_market)
+    monkeypatch.setattr(market_data_mod, "get_market_data", _fake_market)
 
     options = await advisor_mod.find_upgrade_options(None, v)
     assert len(options) == 3  # +1, +2, -1
@@ -460,13 +461,14 @@ async def test_find_upgrade_options_uses_cached_medians(monkeypatch) -> None:
 @pytest.mark.asyncio
 async def test_find_upgrade_options_returns_note_when_no_market_data(monkeypatch) -> None:
     from app.services import advisor as advisor_mod
+    import app.services.market_data as market_data_mod
 
     v = _vehicle(year=date_now_year() - 2)
 
     async def _fake_market(db, make, model, year, vt):
         return {"median_price": None, "note": "no listings"}
 
-    monkeypatch.setattr(advisor_mod, "get_market_data", _fake_market)
+    monkeypatch.setattr(market_data_mod, "get_market_data", _fake_market)
 
     options = await advisor_mod.find_upgrade_options(None, v)
     assert len(options) == 3
@@ -492,13 +494,14 @@ async def test_find_upgrade_options_empty_when_make_or_model_missing() -> None:
 @pytest.mark.asyncio
 async def test_find_similar_vehicles_excludes_own_make_model(monkeypatch) -> None:
     from app.services import advisor as advisor_mod
+    import app.services.market_data as market_data_mod
 
     v = _vehicle(make="Toyota", model="Corolla", year=date_now_year() - 4)
 
     async def _fake_market(db, make, model, year, vt):
         return {"median_price": 20_000 if year == v.year else 22_000}
 
-    monkeypatch.setattr(advisor_mod, "get_market_data", _fake_market)
+    monkeypatch.setattr(market_data_mod, "get_market_data", _fake_market)
 
     # Build a fake session whose scalars() returns two Honda rows + one Toyota.
     class _Scalars:
@@ -572,13 +575,16 @@ def test_enforce_entitlement_allows_paid_user_and_demo() -> None:
 @pytest.mark.asyncio
 async def test_compute_upgrade_returns_empty_when_no_market_data(monkeypatch) -> None:
     from app.services import advisor as advisor_mod
+    import app.services.market_data as market_data_mod
+    import app.services.advisor.value as value_mod
 
     v = _vehicle()
 
     async def _fake_market(db, make, model, year, vt):
         return {"median_price": None, "note": "no listings"}
 
-    monkeypatch.setattr(advisor_mod, "get_market_data", _fake_market)
+    monkeypatch.setattr(market_data_mod, "get_market_data", _fake_market)
+    monkeypatch.setattr(value_mod, "get_market_data", _fake_market)
 
     plan = await advisor_mod.compute_upgrade(None, v)
     assert plan["current_value"] is None
@@ -594,13 +600,16 @@ async def test_compute_upgrade_returns_empty_when_no_market_data(monkeypatch) ->
 @pytest.mark.asyncio
 async def test_compute_upgrade_propagates_finance_inputs(monkeypatch) -> None:
     from app.services import advisor as advisor_mod
+    import app.services.market_data as market_data_mod
+    import app.services.advisor.value as value_mod
 
     v = _vehicle(year=date_now_year() - 4)
 
     async def _fake_market(db, make, model, year, vt):
         return {"median_price": 20_000 if year == v.year else 22_000}
 
-    monkeypatch.setattr(advisor_mod, "get_market_data", _fake_market)
+    monkeypatch.setattr(market_data_mod, "get_market_data", _fake_market)
+    monkeypatch.setattr(value_mod, "get_market_data", _fake_market)
 
     class _EmptyScalars:
         def all(self):
