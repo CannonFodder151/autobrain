@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-4981)
+- fix(scripts): `sync-compose-to-portainer.py` exit-5 recovery command now interpolates the actual orphan container name(s) instead of printing a literal `<NAME>` placeholder. The delete URLs in the recovery instructions now substitute the real container names from the collision detection. `scripts/test_sync_compose_guards.py` asserts the interpolated names and that the placeholder is absent.
+
 ### Fixed (AUT-4812)
 - fix(backend): `tests/test_advisor_value.py` could not import `BAND_LOW_RATIO` / `BAND_HIGH_RATIO` from `app.services.advisor`, so the entire backend suite failed at collection — masked by `ci-tests.yml` running the suite as `pytest … || true`. The `app.services.advisor` package `__init__.py` already re-exports both constants from `advisor/value.py`; the stale `backend/app/services/advisor.py` module that shadowed the package is deleted (no imports referenced it). Removed `|| true` from the full-suite step in `.github/workflows/ci-tests.yml` so future collection errors fail the build. All 16 `test_advisor_value.py` tests pass; full suite collects without import errors.
 
