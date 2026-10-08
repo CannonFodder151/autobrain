@@ -63,12 +63,15 @@ Architecture Decision Records for AutoBrain. Newest first. Each entry is immutab
 
 **Context:** Nathan was being repeatedly asked to approve PRs. He does not approve PRs. PR review was a bottleneck.
 
-**Decision:** Every PR auto-merges (squash) once QA, Security, and OCR sign-off is clean. The PR Gardener performs the merge. PRs never route through `#approvals` or `request_confirmation` interactions. No issues titled "Approve" or "[Approval]" for PRs.
+**Decision:** Every PR is squash-merged once QA, Security, and OCR sign-off is clean. The PR Gardener performs the merge. PRs never route through `#approvals` or `request_confirmation` interactions. No issues titled "Approve" or "[Approval]" for PRs.
+
+**Amended (AUT-5561):** the merge is performed by the Paperclip gate script `merge-gated.mjs`, not by arming GitHub auto-merge. GitHub's own gate cannot express "QA **and** Security": `main` allows one approving review, so an armed auto-merge fires on a single role's approval. `allow_auto_merge` is therefore `false` on the repo, and the two-role requirement is enforced where it can be — in the gate script, which refuses unless both roles signed off at the exact current head from two distinct identities.
 
 **Consequences:**
 - Nathan's attention is reserved for genuine board decisions: budget, hires, contracts, major architecture, policy, incidents.
 - Approved PRs must be merged immediately — never left open.
 - PR Gardener skill is responsible for driving non-ready PRs back to green.
+- The gate is bound to the head SHA it verified, so a push after sign-off blocks the merge instead of riding along on a stale approval.
 
 ---
 
