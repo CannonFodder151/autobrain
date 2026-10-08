@@ -4,6 +4,12 @@ name: CI Triage Webhook
 # review the freshly settled workflow runs for failures (AUT-557).
 # The routine's execution issue is created by the Paperclip control plane
 # when the webhook fires; nothing in this job needs write access.
+#
+# CI_TRIAGE_WEBHOOK_URL points at the Paperclip routine trigger
+# (/api/routine-triggers/public/{publicId}/fire), which is the ONLY thing that
+# wakes the CI Triage Agent. The backend's POST /api/v1/ci/webhook receiver was
+# removed in AUT-5718 — it had no callers and answered 503 on Hosted. Do not
+# repoint this secret at the AutoBrain backend.
 
 on:
   push:
