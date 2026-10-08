@@ -26,7 +26,7 @@ from app.services.advisor.replace import (
     age_years,
     _clamp_horizon,
 )
-from app.services.market_data import get_market_data
+from app.services.advisor import get_market_data
 
 logger = get_logger(__name__)
 
