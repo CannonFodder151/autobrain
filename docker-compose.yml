@@ -105,6 +105,12 @@ services:
     command: ["sh", "-c", "alembic upgrade head && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload & uvicorn ai_app.main:app --host 0.0.0.0 --port 8001 --reload & wait"]
     volumes:
       - ./backend:/app
+    networks:
+      default:
+        # AUT-5623: the frontend proxies /ai/ to `ai:8001` (see
+        # docker/frontend/nginx.conf). The gateway is the `ai_app.main:app`
+        # co-process on :8001 in this container, so `ai` must resolve to it.
+        aliases: [backend, ai]
 
   frontend:
     build:
