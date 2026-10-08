@@ -6,6 +6,11 @@ Hosted-only. Nothing redeployed the EP2 stacks afterwards, so demo
 (demo.autobrainservice.app) went 502 and stayed down. This test fails if the
 chain is narrowed again, or if a tier loses its health URL (a tier with no
 health check is silently promoted through).
+
+AUT-5611: the Default tier's app services are now the `autobrain-default`
+Portainer stack (docker-compose.default.yml), not the old `autobrain` stack.
+The stack joins the /opt/autobrain-default compose project's network as
+external, so the database is not in scope of this stack's delete/prune.
 """
 import os
 import re
@@ -16,12 +21,12 @@ SCRIPT = os.path.join(REPO, "scripts", "upgrade-instances.sh")
 WORKFLOW = os.path.join(REPO, ".github", "workflows", "deploy-instances.yml")
 
 # name, Portainer endpoint id, health URL path — the board-mandated order (AUT-107).
+# AUT-5611: Default tier stack name is now `autobrain-default` (not `autobrain`).
 EXPECTED_CHAIN = [
     ("autobrain-demo", "2", "https://demo.autobrainservice.app/health"),
-    ("autobrain", "2", "https://default.autobrainservice.app/health"),
+    ("autobrain-default", "2", "https://default.autobrainservice.app/health"),
     ("autobrain-hosted", "5", "https://hosted.autobrainservice.app/health"),
 ]
-
 
 def _default_tiers(script: str):
     """Parse DEFAULT_TIERS out of the shell script into (name, endpoint, health)."""
@@ -36,16 +41,15 @@ def _default_tiers(script: str):
         tiers.append((name, endpoint, health))
     return tiers
 
-
 class TestUpgradeInstanceTiers(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
         with open(SCRIPT) as f:
-            cls.script = f.read()
+            TestUpgradeInstanceTiers.script = f.read()
         with open(WORKFLOW) as f:
             cls.workflow = f.read()
-        cls.tiers = _default_tiers(cls.script)
+        cls.tiers = _default_tiers(TestUpgradeInstanceTiers.script)
 
     def test_default_chain_is_demo_default_hosted_in_promotion_order(self):
         self.assertEqual(self.tiers, EXPECTED_CHAIN)
@@ -67,8 +71,7 @@ class TestUpgradeInstanceTiers(unittest.TestCase):
     def test_tiers_input_still_falls_back_to_the_full_chain(self):
         # TIERS="${UPGRADE_TIERS:-$DEFAULT_TIERS}" — a blank dispatch input must
         # NOT collapse the chain to nothing.
-        self.assertIn('TIERS="${UPGRADE_TIERS:-$DEFAULT_TIERS}"', self.script)
-
+        self.assertIn('TIERS="${UPGRADE_TIERS:-$DEFAULT_TIERS}"', TestUpgradeInstanceTiers.script)
 
 if __name__ == "__main__":
     unittest.main()

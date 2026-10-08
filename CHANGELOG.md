@@ -10,6 +10,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Fixed (AUT-5487)
+- fix(deploy): version parity gate now runs preflight **before** tier mutation (AUT-5455 gate hardening)
+  - `scripts/upgrade-instances.sh` runs `check_version_parity` on the current tier before `redeploy`, failing fast if drift would be introduced
+  - Post-redeploy promotion gate retained as a second line of defense
+  - `ALLOW_VERSION_DRIFT=1` escape hatch documented for emergency use
+  - Version comparison logic extracted to `scripts/version_parity.py` with polling retry (AUT-5487 finding #2)
+  - Added `scripts/test_version_parity.py` with 15 unit tests covering match/mismatch/missing/HTML/retry/path-prefix cases (AUT-5487 finding #3)
+- fix(test): updated `scripts/test_upgrade_instance_tiers.py` to assert `autobrain-default` stack name (AUT-5611)
 
 ## [0.3.308] - 2026-10-04
 
