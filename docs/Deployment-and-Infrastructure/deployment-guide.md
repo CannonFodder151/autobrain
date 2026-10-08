@@ -522,3 +522,92 @@ On Portainer: redeploy the previous stack definition / image tag. In a
 migration, keep the old host running and flip DNS back to roll back — see
 `server-migration.md`.
 
+## Admin password rotation (AUT-5135)
+
+The hosted super-admin account (`admin@autobrain.io`) is bootstrapped on first
+start via `ADMIN_EMAIL` / `ADMIN_INITIAL_PASSWORD` (or `ADMIN_INITIAL_PASSWORD_FILE`).
+That initial password is only used once — the bootstrap skips creation if the
+account already exists. If the password is lost or must be rotated, use the
+`admin_reset` CLI module inside the backend container. No SSH to the Oracle VM
+is required; the command runs via Portainer's container exec.
+
+### Prerequisites
+
+- The new password must be staged as a secret file at
+  `/data/autobrain/secrets/admin_new_password` on the Oracle VM (or wherever
+  `SECRETS_DIR` points). This follows the existing `*_FILE` pattern
+  (AUT-1533, `docker/lib-load-secrets.sh`).
+- The Portainer stack env for `autobrain-hosted` must already have
+  `ADMIN_EMAIL=admin@autobrain.io` (or the correct admin email) configured.
+
+### Procedure (via Portainer UI)
+
+1. Open Portainer → **Endpoints** → **5 = AutoBrain-Hosted** → **Containers**.
+2. Find the `backend` container for the `autobrain-hosted` stack.
+3. Click **Console** (or **Exec**) → start a shell (`/bin/sh` or `bash`).
+4. Run the reset command:
+
+```bash
+# Inside the backend container
+ADMIN_NEW_PASSWORD_FILE=/run/secrets/admin_new_password \
+python -m app.db.admin_reset
+```
+
+The secret file is bind-mounted at `/run/secrets/admin_new_password` by the
+`x-secrets` volume in `docker-compose.hosted.yml`. The command reads the
+password from that file, hashes it with bcrypt, updates the admin user, and
+increments `token_version` (revoking every existing session). Output is a JSON
+line:
+
+```json
+{"user_id":"...","email":"admin@autobrain.io","status":"reset"}
+```
+
+**The new password is never logged.** Record the outcome in the issue / `#updates`
+channel — do not paste the password anywhere.
+
+### Procedure (via Portainer API)
+
+```bash
+# From a host that can reach Portainer (CI runner, dev box, etc.)
+PORTAINER_URL=https://portainer.nathanmartina.com
+PORTAINER_API_KEY=<secret>
+
+# 1. Get the container ID for the hosted backend
+CONTAINER_ID=$(curl -s -H "X-API-Key: $PORTAINER_API_KEY" \
+  "$PORTAINER_URL/api/endpoints/5/docker/containers/json?filters=%7B%22label%22%3A%7B%22com.docker.compose.service%3Dbackend%22%3Atrue%7D%7D" \
+  | jq -r '.[0].Id')
+
+# 2. Create an exec instance
+EXEC_ID=$(curl -s -X POST -H "X-API-Key: $PORTAINER_API_KEY" \
+  "$PORTAINER_URL/api/endpoints/5/docker/containers/$CONTAINER_ID/exec" \
+  -H "Content-Type: application/json" \
+  -d '{"Cmd":["sh","-c","ADMIN_NEW_PASSWORD_FILE=/run/secrets/admin_new_password python -m app.db.admin_reset"],"AttachStdout":true,"AttachStderr":true}' \
+  | jq -r '.Id')
+
+# 3. Start the exec and capture output
+curl -s -X POST -H "X-API-Key: $PORTAINER_API_KEY" \
+  "$PORTAINER_URL/api/endpoints/5/docker/exec/$EXEC_ID/start" \
+  -H "Content-Type: application/json" \
+  -d '{"Detach":false,"Tty":false}'
+```
+
+### Verification
+
+After reset, verify the new password works by logging in at
+`https://hosted.autobrainservice.app` (or via `POST /api/v1/auth/login`).
+The old password will no longer be accepted; all prior sessions are revoked.
+
+### Security notes
+
+- The new password file should be generated with a CSPRNG:
+  `openssl rand -base64 32 > /data/autobrain/secrets/admin_new_password`
+- After a successful reset, **delete or rotate the secret file** so it cannot
+  be reused:
+  `rm /data/autobrain/secrets/admin_new_password`
+- The credential lives only in Paperclip secrets / the host secret file. It is
+  never written to the database in plaintext, never logged, and never sent over
+  the network.
+- If the reset must be repeated, stage a new secret file with a new password
+  and re-run the command.
+
