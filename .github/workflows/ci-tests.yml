@@ -139,6 +139,12 @@ jobs:
           print("all workflow files parse")
           PY
 
+      # AUT-5690: a DISCORD_REPORT_WEBHOOK that is not an http(s) URL
+      # reaches curl as an option, so every CI Discord alert silently
+      # stops sending. A guard nothing runs is dead code.
+      - name: Discord report webhook must be guarded before curl
+        run: python3 scripts/check-discord-webhook-guard.py
+
   # AUT-4690 made docker/frontend/Dockerfile hard-fail on an empty CARTO_API_KEY,
   # which silently broke every documented/scripted frontend build that omitted the
   # build arg (AUT-4824). The check needs no docker daemon, so run it on every PR.

@@ -81,7 +81,11 @@ jobs:
             -H "Idempotency-Key: ci-triage-${GITHUB_RUN_ID}" \
             -d "$payload") || true
 
-          http_code=$(echo "$response" | grep -E '^HTTP_CODE:' | cut -d: -f2)
+          # AUT-5690: `set -e` + `pipefail` made a completely empty response abort the
+          # step here — grep exits 1 with no match — so the error annotation and
+          # the Discord fallback below were never reached. Losing the response
+          # must lose the wake loudly, not silently. `|| true` on both.
+          http_code=$(echo "$response" | grep -E '^HTTP_CODE:' | cut -d: -f2 || true)
           body=$(echo "$response" | sed '/^HTTP_CODE:/d')
 
           if [[ "$http_code" -ge 200 && "$http_code" -lt 300 ]]; then
@@ -108,16 +112,26 @@ jobs:
           # Loud failure: a lost triage wake must read as `failure`
           # with an annotation, not as `cancelled` (AUT-5668).
           echo "::error::CI triage webhook undeliverable (HTTP ${http_code:-none}): ${body:-<empty response>}"
-          if [[ -n "${DISCORD_REPORT_WEBHOOK:-}" ]]; then
-            discord_payload=$(jq -n \
-              --arg title "CI Triage Webhook Failed" \
-              --arg desc "Webhook returned HTTP ${http_code:-none} after retries. CI Triage Agent may not be woken.\nRepo: $GITHUB_REPOSITORY\nRef: $GITHUB_REF" \
-              --arg color "0xFEE75C" \
-              --arg author "CI Triage" \
-              --arg channel "incidents" \
-              '{channel:$channel,title:$title,description:$desc,color:$color,author:$author}')
-            curl -sS --max-time 20 -X POST "$DISCORD_REPORT_WEBHOOK" \
-              -H "Content-Type: application/json" \
-              -d "$discord_payload" || echo "Discord notification also failed"
-          fi
+          # AUT-5690: a secret that is not an http(s) URL reaches curl
+          # as an *option* instead of a URL ("curl: option -: is unknown"),
+          # so the incident fallback silently never fired. Validate the
+          # scheme before curl ever parses it.
+          discord_url="${DISCORD_REPORT_WEBHOOK:-}"
+          case "$discord_url" in
+            https://*|http://*) ;;
+            *)
+              echo "::warning::DISCORD_REPORT_WEBHOOK is not an http(s) URL (len=${#discord_url}); skipping Discord alert"
+              exit 1
+              ;;
+          esac
+          discord_payload=$(jq -n \
+            --arg title "CI Triage Webhook Failed" \
+            --arg desc "Webhook returned HTTP ${http_code:-none}. CI Triage Agent may not be woken.\nRepo: $GITHUB_REPOSITORY\nRef: $GITHUB_REF" \
+            --arg color "0xFEE75C" \
+            --arg author "CI Triage" \
+            --arg channel "incidents" \
+            '{channel:$channel,title:$title,description:$desc,color:$color,author:$author}')
+          curl -sS --max-time 20 -X POST "$discord_url" \
+            -H "Content-Type: application/json" \
+            -d "$discord_payload" || echo "Discord notification also failed"
           exit 1
