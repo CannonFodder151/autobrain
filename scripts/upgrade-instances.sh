@@ -29,6 +29,9 @@
 #                           AUT-4982: default is the full promotion chain again (demo → default → hosted)
 #   UPGRADE_DRY_RUN=1    resolve + health-check only, do not redeploy
 #   HEALTH_TIMEOUT_SEC   per-tier health poll timeout (default 600)
+#   VERSION_PARITY_TIMEOUT  per-request timeout for version parity check (default 10)
+#   VERSION_PARITY_RETRIES  number of retries for version.json fetch (default 3)
+#   ALLOW_VERSION_DRIFT=1  downgrade version parity gate to warning (AUT-5487 finding #1 escape hatch)
 #
 # Requires bash + curl + python3 (matches scripts/prune-images.sh).
 
@@ -38,6 +41,9 @@ PORTAINER_URL="${PORTAINER_URL:-https://portainer.nathanmartina.com}"
 : "${PORTAINER_API_KEY:?set PORTAINER_API_KEY to the Portainer API key}"
 DRY_RUN="${UPGRADE_DRY_RUN:-0}"
 HEALTH_TIMEOUT_SEC="${HEALTH_TIMEOUT_SEC:-600}"
+VERSION_PARITY_TIMEOUT="${VERSION_PARITY_TIMEOUT:-10}"
+VERSION_PARITY_RETRIES="${VERSION_PARITY_RETRIES:-3}"
+ALLOW_VERSION_DRIFT="${ALLOW_VERSION_DRIFT:-0}"
 SCRATCH="${PAPERCLIP_RUN_SCRATCH_DIR:-${TMPDIR:-/tmp}}"
 mkdir -p "$SCRATCH"
 
@@ -67,6 +73,7 @@ TIERS="${UPGRADE_TIERS:-$DEFAULT_TIERS}"
 
 log() { echo "$(date -u +%FT%TZ) [upgrade] $*"; }
 fail() { echo "$(date -u +%FT%TZ) [upgrade] ERROR: $*" >&2; }
+warn() { echo "$(date -u +%FT%TZ) [upgrade] WARNING: $*" >&2; }
 
 # Resolve a stack id + endpoint by exact name (Portainer 2.45 ignores ?name=).
 resolve_stack() {
@@ -118,6 +125,37 @@ wait_health() {
   done
 }
 
+# AUT-5455 / AUT-5487: version parity gate.
+# Runs a preflight check BEFORE mutation, then a post-redeploy promotion gate.
+# Uses scripts/version_parity.py for the comparison logic with retry/poll.
+check_version_parity() {
+  local health_url="$1"
+  local stage="${2:-preflight}"  # "preflight" or "post-redeploy"
+  local script_dir="${0%/*}"
+  local parity_script="$script_dir/version_parity.py"
+  
+  if [ ! -x "$parity_script" ]; then
+    fail "   version_parity.py not found or not executable at $parity_script"
+    return 1
+  fi
+  
+  log "   [$stage] checking version parity against $health_url"
+  
+  # Run the Python parity check with retries
+  if python3 "$parity_script" "$health_url" "$VERSION_PARITY_TIMEOUT" "$VERSION_PARITY_RETRIES" 2.0; then
+    log "   [$stage] version parity ok"
+    return 0
+  else
+    local exit_code=$?
+    if [ "$ALLOW_VERSION_DRIFT" = "1" ]; then
+      warn "   [$stage] version parity gate FAILED but ALLOW_VERSION_DRIFT=1 — downgrading to warning (AUT-5487)"
+      return 0
+    fi
+    fail "   [$stage] version parity gate FAILED (exit=$exit_code) — see error above (AUT-5455/AUT-5487)"
+    return 1
+  fi
+}
+
 OVERALL=0
 while IFS= read -r line; do
   line="$(echo "$line" | tr -d '[:space:]')"
@@ -131,8 +169,22 @@ while IFS= read -r line; do
 
   if [ "$DRY_RUN" = "1" ]; then
     log "   dry-run: skip redeploy"
-    if wait_health "$health"; then log "   healthy ($health)"; else fail "   UNHEALTHY ($health)"; OVERALL=1; fi
+    if wait_health "$health"; then
+      log "   healthy ($health)"
+      if ! check_version_parity "$health" "dry-run"; then OVERALL=1; fi
+    else
+      fail "   UNHEALTHY ($health)"; OVERALL=1
+    fi
     continue
+  fi
+
+  # PREFLIGHT: check version parity on CURRENT tier before any mutation.
+  # This tells the operator "this tier will drift" before anything is touched.
+  log "   preflight: checking current tier version parity (AUT-5487 finding #1)"
+  if ! check_version_parity "$health" "preflight"; then
+    fail "   preflight version parity gate failed — tier would drift, ABORTING before mutation (AUT-5487)"
+    OVERALL=1
+    break
   fi
 
   # Pull current compose + env, inject any required-but-missing env, redeploy.
@@ -161,7 +213,13 @@ PY
   log "   redeploy result: $result"
 
   if wait_health "$health"; then
-    log "   healthy ($health) — promote"
+    log "   healthy ($health) — checking version parity post-redeploy (AUT-5455)"
+    if ! check_version_parity "$health" "post-redeploy"; then
+      fail "   post-redeploy version parity gate failed — STOPPING promotion (AUT-5455)"
+      OVERALL=1
+      break
+    fi
+    log "   promote"
   else
     fail "   UNHEALTHY ($health) after redeploy — STOPPING promotion"
     OVERALL=1
