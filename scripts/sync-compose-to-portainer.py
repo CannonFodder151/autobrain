@@ -29,6 +29,8 @@ Usage:
 import argparse
 import json
 import os
+import re
+import shlex
 import sys
 import time
 import urllib.error
@@ -66,7 +68,7 @@ def parse_env_file(path):
     return env
 
 
-def report(args, content, services):
+def report(args, content, services, env=None):
     """Post-deploy audit: 200 is not health (AUT-4946), then the digest trail."""
     try:
         problems = verify_running(args, services)
@@ -85,9 +87,42 @@ def report(args, content, services):
               file=sys.stderr)
         return 6
 
-    print(f"stack={args.stack} endpoint={args.endpoint} "
-          f"{'created' if args.create else 'updated'}")
-    print(f"verified: {len(services)} services running, no stuck containers")
+    # AUT-5132: healthy is not deployed. Assert the running stack
+    # actually runs the image digests and container commands this compose
+    # declares, so a no-op redeploy (digest pin never advanced, or the
+    # inline compose in stack 122 was never re-uploaded) fails here
+    # instead of passing silently.
+    specs = compose_service_specs(
+        content, {e["name"]: e.get("value", "") for e in (env or [])})
+    try:
+        live = endpoint_containers(args)
+    except urllib.error.HTTPError as e:
+        print(f"WARNING: could not read containers for the digest check -> "
+              f"HTTP {e.code}", file=sys.stderr)
+        live = []
+    drift = (verify_image_digests(args,
+                                  {s: specs[s]["image"] for s in specs
+                                   if "image" in specs[s]}, live)
+             + verify_commands(args, specs, live))
+    if drift:
+        print(f"ERROR: stack {args.stack!r} is running but does NOT match "
+              f"{args.file} — the deploy did not land:", file=sys.stderr)
+        for name, why in drift:
+            print(f"  {name}: {why}", file=sys.stderr)
+        print("CAUSE (AUT-5132): stack 122 is an INLINE stack — Portainer "
+              "re-applies its stored compose verbatim, and `pullImage=true` on "
+              "a repo@sha256:... ref re-pulls the same immutable digest.\n"
+              "Fix: re-upload the compose (this script without --verify-only), "
+              "or dispatch .github/workflows/build-hosted.yml so "
+              "scripts/update-compose-pins.py advances the pins first.",
+              file=sys.stderr)
+        return 7
+
+    verb = "verified" if getattr(args, "verify_only", False) else (
+        "created" if args.create else "updated")
+    print(f"stack={args.stack} endpoint={args.endpoint} {verb}")
+    print(f"verified: {len(services)} services running, no stuck containers, "
+          f"image digests + container commands match the compose")
     # AUT-5669: which commit these digests were built from,
     # alongside the per-service digest trail below.
     src = compose_pin_source(content)
@@ -154,7 +189,7 @@ def create_stack(args, content):
     print(f"created stack={args.stack!r} type={args.stack_type} "
           f"endpoint={args.endpoint} with {len(env)} env vars "
           f"(id={created.get('Id')})")
-    return report(args, content, services)
+    return report(args, content, services, env)
 
 
 def in_deploy_window(now=None):
@@ -269,6 +304,166 @@ def compose_image_refs(content):
             for name, spec in (doc.get("services") or {}).items()}
 
 
+# ponytail: a subset of docker compose interpolation — ${VAR}, ${VAR:-def},
+# ${VAR-def}, ${VAR:?msg}, $VAR, $$ -> $ and a literal "${". It does not
+# implement nested defaults or `:-` on a multi-line default; Portainer has
+# already done the real interpolation before the value reaches a container,
+# so anything left literal is compared verbatim rather than guessed at.
+_INTERP = re.compile(
+    r"""\$\$|
+        \$\{(?P<name>[A-Za-z_][A-Za-z0-9_]*)
+            (?:(?P<op>:?[-?])(?P<def>[^}]*))?\}|
+        \$(?P<bare>[A-Za-z_][A-Za-z0-9_]*)|
+        \$\{""",
+    re.X,
+)
+
+
+def interpolate(s, vars_):
+    """Resolve compose ${VAR}/$VAR against stack env + os.environ."""
+    def sub(m):
+        if m.group(0) == "$$":
+            return "$"
+        if m.group(0) == "${":
+            return "${"
+        name = m.group("name") or m.group("bare")
+        val = vars_.get(name, "")
+        if not val and m.group("def") is not None:
+            return m.group("def")
+        return val
+    return _INTERP.sub(sub, s)
+
+
+def compose_service_specs(content, vars_=None):
+    """{service: {"image"?, "command"?, "entrypoint"?}} for what compose declares.
+
+    Only declared keys are returned: an unset key means "use the image
+    default", and asserting on that would be a false failure. Values are
+    interpolated first, because Portainer interpolates the compose before the
+    value ever reaches a container — comparing raw `$$VAR` against the running
+    `$VAR` would flag every well-formed stack.
+    """
+    vars_ = dict(os.environ, **(vars_ or {}))
+    doc = yaml.safe_load(content) or {}
+    specs = {}
+    for name, spec in (doc.get("services") or {}).items():
+        spec = spec or {}
+        got = {}
+        for key in ("image", "command", "entrypoint"):
+            raw = spec.get(key)
+            if not raw:
+                continue
+            # A string command is shell-split by compose, a list is already
+            # argv — joining a list back into a string would lose the split.
+            if key == "image" or isinstance(raw, str):
+                val = interpolate(str(raw), vars_)
+                got[key] = val if key == "image" else shlex.split(val)
+            else:
+                got[key] = [interpolate(str(x), vars_) for x in raw]
+        if got:
+            specs[name] = got
+    return specs
+
+
+def _repo_of(ref):
+    """ghcr.io/o/r:hosted@sha256:x -> ghcr.io/o/r (registry ports keep theirs)."""
+    name = ref.split("@", 1)[0]
+    head, sep, tail = name.rpartition(":")
+    return head if sep and "/" not in tail else name
+
+
+def expected_repo_digest(ref):
+    """The repo@digest compose demands, or None when the ref is not pinned."""
+    return f"{_repo_of(ref)}@{ref.split('@', 1)[1]}" if "@" in ref else None
+
+
+def _running_of(services, containers):
+    """{service: [container, ...]} for running containers only."""
+    out = {}
+    for c in containers:
+        svc = _service_of(c)
+        if c.get("State") == "running" and svc in services:
+            out.setdefault(svc, []).append(c)
+    return out
+
+
+def verify_image_digests(args, services, containers):
+    """Every running container must run the image digest the compose pins.
+
+    AUT-5132: stack 122 is an *inline* stack whose stored compose is re-applied
+    verbatim, so `redeploy?pullImage=true` on a `repo:tag@sha256:...` ref pulls
+    the same immutable digest and reports success without shipping new code.
+    The running RepoDigests are the only evidence that a deploy landed.
+    """
+    problems = []
+    for svc, ref in sorted(services.items()):
+        want = expected_repo_digest(ref)
+        if not want:  # unpinned ref: the tag itself is the contract
+            continue
+        live = [c for c in containers
+                if _service_of(c) == svc and c.get("State") == "running"]
+        if not live:
+            problems.append((None, f"service {svc!r} has no running container "
+                                   "to check the image digest"))
+            continue
+        for c in live:
+            name = c["Names"][0].lstrip("/")
+            try:
+                img = _api(args, f"/endpoints/{args.endpoint}/docker/images/"
+                                 f"{c.get('Image') or name}/json")
+            except urllib.error.HTTPError as e:
+                problems.append((name, f"could not inspect image -> HTTP {e.code}"))
+                continue
+            digests = img.get("RepoDigests") or []
+            if want not in digests:
+                problems.append((name, f"runs {digests or ['<no repo digest>']} "
+                                       f"but compose pins {want} — the deploy "
+                                       "was a no-op"))
+    return problems
+
+
+def _norm_argv(argv):
+    """Flatten argv to comparable command text.
+
+    argv equality is NOT a reliable contract here: compose resolves a string
+    `command` with its own shell lexer, so the inner double quotes of
+    `sh -c "... "$(cat f)" ..."` are consumed at parse time and never reach
+    docker. Collapse whitespace and drop double quotes — the shell never treats
+    either as significant once the string is argv, and every real difference we
+    care about (a missing `alembic upgrade head`) survives the normalisation.
+    """
+    return re.sub(r"\s+", " ", " ".join(argv).replace('"', "")).strip()
+
+
+def verify_commands(args, services, containers):
+    """Container command/entrypoint must match the compose the sync uploaded.
+
+    The stale-inline-compose half of AUT-5132: the stack can come up healthy on
+    the right image yet still run the previous container command.
+    """
+    problems = []
+    running = _running_of(services, containers)
+    for svc, want in sorted(services.items()):
+        for field, key in (("command", "Cmd"), ("entrypoint", "Entrypoint")):
+            if field not in want:
+                continue
+            for c in running.get(svc, []):
+                name = c["Names"][0].lstrip("/")
+                try:
+                    cfg = (_api(args, f"/endpoints/{args.endpoint}/docker/"
+                                     f"containers/{c.get('Id')}/json")
+                           .get("Config") or {})
+                except urllib.error.HTTPError as e:
+                    problems.append((name, f"could not inspect container -> "
+                                           f"HTTP {e.code}"))
+                    break
+                got = _norm_argv(cfg.get(key) or [])
+                exp = _norm_argv(want[field])
+                if got != exp:
+                    problems.append((name, f"{field} is {got or '<image default>'}"
+                                           f" but compose sets {exp}"))
+    return problems
+
 def unpinned_image_refs(content):
     """AUT-5669: services whose image is a moving tag rather than a digest.
 
@@ -318,20 +513,37 @@ def check_port_collisions(args, services, wanted_ports):
 
 def verify_running(args, services, attempts=20, delay=5):
     """Wait for every service to have a running container. Returns list of
-    problems; empty means healthy."""
+    problems; empty means healthy.
+
+    Only containers whose `com.docker.compose.service` label names a
+    service in this compose count. `endpoint_containers` returns every
+    container on the endpoint — the GitHub runner, nginx-proxy-manager,
+    the Portainer agent, and any `autobrain.role: verify-once`
+    diagnostic (AUT-5511's `fw-verify-aut5511`) — and a foreign
+    container wedged in `created` failed this gate with exit 6 on every
+    subsequent hosted deploy (AUT-5601). Scoping on the service label
+    keeps one stray container from being a single point of failure for
+    all four image-push workflows.
+    """
     for _ in range(attempts):
         containers = endpoint_containers(args)
-        running = {_service_of(c) for c in containers if c.get("State") == "running"}
+        running = {_service_of(c) for c in containers
+                   if c.get("State") == "running"
+                   and _service_of(c) in services}
         stuck = [(c["Names"][0].lstrip("/"), c.get("State"))
-                 for c in containers if c.get("State") == "created"]
+                 for c in containers if c.get("State") == "created"
+                 and _service_of(c) in services]
         missing = sorted(services - running)
         if not missing and not stuck:
             return []
         time.sleep(delay)
     containers = endpoint_containers(args)
-    running = {_service_of(c) for c in containers if c.get("State") == "running"}
+    running = {_service_of(c) for c in containers
+               if c.get("State") == "running"
+               and _service_of(c) in services}
     stuck = [(c["Names"][0].lstrip("/"), c.get("State"))
-             for c in containers if c.get("State") == "created"]
+             for c in containers if c.get("State") == "created"
+             and _service_of(c) in services]
     return ([(None, f"service {m!r} has no running container")
              for m in sorted(services - running)] +
             [(n, f"stuck in state {st}") for n, st in stuck])
@@ -355,6 +567,10 @@ def main():
     ap.add_argument("--stack-type", type=int, default=COMPOSE_STACK_TYPE,
                     help="Portainer stack type for --create "
                          f"(default: {COMPOSE_STACK_TYPE})")
+    ap.add_argument("--verify-only", action="store_true",
+                    help="skip the PUT; only assert the running stack "
+                         "matches the compose (AUT-5132 re-verify of "
+                         "a deploy)")
     args = ap.parse_args()
 
     # AUT-5172: gate before any network call so a gated run has zero effect.
@@ -410,6 +626,13 @@ def main():
         print("ERROR: stack env is empty — refusing to sync (would wipe it)",
               file=sys.stderr)
         return 3
+
+    # AUT-5132: --verify-only never touches the stack. The digest +
+    # command assertion in report() is the whole point, so stop here
+    # after the reads needed to interpolate the compose.
+    if args.verify_only:
+        services, _ = compose_services_and_ports(content)
+        return report(args, content, services, env)
 
     # AUT-5669: refuse to deploy a moving tag. The whole point of
     # a pinned compose file is that the deploy resolves the exact
@@ -484,7 +707,7 @@ def main():
 
     # AUT-4946: a 200 PUT does not mean a healthy stack. Verify + audit.
     print(f"stack={args.stack} id={stack_id} endpoint={args.endpoint} updated")
-    return report(args, content, services)
+    return report(args, content, services, env)
 
 
 if __name__ == "__main__":

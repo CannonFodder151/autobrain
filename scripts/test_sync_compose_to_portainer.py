@@ -165,7 +165,7 @@ class SyncComposeTestBase(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def run_main(self, responder, extra_args=(), env=None, in_window=True,
-                 endpoint=5):
+                 endpoint=5, verify_only=False):
         """Run main() with urlopen routed by responder; returns (rc, out, err).
 
         Defaults to inside the AUT-5172 deploy window so the pre-existing
@@ -177,7 +177,10 @@ class SyncComposeTestBase(unittest.TestCase):
                 "--endpoint", str(endpoint),
                 "--file", self.compose_file,
                 "--portainer-url", "https://portainer.example.com",
-                "--api-key", "test-key", *extra_args]
+                "--api-key", "test-key"]
+        if verify_only:
+            argv.append("--verify-only")
+        argv.extend(extra_args)
         old_argv, old_out, old_err = sys.argv, sys.stdout, sys.stderr
         sys.argv, sys.stdout, sys.stderr = argv, out, err
         try:
@@ -353,7 +356,7 @@ class TestNoopDeployDetection(SyncComposeTestBase):
             f.write("services:\n  backend:\n    image: ghcr.io/x/backend:hosted\n")
         r = _Responder(self.healthy_routes(self._containers()))
 
-        rc, _, _ = self.run_main(r)
+        rc, _, _ = self.run_main(r, verify_only=True)
 
         self.assertEqual(rc, 0)  # no digest declared -> the tag is the contract
 
