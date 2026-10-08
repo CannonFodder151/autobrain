@@ -235,6 +235,11 @@ jobs:
       worker_digest: ${{ steps.digest.outputs.worker_digest }}
       ai_digest: ${{ steps.digest.outputs.ai_digest }}
       frontend_digest: ${{ steps.digest.outputs.frontend_digest }}
+      backend_sha_digest: ${{ steps.digest.outputs.backend_sha_digest }}
+      worker_sha_digest: ${{ steps.digest.outputs.worker_sha_digest }}
+      ai_sha_digest: ${{ steps.digest.outputs.ai_sha_digest }}
+      frontend_sha_digest: ${{ steps.digest.outputs.frontend_sha_digest }}
+      sha_tag: ${{ steps.digest.outputs.sha_tag }}
     # AUT-5186: the nightly cron only syncs pins (nightly-hosted-sync);
     # it must never rebuild or re-pin images.
     if: github.event_name != 'pull_request' && github.event_name != 'schedule'
@@ -311,6 +316,14 @@ jobs:
             d="$(docker buildx imagetools inspect "ghcr.io/cannonfodder151/autobrain-${svc}:${TAG}" --raw | sha256sum | awk '{print $1}')"
             echo "${svc}_digest=sha256:${d}" >> "$GITHUB_OUTPUT"
           done
+          # AUT-5502: also capture digests for the immutable SHA_TAG so compose
+          # and k8s can pin to the immutable tag (e.g. hosted-sha-abc123@sha256:...)
+          # rather than the mutable :hosted tag.
+          for svc in backend ai frontend; do
+            d="$(docker buildx imagetools inspect "ghcr.io/cannonfodder151/autobrain-${svc}:${SHA_TAG}" --raw | sha256sum | awk '{print $1}')"
+            echo "${svc}_sha_digest=sha256:${d}" >> "$GITHUB_OUTPUT"
+          done
+          echo "sha_tag=${SHA_TAG}" >> "$GITHUB_OUTPUT"
 
   compose-pin:
     needs: build-manifest
@@ -325,9 +338,10 @@ jobs:
       contents: write
     env:
       TAG: ${{ github.event.inputs.tag || 'hosted' }}
-      BACKEND_DIGEST: ${{ needs.build-manifest.outputs.backend_digest }}
-      AI_DIGEST: ${{ needs.build-manifest.outputs.ai_digest }}
-      FRONTEND_DIGEST: ${{ needs.build-manifest.outputs.frontend_digest }}
+      SHA_TAG: ${{ needs.build-manifest.outputs.sha_tag }}
+      BACKEND_DIGEST: ${{ needs.build-manifest.outputs.backend_sha_digest }}
+      AI_DIGEST: ${{ needs.build-manifest.outputs.ai_sha_digest }}
+      FRONTEND_DIGEST: ${{ needs.build-manifest.outputs.frontend_sha_digest }}
       PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
       PORTAINER_URL: https://portainer.nathanmartina.com
     steps:
@@ -344,8 +358,12 @@ jobs:
           # AUT-5669: --source-sha stamps x-autobrain-pin-source into the
           # compose file and makes the bump a no-op (exit 3) when this run's
           # commit is older than the commit that owns the current pin.
+          # AUT-5502: use the immutable SHA_TAG (e.g. hosted-sha-abc123) in the
+          # pin so QA can verify a named digest that won't be superseded by
+          # subsequent pushes to :hosted.
           ./scripts/update-compose-pins.py \
             --source-sha "${{ github.sha }}" \
+            --tag "${SHA_TAG}" \
             backend="${BACKEND_DIGEST}" \
             ai="${AI_DIGEST}" \
             frontend="${FRONTEND_DIGEST}"
@@ -359,28 +377,28 @@ jobs:
           fi
           exit 0
 
-      # AUT-5669 AC3: :hosted and the pin it just wrote must not be able to
-      # disagree. Assert before the push, so a mismatch fails the run instead
-      # of committing a pin that names an index no commit can reproduce.
-      - name: Assert :hosted still matches the pin just written
+      # AUT-5669 AC3: the immutable SHA_TAG and the pin it just wrote must not
+      # be able to disagree. Assert before the push, so a mismatch fails the run
+      # instead of committing a pin that names an index no commit can reproduce.
+      - name: Assert SHA_TAG still matches the pin just written
         if: steps.bump.outputs.changed == 'true'
         env:
-          TAG: ${{ github.event.inputs.tag || 'hosted' }}
+          SHA_TAG: ${{ needs.build-manifest.outputs.sha_tag }}
         run: |
           set -euo pipefail
           for svc in backend frontend; do
-            pinned="$(grep -oP "ghcr\.io/cannonfodder151/autobrain-${svc}:hosted@\Ksha256:[a-f0-9]{64}" docker-compose.hosted.yml | head -1)"
+            pinned="$(grep -oP "ghcr\.io/cannonfodder151/autobrain-${svc}:${SHA_TAG}@\Ksha256:[a-f0-9]{64}" docker-compose.hosted.yml | head -1)"
             tok="$(curl -fsS "https://ghcr.io/token?scope=repository:cannonfodder151/autobrain-${svc}:pull" \
               | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')"
             live="$(curl -fsSI -H "Authorization: Bearer ${tok}" \
               -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json" \
-              "https://ghcr.io/v2/cannonfodder151/autobrain-${svc}/manifests/${TAG}" \
+              "https://ghcr.io/v2/cannonfodder151/autobrain-${svc}/manifests/${SHA_TAG}" \
               | tr -d '\r' | awk -F': ' 'tolower($1)=="docker-content-digest"{print $2}')"
             if [ -z "${pinned}" ] || [ "${pinned}" != "${live}" ]; then
-              echo "::error::AUT-5669: autobrain-${svc} :hosted=${live:-<unreadable>} but the pin just written is ${pinned:-<none>} — refusing to commit a pin that disagrees with the tag"
+              echo "::error::AUT-5669: autobrain-${svc} ${SHA_TAG}=${live:-<unreadable>} but the pin just written is ${pinned:-<none>} — refusing to commit a pin that disagrees with the tag"
               exit 1
             fi
-            echo "==> ${svc}: :hosted == pin (${live})"
+            echo "==> ${svc}: ${SHA_TAG} == pin (${live})"
           done
 
       - name: Commit + push pin bump
@@ -473,10 +491,10 @@ jobs:
     permissions:
       contents: write
     env:
-      BACKEND_DIGEST: ${{ needs.build-manifest.outputs.backend_digest }}
-      WORKER_DIGEST: ${{ needs.build-manifest.outputs.worker_digest }}
-      AI_DIGEST: ${{ needs.build-manifest.outputs.ai_digest }}
-      FRONTEND_DIGEST: ${{ needs.build-manifest.outputs.frontend_digest }}
+      BACKEND_DIGEST: ${{ needs.build-manifest.outputs.backend_sha_digest }}
+      WORKER_DIGEST: ${{ needs.build-manifest.outputs.worker_sha_digest }}
+      AI_DIGEST: ${{ needs.build-manifest.outputs.ai_sha_digest }}
+      FRONTEND_DIGEST: ${{ needs.build-manifest.outputs.frontend_sha_digest }}
     steps:
       - uses: actions/checkout@v4
         with:
