@@ -53,11 +53,11 @@ CVE-2026-56862  # gosu-stdlib: crypto/tls KeyUpdate; gosu does no TLS
 #     result_serializer="json"), so kombu never imports msgpack at runtime.
 #   * setuptools: no runtime `import setuptools`/`PackageIndex`; packages are
 #     installed at build, never fetched via PackageIndex at runtime.
-# python:3.13-slim@sha256:7ce4b6d... is the LATEST 3.13-slim digest (Docker Hub
-# confirmed) — no digest bump carries patched wheels — so suppress per policy
-# ("tolerate when no fixed image exists") until a 3.13-slim respin ships them.
-# Time-boxed: re-check 2026-11-28; drop entries + bump PYTHON_BASE_IMAGE digest
-# once a 3.13-slim ships msgpack>=1.2.1 and setuptools>=78.1.1. At that re-check,
+# Re-verified 2026-10-02 (AUT-4718) against python:3.13.16-slim-trixie@sha256:6906dca8...:
+# still msgpack 1.1.2 and setuptools 70.3.0, i.e. no python tag respin has shipped
+# msgpack>=1.2.1 / setuptools>=78.1.1, so suppress per policy ("tolerate when no
+# fixed image exists"). Time-boxed: re-check 2026-11-28; drop entries + bump
+# PYTHON_BASE_IMAGE digest once a respin ships them. At that re-check,
 # ALSO re-run `grep -rnE 'import msgpack|from msgpack|PackageIndex'` across the
 # repo AND scan the FINAL built images (not just the bare base), so a future
 # reachable msgpack/PackageIndex usage cannot hide behind this ignore.
@@ -67,13 +67,13 @@ CVE-2026-56862  # gosu-stdlib: crypto/tls KeyUpdate; gosu does no TLS
 GHSA-6v7p-g79w-8964  # msgpack OOB read/crash on Unpacker reuse: NOT imported; unreachable
 CVE-2026-57585  # msgpack: CVE alias of GHSA-6v7p-g79w-8964 (same advisory); unreachable
 CVE-2025-47273  # setuptools PackageIndex path traversal: build-time only, no runtime install path
-CVE-2025-47273  # setuptools PackageIndex path traversal: build-time only, no runtime install path
 GHSA-5rjg-fvgr-3xxf  # setuptools: GHSA alias of CVE-2025-47273; build-time only
 
 # --- AUT-1793 / python base image OpenSSL QUIC DoS -----------------------------------
 # CVE-2026-14456: OpenSSL DoS via unbounded memory growth in QUIC server, fixed in
-# 3.5.7-1~deb13u2. python:3.13-slim@sha256:7ce4b6d... ships 3.5.6-1~deb13u2 (the LATEST
-# 3.13-slim digest on Docker Hub as of 2026-09-02 — no digest bump carries the fix).
+# 3.5.7-1~deb13u2. Re-verified 2026-10-02 (AUT-4718): python:3.13.16-slim-trixie
+# @sha256:6906dca8... ships openssl/libssl3t64 3.5.7-1~deb13u3 on BOTH amd64 and arm64,
+# so this finding no longer reproduces and no entry is carried (it is already absent).
 # AutoBrain never enables QUIC in any OpenSSL consumer (FastAPI/Uvicorn, celery
 # worker, market-data, ai gateway all use TLS ≤1.3 over TCP/HTTPS). QUIC exposure
 # requires explicit openssl ctx set_quic_method() calls none of our stacks perform.
@@ -81,37 +81,22 @@ GHSA-5rjg-fvgr-3xxf  # setuptools: GHSA alias of CVE-2025-47273; build-time only
 # Time-boxed: re-check 2026-11-28; drop entry + bump PYTHON_BASE_IMAGE digest once
 # a 3.13-slim respin ships openssl>=3.5.7-1~deb13u2.
 
-# --- AUT-1998: nginx libexpat HIGH CVEs (image not yet rebuilt with expat 2.8.4) ------------------
-# Source: libexpat in nginxinc/nginx-unprivileged:stable-alpine@sha256:ee055adf...
-# CVE-2026-66046 and CVE-2026-76641: DoS via crafted XML. expat 2.8.4-r0 fixes.
-# Image tag hasn't been rebuilt with patched expet yet. Suppress until image rebuilt;
-# re-check 2026-12-28: if upstream nginx releases patched alpine build, bump image digest.
-CVE-2026-66046  # expat DoS: no network exposure in AutoBrain nginx frontend
-CVE-2026-76641  # expat: same package; no runtime impact
+# --- AUT-1998: nginx libexpat HIGH CVEs — RESOLVED by the AUT-4718 digest bump ---------------
+# RESOLVED (AUT-4718, 2026-10-02): the pin moved to
+# nginxinc/nginx-unprivileged:stable-alpine@sha256:ed04ec1f... (Alpine 3.24.2), which
+# carries libexpat 2.8.5-r0 on both the amd64 and arm64 manifests (verified by
+# extracting lib/apk/db/installed from every layer of both manifests). That is
+# >= the fix for CVE-2026-66046 / CVE-2026-76641 (2.8.4-r0) and CVE-2026-93990
+# (2.8.5-r0). Entries DROPPED, not re-suppressed. libexpat-version-check.yml
+# THRESHOLD raised to 2.8.5-r0 and its PINNED_DIGEST synced to ed04ec1f.
 
 
-# --- AUT-2762: nginx libuuid (util-linux) HIGH CVEs (alpine 3.24.1 base package; no upstream fix yet) ---
-# Source: libuuid in nginxinc/nginx-unprivileged:stable-alpine@sha256:45ce1e2e...
-# CVE-2026-53612/53613/53614: TOCTOU / SUID mount bypass via libmount; CVE-2026-76642: privileged X-mount post-hooks.
-# CVE-2026-78408/78409/78410: nsenter cgroup leak / X-mount.subdir symlink escape / restricted bind-mount pinning.
-# These are util-linux/libmount mount(8) features AutoBrain does not use — the nginx frontend
-# container never invokes mount(8), nsenter, or libmount path resolution at runtime.
-# Time-boxed: re-check 2026-12-28; drop entries + bump NGINX_FRONTEND_IMAGE digest if
-# nginxinc ships an alpine 3.24.x respin with util-linux >= 2.42.3-r0.
-CVE-2026-53612  # util-linux TOCTOU in mount(8): nginx frontend never invokes mount
-CVE-2026-53613  # util-linux ancestor directory swap via mount: nginx frontend never invokes mount
-CVE-2026-53614  # util-linux SUID mount(8) nosuid bypass: nginx frontend never invokes mount
-CVE-2026-76642  # util-linux failed mount helper post-hooks: nginx frontend never invokes mount
-CVE-2026-78408  # util-linux nsenter --join-cgroup root cgroup leak: nginx frontend never invokes nsenter
-CVE-2026-78409  # util-linux X-mount.subdir symlink escape: nginx frontend never invokes libmount
-CVE-2026-78410  # util-linux restricted bind-mount source pinning bypass: nginx frontend never invokes mount
-# --- AUT-2332: trivy-db placeholder CVE in nginxinc/nginx-unprivileged:stable-alpine ----
-# CVE-2026-80256 was added to the Alpine 3.24.1 vuln DB on 2026-09-03 but its
-# metadata is still being populated upstream (trivy 0.70 logs "no vulnerability
-# details" and exits 1 even though the finding is suppressed by --ignore-unfixed).
-# Trivy 0.74 + a fully populated DB will resolve itself; for now, suppress the
-# noisy placeholder so PRs don't get blocked on DB freshness. Reviewer: Sec.
-CVE-2026-80256  # nginx placeholder; trivy 0.70 false-positive on missing metadata
+# --- AUT-2762 / AUT-2332 / AUT-1600-PR: nginx util-linux + placeholder CVEs — RESOLVED (AUT-4718) ---
+# RESOLVED (AUT-4718, 2026-10-02): all of these cleared when the nginx pin moved to
+# @sha256:ed04ec1f... (Alpine 3.24.2, libuuid 2.42.3-r1). A clean scan of that digest at
+# HIGH/CRITICAL with an EMPTY ignorefile returns zero util-linux/libuuid findings and
+# zero CVE-2026-80256, so the 15 suppression lines are DROPPED rather than carried
+# forward. They were hiding nothing, but they would have masked the next real finding.
 
 # --- POSTGRESQL libpcre2 CVEs (pgvector/pgvector:pg17) ---
 # CVE-2026-86145 / CVE-2026-89161: pcre2 out-of-bounds write + JIT memory corruption.
@@ -137,54 +122,73 @@ CVE-2026-89161  # pcre2 JIT memory corruption: same exposure surface as above
 # ships deb12u1. Security Officer sign-off: APPROVED (AUT-4718).
 CVE-2026-89157  # pcre2 pcre2_pattern_convert OOB write: 32-bit platforms only; we run 64-bit
 
-# --- AUT-2918: python:3.13.15-slim-trixie base image CVEs (unused at runtime) --------
-# python:3.13.15-slim-trixie@sha256:9d2e555... (debian 13.6) carries 10 HIGH/CRITICAL
-# CVEs across gzip, libsqlite3-0, and perl-base. All three packages are present in
-# the base image but never exercised at runtime:
-#   * gzip: build-time tool only (decompress wheels); no runtime process invokes gzip
-#     on untrusted input. CVE-2026-41992 (LZH decompression info leak) requires a
-#     crafted .gz/.lz archive — not used at runtime.
-#   * libsqlite3-0: AutoBrain uses PostgreSQL, not SQLite. No runtime service imports
-#     sqlite3 or executes SQL against a SQLite database. CVE-2026-11822/11824 (FTS5
-#     heap overflow, arbitrary code execution via crafted FTS5) are unreachable.
-#   * perl-base: build-time dependency only (Module::Build, XS compile). No runtime
-#     service invokes perl. CVE-2026-13221 (CRITICAL, regex DoS), CVE-2026-8376
-#     (CRITICAL, heap overflow on 32-bit), CVE-2026-42496/42497 (CRITICAL/HIGH,
-#     archive-tar path traversal/hardlink), CVE-2026-48962 (IO-Compress arbitrary
-#     code), CVE-2026-57432 (pack/unpack info leak), CVE-2026-57433 (Storable DoS)
-#     are all unreachable.
-# python:3.13.15-slim-trixie is the CURRENT latest (Docker Hub confirmed 2026-09-15);
-# no newer digest carries patched packages. Suppress per policy ("tolerate when no
-# fixed image exists") until a respin ships patched gzip/libsqlite3/perl-base.
-# Time-boxed: re-check 2026-12-15; drop entries + bump PYTHON_BASE_IMAGE digest.
-# Security Officer sign-off: PENDING (AUT-2918).
-CVE-2026-41992  # gzip LZH info leak: build-time only; no runtime gzip on untrusted input
-CVE-2026-11822  # libsqlite3 FTS5 arbitrary code exec: AutoBrain uses PostgreSQL, not SQLite
-CVE-2026-11824  # libsqlite3 heap overflow: same — no SQLite at runtime
-CVE-2026-13221  # perl regex DoS: build-time only; no runtime perl invocation
-CVE-2026-8376   # perl heap overflow (32-bit): build-time only; 64-bit containers unaffected
-CVE-2026-42496  # perl-archive-tar path traversal via symlinks: build-time only
-CVE-2026-42497  # perl-archive-tar hardlink arbitrary write: build-time only
-CVE-2026-48962  # perl-IO-Compress arbitrary code via glob: build-time only
-CVE-2026-57432  # perl pack/unpack info leak: build-time only
-CVE-2026-57433  # perl Storable DoS: build-time only; no Storable in runtime
+# --- AUT-2918: python base image gzip/libsqlite3/perl-base CVEs — RESOLVED (AUT-4718) -------
+# RESOLVED (AUT-4718, 2026-10-02): the pin moved from python:3.13.15-slim-trixie
+# (@sha256:9d2e5553...) to python:3.13.16-slim-trixie (@sha256:6906dca8...), which carries
+# Debian 13.7 point-release packages that fix all ten: gzip 1.13-1+deb13u1,
+# libsqlite3-0 3.46.1-7+deb13u2, perl-base 5.40.1-6+deb13u1. Verified by scanning the new
+# digest at HIGH/CRITICAL with an empty ignorefile: zero gzip, libsqlite3-0 or perl-base
+# findings. Entries DROPPED, not re-suppressed.
 
-# --- AUT-1600-PR: nginx libuuid/util-linux HIGH CVEs (pending upstream rebuild) -----
-# Source: libuuid (util-linux 2.42.1-r0) in nginxinc/nginx-unprivileged:stable-alpine.
-# CVE-2026-53612/53613/53614: TOCTOU/SUID mount bypasses require filesystem
-#   mount operations or SUID mount(8) — nginx frontend does neither.
-# CVE-2026-76642: external mount helper post-hooks require privileged mount paths —
-#   nginx serves static files from a read-only image layer, no mount operations.
-# CVE-2026-78408/78409/78410: nsenter cgroup leak, symlink tree escape, bind-mount
-#   source pinning — all require process spawning, cgroup namespaces, or bind-mount
-#   source control, none of which the nginx frontend container performs.
-# The nginxinc/nginx-unprivileged image rebuilds periodically; once the Alpine
-# 3.24.1 util-linux package reaches 2.42.3-r0/r1, drop these entries.
-# Time-boxed: re-check 2026-12-31.
-CVE-2026-53612  # util-linux TOCTOU mount: nginx frontend does no mount ops
-CVE-2026-53613  # util-linux ancestor dir swap: requires mount, not present
-CVE-2026-53614  # util-linux SUID mount bypass: nginx runs non-root unprivileged
-CVE-2026-76642  # util-linux mount post-hooks: no privileged mount paths
-CVE-2026-78408  # util-linux nsenter cgroup: nginx never spawns nsenter
-CVE-2026-78409  # util-linux X-mount.subdir symlink escape: no mount ops
-CVE-2026-78410  # util-linux bind-mount source pinning: no bind mounts
+# --- AUT-4718: pcre2 CVE-2026-103111 (OOB write, attacker-controlled regex + JIT) ---------
+# "PCRE2 before 10.49, when there is an attacker-controlled regular expression and certain
+# JIT API usage, allows an out-of-bounds write with arbitrary data."
+# (GHSA-r9hj-j2rw-4q3m). Two conditions must BOTH hold; condition 1 fails, so the
+# advisory is unreachable here regardless of condition 2:
+#
+#   1. Attacker-controlled regular expression. AutoBrain compiles no regex from user input
+#      on any request path. The only regexes in the runtime are literals in our own source
+#      and in docker/frontend/nginx.conf (the one PCRE location is the static
+#      `location ~ ^/(autobrain-assets|autobrainservice-assets)/` prefix match). No public
+#      API endpoint accepts a pattern string (established for AUT-2918 and unchanged).
+#   2. JIT API usage. NOT absent — it is present but not decisive. Verified 2026-10-02
+#      (AUT-5131) against the pinned images themselves, not inferred from the tags:
+#        * python base: no pcre2 in the interpreter at all. The CPython binary's DT_NEEDED
+#          is exactly {libc.so.6, libpython3.13.so.1.0} and Python's `re` is the bundled
+#          `_sre` C module. libpcre2-8-0 exists in the image, but only as a dependency of
+#          libselinux1 and nothing we run loads it for regex work.
+#        * nginx: PCRE2 JIT IS compiled in. usr/sbin/nginx (nginx 1.30.5-r1) has
+#          libpcre2-8.so.0 in DT_NEEDED and imports pcre2_jit_compile_8, pcre2_compile_8,
+#          pcre2_match_8 and pcre2_pattern_info_8 from .dynsym — the pcre2_jit_compile_8
+#          import is what proves it (the `--with-pcre-jit` configure flag being absent is
+#          NOT evidence either way). An earlier revision of this file claimed the image
+#          "ships no JIT-enabled pcre2 build for our config"; that was false and is
+#          withdrawn. It does not matter for this CVE: condition 1 already fails, because
+#          the only regex nginx ever evaluates against request data is the static
+#          `location ~ ^/(autobrain-assets|autobrainservice-assets)/` literal, so no
+#          attacker-controlled pattern is ever JIT-compiled.
+# Sources: pcre2 10.48-r0 (nginx Alpine 3.24.2) and libpcre2-8-0 10.46-1~deb13u2 (python
+# Debian 13.7), both read from the pinned digests' own layer metadata. Fixes ARE published
+# upstream — Alpine 3.24 main carries pcre2-10.49-r0 and debian-security carries
+# libpcre2-8-0 10.46-1~deb13u3 — but as re-checked 2026-10-02 (AUT-5131) neither
+# nginxinc/nginx-unprivileged:stable-alpine nor python:3.13.16-slim-trixie has been
+# rebuilt with them (the nginx tag still resolves to the exact pinned index digest
+# ed04ec1f..., and the newest python index's amd64 manifest is byte-identical to the
+# pinned 6906dca8 one), so no digest bump clears this today. Suppress per policy
+# ("tolerate when no fixed image exists").
+# Time-boxed: re-check 2026-11-30; drop the entry and bump the nginx + python base digests
+# as soon as either upstream image ships the fixed pcre2. Re-run the DT_NEEDED, .dynsym and
+# nginx.conf checks at that point so a future dynamic-regex or JIT path cannot hide here.
+CVE-2026-103111  # pcre2 OOB write: needs attacker-controlled regex AND JIT; JIT is compiled in
+                  # (see above) but no attacker-controlled regex is ever compiled — see conditions 1+2
+
+# --- AUT-4718: urllib3 CVE-2026-97687 / CVE-2026-97689 (pip's vendored copy) ----------------
+# urllib3 2.7.0 ships ONLY inside pip's vendor tree — `usr/local/lib/python3.13/
+# site-packages/pip/_vendor/urllib3/` — and pip's own lock file records `urllib3==2.7.0`.
+# There is no top-level urllib3 dist-info in the image, so this is pip's private copy, not
+# an installed dependency of any AutoBrain service.
+#   * CVE-2026-97687 (HIGH, traffic interception via HTTPS proxy TLS config override): pip
+#     is invoked only at image build to install requirements.txt from PyPI. No
+#     HTTPS_PROXY is configured in the build, and no runtime process executes pip.
+#   * CVE-2026-97689 (HIGH, DoS via unbounded allocation in the chunk parser): reachable
+#     only by feeding a crafted HTTP response to pip's own downloader at build time.
+# AutoBrain's runtime HTTP stack is httpx (pinned 0.28.1 in backend/ and ai/), which does
+# not use urllib3; `grep -rn urllib3` across backend/, ai/, worker/, market-data/ and every
+# requirements.txt returns nothing. Runtime urllib3 CVEs are covered by the pip-audit
+# resolved-tree gate (AUT-1189), which is green.
+# Fixed in urllib3 2.8.0, but pip 26.2.1 (the version in every current python tag) still
+# vendors 2.7.0, so no image bump clears this. Suppress per policy.
+# Time-boxed: re-check 2026-11-30; drop both entries once a python tag ships a pip that
+# vendors urllib3 >= 2.8.0, and re-verify that no requirements.txt gained urllib3.
+CVE-2026-97687  # urllib3 proxy-TLS override: pip's vendored copy, build-time only; runtime uses httpx
+CVE-2026-97689  # urllib3 chunk-parser DoS: pip's vendored copy, build-time only; runtime uses httpx

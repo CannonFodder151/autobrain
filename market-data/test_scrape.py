@@ -44,9 +44,42 @@ def test_map_and_filter():
         {"title": "e", "price": 50.0, "year": 1998, "source": "carsguide", "url": "", "odometer_km": 1},
     ]
     assert len(carsguide._filter_year(cars, 2016)) == 3
-    assert len(carsguide._filter_year(cars, 1997)) == 5  # ±1yr = {1997, 1998} = 2 <3 -> all
-    assert len(carsguide._filter_year(cars, 1990)) == 5  # <3 near -> all
+    assert len(carsguide._filter_year(cars, 1997)) == 2  # ±1yr tier {1997, 1998}
+    assert len(carsguide._filter_year(cars, 1990)) == 0  # nothing within 5 yrs
     assert len(carsguide._filter_year(cars, None)) == 5
+    print("unit tests OK")
+
+
+def test_filter_year_never_widens_to_a_different_decade():
+    """AUT-5541: a 2009 Toyota Crown was valued against 2019 Crowns.
+
+    The old code fell back to the whole listing set whenever fewer than 3
+    listings matched the year, which is exactly what a rare-year car hits.
+    """
+    crown = [
+        {"title": "2009 Crown a", "price": 12000.0, "year": 2009, "source": "carsguide", "url": "", "odometer_km": 1},
+        {"title": "2009 Crown b", "price": 13000.0, "year": 2009, "source": "carsguide", "url": "", "odometer_km": 1},
+        {"title": "2019 Crown a", "price": 45000.0, "year": 2019, "source": "carsguide", "url": "", "odometer_km": 1},
+        {"title": "2019 Crown b", "price": 46000.0, "year": 2019, "source": "carsguide", "url": "", "odometer_km": 1},
+        {"title": "2021 Crown a", "price": 52000.0, "year": 2021, "source": "carsguide", "url": "", "odometer_km": 1},
+    ]
+    # Two exact-year listings is under MIN_SAMPLE, but the ±1 tier is the
+    # 2009s — it must never widen to the 2019s/2021s.
+    out = carsguide._filter_year(crown, 2009)
+    assert {l["year"] for l in out} == {2009}, out
+
+    # A decade away with nothing close: report nothing rather than a
+    # confidently wrong median.
+    assert carsguide._filter_year(crown, 1995) == []
+
+    # Tier widening: 1 exact match, 3 within ±1 -> the ±1 tier wins.
+    mixed = [
+        {"title": "x", "price": 1.0, "year": 2009, "source": "carsguide", "url": "", "odometer_km": 1},
+        {"title": "y", "price": 2.0, "year": 2010, "source": "carsguide", "url": "", "odometer_km": 1},
+        {"title": "z", "price": 3.0, "year": 2008, "source": "carsguide", "url": "", "odometer_km": 1},
+        {"title": "w", "price": 4.0, "year": 2019, "source": "carsguide", "url": "", "odometer_km": 1},
+    ]
+    assert len(carsguide._filter_year(mixed, 2009)) == 3
     print("unit tests OK")
 
 

@@ -57,6 +57,7 @@ from app.services.advisor import (
     compute_dream,
     compute_finance_plan,
     compute_market_value,
+    compute_replace,
     compute_upgrade,
     find_comparables,
     trade_in_band,

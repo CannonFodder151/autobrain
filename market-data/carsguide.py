@@ -122,16 +122,31 @@ def _map_listing(raw: dict) -> dict | None:
     }
 
 
+# Widening tiers for the comparables window, in years either side of the
+# vehicle's model year. A tier is used as soon as it holds MIN_SAMPLE
+# listings; beyond MAX_WINDOW_YEARS nothing is returned, so a rare-year car
+# reports "no market data" instead of a median built from a different decade.
+MIN_SAMPLE = 3
+MAX_WINDOW_YEARS = 5
+YEAR_TIERS = (0, 1, 3, MAX_WINDOW_YEARS)
+
+
 def _filter_year(listings: list[dict], year: int | None) -> list[dict]:
+    """Restrict listings to the same model year, widening in tiers.
+
+    AUT-5541: this used to fall back to the *whole* unfiltered listing set
+    whenever a year had fewer than 3 matches, so a 2009 Toyota Crown was
+    valued against 2019 Crowns. It now widens 0 -> 1 -> 3 -> 5 years and
+    returns nothing past that: a thin same-year sample is reported as no
+    market data rather than a confidently wrong number.
+    """
     if not year:
         return listings
-    exact = [l for l in listings if l["year"] == year]
-    if len(exact) >= 3:
-        return exact
-    nearby = [l for l in listings if l["year"] and abs(l["year"] - year) <= 1]
-    if len(nearby) >= 3:
-        return nearby
-    return listings
+    for window in YEAR_TIERS:
+        tier = [l for l in listings if l["year"] and abs(l["year"] - year) <= window]
+        if len(tier) >= MIN_SAMPLE:
+            return tier
+    return [l for l in listings if l["year"] and abs(l["year"] - year) <= MAX_WINDOW_YEARS]
 
 
 async def search_carsguide(query: str, year: int | None = None) -> dict:

@@ -29,11 +29,9 @@ SCRIPT = os.path.join(REPO, "scripts", "check-compose-consolidation.py")
 COMPOSE = os.path.join(REPO, "docker-compose.hosted.yml")
 CI_WORKFLOW = os.path.join(REPO, ".github", "workflows", "ci-tests.yml")
 
-
 def load_compose():
     with open(COMPOSE) as f:
         return yaml.safe_load(f)
-
 
 def run_check(compose_text=None):
     """Run the consolidation check and return (returncode, combined output).
@@ -59,20 +57,17 @@ def run_check(compose_text=None):
         if tmp:
             shutil.rmtree(tmp, ignore_errors=True)
 
-
 def broken(mutate):
     """Return YAML text for the real compose file with `mutate` applied."""
     doc = load_compose()
     mutate(doc)
     return yaml.safe_dump(doc)
 
-
 def backend_env(**changes):
     """Mutator: set keys on backend.environment."""
     def apply(doc):
         doc["services"]["backend"]["environment"].update(changes)
     return apply
-
 
 def drop_backend_env(*keys):
     """Mutator: remove keys from backend.environment."""
@@ -81,7 +76,6 @@ def drop_backend_env(*keys):
         for key in keys:
             env.pop(key, None)
     return apply
-
 
 def set_backup_ports(ports):
     """Mutator: replace the backup service's port bindings."""
@@ -93,10 +87,14 @@ def set_backup_ports(ports):
             svc["ports"] = ports
     return apply
 
-
 def drop_backup_service(doc):
     del doc["services"]["backup"]
 
+def set_backend_command(cmd):
+    """Mutator: replace the backend container command."""
+    def apply(doc):
+        doc["services"]["backend"]["command"] = cmd
+    return apply
 
 class TestComposeConsolidationRealFile(unittest.TestCase):
     """The live compose file must satisfy every asserted invariant."""
@@ -127,7 +125,6 @@ class TestComposeConsolidationRealFile(unittest.TestCase):
     def test_offsite_enabled_is_true(self):
         enabled = self.doc["services"]["backend"]["environment"]["BACKUP_OFFSITE_ENABLED"]
         self.assertEqual(str(enabled).lower(), "true")
-
 
 class TestComposeConsolidationBackupInvariants(unittest.TestCase):
     """Negative cases: each broken invariant must fail the check loudly."""
@@ -190,7 +187,6 @@ class TestComposeConsolidationBackupInvariants(unittest.TestCase):
             'BACKUP_OFFSITE_ENABLED must stay "true"',
         )
 
-
 class TestComposeConsolidationIsTriggered(unittest.TestCase):
     """The invariants above are only enforced if CI runs on the file they read.
 
@@ -212,6 +208,42 @@ class TestComposeConsolidationIsTriggered(unittest.TestCase):
 
     def test_push_to_main_triggered_by_hosted_compose(self):
         self.assertIn("docker-compose.hosted.yml", self.on["push"]["paths"])
+
+class TestComposeConsolidationMigrations(unittest.TestCase):
+    """AUT-5088: the backend must run `alembic upgrade head` before it serves.
+
+    Hosted booted straight into `python -m app.db.bootstrap`, whose create_all
+    fallback swallowed every migration failure, so migration-only changes (new
+    index, constraint, column rename, data backfill) never ran in production.
+    """
+
+    def setUp(self):
+        self.rc, self.out = run_check()
+        self.doc = load_compose()
+
+    def test_alembic_runs_before_bootstrap_in_backend_command(self):
+        cmd = self.doc["services"]["backend"]["command"]
+        self.assertIn("alembic upgrade head", cmd)
+        self.assertLess(
+            cmd.index("alembic upgrade head"), cmd.index("python -m app.db.bootstrap")
+        )
+
+    def test_missing_alembic_fails(self):
+        doc_cmd = load_compose()["services"]["backend"]["command"]
+        stripped = doc_cmd.replace("alembic upgrade head && ", "")
+        rc, out = run_check(broken(set_backend_command(stripped)))
+        self.assertEqual(rc, 1, out)
+        self.assertIn("`alembic upgrade head` (AUT-5088)", out)
+
+    def test_alembic_after_bootstrap_fails(self):
+        doc_cmd = load_compose()["services"]["backend"]["command"]
+        reordered = doc_cmd.replace(
+            "alembic upgrade head && python -m app.db.bootstrap",
+            "python -m app.db.bootstrap && alembic upgrade head",
+        )
+        rc, out = run_check(broken(set_backend_command(reordered)))
+        self.assertEqual(rc, 1, out)
+        self.assertIn("must run before bootstrap/uvicorn (AUT-5088)", out)
 
 
 if __name__ == "__main__":

@@ -5,6 +5,8 @@
 /// `import 'package:autobrain/core/models.dart'` call sites unchanged.
 library models;
 
+import 'dart:convert';
+
 part 'models/vehicle.dart';
 part 'models/service.dart';
 part 'models/fuel.dart';
@@ -17,3 +19,6 @@ part 'models/receipt.dart';
 part 'models/valuation.dart';
 part 'models/analytics.dart';
 part 'models/timeline.dart';
+part 'models/electricity.dart';
+part 'models/shop_mechanic.dart';
+part 'models/vass.dart';

@@ -189,8 +189,10 @@ async def find_comparables(
     24h (same as ``/valuation/market``) so comparables stay stable between
     visits.
 
-    Listings are sorted by year DESC then price ASC and capped at
-    ``max_results`` so the UI shows a tight comparison set.
+    Listings are sorted by year proximity (nearest model year first) then
+    price ASC and capped at ``max_results`` so the UI shows a tight
+    comparison set. Individual listings are year-checked as well as the
+    cache rows they live in.
     """
     make_l = (vehicle.make or "").strip().lower()
     model_l = (vehicle.model or "").strip().lower()
@@ -216,15 +218,27 @@ async def find_comparables(
                 continue
             if listing.get("price") is None:
                 continue
+            # AUT-5541: the row-level year filter is not enough — a
+            # cached row can hold listings for a different model year
+            # (a 2009 Crown row carrying 2019 Crowns), and the newest
+            # year sorted to the top of the comparison set. Only
+            # listings inside the same +/-window as the vehicle count.
+            listing_year = listing.get("year") or row.year
+            if listing_year is None:
+                continue
+            if year is not None and abs(listing_year - year) > COMPARABLES_YEAR_WINDOW:
+                continue
             out.append({
                 "title": listing.get("title", ""),
                 "price": float(listing["price"]),
-                "year": listing.get("year") or row.year,
+                "year": listing_year,
                 "odometer_km": listing.get("odometer_km"),
                 "source": listing.get("source", row.source or ""),
                 "url": listing.get("url", ""),
             })
-    out.sort(key=lambda x: (-(x.get("year") or 0), x["price"]))
+    # Closest year first, then cheapest, so the comparison set the
+    # UI shows is the one a human would pick for this car.
+    out.sort(key=lambda x: (abs((x.get("year") or 0) - (year or 0)), x["price"]))
     return out[:max_results]
 
 

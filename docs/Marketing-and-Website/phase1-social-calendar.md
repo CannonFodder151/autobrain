@@ -6,13 +6,13 @@
 
 ## Narrative pillars (Phase 1)
 
-| Pillar | One line | Proof point |
-|--------|----------|-------------|
-| **Simpler** | Fewer containers, easier to run | 9 → 8 long-running containers; worker merged into backend |
-| **Vectorised** | Your data is searchable in your own DB | 1536-dim embeddings, pgvector, `AI_ENABLED` toggle |
-| **Deterministic-first** | Works even when AI is down | `enhance()` pattern; `model: rule-based+ai` / `rule-based-fallback` |
-| **Modular** | Add a feature, not a service | 13 modules, 14 fallbacks, shared `router_utils` |
-| **Docs rebuilt** | Docs stay in sync with code | 8-section mirror + Outline source of truth |
+| Pillar | One line | Proof point | Verify in |
+|--------|----------|-------------|-----------|
+| **Simpler** | Fewer containers, easier to run | Hosted stack consolidated **12 → 9** long-running containers; worker merged into backend | `docker-compose.hosted.yml` |
+| **Vectorised** | Your data is searchable in your own DB | pgvector embeddings, `EMBEDDING_DIMENSION=1536`, `AI_ENABLED` toggle | `backend/app/core/config.py` |
+| **Deterministic-first** | Works even when AI is down | `enhance()` pattern; `model: rule-based+ai` / `rule-based-fallback` | `ai/app/router_client.py`, `ai/app/fallbacks/` |
+| **Modular** | Add a feature, not a service | **12** AI modules, **12** fallback files (11 module fallbacks + shared `utils.py`) | `ai/app/modules/`, `ai/app/fallbacks/` |
+| **Docs rebuilt** | Docs stay in sync with code | Section mirrors in `docs/` + Outline source of truth | `docs/` |
 
 ## Week 1 (launch week)
 
@@ -32,7 +32,7 @@
 | Date | Channel | Asset | Hook | CTA |
 |------|---------|-------|------|-----|
 | W2-D2 | Blog follow-up | "How the `enhance()` pattern keeps your valuations honest" | Resale numbers are immutable; 9Router can't touch them | /ai-data.html |
-| W2-D3 | LinkedIn | Case-styled post | "9 containers → 8: what consolidating your stack actually saves" | /selfhost.html |
+| W2-D3 | LinkedIn | Case-styled post | "12 containers → 9: what consolidating your stack actually saves" | /selfhost.html |
 | W2-D4 | Twitter/X | Single image | "Your data, vectorised: search your garage in plain English" | /selfhost.html |
 | W2-D5 | Discord #support | Embed | FAQ: "Does AutoBrain work without an AI router?" | — |
 
@@ -59,5 +59,5 @@ Every asset above is **draft only** until the human CMO approves in Discord #mar
 ## Source of truth
 
 - Website copy: `autobrainservice-website` repo, branch `phase1/cmo-marketing-refresh`
-- Blog draft: `drafts/AUT-3971-phase1-outcomes-blog.md`
+- Blog draft: Outline (internal-only) — draft blog post AUT-3971
 - Facts: `autobrain` repo — `ai/app/router_client.py`, `ai/app/fallbacks/`, `backend/app/services/vector_search.py`, `docker-compose.hosted.yml`, `docs/Deployment-and-Infrastructure/container-consolidation-migration.md`, `phase1-improvement-plan.md`

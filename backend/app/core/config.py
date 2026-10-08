@@ -131,7 +131,10 @@ class Settings(BaseSettings):
     # Demo mode: seeds a read-only demo account + sample data. No AI, no writes.
     DEMO_MODE: bool = False
     DEMO_EMAIL: str = "demo@autobrainservice.app"
-    DEMO_PASSWORD: str = "demo"
+    # No default: the demo password is a secret (Paperclip
+    # `demo/demo-account-password`), never a literal in code. seed_demo /
+    # reset_demo fail closed when it is empty (AUT-5063).
+    DEMO_PASSWORD: str = ""
     DEMO_DISPLAY_NAME: str = "Demo Garage"
     # One-shot demo reseed: wipe + regenerate the demo data on startup
     # (used when the seed changes so existing instances get new sample data).
@@ -168,17 +171,19 @@ class Settings(BaseSettings):
     APP_BASE_URL: str = "http://localhost:8000"
 
     # Versioning (local only; the GitHub update check was removed — AUT-461)
-    APP_VERSION: str = "0.3.296"  # mirror frontend/pubspec.yaml version
+    APP_VERSION: str = "0.3.311"  # mirror frontend/pubspec.yaml version
 
     # Scheduled backup (daily). When set, beats stores a full JSON snapshot to MinIO.
     BACKUP_ENABLED: bool = True
     BACKUP_RETENTION_DAYS: int = 14
 
     # Off-site backup (hourly) — replaces the standalone backup-agent container (AUT-3827).
-    # Pushes full-DB snapshots to autobrain-backup /ingest with tiered retention.
+    # Pushes full-DB snapshots to autobrain-backup /ingest. Per-tier retention is
+    # owned by the autobrain-backup instance (retention.hourly/daily/weekly) —
+    # the backend never prunes this store (AUT-5136).
     BACKUP_OFFSITE_ENABLED: bool = False
     BACKUP_OFFSITE_URL: str = ""              # e.g. http://autobrain-backup:8080
-    BACKUP_OFFSITE_GUI_KEY: str = ""          # X-Gui-Key for /api/backups + /api/backup/delete
+    BACKUP_OFFSITE_GUI_KEY: str = ""          # X-Gui-Key (kept for admin/ops calls against the store)
     BACKUP_OFFSITE_GUI_KEY_FILE: str = ""     # secret-file fallback
     BACKUP_OFFSITE_INGEST_KEY: str = ""       # X-Ingest-Key for /api/backup/ingest
     BACKUP_OFFSITE_INGEST_KEY_FILE: str = ""  # secret-file fallback
@@ -218,6 +223,11 @@ class Settings(BaseSettings):
     PAPERCLIP_API_URL: str = ""  # e.g. https://paperclip.nathanmartina.com
     PAPERCLIP_API_KEY: str = ""  # long-lived agent key or service token
     PAPERCLIP_COMPANY_ID: str = ""  # AutoBrain company UUID in Paperclip control plane
+
+    # AUT-5137: best-effort ops webhook fired when boot aborts because
+    # `alembic upgrade head` failed against a non-empty database. Empty = log
+    # line only (the container still exits non-zero and crash-loops).
+    BOOT_ALERT_WEBHOOK_URL: str = ""
 
     # Self-service signup (hosted). When enabled, anyone can register a
     # Free-tier account via POST /auth/signup. Self-hosted instances keep
@@ -275,7 +285,7 @@ class Settings(BaseSettings):
     IAP_APPLE_ISSUER_ID: str = ""              # App Store Connect API key issuer id
     IAP_APPLE_KEY_ID: str = ""                 # App Store Connect API key id
     IAP_APPLE_PRIVATE_KEY: str = ""            # App Store Connect API key .p8 PEM (secret)
-    IAP_APPLE_BUNDLE_ID: str = "com.autobrainservice.app"
+    IAP_APPLE_BUNDLE_ID: str = "com.autobrain.autobrain"
     # Verify-on-refresh (AUT-617): GET /auth/me re-validates the stored store
     # purchase token against the store API when the entitlement is already
     # expired or within this many days of expiring. Keeps renewals/refunds

@@ -72,11 +72,25 @@ assert sync.verify_running(FakeArgs(), services, attempts=1, delay=0) == []
 
 sync.endpoint_containers = lambda args: [
     cont("s-frontend-1", "frontend", "created", [8086]),
-    cont("s-backup-1", "backup", "running", [8080]),
+    cont("s-backend-1", "backend", "running", [8080]),
 ]
 problems = sync.verify_running(FakeArgs(), services, attempts=1, delay=0)
 assert ("s-frontend-1", "stuck in state created") in problems, problems
 assert any("'postgres' has no running container" in w for _, w in problems), problems
+
+# AUT-5669: a moving tag is refused, a digest pin is not.
+PINNED = """
+x-autobrain-pin-source: "%s"
+services:
+  backend:
+    image: ghcr.io/cannonfodder151/autobrain-backend:hosted@sha256:%s
+"""
+assert sync.unpinned_image_refs(PINNED % ("a" * 40, "b" * 64)) == {}
+assert sync.unpinned_image_refs(
+    "services:\n  backend:\n    image: ghcr.io/cannonfodder151/autobrain-backend:hosted\n"
+) == {"backend": "ghcr.io/cannonfodder151/autobrain-backend:hosted"}
+assert sync.compose_pin_source(PINNED % ("a" * 40, "b" * 64)) == "a" * 40
+assert sync.compose_pin_source("services:\n  backend:\n    image: x\n") is None
 
 print("OK: sync-compose guards")
 sys.exit(0)

@@ -21,14 +21,14 @@ from app.schemas.fuel import FuelStats  # noqa: E402
 from app.services.fuel_servo import annotate_price, annotate_prices  # noqa: E402
 
 
-def _stats(*, avg_l_per_100km: float | None, avg_litres_per_fill: float | None) -> FuelStats:
+def _stats(*, avg_l_per_100km: float | None, avg_fill_litres: float | None) -> FuelStats:
     """Tiny FuelStats carrying just the two fields the annotation helper uses."""
     return FuelStats(
         total_litres=0.0,
         total_cost=0.0,
         avg_l_per_100km=avg_l_per_100km,
         avg_cost_per_km=None,
-        avg_litres_per_fill=avg_litres_per_fill,
+        avg_fill_litres=avg_fill_litres,
         last_log=None,
         series=[],
     )
@@ -79,7 +79,7 @@ def test_annotate_prices_without_stats_keeps_every_annotation_none() -> None:
 def test_annotate_prices_with_empty_logs_stats_yields_none_per_price() -> None:
     # /fuel/stations called with vehicle_id for a vehicle that has no fuel logs yet.
     # stats object is present, but both averages are None -> every per-station annotation None.
-    stats = _stats(avg_l_per_100km=None, avg_litres_per_fill=None)
+    stats = _stats(avg_l_per_100km=None, avg_fill_litres=None)
     out = annotate_prices([165.0, 189.9, 220.5], stats)
     assert out == [(None, None), (None, None), (None, None)]
 
@@ -87,7 +87,7 @@ def test_annotate_prices_with_empty_logs_stats_yields_none_per_price() -> None:
 def test_annotate_prices_full_stats_annotates_every_price_independently() -> None:
     # Sanity: one stats object, three different station prices -> three different cost_per_km
     # / avg_fill_cost pairs in the same order. round() uses banker's rounding, so 85.455 -> 85.45.
-    stats = _stats(avg_l_per_100km=8.5, avg_litres_per_fill=45.0)
+    stats = _stats(avg_l_per_100km=8.5, avg_fill_litres=45.0)
     out = annotate_prices([165.0, 189.9, 220.5], stats)
     assert [c for c, _ in out] == [0.1403, 0.1614, 0.1874]
     assert [f for _, f in out] == [74.25, 85.45, 99.22]

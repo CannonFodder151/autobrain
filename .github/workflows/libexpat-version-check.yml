@@ -1,10 +1,15 @@
 name: libexpat fix-detect (nginx frontend, AUT-2126)
 
-# Time-boxed guard for .trivyignore entries CVE-2026-66046 / CVE-2026-76641
-# (libexpat 2.8.3-r0 in nginxinc/nginx-unprivileged:stable-alpine). Once
-# nginxinc ships a new stable-alpine digest with libexpat >= 2.8.4-r0, this
-# workflow files a Paperclip issue with a PR-ready patch so the entries can be
-# dropped and the image digest bumped.
+# Digest-drift guard for nginxinc/nginx-unprivileged:stable-alpine. Runs daily;
+# when the tag head moves off the digest we pin AND the new image clears the
+# libexpat threshold, it files a Paperclip issue with a PR-ready digest bump.
+#
+# AUT-4718: the expat suppressions this workflow was born for (CVE-2026-66046 /
+# CVE-2026-76641 / CVE-2026-93990) are now DROPPED — the pin sits on
+# @sha256:ed04ec1f... with libexpat 2.8.5-r0 — and the threshold moved to
+# 2.8.5-r0. It also compared a per-arch manifest digest against the index digest,
+# so `unchanged` was never true and it re-filed a duplicate issue daily; it now
+# resolves the index digest.
 #
 # Manual run: ok. Daily schedule: 07:30 UTC (off-hours to avoid contention
 # with the weekly 07:00 Mon scan in trivy-image-scan.yml).
@@ -24,9 +29,9 @@ permissions:
   contents: read
 
 env:
-  THRESHOLD: '2.8.4-r0'
+  THRESHOLD: '2.8.5-r0'
   IMAGE_TAG: 'nginxinc/nginx-unprivileged:stable-alpine'
-  PINNED_DIGEST: 'sha256:45ce1e2e699234253d1def7baa96218a5d00b498d1ba0cbb1a17b6bdf73d1351'
+  PINNED_DIGEST: 'sha256:ed04ec1ff34502c339ee5c3ae3f855442398edc1d05591e2b98981dcbbd20b1e'
   DISCORD_REPORT_WEBHOOK: ${{ secrets.DISCORD_REPORT_WEBHOOK }}
 
 jobs:
@@ -53,7 +58,11 @@ jobs:
         id: digest
         run: |
           set -euo pipefail
-          DIGEST="$(regctl image digest --platform linux/amd64 "${{ env.IMAGE_TAG }}")"
+          # AUT-4718: resolve the multi-arch INDEX digest, not a per-arch manifest
+          # digest. `--platform linux/amd64` returned the amd64 manifest while
+          # PINNED_DIGEST holds the index digest, so `unchanged` was always false and
+          # this daily job re-filed a duplicate issue on every run.
+          DIGEST="$(regctl image digest "${{ env.IMAGE_TAG }}")"
           echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
           echo "current stable-alpine digest: $DIGEST"
           if [ "$DIGEST" = "${{ env.PINNED_DIGEST }}" ]; then
@@ -115,7 +124,7 @@ jobs:
           BODY=$(cat <<JSON
           {
             "title": "libexpat ${LIBEXPAT_VERSION} in nginx:stable-alpine — drop .trivyignore entries + bump digest (AUT-2126/AUT-2161)",
-            "description": "Parent: AUT-2126.\\n\\nlibexpat-version-check.yml detected a new nginxinc/nginx-unprivileged:stable-alpine digest with libexpat **${LIBEXPAT_VERSION}** (>= 2.8.4-r0). The two time-boxed .trivyignore entries (CVE-2026-66046, CVE-2026-76641) are now redundant and must be dropped.\\n\\n## Patch\\n\\n1. **docker/frontend/Dockerfile**\\n   - Replace `FROM ${IMAGE_TAG}@${PINNED_DIGEST_SHORT}` with `FROM ${IMAGE_TAG}@${NEW_DIGEST}`.\\n2. **.github/workflows/trivy-image-scan.yml**\\n   - Update `NGINX_FRONTEND_IMAGE` env to the new digest.\\n3. **.trivyignore**\\n   - Delete the two `CVE-2026-66046` / `CVE-2026-76641` lines under the `nginx:stable-alpine libexpat CVEs (time-boxed)` block.\\n4. **CHANGELOG.md**\\n   - Add an entry under `[Unreleased]`.\\n5. Re-run `.github/workflows/trivy-image-scan.yml` and confirm the nginx step is green without the ignores.\\n\\n## Detected values\\n\\n- New digest: `${NEW_DIGEST}`\\n- libexpat: `${LIBEXPAT_VERSION}` (threshold 2.8.4-r0)\\n- Image: `${IMAGE_TAG}`\\n\\n## Acceptance\\n\\n- Re-run trivy image scan: nginx step green, no .trivyignore entries for the two CVEs.\\n- Deploy per the deploy-instances.yml path.\\n\\nThis issue is created automatically by the libexpat-version-check workflow (AUT-2161). Merge the fix PR, close this issue, and close AUT-2126 done.",
+            "description": "Parent: AUT-2126.\\n\\nlibexpat-version-check.yml detected a new nginxinc/nginx-unprivileged:stable-alpine digest with libexpat **${LIBEXPAT_VERSION}** (>= 2.8.5-r0). Bump the pinned digest so the base-image scan covers the new image.\\n\\n## Patch\\n\\n1. **docker/frontend/Dockerfile**\\n   - Replace `FROM ${IMAGE_TAG}@${PINNED_DIGEST_SHORT}` with `FROM ${IMAGE_TAG}@${NEW_DIGEST}`.\\n2. **.github/workflows/trivy-image-scan.yml**\\n   - Update `NGINX_FRONTEND_IMAGE` env to the new digest.\\n3. **.trivyignore**\\n   - Delete the two `CVE-2026-66046` / `CVE-2026-76641` lines under the `nginx:stable-alpine libexpat CVEs (time-boxed)` block.\\n4. **CHANGELOG.md**\\n   - Add an entry under `[Unreleased]`.\\n5. Re-run `.github/workflows/trivy-image-scan.yml` and confirm the nginx step is green without the ignores.\\n\\n## Detected values\\n\\n- New digest: `${NEW_DIGEST}`\\n- libexpat: `${LIBEXPAT_VERSION}` (threshold 2.8.5-r0)\\n- Image: `${IMAGE_TAG}`\\n\\n## Acceptance\\n\\n- Re-run trivy image scan: nginx step green, no .trivyignore entries for the two CVEs.\\n- Deploy per the deploy-instances.yml path.\\n\\nThis issue is created automatically by the libexpat-version-check workflow (AUT-2161). Merge the fix PR, close this issue, and close AUT-2126 done.",
             "status": "todo",
             "priority": "high",
             "parentId": "${PAPERCLIP_PARENT_ISSUE}"

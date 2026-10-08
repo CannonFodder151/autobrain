@@ -167,9 +167,16 @@ services:
     # AUT-3153: the standalone Celery worker+beat service is merged into this
     # container. The backend image already carries the worker dependencies and
     # its default CMD runs the same topology as docker-compose.prod.yml.
-    image: ghcr.io/cannonfodder151/autobrain-backend:hosted@sha256:28c1747959feed67ac58075692de0d49c9f0ffcabddf6734fe0e2a4628fa7464
+    image: ghcr.io/cannonfodder151/autobrain-backend:hosted@sha256:161f2b4a75391491b688d796b66e78cc7f349af1f4eaaad476990fbc7e3cc15c
     restart: unless-stopped
-    command: sh -c "export AI_ROUTER_API_KEY=$(cat /run/secrets/ai_router_api_key) && python -m app.db.bootstrap && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && (uvicorn ai_app.main:app --host 0.0.0.0 --port 8001 &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    # AUT-5088: `alembic upgrade head` runs first and its failure is fatal.
+    # Without it, bootstrap's `create_all` fallback silently swallowed every
+    # migration failure, so migration-only changes (new index, constraint,
+    # column rename, data backfill) were dead code on hosted — `alembic_version`
+    # sat at `aut4925_missing_tables` while `fuel_price_snapshots` existed only
+    # because create_all happened to build it. bootstrap still runs after it,
+    # for the admin/demo seed.
+    command: sh -c "export AI_ROUTER_API_KEY=$(cat /run/secrets/ai_router_api_key) && alembic upgrade head && python -m app.db.bootstrap && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && (uvicorn ai_app.main:app --host 0.0.0.0 --port 8001 &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
       <<: [*db-env, *core-env, *router-env]
       PYTHONPATH: /app
@@ -198,10 +205,16 @@ services:
       # the secrets anchor below mounts ${SECRETS_DIR} read-only, so the file
       # resolves when seed-secrets.sh provisions fuel_qld_api_key.
       FUEL_QLD_API_KEY_FILE: /run/secrets/fuel_qld_api_key
-      # AUT-2610: SA SAFPIS ingester (AUT-2406). Same Informed Sources subscriber
-      # token as QLD; secret file provisioned via seed-secrets.sh.
+      # AUT-2610/AUT-5072: SA SAFPIS ingester. The SAFPIS Direct API
+      # host (fppdirectapi.safuelpricinginformation.com.au, per the
+      # AUT-2372 research doc) is NXDOMAIN — the production base URL
+      # was only ever "to be confirmed from registration" and no
+      # subscriber token was ever contracted. FUEL_SA_ENABLED stays
+      # false until an aggregator is contracted; the secret file
+      # stays mounted so the feed can be re-enabled with a one-line
+      # flag flip (same pattern as VIC/AUT-4976).
       FUEL_SA_API_KEY_FILE: /run/secrets/fuel_sa_api_key
-      FUEL_SA_ENABLED: "true"
+      FUEL_SA_ENABLED: "false"
       AI_GATEWAY_API_KEY_FILE: /run/secrets/ai_gateway_api_key
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@autobrain.io}
       ADMIN_DISPLAY_NAME: AutoBrain Admin
@@ -273,7 +286,7 @@ services:
       IAP_APPLE_ISSUER_ID: ${IAP_APPLE_ISSUER_ID:-}
       IAP_APPLE_KEY_ID: ${IAP_APPLE_KEY_ID:-}
       IAP_APPLE_PRIVATE_KEY_FILE: /run/secrets/iap_apple_private_key
-      IAP_APPLE_BUNDLE_ID: ${IAP_APPLE_BUNDLE_ID:-com.autobrainservice.app}
+      IAP_APPLE_BUNDLE_ID: ${IAP_APPLE_BUNDLE_ID:-com.autobrain.autobrain}
       IAP_REFRESH_WINDOW_DAYS: ${IAP_REFRESH_WINDOW_DAYS:-2}
       IAP_GOOGLE_PUBSUB_AUDIENCE: ${IAP_GOOGLE_PUBSUB_AUDIENCE:-}
     <<: *secrets
@@ -334,7 +347,7 @@ services:
       - "8000"
 
   frontend:
-    image: ghcr.io/cannonfodder151/autobrain-frontend:hosted@sha256:e28ce22c9c5fe62589b3ed9f92ffe1dfa8c205dcc4d060e429a0a04bea59086c
+    image: ghcr.io/cannonfodder151/autobrain-frontend:hosted@sha256:9fcf4de8b0edb8bbd6e9cde95a640071f151b626b74aeee0064c698ab5e9ef0f
     # AUT-2087: pinned to the verified arm64 child manifest digest of the
     # autobrain-frontend :hosted OCI image index. Earlier pin
     # (`@sha256:8937c2bb…`) targeted an arm64 image whose nginx + busybox
