@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-3512)
+- feat(backend): extend pgvector embeddings to `fuel_price_snapshots`, `devices`, `market_listing_cache`, and `vehicles` tables with HNSW indexes. New Alembic migration `g7h8i9j0k1l3` adds `embedding vector(1536)` columns and cosine-similarity indexes. Search service `_ENTITY_MAP` expanded with `fuel_price`, `device`, `market_listing`, `vehicle` entity types (including `scope_field` override for vehicle-scoped search). Vector embedding service `_to_text` updated for new types. API `/api/v1/search` entity_types description updated.
+
 ### Fixed (AUT-4812)
 - fix(backend): `tests/test_advisor_value.py` could not import `BAND_LOW_RATIO` / `BAND_HIGH_RATIO` from `app.services.advisor`, so the entire backend suite failed at collection — masked by `ci-tests.yml` running the suite as `pytest … || true`. The `app.services.advisor` package `__init__.py` already re-exports both constants from `advisor/value.py`; the stale `backend/app/services/advisor.py` module that shadowed the package is deleted (no imports referenced it). Removed `|| true` from the full-suite step in `.github/workflows/ci-tests.yml` so future collection errors fail the build. All 16 `test_advisor_value.py` tests pass; full suite collects without import errors.
 
