@@ -150,12 +150,12 @@ class Settings(BaseSettings):
     FCM_SERVER_KEY: str = ""
 
     # SMTP (email notifications + self-service password reset)
-    SMTP_HOST: str = ""
+    SMTP_HOST: str = "mail.smtp2go.com"
     SMTP_PORT: int = 587
-    SMTP_USERNAME: str = ""
+    SMTP_USERNAME: str = "${SMTP2GO_USERNAME}"
     SMTP_PASSWORD: str = ""
     SMTP_USE_TLS: bool = True  # STARTTLS (TLS on connect when False → SSL)
-    SMTP_FROM_EMAIL: str = "noreply@example.com"
+    SMTP_FROM_EMAIL: str = "noreply@smtp2go.com"
     SMTP_FROM_NAME: str = "AutoBrain"
     # Recipient suppression (AUT-1167): never deliver real email to reserved/
     # throwaway test domains or addresses matching these regex patterns. Guards
