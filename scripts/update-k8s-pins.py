@@ -78,6 +78,13 @@ def main():
             )
             new_ref = f"\\1@{digest}"
             text, n = pattern.subn(new_ref, text)
+            # If no tag-only matches, try replacing existing @sha256: digests
+            if n == 0:
+                pattern_digest = re.compile(
+                    r"(" + re.escape(repo_prefix) + r")@sha256:[a-f0-9]{64}"
+                )
+                new_ref_digest = f"\\1@{digest}"
+                text, n = pattern_digest.subn(new_ref_digest, text)
             if n == 0:
                 print(f"WARN: no match for {svc} in {p}", file=sys.stderr)
             elif text != orig:

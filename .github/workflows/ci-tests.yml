@@ -9,12 +9,18 @@ on:
     paths:
       - "backend/**"
       - "scripts/**"
+      # AUT-5069: this is the only file check-compose-consolidation.py reads.
+      # Without it here, a PR touching nothing but the hosted compose file
+      # never ran the job and the AUT-3944 backup invariants were unenforced
+      # for exactly the file they guard.
+      - "docker-compose.hosted.yml"
       - ".github/workflows/**"
   push:
     branches: [main]
     paths:
       - "backend/**"
       - "scripts/**"
+      - "docker-compose.hosted.yml"
       - ".github/workflows/**"
 
 permissions:
