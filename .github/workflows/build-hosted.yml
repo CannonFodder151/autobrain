@@ -407,10 +407,21 @@ jobs:
           # workflows that run on a push to main.
           # http.extraheader is passed per-invocation with -c, so the token is
           # never persisted into .git/config.
+          echo "==> GH_PAT length: ${#GH_PAT}"
+          echo "==> git config before push:"
+          git config --local --list | grep -E 'http\.extraheader|credential' || echo "(none)"
+          # The checkout action persists an http.extraheader into .git/config for
+          # the app GITHUB_TOKEN. Drop it before pushing with the admin PAT so
+          # the credential cannot shadow the -c override.
+          git config --local --unset-all http.https://github.com/.extraheader || true
           auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_PAT" | base64 -w0)"
           for i in 1 2 3; do
+            echo "==> push attempt $i/3"
             push_output=$(git -c "http.extraheader=${auth}" push origin main 2>&1)
             push_rc=$?
+            echo "==> push exit code: $push_rc"
+            echo "==> push output:"
+            echo "$push_output"
             if [ $push_rc -eq 0 ]; then
               echo "==> compose pins pushed"
               exit 0
@@ -425,7 +436,6 @@ jobs:
               exit 0
             fi
             echo "==> push failed — rebasing onto main and retrying ($i/3)"
-            echo "$push_output"
             git pull --rebase origin main
             git add docker-compose.hosted.yml
             git commit --amend --no-edit || true
