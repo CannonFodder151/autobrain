@@ -8,8 +8,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > user-facing change ships with an entry here under `[Unreleased]` — see
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
-
 ## [Unreleased]
+
+### Fixed (AUT-5612)
+- `devices.vehicle_type` rollback data loss: `aut5092_dev_veh_type` is a no-op
+  on the hosted `create_all` database it exists to repair (the column is already
+  there), yet its `downgrade()` dropped the column anyway, destroying real data
+  on rollback. `upgrade()` now stamps the column it adds with a provenance
+  marker (`COMMENT ON COLUMN`) and `downgrade()` drops only a column carrying
+  that marker — a pre-existing column is left alone, while a genuine rollback of
+  a column this revision created still drops it. Covered by
+  `tests/test_alembic_heads.py` (offline) and two new cases in
+  `tests/test_alembic_migration_only.py` (real Postgres, `alembic-migrations` CI
+  job).
+- `BACKUP_OFFSITE_INGEST_KEY`'s docstring still said `/api/backup/ingest`, an
+  endpoint that 404s; the value is the `X-Ingest-Key` for `/ingest`.
 
 ### Removed (AUT-5718)
 - Removed the dead `POST /api/v1/ci/webhook` CI triage receiver. The GitHub Actions `ci-triage-webhook.yml` fire job has never posted to the AutoBrain backend — it fires `secrets.CI_TRIAGE_WEBHOOK_URL`, the Paperclip routine trigger on the `CI Triage` routine, and that routine trigger is the only thing that wakes the CI Triage Agent. The backend route had no callers: AutoBrain-Hosted answered `503 CI triage webhook not configured` to every request since at least 2026-09-03 because `docker-compose.hosted.yml` wired `CI_TRIAGE_WEBHOOK_SECRET`/`CI_TRIAGE_PARENT_ISSUE_ID`/`CI_TRIAGE_GOAL_ID` to empty defaults the Hosted env file never set, and the Hosted access log contains no POST from any Actions runner to that path. Deletes `backend/app/api/v1/ci.py`, its router registration, the `CI_TRIAGE_*` + server-side `PAPERCLIP_*` settings in `backend/app/core/config.py`, the same block in `docker-compose.hosted.yml`, the `CI_TRIAGE_*` block in `.env.example`, and the `/ci/webhook` row in `docs/Engineering/api-spec.md`; `ci-triage-webhook.yml` and the deployment guide now state that the Paperclip routine trigger is the canonical receiver so the route is not re-added or repointed. The Hosted stack no longer needs `PAPERCLIP_API_KEY`/`CI_TRIAGE_WEBHOOK_SECRET` to boot. `backend/tests/test_ci_receiver_removed_aut5718.py` asserts the route is gone (404) and the settings no longer exist, so a re-added receiver fails CI.

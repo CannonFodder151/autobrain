@@ -24,6 +24,7 @@ import asyncio  # noqa: E402
 import logging  # noqa: E402
 
 import httpx  # noqa: E402
+import pytest  # noqa: E402
 
 from app.core.logging import setup_logging  # noqa: E402
 from app.services import backup_offsite  # noqa: E402
@@ -151,7 +152,7 @@ def test_hourly_push_deletes_nothing_on_an_in_policy_store(monkeypatch):
     asyncio.run(backup_offsite.run_backup_offsite())
 
     assert [c for c in calls if c[0] == "DELETE"] == [], "backend must never delete off-site backups"
-    assert [c for c in calls if c[0] == "POST"] == [("POST", "/api/backup/ingest")]
+    assert [c for c in calls if c[0] == "POST"] == [("POST", "/ingest")]
 
 
 def test_hourly_push_skips_when_disabled(monkeypatch):
@@ -169,3 +170,56 @@ def test_hourly_push_skips_when_disabled(monkeypatch):
 
     asyncio.run(backup_offsite.run_backup_offsite())
     assert calls == []
+
+
+def test_hourly_task_actually_awaits_the_push(monkeypatch):
+    """AUT-5092: the task called the coroutine without awaiting it.
+
+    Celery then reported success in ~1ms and nothing was ever pushed. Assert
+    the coroutine actually runs to completion.
+    """
+    tasks = pytest.importorskip("app.workers.tasks")
+
+    ran: list[str] = []
+
+    async def _fake_run() -> None:
+        ran.append("done")
+
+    monkeypatch.setattr(backup_offsite, "run_backup_offsite", _fake_run)
+    tasks.backup_offsite_hourly()
+    assert ran == ["done"]
+
+
+def test_push_uses_the_gui_ingest_path(monkeypatch):
+    """AUT-5092: the GUI serves POST /ingest, not /api/backup/ingest (404)."""
+    seen: dict = {}
+
+    class _Resp:
+        status_code = 200
+
+        def raise_for_status(self) -> None:
+            return None
+
+    class _Client:
+        def __init__(self, *a, **kw):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post(self, url, params=None, headers=None, content=None):
+            seen.update(url=url, params=params, headers=headers)
+            return _Resp()
+
+    monkeypatch.setattr(backup_offsite.httpx, "AsyncClient", _Client)
+    monkeypatch.setattr(backup_offsite.settings, "BACKUP_OFFSITE_URL", "http://backup:8080")
+    monkeypatch.setattr(backup_offsite.settings, "BACKUP_OFFSITE_INSTANCE", "hosted")
+    monkeypatch.setattr(backup_offsite.settings, "BACKUP_OFFSITE_INGEST_KEY", "k")
+
+    assert asyncio.run(backup_offsite._push_offsite(b"{}", "snap.json")) is True
+    assert seen["url"] == "http://backup:8080/ingest"
+    assert seen["params"] == {"instance": "hosted"}
+    assert seen["headers"]["X-Ingest-Key"] == "k"
