@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   cancel-orphaned-runs:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, vm2]
     timeout-minutes: 10
     strategy:
       fail-fast: false

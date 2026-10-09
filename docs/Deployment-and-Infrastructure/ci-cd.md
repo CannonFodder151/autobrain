@@ -224,5 +224,15 @@ GitHub Actions secrets on `CannonFodder151/autobrain`:
 (mobile sync + release dispatch). The mobile repo carries its own
 `UPLOAD_KEYSTORE_BASE64`, `KEY_ALIAS`, `KEY_PASSWORD`, `KEY_STORE_PASSWORD`.
 
+`DISCORD_REPORT_WEBHOOK` is the n8n Discord Reporter URL
+(`https://n8n.nathanmartina.com/webhook/discord-report`).
+Every workflow that posts through it copies the secret into a
+`discord_url` local and rejects anything that is not an `http(s)://`
+URL **before** curl parses it — a malformed secret would otherwise
+reach curl as an *option* (`curl: option -: is unknown`) and the
+alert would silently never send (AUT-5690).
+`python3 scripts/check-discord-webhook-guard.py` asserts the guard
+in both call sites.
+
 > Mirror of the Outline doc *Engineering > CI/CD Pipeline*. Keep in sync when
 > the pipelines change. Never store credentials in this file or in the repo.

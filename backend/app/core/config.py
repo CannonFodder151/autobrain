@@ -131,7 +131,10 @@ class Settings(BaseSettings):
     # Demo mode: seeds a read-only demo account + sample data. No AI, no writes.
     DEMO_MODE: bool = False
     DEMO_EMAIL: str = "demo@autobrainservice.app"
-    DEMO_PASSWORD: str = "demo"
+    # No default: the demo password is a secret (Paperclip
+    # `demo/demo-account-password`), never a literal in code. seed_demo /
+    # reset_demo fail closed when it is empty (AUT-5063).
+    DEMO_PASSWORD: str = ""
     DEMO_DISPLAY_NAME: str = "Demo Garage"
     # One-shot demo reseed: wipe + regenerate the demo data on startup
     # (used when the seed changes so existing instances get new sample data).
@@ -210,16 +213,11 @@ class Settings(BaseSettings):
             )
         return self
 
-    # CI Triage webhook (AUT-1669): receives GitHub Actions CI pings and relays
-    # to the CI Triage Agent via Paperclip issue creation.
-    CI_TRIAGE_WEBHOOK_SECRET: str = ""  # bearer auth secret for the webhook
-    CI_TRIAGE_PARENT_ISSUE_ID: str = ""  # parent issue for child issue creation
-    CI_TRIAGE_GOAL_ID: str = ""  # goal to link child issues to
-    CI_TRIAGE_AGENT_ID: str = "acae6bf2"  # CI Triage Agent short id
-    # Paperclip API (server-side, for creating child issues from the webhook)
-    PAPERCLIP_API_URL: str = ""  # e.g. https://paperclip.nathanmartina.com
-    PAPERCLIP_API_KEY: str = ""  # long-lived agent key or service token
-    PAPERCLIP_COMPANY_ID: str = ""  # AutoBrain company UUID in Paperclip control plane
+    # NOTE (AUT-5718): the CI_TRIAGE_* settings and the server-side PAPERCLIP_*
+    # settings are gone with the dead POST /api/v1/ci/webhook receiver. CI triage
+    # is woken by the Paperclip routine trigger that
+    # .github/workflows/ci-triage-webhook.yml fires
+    # (secrets.CI_TRIAGE_WEBHOOK_URL), never by this backend.
 
     # AUT-5137: best-effort ops webhook fired when boot aborts because
     # `alembic upgrade head` failed against a non-empty database. Empty = log

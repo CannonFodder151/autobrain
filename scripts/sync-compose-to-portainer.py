@@ -88,6 +88,11 @@ def report(args, content, services):
     print(f"stack={args.stack} endpoint={args.endpoint} "
           f"{'created' if args.create else 'updated'}")
     print(f"verified: {len(services)} services running, no stuck containers")
+    # AUT-5669: which commit these digests were built from,
+    # alongside the per-service digest trail below.
+    src = compose_pin_source(content)
+    if src:
+        print(f"pin-source: {src}")
     # AUT-5186: audit trail for the nightly 03:00 AEST deploy — one line per
     # service with the digest the stack now runs. The run log is the only
     # record once the workflow is no longer tied to a human dispatch.
@@ -264,6 +269,23 @@ def compose_image_refs(content):
             for name, spec in (doc.get("services") or {}).items()}
 
 
+def unpinned_image_refs(content):
+    """AUT-5669: services whose image is a moving tag rather than a digest.
+
+    A deploy resolves whatever this file names, so a tag-only ref would run
+    an image no commit references — exactly the provenance drift AUT-5669 is
+    about. Refused rather than deployed.
+    """
+    return {name: ref for name, ref in compose_image_refs(content).items()
+            if "@sha256:" not in ref}
+
+
+def compose_pin_source(content):
+    """AUT-5669: the commit the pinned digests were built from, if recorded."""
+    doc = yaml.safe_load(content) or {}
+    return doc.get("x-autobrain-pin-source")
+
+
 def endpoint_containers(args):
     """All containers on the endpoint (including stopped/unused ones)."""
     return _api(args, f"/endpoints/{args.endpoint}/docker/containers/json?all=true")
@@ -388,6 +410,20 @@ def main():
         print("ERROR: stack env is empty — refusing to sync (would wipe it)",
               file=sys.stderr)
         return 3
+
+    # AUT-5669: refuse to deploy a moving tag. The whole point of
+    # a pinned compose file is that the deploy resolves the exact
+    # index a commit references; a tag-only ref silently deploys
+    # whatever ghcr.io serves at deploy time instead.
+    unpinned = unpinned_image_refs(content)
+    if unpinned:
+        print("ERROR: refusing to sync — image ref(s) without a digest "
+              "pin:", file=sys.stderr)
+        for name, ref in sorted(unpinned.items()):
+            print(f"  {name}: {ref}", file=sys.stderr)
+        print("Pin every image as repo:tag@sha256:<digest> first "
+              "(see scripts/update-compose-pins.py).", file=sys.stderr)
+        return 7
 
     # AUT-4946: refuse BEFORE the PUT if a host port this compose needs is
     # held by a container from a service the new compose drops. Portainer's

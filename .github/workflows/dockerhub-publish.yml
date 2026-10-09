@@ -36,7 +36,7 @@ jobs:
     # downstream job, so guarding here would silently skip changelog-gate and
     # the whole publish chain on PRs and workflow_dispatch. The event check
     # lives in the step body instead.
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, vm2]
     permissions:
       actions: write
     steps:

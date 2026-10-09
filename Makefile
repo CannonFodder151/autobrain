@@ -1,4 +1,4 @@
-.PHONY: up down build logs test lint seed migrate deploy
+.PHONY: up down build logs test lint seed migrate deploy openapi
 
 # Start the dev stack with hot reload
 up:
@@ -37,4 +37,8 @@ seed:
 # Deploy to production via SSH
 deploy:
 	./scripts/deploy.sh
+
+# Generate OpenAPI spec from FastAPI app
+openapi:
+	docker compose exec backend python scripts/generate_openapi.py
 

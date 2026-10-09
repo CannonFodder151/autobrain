@@ -168,7 +168,20 @@ jobs:
             COLOR="0xFEE75C"
             DESC="New digest but libexpat not yet at the fix threshold. Will retry tomorrow."
           fi
-          curl -s -X POST "$DISCORD_REPORT_WEBHOOK" \
+          # AUT-5690: a secret that is not an http(s) URL reaches curl as an
+          # *option* instead of a URL ("curl: option -: is unknown"), so the
+          # report silently never sent. This step runs `if: always()`, so it
+          # warns and exits 0 rather than turning a green run red (AUT-5574).
+          discord_url="${DISCORD_REPORT_WEBHOOK:-}"
+          case "$discord_url" in
+            https://*|http://*) ;;
+            *)
+              echo "::warning::DISCORD_REPORT_WEBHOOK is not an http(s) URL (len=${#discord_url}); skipping Discord report"
+              exit 0
+              ;;
+          esac
+          curl -sS --max-time 30 -X POST "$discord_url" \
             -H "Content-Type: application/json" \
             -d "$(jq -nc --arg c ops --arg t "$TITLE" --arg col "$COLOR" --arg u "$RUN_URL" --arg d "$DESC" \
-              '{channel:$c,title:$t,description:$d,color:$col,author:"libexpat fix-detect",fields:[{name:"Run",value:$u,inline:true},{name:"Threshold",value:"2.8.4-r0",inline:true}]}')"
+              '{channel:$c,title:$t,description:$d,color:$col,author:"libexpat fix-detect",fields:[{name:"Run",value:$u,inline:true},{name:"Threshold",value:"2.8.4-r0",inline:true}]}')" \
+            || echo "::warning::Discord report POST failed"

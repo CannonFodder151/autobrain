@@ -40,7 +40,7 @@ Gate 2 post-push pass for the demo issue-blog seed. Change under test: `_seed_de
 - `tests_social` — **19 passed**.
 - `ruff check backend/app/db/seed.py` — clean.
 
-**Live demo tier check (https://demo.autobrainservice.app, demo@autobrainservice.app / demo):**
+**Live demo tier check (https://demo.autobrainservice.app, login `demo@autobrainservice.app`, password from Paperclip secret `demo/demo-account-password`):**
 
 - Login OK (HTTP 200, access + refresh token).
 - `GET /api/v1/social/issues` → HTTP 200, **16 posts** returned (≥15 required). Every post has `comment_count` 1-3 (replies render); all `answered`/`resolved` posts carry a pinned `resolved_comment_id`, all `open` posts carry none. Titles match the seeded 16 (Rough idle and stalling on cold start … Oil leak from the front of the engine).
