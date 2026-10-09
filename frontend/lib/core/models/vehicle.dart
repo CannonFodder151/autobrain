@@ -8,7 +8,7 @@ class Vehicle {
   final String condition;
   final String vehicleType;
   final bool isPrimary, clubReg;
-  final bool autoSuggestService;
+  final bool autoSuggestService, isFinanced;
   final String? fuelType;
   final String powertrain;
   final bool isShared;
@@ -38,6 +38,7 @@ class Vehicle {
     this.isPrimary = false,
     this.clubReg = false,
     this.autoSuggestService = false,
+    this.isFinanced = false,
     this.fuelType,
     this.powertrain = 'ICE',
     this.isShared = false,
@@ -125,6 +126,7 @@ class Vehicle {
         isPrimary: (j['is_primary'] as bool?) ?? false,
         clubReg: (j['club_reg'] as bool?) ?? false,
         autoSuggestService: (j['auto_suggest_service'] as bool?) ?? false,
+        isFinanced: (j['is_financed'] as bool?) ?? false,
         fuelType: (j['fuel_type'] as String?),
         powertrain: (j['powertrain'] as String?) ?? 'ICE',
         isShared: (j['is_shared'] as bool?) ?? false,
