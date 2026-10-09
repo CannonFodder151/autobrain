@@ -249,8 +249,8 @@ services:
       # the Stripe browser path). Credentials are Paperclip secrets.
       IAP_GOOGLE_SERVICE_ACCOUNT_JSON_FILE: /run/secrets/iap_google_service_account_json
       IAP_GOOGLE_PACKAGE_NAME: ${IAP_GOOGLE_PACKAGE_NAME:-com.autobrainservice.app}
-      IAP_APPLE_ISSUER_ID: ${IAP_APPLE_ISSUER_ID:-}
-      IAP_APPLE_KEY_ID: ${IAP_APPLE_KEY_ID:-}
+      IAP_APPLE_ISSUER_ID: ${IAP_APPLE_ISSUER_ID:-515dfa65-a30f-4b70-9dee-2e2693b5243e}
+      IAP_APPLE_KEY_ID: ${IAP_APPLE_KEY_ID:-A4C35NJJ5A}
       IAP_APPLE_PRIVATE_KEY_FILE: /run/secrets/iap_apple_private_key
       IAP_APPLE_BUNDLE_ID: ${IAP_APPLE_BUNDLE_ID:-com.autobrainservice.app}
       IAP_REFRESH_WINDOW_DAYS: ${IAP_REFRESH_WINDOW_DAYS:-2}
