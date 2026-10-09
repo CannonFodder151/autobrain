@@ -1,0 +1,13 @@
+[Unit]
+# AUT-5134: alerts when a hosted container restart-loops or leaves
+# running (healthy). Installed on the Oracle VM (Portainer EP5) and any
+# other host running a compose stack; see docs/Deployment-and-Infrastructure/
+# deployment-guide.md ("Health watchdog").
+Description=AutoBrain hosted health watchdog (AUT-5134)
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/hosted-health-watch.sh
+# No [Install]: the .timer drives it.

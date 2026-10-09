@@ -144,6 +144,73 @@ network.
 sudo ./scripts/setup-server.sh <user>
 ```
 
+## Host-side secrets directory permissions (AUT-5134)
+
+`docker-compose.hosted.yml` bind-mounts `${SECRETS_DIR:-/data/autobrain/secrets}`
+read-only at `/run/secrets`, and every secret-class value is loaded through the
+`*_FILE` pattern. Containers run as **uid/gid 1000**, so the host directory and
+its files need exactly these modes — anything less and every `*_FILE` load fails
+with `cat: /run/secrets/<name>: Permission denied`, `Settings()` validation
+fails, and the container exits 1 in a restart loop.
+
+| Path | Owner | Mode | Why |
+|------|-------|------|-----|
+| `${SECRETS_DIR}` (the dir itself) | `root:1000` | `0750` | uid 1000 needs `r-x` to **traverse** it. `0640`/`0644` (no execute bit) breaks every read, even for root. |
+| each file in `${SECRETS_DIR}` | `root:1000` | `0640` | gid 1000 needs `r` to read. `0600` denies the runtime; `0644` leaks the value world-readable. |
+
+Never point `SECRETS_DIR` at `/opt/autobrain/secrets` — the snap dockerd on the
+Oracle VM masks `/opt` read-only (AUT-1853). `/data` is never masked.
+
+```bash
+# once, after creating or restoring the directory
+sudo chown root:1000 /data/autobrain/secrets
+sudo chmod 0750 /data/autobrain/secrets
+sudo chown root:1000 /data/autobrain/secrets/*
+sudo chmod 0640 /data/autobrain/secrets/*
+```
+
+`scripts/seed-secrets.sh` writes exactly these modes; re-run it rather than
+chmod-ing by hand after a restore from backup.
+
+### The container fails fast on a bad mode (AUT-5134)
+
+`docker/preflight-secrets.sh` runs from the backend and AI entrypoints as uid
+1000 **before** anything reads a secret. On a permission fault it prints one
+line naming the offending path and exits non-zero:
+
+```
+autobrain preflight: /run/secrets/redis_password unreadable: dir /run/secrets
+is [640 root:root], not traversable by uid 1000/gid 1000 — required: secrets
+dir 0750 root:1000, secret files 0640 root:1000; fix on host:
+chown root:1000 /data/autobrain/secrets && chmod 750 /data/autobrain/secrets
+```
+
+A missing optional secret is **not** a fault — the loader still skips it. Only
+permission faults stop the boot.
+
+### Health watchdog — restart loops and unhealthy containers (AUT-5134)
+
+Nothing alerted on the AUT-5125 outage, which is why a 1-minute host typo ran
+for 16 minutes. `scripts/hosted-health-watch.sh` polls the stack every 2 minutes
+and posts to Discord through the n8n Reporter. Install it on every host running
+a stack:
+
+```bash
+sudo install -m 0755 scripts/hosted-health-watch.sh /usr/local/bin/
+sudo install -m 0644 infra/systemd/autobrain-health-watch.service /etc/systemd/system/
+sudo install -m 0644 infra/systemd/autobrain-health-watch.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now autobrain-health-watch.timer
+```
+
+- `RestartCount` grows → `#incidents`
+- running but not `healthy` (or stuck `starting` past 180 s) → `#ops`
+- left the running state → `#incidents`
+- healthy/running again → `#incidents`, resolved colour
+
+Each event is latched in `/var/lib/autobrain-health-watch/state`, so a fault is
+reported once and its recovery once — no spam on a 2-minute poll.
+
 ## Deploy (dev, from source)
 
 ```bash
@@ -305,6 +372,10 @@ upgrade path):
   redeploying the HostED stack, provision + re-seed `/data/autobrain/secrets`
   (see docs/security.md "Oracle VM path migration (AUT-1853)"), then remove the
   legacy `autobrain-opt-guard.sh` `/opt` remount cron workaround.
+  Verify the host-side perms first — dir `0750` / files `0640`,
+  `root:1000` (see "Host-side secrets directory permissions (AUT-5134)"
+  above). The backend image now fails fast on a bad mode instead of
+  crash-looping silently.
 
 ### Nginx Proxy Manager + the hosted frontend (AUT-372)
 
