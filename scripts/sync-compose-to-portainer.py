@@ -431,12 +431,21 @@ def main():
     # forever and the site 502s (AUT-4911).
     services, wanted_ports = compose_services_and_ports(content)
     flat_wanted = {p for ps in wanted_ports.values() for p in ps}
-    try:
-        clashes = check_port_collisions(args, services, flat_wanted)
-    except urllib.error.HTTPError as e:
-        print(f"WARNING: could not read endpoint containers -> HTTP {e.code}; "
-              "skipping the pre-PUT orphan check", file=sys.stderr)
-        clashes = []
+    for attempt in range(1, 4):
+        try:
+            clashes = check_port_collisions(args, services, flat_wanted)
+            break
+        except urllib.error.HTTPError as e:
+            if e.code in (502, 504) and attempt < 3:
+                sleep = 5 * attempt
+                print(f"WARNING: could not read endpoint containers -> HTTP {e.code} "
+                      f"(attempt {attempt}); retrying after {sleep}s", file=sys.stderr)
+                time.sleep(sleep)
+                continue
+            print(f"WARNING: could not read endpoint containers -> HTTP {e.code}; "
+                  "skipping the pre-PUT orphan check", file=sys.stderr)
+            clashes = []
+            break
     if clashes:
         print(f"ERROR: refusing to sync — host port collision with orphans on "
               f"endpoint {args.endpoint}:", file=sys.stderr)
@@ -460,27 +469,36 @@ def main():
     if args.pull_image:
         params += "&pullImage=true"
 
-    req = urllib.request.Request(
-        f"{api}/stacks/{stack_id}{params}",
-        data=json.dumps(body).encode(),
-        method="PUT",
-        headers={
-            "X-API-Key": args.api_key,
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        },
-    )
-    # AUT-4911: print the Portainer response body on failure. The bare
-    # "HTTP Error 500" hid the actual cause ("compose build operation failed:
-    # listing workers for Build") for a whole day of red CI.
-    try:
-        with urllib.request.urlopen(req, timeout=120) as r:
-            r.read()
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", "replace")
-        print(f"ERROR: Portainer PUT /stacks/{stack_id} -> HTTP {e.code}", file=sys.stderr)
-        print(body, file=sys.stderr)
-        return 4
+        req = urllib.request.Request(
+            f"{api}/stacks/{stack_id}{params}",
+            data=json.dumps(body).encode(),
+            method="PUT",
+            headers={
+                "X-API-Key": args.api_key,
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+        )
+        # AUT-4911: print the Portainer response body on failure. The bare
+        # "HTTP Error 500" hid the actual cause ("compose build operation failed:
+        # listing workers for Build") for a whole day of red CI.
+        max_retries = 3
+        for attempt in range(1, max_retries + 1):
+            try:
+                with urllib.request.urlopen(req, timeout=300) as r:
+                    r.read()
+                break
+            except urllib.error.HTTPError as e:
+                body = e.read().decode("utf-8", "replace")
+                print(f"ERROR: Portainer PUT /stacks/{stack_id} -> HTTP {e.code} (attempt {attempt})", file=sys.stderr)
+                print(body, file=sys.stderr)
+                if e.code in (502, 504) and attempt < max_retries:
+                    sleep = 5 * attempt
+                    print(f"Retrying after {sleep}s...", file=sys.stderr)
+                    time.sleep(sleep)
+                    continue
+                return 4
+
 
     # AUT-4946: a 200 PUT does not mean a healthy stack. Verify + audit.
     print(f"stack={args.stack} id={stack_id} endpoint={args.endpoint} updated")
