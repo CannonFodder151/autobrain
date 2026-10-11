@@ -36,7 +36,7 @@ jobs:
     # downstream job, so guarding here would silently skip changelog-gate and
     # the whole publish chain on PRs and workflow_dispatch. The event check
     # lives in the step body instead.
-    runs-on: [self-hosted, linux, x64, vm2]
+    runs-on: ubuntu-latest
     permissions:
       actions: write
     steps:
@@ -72,7 +72,7 @@ jobs:
     # queued behind the heavy docker publish pipeline on vm2. AUT-1802: arm64
     # reserved for arm images only. The gate needs no docker, so the legacy
     # runner's dockerd-wedge history (AUT-1720) does not apply here.
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -132,7 +132,7 @@ jobs:
     # [self-hosted, linux, x64] so GitHub can use the idle legacy x64 runner
     # instead of queuing behind the heavy docker publish on vm2. AUT-1802: the
     # arm64 runner is reserved for building arm images only.
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Install pip-audit
