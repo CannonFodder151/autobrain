@@ -125,6 +125,18 @@ CVE-2026-78667  # gosu-stdlib: net/http Range DoS; gosu does no HTTP
 CVE-2026-78669  # gosu-stdlib: net/http HTTP/2 SETTINGS DoS; gosu does no HTTP
 CVE-2026-97031  # gosu-stdlib: crypto/tls ECH DoS; gosu does no TLS
 
+# --- AUT-6147: nginx libtiff CVE (unreachable in frontend nginx) -----------------
+# CVE-2026-4775: libtiff arbitrary code execution/DoS via signed integer overflow
+# in TIFF file parsing. Fixed in 4.7.2-r0 (Alpine). The nginxinc/nginx-unprivileged
+# image (sha256:ed04ec1f...) carries 4.7.1-r0; upstream has not yet respun the image.
+# The AutoBrain frontend nginx serves static Flutter assets and proxies /api, /ws,
+# /ai to the backend. It does NOT process user-supplied TIFF files at runtime —
+# static assets are built at compile time. No runtime TIFF parsing occurs.
+# Suppress per policy ("tolerate when no fixed image exists"). Time-boxed: re-check
+# 2026-11-30; drop entry + bump nginx frontend digest once a respin ships 4.7.2-r0.
+# Security Officer sign-off: APPROVED (AUT-6147).
+CVE-2026-4775  # libtiff TIFF parsing: no user-supplied TIFF processing in nginx runtime
+
 # --- AUT-2918: python base image gzip/libsqlite3/perl-base CVEs — RESOLVED (AUT-4718) -------
 # RESOLVED (AUT-4718, 2026-10-02): the pin moved from python:3.13.15-slim-trixie
 # (@sha256:9d2e5553...) to python:3.13.16-slim-trixie (@sha256:6906dca8...), which carries
