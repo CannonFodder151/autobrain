@@ -60,7 +60,7 @@ async def _sync_federation(db: AsyncSession) -> None:
         if not isinstance(build, dict):
             continue
         if build.get("type") == "issue":
-            from app.api.v1.issues import pull_remote_issue
+            from app.api.v1.issues_pkg.federation import pull_remote_issue
             await pull_remote_issue(db, item, build)
             continue
         rid = build.get("remote_build_id") or build.get("build_id")
@@ -113,7 +113,7 @@ async def _apply_event(db: AsyncSession, event: dict) -> None:
         if not build_id:
             return
         if payload.get("post_type") == "issue":
-            from app.api.v1.issues import apply_issue_event
+            from app.api.v1.issues_pkg.federation import apply_issue_event
             await apply_issue_event(db, event)
             return
         build = await db.get(SocialBuild, str(build_id))
@@ -134,7 +134,7 @@ async def _apply_event(db: AsyncSession, event: dict) -> None:
     if not isinstance(payload, dict):
         return
     if payload.get("post_type") == "issue":
-        from app.api.v1.issues import apply_issue_event
+        from app.api.v1.issues_pkg.federation import apply_issue_event
         await apply_issue_event(db, event)
         return
     build_id = payload.get("build_id")
