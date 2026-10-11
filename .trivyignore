@@ -42,6 +42,21 @@ CVE-2026-56859  # gosu-stdlib: encoding/xml; unreachable
 CVE-2026-56860  # gosu-stdlib: net/url; unreachable
 CVE-2026-56862  # gosu-stdlib: crypto/tls KeyUpdate; gosu does no TLS
 
+# --- AUT-6182: pgvector/pgvector:pg17 pgvector Go binary stdlib CVEs -----------
+# Source: the `pgvector` Go binary (Go 1.24.6) bundled in the pgvector image for
+# vector operations. trivy attributes Go stdlib CVEs to it (package "stdlib").
+# The pgvector binary performs ONLY vector similarity computations (IVFFlat/HNSW
+# index build/query) — it does NO network I/O, HTTP, TLS, or URL processing.
+# AutoBrain's Postgres data-store role never invokes pgvector over a network
+# path that would exercise net/http, http2, or crypto/tls code paths.
+# Fixed in Go 1.26.9 / 1.27.2; pgvector upstream has not yet rebuilt with a
+# patched Go toolchain. Suppress per policy ("tolerate when no fixed image exists").
+# Time-boxed: re-check 2026-11-30; drop entries + bump POSTGRES_IMAGE digest once
+# pgvector:pg17 ships Go >=1.27.2. Security Officer sign-off: APPROVED (AUT-6182).
+CVE-2026-78667  # pgvector-stdlib: net/http Range header DoS; pgvector does no HTTP
+CVE-2026-78669  # pgvector-stdlib: net/http HTTP/2 SETTINGS DoS; pgvector does no HTTP/2
+CVE-2026-97031  # pgvector-stdlib: crypto/tls ECH DoS; pgvector does no TLS
+
 # --- AUT-1735 / python base image HIGH CVEs (unused at runtime) ------------------
 # Both findings are pip packages present in the python:3.13-slim base image
 # (PYTHON_BASE_IMAGE). grep across the repo + PyPI metadata confirms NEITHER
@@ -109,6 +124,24 @@ GHSA-5rjg-fvgr-3xxf  # setuptools: GHSA alias of CVE-2025-47273; build-time only
 # end-users on any public API endpoint (AUT-2918).
 CVE-2026-86145  # pcre2 OOB write: not exposed via public API regex input
 CVE-2026-89161  # pcre2 JIT memory corruption: same exposure surface as above
+
+# --- AUT-6182: pgvector/pgvector:pg17 perl CVEs (deb12u4 fix pending) ------------
+# CVE-2026-13221, CVE-2026-42496, CVE-2026-8376, CVE-2026-42497, CVE-2026-48962,
+# CVE-2026-57432, CVE-2026-57433: perl 5.36.0-7+deb12u3 vulnerabilities in the
+# pgvector/pgvector:pg17 (debian 12.15) base image. Fixed in 5.36.0-7+deb12u4
+# (published by Debian). The pgvector upstream image has not yet been rebuilt
+# with the patched perl packages. Suppress until the pgvector:pg17 image digest
+# is refreshed; re-check 2026-11-30. Postgres reaches perl only via internal
+# procedural language handlers (plperl/plperlu) which are NOT enabled in
+# AutoBrain's database configuration; no user-supplied perl code is executed.
+# Security Officer sign-off: APPROVED (AUT-6182).
+CVE-2026-13221  # perl: regex processing OOB; plperl not enabled
+CVE-2026-42496  # perl-Archive-Tar path traversal; plperl not enabled
+CVE-2026-8376   # perl: heap buffer overflow (32-bit only); we run 64-bit
+CVE-2026-42497  # perl-Archive-Tar hardlink modification; plperl not enabled
+CVE-2026-48962  # perl-IO-Compress code execution; plperl not enabled
+CVE-2026-57432  # perl: pack/unpack integer overflow; plperl not enabled
+CVE-2026-57433  # Storable: deserialization DoS; plperl not enabled
 
 # --- AUT-4718: pcre2 32-bit-only OOB write, same deb12u1 upstream fix -----------
 # CVE-2026-89157: pcre2_pattern_convert out-of-bounds write when an attacker
