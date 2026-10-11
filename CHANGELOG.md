@@ -10,6 +10,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Fixed (AUT-5487)
+- fix(deploy): version parity gate now runs preflight **before** tier mutation (AUT-5455 gate hardening)
+  - `scripts/upgrade-instances.sh` runs `check_version_parity` on the current tier before `redeploy`, failing fast if drift would be introduced
+  - Post-redeploy promotion gate retained as a second line of defense
+  - `ALLOW_VERSION_DRIFT=1` escape hatch documented for emergency use
+  - Version comparison logic extracted to `scripts/version_parity.py` with polling retry (AUT-5487 finding #2)
+  - Added `scripts/test_version_parity.py` with 15 unit tests covering match/mismatch/missing/HTML/retry/path-prefix cases (AUT-5487 finding #3)
+- fix(test): updated `scripts/test_upgrade_instance_tiers.py` to assert `autobrain-default` stack name (AUT-5611)
 
 ### Removed (AUT-5718)
 - Removed the dead `POST /api/v1/ci/webhook` CI triage receiver. The GitHub Actions `ci-triage-webhook.yml` fire job has never posted to the AutoBrain backend — it fires `secrets.CI_TRIAGE_WEBHOOK_URL`, the Paperclip routine trigger on the `CI Triage` routine, and that routine trigger is the only thing that wakes the CI Triage Agent. The backend route had no callers: AutoBrain-Hosted answered `503 CI triage webhook not configured` to every request since at least 2026-09-03 because `docker-compose.hosted.yml` wired `CI_TRIAGE_WEBHOOK_SECRET`/`CI_TRIAGE_PARENT_ISSUE_ID`/`CI_TRIAGE_GOAL_ID` to empty defaults the Hosted env file never set, and the Hosted access log contains no POST from any Actions runner to that path. Deletes `backend/app/api/v1/ci.py`, its router registration, the `CI_TRIAGE_*` + server-side `PAPERCLIP_*` settings in `backend/app/core/config.py`, the same block in `docker-compose.hosted.yml`, the `CI_TRIAGE_*` block in `.env.example`, and the `/ci/webhook` row in `docs/Engineering/api-spec.md`; `ci-triage-webhook.yml` and the deployment guide now state that the Paperclip routine trigger is the canonical receiver so the route is not re-added or repointed. The Hosted stack no longer needs `PAPERCLIP_API_KEY`/`CI_TRIAGE_WEBHOOK_SECRET` to boot. `backend/tests/test_ci_receiver_removed_aut5718.py` asserts the route is gone (404) and the settings no longer exist, so a re-added receiver fails CI.
