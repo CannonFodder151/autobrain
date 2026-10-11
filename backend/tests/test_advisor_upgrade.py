@@ -443,7 +443,7 @@ async def test_find_upgrade_options_uses_cached_medians(monkeypatch) -> None:
     async def _fake_market(db, make, model, year, vt):
         return _FakeMarketResult(median=20_000 if year == v.year else 22_000).__dict__
 
-    monkeypatch.setattr(advisor_mod, "get_market_data", _fake_market)
+    monkeypatch.setattr("app.services.market_data.get_market_data", _fake_market)
 
     options = await advisor_mod.find_upgrade_options(None, v)
     assert len(options) == 3  # +1, +2, -1
@@ -466,7 +466,7 @@ async def test_find_upgrade_options_returns_note_when_no_market_data(monkeypatch
     async def _fake_market(db, make, model, year, vt):
         return {"median_price": None, "note": "no listings"}
 
-    monkeypatch.setattr(advisor_mod, "get_market_data", _fake_market)
+    monkeypatch.setattr("app.services.market_data.get_market_data", _fake_market)
 
     options = await advisor_mod.find_upgrade_options(None, v)
     assert len(options) == 3
@@ -498,7 +498,7 @@ async def test_find_similar_vehicles_excludes_own_make_model(monkeypatch) -> Non
     async def _fake_market(db, make, model, year, vt):
         return {"median_price": 20_000 if year == v.year else 22_000}
 
-    monkeypatch.setattr(advisor_mod, "get_market_data", _fake_market)
+    monkeypatch.setattr("app.services.market_data.get_market_data", _fake_market)
 
     # Build a fake session whose scalars() returns two Honda rows + one Toyota.
     class _Scalars:
@@ -578,7 +578,7 @@ async def test_compute_upgrade_returns_empty_when_no_market_data(monkeypatch) ->
     async def _fake_market(db, make, model, year, vt):
         return {"median_price": None, "note": "no listings"}
 
-    monkeypatch.setattr(advisor_mod, "get_market_data", _fake_market)
+    monkeypatch.setattr("app.services.market_data.get_market_data", _fake_market)
 
     plan = await advisor_mod.compute_upgrade(None, v)
     assert plan["current_value"] is None
@@ -600,7 +600,7 @@ async def test_compute_upgrade_propagates_finance_inputs(monkeypatch) -> None:
     async def _fake_market(db, make, model, year, vt):
         return {"median_price": 20_000 if year == v.year else 22_000}
 
-    monkeypatch.setattr(advisor_mod, "get_market_data", _fake_market)
+    monkeypatch.setattr("app.services.market_data.get_market_data", _fake_market)
 
     class _EmptyScalars:
         def all(self):
