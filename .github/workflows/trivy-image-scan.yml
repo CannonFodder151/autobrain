@@ -55,7 +55,7 @@ env:
 
 jobs:
   image-scan:
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ${{ github.event_name == 'pull_request' && fromJson('["ubuntu-latest"]') || fromJson('["self-hosted", "linux", "x64"]') }}
     steps:
       - uses: actions/checkout@v4
 

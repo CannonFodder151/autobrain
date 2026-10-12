@@ -31,7 +31,7 @@ jobs:
     # non-blocking (continue-on-error + 10min step timeout + AUT-1814
     # auto-approve + AUT-1805 15min job timeout), so a 9Router stall or
     # runner hang degrades to a neutral advisory, never a block.
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ${{ github.event_name == 'pull_request' && fromJson('["ubuntu-latest"]') || fromJson('["self-hosted", "linux", "x64"]') }}
     permissions:
       contents: read
       pull-requests: write

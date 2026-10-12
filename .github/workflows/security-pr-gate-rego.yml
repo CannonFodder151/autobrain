@@ -26,7 +26,7 @@ concurrency:
 jobs:
   pip-audit:
     name: pip-audit — rego-lookup-api
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ${{ github.event_name == 'pull_request' && fromJson('["ubuntu-latest"]') || fromJson('["self-hosted", "linux", "x64"]') }}
     steps:
       - uses: actions/checkout@v4
       - name: Install pip-audit
@@ -43,7 +43,7 @@ jobs:
     name: Report gate result to Discord #status
     if: always()
     needs: [pip-audit]
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ${{ github.event_name == 'pull_request' && fromJson('["ubuntu-latest"]') || fromJson('["self-hosted", "linux", "x64"]') }}
     steps:
       - name: Report to Discord #status
         env:
