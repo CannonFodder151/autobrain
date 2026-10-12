@@ -349,6 +349,13 @@ class Settings(BaseSettings):
                     'python -c "import secrets; print(secrets.token_urlsafe(64))"'
                 )
             self.SECRET_KEY = secrets.token_urlsafe(64)
+
+        if self.ENVIRONMENT != "development" and len(self.SECRET_KEY) < 32:
+            raise ValueError(
+                "SECRET_KEY must be at least 32 bytes (characters) for HS256/384/512 "
+                "signing keys — generate one with: "
+                'python -c "import secrets; print(secrets.token_urlsafe(64))"'
+            )
         if self.ADMIN_API_KEY and len(self.ADMIN_API_KEY) < 32:
             raise ValueError(
                 "ADMIN_API_KEY must be at least 32 characters "
