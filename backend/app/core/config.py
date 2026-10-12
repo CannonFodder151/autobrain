@@ -276,10 +276,12 @@ class Settings(BaseSettings):
     # Credentials are secrets — never commit them; set them via the deployment
     # env (docker-compose.hosted.yml passes them through).
     IAP_GOOGLE_SERVICE_ACCOUNT_JSON: str = ""  # Play service-account key JSON (secret)
+    IAP_GOOGLE_SERVICE_ACCOUNT_JSON_FILE: str = ""  # AUT-1533: secret-file fallback
     IAP_GOOGLE_PACKAGE_NAME: str = "com.autobrainservice.app"
     IAP_APPLE_ISSUER_ID: str = ""              # App Store Connect API key issuer id
     IAP_APPLE_KEY_ID: str = ""                 # App Store Connect API key id
     IAP_APPLE_PRIVATE_KEY: str = ""            # App Store Connect API key .p8 PEM (secret)
+    IAP_APPLE_PRIVATE_KEY_FILE: str = ""       # AUT-1533: secret-file fallback
     IAP_APPLE_BUNDLE_ID: str = "com.autobrain.autobrain"
     # Verify-on-refresh (AUT-617): GET /auth/me re-validates the stored store
     # purchase token against the store API when the entitlement is already
@@ -335,6 +337,14 @@ class Settings(BaseSettings):
             p = Path(self.BACKUP_OFFSITE_INGEST_KEY_FILE)
             if p.is_file():
                 self.BACKUP_OFFSITE_INGEST_KEY = p.read_text(encoding="utf-8").strip()
+        if not self.IAP_GOOGLE_SERVICE_ACCOUNT_JSON and self.IAP_GOOGLE_SERVICE_ACCOUNT_JSON_FILE:
+            p = Path(self.IAP_GOOGLE_SERVICE_ACCOUNT_JSON_FILE)
+            if p.is_file():
+                self.IAP_GOOGLE_SERVICE_ACCOUNT_JSON = p.read_text(encoding="utf-8").strip()
+        if not self.IAP_APPLE_PRIVATE_KEY and self.IAP_APPLE_PRIVATE_KEY_FILE:
+            p = Path(self.IAP_APPLE_PRIVATE_KEY_FILE)
+            if p.is_file():
+                self.IAP_APPLE_PRIVATE_KEY = p.read_text(encoding="utf-8").strip()
         return self
 
     @model_validator(mode="after")
