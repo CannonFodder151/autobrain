@@ -94,7 +94,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Upgrade hosted instance only (AUT-2409: hosted-only deploys, 03:00-04:00 AEST window)
+      - name: "Upgrade hosted instance only (AUT-2409: hosted-only deploys, 03:00-04:00 AEST window)"
         run: ./scripts/upgrade-instances.sh
 
       - name: Report status to Discord
