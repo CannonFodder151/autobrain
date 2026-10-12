@@ -10,6 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+- deploy(sync): `scripts/sync-compose-to-portainer.py` now prints the real orphan
 ### Added/Changed (AUT-3533)
 - fix: Servo Spy map blank white screen on hosted by resolving undefined _kCartoKeyParam and injecting CARTO API key (PR #715)
 
