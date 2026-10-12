@@ -1,6 +1,9 @@
 """Semantic search service — hybrid vector + keyword search across AutoBrain data."""
 
-from sqlalchemy import TextClause, and_, or_, select, text
+from typing import Any
+
+from sqlalchemy import and_, or_, select, text
+from sqlalchemy.sql import bindparam
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
@@ -140,16 +143,14 @@ async def semantic_search(
     return results[:limit]
 
 
-def _embedding_literal(embedding: list[float]) -> str:
-    """Serialize a float vector as a pgvector array literal (floats only)."""
-    return "[" + ",".join(repr(float(v)) for v in embedding) + "]"
+def _vector_similarity(vec_col: str, embedding: list[float]) -> Any:
+    """Cosine-distance expression (`a <=> b`) using native pgvector binding."""
+    from pgvector.sqlalchemy import Vector
 
-
-def _vector_similarity(vec_col: str, embedding: list[float]) -> TextClause:
-    """Cosine-distance expression (`a <=> b`) with the vector bound as a parameter."""
-    return text(
-        f"{vec_col} <=> CAST(:embedding AS vector)"
-    ).bindparams(embedding=_embedding_literal(embedding))
+    vec_type = Vector(len(embedding))
+    return text(f"{vec_col} <=> :embedding").bindparams(
+        bindparam("embedding", value=embedding, type_=vec_type)
+    )
 
 
 def _serialise(etype: str, row, *, score: float, method: str) -> dict:
@@ -220,12 +221,18 @@ async def backfill_entity_embedding(
     if embedding is None:
         return False
 
+    from datetime import datetime, timezone
+
     table = model.__tablename__  # model-defined constant, never user input
     await db.execute(
         text(
-            f"UPDATE {table} SET embedding = CAST(:embedding AS vector) WHERE id = :id"
+            f"UPDATE {table} SET embedding = :embedding, embedding_updated_at = :updated_at WHERE id = :id"
         ),
-        {"embedding": _embedding_literal(embedding), "id": entity_id},
+        {
+            "embedding": embedding,
+            "updated_at": datetime.now(timezone.utc),
+            "id": entity_id,
+        },
     )
     await db.commit()
     return True

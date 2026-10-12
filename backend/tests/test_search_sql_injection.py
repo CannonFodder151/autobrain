@@ -28,7 +28,9 @@ def test_vector_similarity_binds_embedding_not_inlines() -> None:
     # dialect renders :name as %(name)s.)
     assert "0.1" not in sql
     assert f"[{_vec()}]" not in sql
-    assert "CAST(" in sql and "AS vector)" in sql
+    # Native pgvector binding: no CAST, just a bound parameter
+    assert "CAST(" not in sql
+    assert "AS vector)" not in sql
     assert ":embedding" in sql or "%(embedding)s" in sql
 
 
@@ -51,3 +53,6 @@ def test_valid_embedding_rejects_wrong_dimension() -> None:
     assert _valid_embedding(_vec() + [0.5]) is None  # too long
     assert _valid_embedding(_vec()[:-1]) is None  # too short
     assert _valid_embedding([0.1, -0.2, 3.0]) is None  # tiny (old hardcoded 3)
+
+
+
