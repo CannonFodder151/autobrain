@@ -50,18 +50,18 @@ API="$PORTAINER_URL/api"
 # by hand (demo went 502 and stayed there because nothing redeployed it).
 # Hosted keeps its 03:00-04:00 AEST window (AUT-2409); scope a dispatch with
 # UPGRADE_TIERS to honour that window, e.g. the `tiers` dispatch input.
-DEFAULT_TIERS="
+DEFAULT_TIERS='
 autobrain-demo|2|https://demo.autobrainservice.app/health|
-# AUT-5611: the Default tier's app services are the `autobrain-default`
+# AUT-5611: the Default tier'"'"'s app services are the `autobrain-default`
 # Portainer stack (docker-compose.default.yml). The stack name is NOT
 # `autobrain`: that compose project already exists on EP2 as the host
 # compose project at /opt/autobrain-default (postgres/redis/minio on
 # network autobrain_default), and naming the app stack `autobrain`
-# would put the Default database in scope of the app stack's
+# would put the Default database in scope of the app stack'"'"'s
 # delete/prune. The stack joins that network as external instead.
 autobrain-default|2|https://default.autobrainservice.app/health|
 autobrain-hosted|5|https://hosted.autobrainservice.app/health|POSTGRES_USER=autobrain,POSTGRES_DB=autobrain
-"
+'
 
 TIERS="${UPGRADE_TIERS:-$DEFAULT_TIERS}"
 
@@ -122,6 +122,7 @@ OVERALL=0
 while IFS= read -r line; do
   line="$(echo "$line" | tr -d '[:space:]')"
   [ -z "$line" ] && continue
+  [[ "$line" == \#* ]] && continue
   IFS='|' read -r name ep health reqenv <<< "$line"
 
   log "=== tier: $name (EP$ep) ==="
