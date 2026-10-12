@@ -31,6 +31,28 @@ WA_PRICES = [
     {"SiteId": 1, "FuelCode": "Banana", "Price": 1.0, "PriceUpdatedDate": "2024-01-01T00:00:00"},
 ]
 
+# New WA FuelWatch API format (fuelwatch.wa.gov.au)
+WA_SITES_NEW = [
+    {
+        "id": 1,
+        "siteName": "Caltex Perth",
+        "brandName": "Caltex",
+        "address": {"line1": "10 Main St", "location": "Perth", "postCode": "6000", "state": "WA", "latitude": -31.95, "longitude": 115.86},
+        "product": {"shortName": "ULP", "isTruckStop": False, "isTwoPrice": True, "isLowAromaticFuel": False, "isOutOfSupply": False},
+        "currentPricingOrder": 18990,  # cents/litre
+        "nextPricingOrder": 18500,
+    },
+    {
+        "id": 2,
+        "siteName": "BP Perth",
+        "brandName": "BP",
+        "address": {"line1": "20 Main St", "location": "Perth", "postCode": "6000", "state": "WA", "latitude": -31.94, "longitude": 115.87},
+        "product": {"shortName": "Diesel", "isTruckStop": False, "isTwoPrice": True, "isLowAromaticFuel": False, "isOutOfSupply": False},
+        "currentPricingOrder": 19990,
+        "nextPricingOrder": 19500,
+    },
+]
+
 NSW = {"features": [
     {"properties": {"stationcode": "S1", "name": "Metro X", "brand": "Metro",
                     "address": "1 St", "latitude": -33.8, "longitude": 151.2,
@@ -60,7 +82,7 @@ def test_haversine_known_distance() -> None:
     assert 690 < d < 740
 
 
-def test_parse_wa_sites_and_prices() -> None:
+def test_parse_wa_sites_and_prices_legacy() -> None:
     sites = feeds._parse_wa_sites(WA_SITES)
     assert sites == [{
         "source": "wa", "source_id": "1", "brand": "Caltex", "name": "Caltex Perth",
@@ -69,6 +91,27 @@ def test_parse_wa_sites_and_prices() -> None:
     prices = feeds._parse_wa_prices(WA_PRICES)
     fts = {ft for (ft, _, _) in prices["1"]}
     assert fts == {"91", "Diesel"}  # Banana dropped
+
+
+def test_parse_wa_sites_and_prices_new_api() -> None:
+    sites = feeds._parse_wa_sites(WA_SITES_NEW)
+    assert sites == [
+        {"source": "wa", "source_id": "1", "brand": "Caltex", "name": "Caltex Perth",
+         "address": "10 Main St", "lat": -31.95, "lon": 115.86},
+        {"source": "wa", "source_id": "2", "brand": "BP", "name": "BP Perth",
+         "address": "20 Main St", "lat": -31.94, "lon": 115.87},
+    ]
+    prices = feeds._parse_wa_prices(WA_SITES_NEW)
+    # currentPricingOrder is in cents, should be converted to float
+    fts_1 = {ft for (ft, _, _) in prices["1"]}
+    fts_2 = {ft for (ft, _, _) in prices["2"]}
+    assert fts_1 == {"91"}
+    assert fts_2 == {"Diesel"}
+    # Price 18990 cents -> 18990.0 float
+    price_1 = next(p for (ft, p, _) in prices["1"] if ft == "91")
+    price_2 = next(p for (ft, p, _) in prices["2"] if ft == "Diesel")
+    assert price_1 == 18990.0
+    assert price_2 == 19990.0
 
 
 def test_parse_nsw_features() -> None:
