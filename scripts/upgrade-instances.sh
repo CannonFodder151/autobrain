@@ -50,9 +50,10 @@ API="$PORTAINER_URL/api"
 # by hand (demo went 502 and stayed there because nothing redeployed it).
 # Hosted keeps its 03:00-04:00 AEST window (AUT-2409); scope a dispatch with
 # UPGRADE_TIERS to honour that window, e.g. the `tiers` dispatch input.
+# AUT-5492: EP2 default tier stack is named "autobrain-default", not "autobrain".
 DEFAULT_TIERS="
 autobrain-demo|2|https://demo.autobrainservice.app/health|
-autobrain|2|https://default.autobrainservice.app/health|
+autobrain-default|2|https://default.autobrainservice.app/health|
 autobrain-hosted|5|https://hosted.autobrainservice.app/health|POSTGRES_USER=autobrain,POSTGRES_DB=autobrain
 "
 
