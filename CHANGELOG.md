@@ -11,6 +11,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-1673)
+- feat(backend): merge dongle-server into backend as sub-app on :8002, consolidating containers and exposing dongle APIs at `http://localhost:8002`.
+
+
 ### Fixed (AUT-6237)
 - fix(ci): added `AUTOBRAIN_BACKEND_URL`, `WEB_UI_BASIC_USER`, `WEB_UI_BASIC_PASSWORD` to `.env.example` so the compose env-var rename detector (AUT-2390) passes. These vars moved from the standalone `dongle-server` service into the backend when dongle-server was merged on :8002 (AUT-1673 Phase 1a).
 
