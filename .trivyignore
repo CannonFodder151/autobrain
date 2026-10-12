@@ -42,6 +42,36 @@ CVE-2026-56859  # gosu-stdlib: encoding/xml; unreachable
 CVE-2026-56860  # gosu-stdlib: net/url; unreachable
 CVE-2026-56862  # gosu-stdlib: crypto/tls KeyUpdate; gosu does no TLS
 
+# --- AUT-6326: pgvector/pgvector:pg17 gosu-stdlib CVEs (Go 1.24.6 -> 1.27.2) ---
+# Source: the `gosu` binary in the postgres base image. trivy attributes Go 1.27
+# stdlib CVEs to it (package "stdlib"). gosu is used ONLY to drop privileges
+# before exec'ing postgres — it performs no network/TLS/URL/XML/MIME/HTTP2
+# processing, so none of these are reachable in AutoBrain's Postgres data-store
+# role. Same exposure surface as AUT-1749 gosu-stdlib entries. pgvector 0.8.7
+# (sha256:ac08538c6f8b...) still bundles gosu built with Go 1.24.6. Fixed in
+# Go 1.26.9/1.27.2; no pgvector respin yet. Time-boxed: re-check 2026-11-30.
+CVE-2026-78667  # gosu-stdlib: net/http Range DoS; gosu does no HTTP
+CVE-2026-78669  # gosu-stdlib: net/http HTTP/2 SETTINGS DoS; gosu does no HTTP
+CVE-2026-97031  # gosu-stdlib: crypto/tls ECH DoS; gosu does no TLS
+
+# --- AUT-6326: pgvector/pgvector:pg17 perl CVEs (5.36.0-7+deb12u3 -> deb12u4) ---
+# Source: libperl5.36 / perl / perl-base / perl-modules-5.36 in the pgvector
+# base image (debian 12.15). Fixed in 5.36.0-7+deb12u4 (DSA-5902-1). pgvector
+# 0.8.7 (sha256:ac08538c6f8b...) was built 2026-10-01, before the postgres
+# base update (2026-10-06) that would carry the patched perl. No pgvector
+# respin yet. AutoBrain's postgres is a pure data store: no user-supplied perl
+# code is executed, no untrusted tar archives are extracted, no attacker-controlled
+# regex is compiled, and no pack/unpack/Storable is invoked on untrusted input.
+# Time-boxed: re-check 2026-11-30; drop entries + bump digest when pgvector
+# ships a respin with deb12u4.
+CVE-2026-13221  # perl regex processing: no attacker-controlled regex compiled
+CVE-2026-42496  # perl-archive-tar symlink traversal: no untrusted tar extraction
+CVE-2026-8376   # perl regex heap overflow (32-bit only): we run 64-bit
+CVE-2026-42497  # perl-archive-tar hardlink modification: no untrusted tar extraction
+CVE-2026-48962  # perl-IO-Compress glob RCE: no attacker-controlled glob input
+CVE-2026-57432  # perl pack/unpack integer overflow: no untrusted pack/unpack
+CVE-2026-57433  # Storable deserialization DoS: no untrusted Storable data
+
 # --- AUT-1735 / python base image HIGH CVEs (unused at runtime) ------------------
 # Both findings are pip packages present in the python:3.13-slim base image
 # (PYTHON_BASE_IMAGE). grep across the repo + PyPI metadata confirms NEITHER
