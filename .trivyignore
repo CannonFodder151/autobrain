@@ -41,6 +41,12 @@ CVE-2026-56858  # gosu-stdlib: html/template; unreachable
 CVE-2026-56859  # gosu-stdlib: encoding/xml; unreachable
 CVE-2026-56860  # gosu-stdlib: net/url; unreachable
 CVE-2026-56862  # gosu-stdlib: crypto/tls KeyUpdate; gosu does no TLS
+# --- AUT-6282: gosu-stdlib CVEs from Go 1.24.6 (fixed in 1.26.9/1.27.2) -------
+# Same exposure surface as above: gosu is a privilege-drop helper with no
+# network/TLS/URL/XML/MIME/HTTP2 processing. Unreachable in our Postgres role.
+CVE-2026-78667  # gosu-stdlib: net/http Range header DoS; unreachable
+CVE-2026-78669  # gosu-stdlib: net/http HTTP/2 SETTINGS DoS; unreachable
+CVE-2026-97031  # gosu-stdlib: crypto/tls ECH outer extension DoS; unreachable
 
 # --- AUT-1735 / python base image HIGH CVEs (unused at runtime) ------------------
 # Both findings are pip packages present in the python:3.13-slim base image
@@ -121,6 +127,23 @@ CVE-2026-89161  # pcre2 JIT memory corruption: same exposure surface as above
 # Re-check 2026-11-30 with the entries above: drop when the pgvector:pg17 digest
 # ships deb12u1. Security Officer sign-off: APPROVED (AUT-4718).
 CVE-2026-89157  # pcre2 pcre2_pattern_convert OOB write: 32-bit platforms only; we run 64-bit
+
+# --- AUT-6282: pgvector:pg17 Perl CVEs (fixed in 5.36.0-7+deb12u4) --------------
+# Seven Perl CVEs (12 CRITICAL + 16 HIGH across libperl5.36, perl, perl-base,
+# perl-modules-5.36) in the pgvector:pg17 base image. Installed 5.36.0-7+deb12u3;
+# fixed in 5.36.0-7+deb12u4 (published in oldstable-security). The pgvector upstream
+# image has not yet been rebuilt with the patched perl packages. Suppress until
+# the pgvector:pg17 image digest is refreshed; re-check 2026-11-30. Same pattern
+# as the pcre2 deb12u1 entries above. Postgres reaches perl only via server-side
+# regex operators; AutoBrain's backend does not expose raw perl input.
+# Security Officer sign-off: APPROVED (AUT-6282).
+CVE-2026-13221  # perl: incorrect regex processing via large regexes
+CVE-2026-42496  # perl-archive-tar: path traversal via crafted symlinks
+CVE-2026-8376   # perl: heap buffer overflow on 32-bit regex compile (we run 64-bit)
+CVE-2026-42497  # perl-Archive-Tar: arbitrary file modification via crafted hardlinks
+CVE-2026-48962  # perl-IO-Compress: arbitrary code execution via output glob
+CVE-2026-57432  # perl: integer overflow in pack/unpack
+CVE-2026-57433  # Storable: DoS via signed integer overflow in deserialization
 
 # --- AUT-2918: python base image gzip/libsqlite3/perl-base CVEs — RESOLVED (AUT-4718) -------
 # RESOLVED (AUT-4718, 2026-10-02): the pin moved from python:3.13.15-slim-trixie
