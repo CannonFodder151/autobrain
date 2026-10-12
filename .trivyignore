@@ -202,6 +202,17 @@ CVE-2026-89157  # pcre2 pcre2_pattern_convert OOB write: 32-bit platforms only; 
 CVE-2026-103111  # pcre2 OOB write: needs attacker-controlled regex AND JIT; JIT is compiled in
                   # (see above) but no attacker-controlled regex is ever compiled — see conditions 1+2
 
+# --- AUT-6326: nginx frontend libtiff CVE-2026-4775 ---------------------------
+# Source: libtiff 4.7.1-r0 in nginxinc/nginx-unprivileged:stable-alpine
+# (alpine 3.24.2). Fixed in 4.7.2-r0 (alpine 3.24.3+). nginx is used as a
+# frontend reverse proxy serving static assets (images/CSS/JS) and proxying
+# API requests. The vulnerable code path is in TIFF image processing, which
+# is NOT invoked by our nginx configuration (no TIFF MIME type handling,
+# no image processing modules). No upstream image bump yet. Time-boxed:
+# re-check 2026-11-30; drop entry + bump NGINX_FRONTEND_IMAGE digest when
+# nginxinc/nginx-unprivileged:stable-alpine ships libtiff >= 4.7.2-r0.
+CVE-2026-4775  # libtiff integer overflow: no TIFF processing in nginx config
+
 # --- AUT-4718: urllib3 CVE-2026-97687 / CVE-2026-97689 (pip's vendored copy) ----------------
 # urllib3 2.7.0 ships ONLY inside pip's vendor tree — `usr/local/lib/python3.13/
 # site-packages/pip/_vendor/urllib3/` — and pip's own lock file records `urllib3==2.7.0`.
