@@ -1,0 +1,66 @@
+[
+  {
+    "title": "Phase 1a: Merge dongle-server into backend",
+    "description": "Move dongle-server FastAPI routes into backend container as sub-app on :8002. Update docker-compose.hosted.yml to drop dongle-server service. Acceptance: 7 containers hosted (postgres, redis, minio, backend, frontend, hub, 9router). Link parent: see AUT-5562.",
+    "status": "todo",
+    "priority": "high",
+    "parentId": "CURRENT_ISSUE_ID",
+    "goalId": "4fc32f2e-2489-4333-aa9c-f04aafede71d"
+  },
+  {
+    "title": "Phase 1a: Merge backup GUI into backend",
+    "description": "Mount backup GUI static assets + read-only router into backend at /admin/backup. Drop `backup` service from docker-compose.hosted.yml. Acceptance: 6 containers hosted (postgres, redis, minio, backend, frontend, 9router). Link parent: see AUT-5562.",
+    "status": "todo",
+    "priority": "high",
+    "parentId": "CURRENT_ISSUE_ID",
+    "goalId": "4fc32f2e-2489-4333-aa9c-f04aafede71d"
+  },
+  {
+    "title": "Phase 1b: Add pgvector embeddings for vehicles, users, garage posts, parts, service_types",
+    "description": "Create Alembic migrations for 5 new tables (vehicles, users, social_garage_posts, parts, service_types) with embedding vector(1536) + HNSW index. Update _ENTITY_MAP and _to_text. Run backfill. Acceptance: 11 entity types have embeddings; semantic search covers all. Link parent: see AUT-5562.",
+    "status": "todo",
+    "priority": "high",
+    "parentId": "CURRENT_ISSUE_ID",
+    "goalId": "4fc32f2e-2489-4333-aa9c-f04aafede71d"
+  },
+  {
+    "title": "Phase 1c: Raise MIN_AI_CONFIDENCE default to 0.85 + per-module floors",
+    "description": "Update router_client.py: default 0.75 → 0.85. Add MIN_AI_CONFIDENCE map in router_utils.py (resale 0.9, ocr 0.8, etc.). Acceptance: config + tests; hybrid rate drops <10%. Link parent: see AUT-5562.",
+    "status": "todo",
+    "priority": "medium",
+    "parentId": "CURRENT_ISSUE_ID",
+    "goalId": "4fc32f2e-2489-4333-aa9c-f04aafede71d"
+  },
+  {
+    "title": "Phase 1c: Add AI telemetry dashboard + cost guard",
+    "description": "Expose /v1/ai/telemetry in admin UI. Alert if hybrid rate <10% or router_error spikes. Add AI_ENABLED=false budget kill-switch. Acceptance: dashboard live, alerts tested. Link parent: see AUT-5562.",
+    "status": "todo",
+    "priority": "medium",
+    "parentId": "CURRENT_ISSUE_ID",
+    "goalId": "4fc32f2e-2489-4333-aa9c-f04aafede71d"
+  },
+  {
+    "title": "Phase 1d: Split app/main.py + config package",
+    "description": "Extract routers to app/api/ (already exist). Move startup/shutdown to app/lifespan.py. Split app/core/config.py into app/core/settings/ subpackage (base, ai, fuel, social, backup, dongle). Acceptance: main.py <300 lines, config importable per-module. Link parent: see AUT-5562.",
+    "status": "todo",
+    "priority": "high",
+    "parentId": "CURRENT_ISSUE_ID",
+    "goalId": "4fc32f2e-2489-4333-aa9c-f04aafede71d"
+  },
+  {
+    "title": "Phase 1d: Split workers tasks + embedding provider protocol",
+    "description": "Split app/workers/tasks.py into app/workers/tasks/ package (embeddings, fuel, backup, social, diagnostics, notifications). Extract EmbeddingProvider protocol in app/services/embeddings/. Acceptance: workers split, protocol implemented for 9Router. Link parent: see AUT-5562.",
+    "status": "todo",
+    "priority": "high",
+    "parentId": "CURRENT_ISSUE_ID",
+    "goalId": "4fc32f2e-2489-4333-aa9c-f04aafede71d"
+  },
+  {
+    "title": "Phase 1e: Audit + rewrite priority docs + Outline sync",
+    "description": "Audit all docs/*.md for staleness. Rewrite architecture.md, ai-router-integration.md, deployment-guide.md, container-consolidation-migration.md, module-boundaries.md, developer-onboarding.md. Write scripts/sync-docs-to-outline.py. Acceptance: docs 100% current, Outline synced. Link parent: see AUT-5562.",
+    "status": "todo",
+    "priority": "medium",
+    "parentId": "CURRENT_ISSUE_ID",
+    "goalId": "4fc32f2e-2489-4333-aa9c-f04aafede71d"
+  }
+]

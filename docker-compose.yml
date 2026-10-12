@@ -25,6 +25,12 @@ x-backend-base: &backend-base
     AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:?AI_GATEWAY_API_KEY must be set in .env}
     SOCIAL_FEDERATION_HUB_URL: ${SOCIAL_FEDERATION_HUB_URL:-https://hub.autobrainservice.app}
     SOCIAL_FEDERATION_HOSTED: ${SOCIAL_FEDERATION_HOSTED:-false}
+    # AUT-1673: dongle-server merged into backend on :8002.
+    DONGLE_SERVER_API_KEY: ${DONGLE_SERVER_API_KEY:-}
+    DONGLE_SERVER_URL: http://localhost:8002
+    WEB_UI_BASIC_USER: ${WEB_UI_BASIC_USER:-admin}
+    WEB_UI_BASIC_PASSWORD: ${WEB_UI_BASIC_PASSWORD:-}
+    AUTOBRAIN_BACKEND_URL: http://localhost:8000
   depends_on:
     postgres:
       condition: service_healthy
@@ -102,7 +108,7 @@ services:
     <<: *backend-base
     ports:
       - "127.0.0.1:8000:8000"
-    command: ["sh", "-c", "alembic upgrade head && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload & uvicorn ai_app.main:app --host 0.0.0.0 --port 8001 --reload & wait"]
+    command: ["sh", "-c", "alembic upgrade head && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload & uvicorn ai_app.main:app --host 0.0.0.0 --port 8001 --reload & uvicorn app.dongle.main:app --host 0.0.0.0 --port 8002 --reload & wait"]
     volumes:
       - ./backend:/app
 

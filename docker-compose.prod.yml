@@ -60,6 +60,12 @@ x-backend-base: &backend-base
     # aggregator is contracted (same pattern as VIC/AUT-4976).
     FUEL_SA_API_KEY: ${FUEL_SA_API_KEY:-}
     FUEL_SA_ENABLED: "false"
+    # AUT-1673: dongle-server merged into backend on :8002.
+    DONGLE_SERVER_API_KEY: ${DONGLE_SERVER_API_KEY:-}
+    DONGLE_SERVER_URL: http://localhost:8002
+    WEB_UI_BASIC_USER: ${WEB_UI_BASIC_USER:-admin}
+    WEB_UI_BASIC_PASSWORD: ${WEB_UI_BASIC_PASSWORD:-}
+    AUTOBRAIN_BACKEND_URL: http://localhost:8000
   depends_on:
     postgres:
       condition: service_healthy
@@ -160,10 +166,12 @@ services:
       && alembic upgrade head
       && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &)
       && (uvicorn ai_app.main:app --host 0.0.0.0 --port 8001 &)
+      && (uvicorn app.dongle.main:app --host 0.0.0.0 --port 8002 &)
       && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
     expose:
       - "8000"
       - "8001"
+      - "8002"
 
   frontend:
     build:
