@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-6237)
+- fix(ci): added `AUTOBRAIN_BACKEND_URL`, `WEB_UI_BASIC_USER`, `WEB_UI_BASIC_PASSWORD` to `.env.example` so the compose env-var rename detector (AUT-2390) passes. These vars moved from the standalone `dongle-server` service into the backend when dongle-server was merged on :8002 (AUT-1673 Phase 1a).
+
 ### Fixed (AUT-6236)
 - fix(ci): compose structural check updated for AUT-1673 Phase 1a dongle-server merge into backend on :8002. Removed `dongle-server` from expected services in `scripts/check-compose-consolidation.py` (hosted stack now 8 long-running containers). Added validation that backend command includes dongle-server uvicorn on :8002. CI now green on phase1-dongle-merge branch.
 
