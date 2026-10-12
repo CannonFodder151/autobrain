@@ -15,15 +15,16 @@ import yaml
 COMPOSE = "docker-compose.hosted.yml"
 
 # Services merged into `backend` or removed outright; none may come back.
-RETIRED = ("worker", "ai", "market-data", "backup-agent")
+RETIRED = ("worker", "ai", "market-data", "backup-agent", "dongle-server")
 
-# The hosted stack as consolidated: 9 long-running containers.
+# The hosted stack as consolidated: 8 long-running containers.
 # `gh-runner` is NOT here — AUT-4911 moved it to its own Portainer stack
 # (`gh-runner-autobrain-arm64`, stack 123 on EP5) because its image was
 # unpublished. It was still listed until now, which kept this check red on
 # main (AUT-5031) and therefore unenforced.
+# AUT-1673 Phase 1a: dongle-server merged into backend on :8002.
 EXPECTED = {
-    "postgres", "redis", "minio", "backend", "dongle-server",
+    "postgres", "redis", "minio", "backend",
     "frontend", "hub", "9router", "backup",
 }
 
@@ -70,6 +71,10 @@ def main():
     # AUT-3824: the AI gateway is a co-process on :8001 inside `backend`.
     if "8001" not in backend_cmd:
         errors.append("backend command missing the AI gateway uvicorn on :8001 (AUT-3824)")
+
+    # AUT-1673: the dongle-server is a co-process on :8002 inside `backend`.
+    if "8002" not in backend_cmd:
+        errors.append("backend command missing the dongle-server uvicorn on :8002 (AUT-1673)")
 
     # AUT-5088: migrations must run at boot. Hosted was still on
     # `python -m app.db.bootstrap`, whose create_all fallback swallowed every
