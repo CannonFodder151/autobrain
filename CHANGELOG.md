@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-6262)
+- fix(backend): login rate limit lockout (5 failed attempts = 3h) had no admin escape hatch. Added `POST /api/v1/admin/auth/clear-rate-limit` (admin role) to clear `login:fail:ip:<IP>` and/or `login:fail:email:<email>` Redis keys so locked-out users can be manually unlocked without SSH access to the hosted Redis.
+
 ### Fixed (AUT-5936)
 - fix(frontend): `favourite_stations_screen.dart` referenced `FuelPriceWatchlist` without importing `core/models.dart`, causing a compile error (`Type 'FuelPriceWatchlist' not found`) that failed the visual-regression CI on branches `fix/aut-5920-pr-based-pin-bumps` and `AUT-4556-servo-saver-map-improvements`. Added the missing import.
 

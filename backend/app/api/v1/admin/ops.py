@@ -14,6 +14,7 @@ from app.core.logging import get_logger
 from app.db.session import get_db
 from app.models.user import User
 from app.services import email as mail
+from app.services.auth import clear_failures
 from app.services.backup import dump_backup, load_backup, restore_all, serialize_all
 
 from app.api.v1.admin.helpers import _best_effort_delete_media
@@ -29,6 +30,17 @@ async def server_version() -> dict:
     """Current server version (local only — no GitHub update check)."""
     return {"version": settings.APP_VERSION}
 
+@admin_ops.post("/auth/clear-rate-limit")
+async def clear_login_rate_limit(
+    ip: str | None = Query(default=None, description="IP address to clear"),
+    email: str | None = Query(default=None, description="Email to clear"),
+    _admin: User = Depends(require_admin),
+) -> dict:
+    """Clear login rate limit for an IP and/or email. Admin only."""
+    if not ip and not email:
+        raise HTTPException(status_code=400, detail="Provide ip or email")
+    await clear_failures(ip or "", email)
+    return {"message": "Rate limit cleared", "ip": ip, "email": email}
 
 @admin_ops.get("/backup")
 async def download_backup(db: AsyncSession = Depends(get_db)) -> Response:
