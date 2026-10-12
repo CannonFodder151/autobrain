@@ -15,6 +15,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - feat(backend): merge dongle-server into backend as sub-app on :8002, consolidating containers and exposing dongle APIs at `http://localhost:8002`.
 
 
+### Fixed (AUT-6265)
+- fix(backend): `tests/test_advisor_upgrade.py::test_advisor_upgrade_route_envelope` failed with `TypeError: object types.SimpleNamespace can't be used in await expression`. The test mocked `get_accessible_vehicle` with a sync lambda returning a `SimpleNamespace`, but the real function is `async def` and the route handler does `await get_accessible_vehicle(...)`. Changed the mock to an `async def` so it returns an awaitable. Also added missing `id` field to the test vehicle mock and added `tier_offsets` to the route response factors to match the test expectation.
+- fix(backend): Several tests in `test_advisor_upgrade.py` monkeypatched the wrong `get_market_data` reference (they patched `app.services.advisor.get_market_data` but the upgrade module imports directly from `app.services.market_data`). Fixed all affected tests to monkeypatch the correct module. Also fixed `test_compute_upgrade_*` tests to monkeypatch `compute_market_value` (which is called with the DB session) instead of the lower-level `get_market_data`.
+
+
 ### Fixed (AUT-6237)
 - fix(ci): added `AUTOBRAIN_BACKEND_URL`, `WEB_UI_BASIC_USER`, `WEB_UI_BASIC_PASSWORD` to `.env.example` so the compose env-var rename detector (AUT-2390) passes. These vars moved from the standalone `dongle-server` service into the backend when dongle-server was merged on :8002 (AUT-1673 Phase 1a).
 
