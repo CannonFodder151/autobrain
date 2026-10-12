@@ -10,6 +10,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Added (AUT-3810)
+- feat(backend): merge market-data scraper into backend as in-process services (Phase 1a container consolidation); CarsGuide search + SCA parts-guide taxonomy scrapers (pure HTTP, no browser); refresh_market_data_cache Celery task + daily beat schedule (01:00 AEST); container count stays at 10 on hosted (market-data already removed, capability restored in-process) (PR #782)
+
 ### Added/Changed (AUT-3533)
 - fix: Servo Spy map blank white screen on hosted by resolving undefined _kCartoKeyParam and injecting CARTO API key (PR #715)
 
