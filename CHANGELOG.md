@@ -10,6 +10,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Fixed (AUT-2458)
+- fix(fuel): WA FuelWatch ingest now uses the new JSON API at `fuelwatch.wa.gov.au/api/sites` (the legacy `industryprd.fuelwatch.wa.gov.au` endpoint no longer resolves). Prices are embedded in the sites response (`currentPricingOrder` in cents/litre). Parser handles both legacy and new response shapes for backward compatibility.
+
 ### Added/Changed (AUT-3533)
 - fix: Servo Spy map blank white screen on hosted by resolving undefined _kCartoKeyParam and injecting CARTO API key (PR #715)
 

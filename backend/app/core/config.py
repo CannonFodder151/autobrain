@@ -116,8 +116,8 @@ class Settings(BaseSettings):
     FUEL_QLD_COUNTRY_ID: int = 21  # Australia
     FUEL_QLD_REGION_LEVEL: int = 3  # state
     FUEL_QLD_USE_OPEN_FALLBACK: bool = False
-    FUEL_WA_SITES_URL: str = "https://industryprd.fuelwatch.wa.gov.au/api/sites"
-    FUEL_WA_PRICES_URL: str = "https://industryprd.fuelwatch.wa.gov.au/api/report/weekly-retail-prices"
+    FUEL_WA_SITES_URL: str = "https://fuelwatch.wa.gov.au/api/sites"
+    FUEL_WA_PRICES_URL: str = ""  # Prices now embedded in sites response; legacy endpoint returns PDFs
     FUEL_NSW_URL: str = "https://api.transport.nsw.gov.au/v1/fuel"
     FUEL_VIC_URL: str = "https://api.servosaver.com.au/v1/prices"
     FUEL_INGEST_USER_AGENT: str = "AutoBrain Servo Spy (+https://autobrainservice.app)"

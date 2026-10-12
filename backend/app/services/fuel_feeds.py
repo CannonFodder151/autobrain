@@ -124,45 +124,59 @@ def _first(d: dict, aliases: list[str]) -> Any:
 
 
 # --------------------------------------------------------------------------- #
-# WA FuelWatch
+# WA FuelWatch (new API at fuelwatch.wa.gov.au, JSON format)
 # --------------------------------------------------------------------------- #
 
 def _parse_wa_sites(raw: Any) -> list[dict]:
+    """Parse WA sites from new FuelWatch API.
+    Response is a list of objects with: id, siteName, address{line1, location, postCode, state, latitude, longitude},
+    brandName, product{shortName, isTruckStop, isTwoPrice, isLowAromaticFuel, isOutOfSupply},
+    currentPricingOrder (price in cents/litre), nextPricingOrder, etc.
+    Also handles legacy format: Sitedid, Name, Brand, Address, Latitude, Longitude.
+    """
     rows = raw if isinstance(raw, list) else []
     out: list[dict] = []
     for r in rows:
         if not isinstance(r, dict):
             continue
-        sid = _first(r, ["Sitedid", "SiteId", "siteId", "id"])
+        sid = _first(r, ["id", "SiteId", "Sitedid", "siteId"])
         if sid is None:
             continue
+        addr = r.get("address") if isinstance(r.get("address"), dict) else {}
         out.append({
             "source": "wa",
             "source_id": str(sid),
-            "brand": (_first(r, ["Brand", "brand"]) or None),
-            "name": str(_first(r, ["Name", "Sitename", "name"]) or ""),
-            "address": str(_first(r, ["Address", "address"]) or ""),
-            "lat": _to_float(_first(r, ["Latitude", "lat"])),
-            "lon": _to_float(_first(r, ["Longitude", "lng"])),
+            "brand": r.get("brandName") or r.get("Brand") or None,
+            "name": str(r.get("siteName") or r.get("Name") or ""),
+            "address": str(addr.get("line1") or r.get("Address") or ""),
+            "lat": _to_float(addr.get("latitude") or r.get("Latitude")),
+            "lon": _to_float(addr.get("longitude") or r.get("Longitude")),
         })
     return out
 
 
 def _parse_wa_prices(raw: Any) -> dict[str, list[tuple[str, float, datetime]]]:
-    """Map WA SiteId -> list of (canonical_fuel, price_cpl, effective_at)."""
+    """Parse WA prices from new FuelWatch API.
+    Prices are embedded in the sites response. Extract from each site's product info.
+    currentPricingOrder appears to be the current price in cents/litre (e.g., 943 = $9.43).
+    Also handles legacy format: SiteId, FuelCode, Price, PriceUpdatedDate.
+    """
     rows = raw if isinstance(raw, list) else []
     out: dict[str, list[tuple[str, float, datetime]]] = {}
+    now = datetime.utcnow()
     for r in rows:
         if not isinstance(r, dict):
             continue
-        sid = _first(r, ["SiteId", "siteId"])
+        sid = _first(r, ["id", "SiteId", "siteId", "Sitedid"])
         if sid is None:
             continue
-        ft = _normalise_fuel_type(_first(r, ["FuelCode", "fuelCode", "fuel_type"]))
-        price = _to_float(_first(r, ["Price", "price"]))
-        if not ft or price is None:
+        product = r.get("product") if isinstance(r.get("product"), dict) else {}
+        fuel_short = product.get("shortName") or r.get("FuelCode") or r.get("fuelCode") or r.get("fuel_type")
+        ft = _normalise_fuel_type(fuel_short)
+        price_cpl = r.get("currentPricingOrder") or r.get("Price") or r.get("price")
+        if not ft or price_cpl is None:
             continue
-        out.setdefault(str(sid), []).append((ft, price, _to_dt(_first(r, ["PriceUpdatedDate", "lastupdated", "effective_at"]))))
+        out.setdefault(str(sid), []).append((ft, float(price_cpl), now))
     return out
 
 
@@ -650,8 +664,8 @@ async def _fetch_json(url: str, *, headers: dict | None = None, params: dict | N
 
 async def ingest_wa_fuelwatch(db: AsyncSession, *, client: httpx.AsyncClient | None = None) -> dict:
     sites = await _fetch_json(settings.FUEL_WA_SITES_URL, client=client)
-    prices = await _fetch_json(settings.FUEL_WA_PRICES_URL, client=client)
-    return await _ingest(db, "wa", _parse_wa_sites(sites), _parse_wa_prices(prices))
+    # New API: prices embedded in sites response
+    return await _ingest(db, "wa", _parse_wa_sites(sites), _parse_wa_prices(sites))
 
 
 async def ingest_nsw_fuelcheck(db: AsyncSession, *, client: httpx.AsyncClient | None = None) -> dict:
