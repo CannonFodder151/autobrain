@@ -198,3 +198,8 @@ async def run_car_check_ai(
         return None
     _car_check_cache_put(cache_key, result)
     return result
+
+
+async def run_health_score(payload: dict) -> dict | None:
+    """Call the AI gateway for Vehicle Health Score (AUT-3857)."""
+    return await _call("health-score", payload)

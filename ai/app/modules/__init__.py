@@ -6,6 +6,7 @@ from ..modules import (
     condition,
     diagnostics,
     fuel_ocr,
+    health_score,
     mod_impact,
     ocr,
     odometer,
@@ -28,6 +29,7 @@ MODULES = {
     "mod-impact": mod_impact.run,
     "parts-guide": parts_guide.run,
     "social-image": social_image.run,
+    "health-score": health_score.run,
 }
 
 __all__ = ["MODULES"]

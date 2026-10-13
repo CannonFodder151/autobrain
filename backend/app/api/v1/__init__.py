@@ -9,6 +9,7 @@ from app.api.v1 import (
     analytics,
     auth,
     billing,
+    ci,
     devices,
     diagnostics,
     dongle_firmware,
@@ -17,6 +18,7 @@ from app.api.v1 import (
     fuel_prices,
     fuel_servo,
     ha,
+    health_score,
     issues,
     logbook,
     mods,
@@ -63,3 +65,5 @@ api_router.include_router(engineer.router)
 api_router.include_router(search.router)
 api_router.include_router(social.router)
 api_router.include_router(issues.router)
+api_router.include_router(ci.router)
+api_router.include_router(health_score.router)

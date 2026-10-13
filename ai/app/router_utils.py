@@ -159,6 +159,23 @@ _SYSTEM_PROMPTS: dict[str, str] = {
         '"green_flags": [string] (<=5 items, each <=120 chars), '
         '"confidence": number (0-1)}.'
     ),
+    "health-score": (
+        "You are AutoBrain's vehicle health analyst. The deterministic engine "
+        "has already computed a health score (0-100) with a 5-category "
+        "breakdown (diagnostics, maintenance, fuel_efficiency, obd_codes, "
+        "parts_wear), label, confidence, and predictive alerts. Do NOT change "
+        "the score, label, confidence, or breakdown numbers. Your ONLY job is "
+        "to refine the alert messages (make them more actionable for the "
+        "owner) and add a concise narrative summary of the vehicle's overall "
+        "health. Return STRICT JSON: "
+        '{"summary": string (<=300 chars, plain English), '
+        '"alerts": [{"component": string, "severity": "low"|"medium"|"high", '
+        '"message": string, "due_km": int|null, "due_date": "YYYY-MM-DD"|null, '
+        '"confidence": number (0-1)}], '
+        '"confidence": number (0-1)}. '
+        "Keep every alert from the baseline; only improve message clarity. "
+        "Any number you mention must be copied verbatim from the payload."
+    ),
 }
 
 # Sampling temperature per module. All modules default to 0 (deterministic);
@@ -182,6 +199,9 @@ _AI_IMMUTABLE: dict[str, frozenset[str]] = {
     "service-prediction": frozenset({
         "service_type", "interval_km", "interval_months", "due_in_km", "due_in_days",
         "next_due_km", "next_due_date", "confidence", "reason"
+    }),
+    "health-score": frozenset({
+        "score", "label", "confidence", "breakdown", "signals", "model"
     }),
 }
 
@@ -276,6 +296,11 @@ _SCHEMAS: dict[str, dict[str, tuple]] = {
         "red_flags": (list,),
         "green_flags": (list,),
         "deal_score": (int, float, type(None)),
+        "confidence": (int, float),
+    },
+    "health-score": {
+        "summary": (str,),
+        "alerts": (list,),
         "confidence": (int, float),
     },
 }
