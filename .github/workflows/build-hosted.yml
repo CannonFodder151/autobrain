@@ -117,7 +117,7 @@ jobs:
           ref: main
           fetch-depth: 0
 
-- name: Fix Docker socket permissions
+      - name: Fix Docker socket permissions
         run: sudo chmod 666 /var/run/docker.sock
       - uses: docker/setup-buildx-action@v3
 
