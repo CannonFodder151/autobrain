@@ -1,0 +1,244 @@
+# AUT-2471: Watchdog for the arm64 self-hosted runner (gh-runner-autobrain-arm64).
+#
+# Periodically checks whether the arm64 runner is registered and online via the
+# GitHub Actions API. If the runner is offline for > 10 min, restart its Docker
+# container on EP5 (Oracle VM) via the Portainer API. Alerts Discord #incidents
+# on the first recreation in a 24h window, with a link to the container logs.
+#
+# Runs on ubuntu-latest (GitHub-hosted), NOT the self-hosted runner — if the
+# arm64 runner is down this workflow must still execute.  A state file (uploaded
+# as an artifact) prevents repeated restarts: only one restart per 24h unless
+# the runner goes offline again after the grace period.
+#
+# Secrets required:
+#   PORTAINER_API_KEY  — EP5 Portainer API key
+#   GITHUB_PAT        — classic PAT with actions:read on CannonFodder151/autobrain
+
+name: Runner Watchdog (arm64)
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # every 10 minutes
+  workflow_dispatch:          # manual trigger for testing
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  PORTAINER_URL: https://portainer.nathanmartina.com
+  PORTAINER_EP: "5"
+  RUNNER_LABEL: "arm64"
+  CONTAINER_NAME: "gh-runner-autobrain-arm64"
+  OFFLINE_THRESHOLD_MIN: 10
+  RESTART_COOLDOWN_HOURS: 24
+
+jobs:
+  watchdog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check runner status via GitHub API
+        id: check
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # Fetch all registered runners and find the arm64 one
+          RESPONSE=$(curl -sf \
+            -H "Authorization: Bearer $GH_PAT" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${REPO}/actions/runners?per_page=100")
+
+          RUNNER_INFO=$(echo "$RESPONSE" | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          runners = data.get('runners', [])
+          for r in runners:
+              if r.get('name') == 'gh-runner-autobrain-arm64':
+                  print(json.dumps(r))
+                  sys.exit(0)
+          # fallback: match on label
+          for r in runners:
+              labels = [l['name'] for l in r.get('labels', [])]
+              if 'ARM64' in labels and r.get('name','').startswith('gh-runner'):
+                  print(json.dumps(r))
+                  sys.exit(0)
+          print('{}')
+          ")
+
+          if [ -z "$RUNNER_INFO" ] || [ "$RUNNER_INFO" = "{}" ]; then
+            echo "runner_found=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::arm64 runner not found in GitHub Actions runners list"
+            exit 0
+          fi
+
+          echo "runner_found=true" >> "$GITHUB_OUTPUT"
+
+          RUNNER_STATUS=$(echo "$RUNNER_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','unknown'))")
+          RUNNER_ID=$(echo "$RUNNER_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))")
+          echo "runner_status=$RUNNER_STATUS" >> "$GITHUB_OUTPUT"
+          echo "runner_id=$RUNNER_ID" >> "$GITHUB_OUTPUT"
+
+          if [ "$RUNNER_STATUS" = "online" ]; then
+            echo "runner_healthy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "runner_healthy=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check if restart is needed
+        id: decide
+        if: steps.check.outputs.runner_healthy != 'true'
+        env:
+          RUNNER_STATUS: ${{ steps.check.outputs.runner_status }}
+          RUNNER_FOUND: ${{ steps.check.outputs.runner_found }}
+        run: |
+          set -euo pipefail
+
+          if [ "$RUNNER_FOUND" != "true" ]; then
+            echo "action=skip" >> "$GITHUB_OUTPUT"
+            echo "reason=runner not registered (may need manual recreation)" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Runner is offline/unexpected — check cooldown via artifact
+          # If a restart artifact from the last 24h exists, skip
+          LAST_RESTART_FILE="runner-watchdog-last-restart"
+          FOUND_RESTART=false
+          for suffix in "" "_$(date -u +%Y%m%d)"; do
+            if [ -f "${LAST_RESTART_FILE}${suffix}" ]; then
+              AGE_HOURS=$(( ($(date +%s) - $(stat -c %Y "${LAST_RESTART_FILE}${suffix}" 2>/dev/null || echo 0)) / 3600 ))
+              if [ "$AGE_HOURS" -lt "$RESTART_COOLDOWN_HOURS" ]; then
+                echo "action=skip" >> "$GITHUB_OUTPUT"
+                echo "reason=within cooldown (${AGE_HOURS}h < ${RESTART_COOLDOWN_HOURS}h)" >> "$GITHUB_OUTPUT"
+                FOUND_RESTART=true
+                break
+              fi
+            fi
+          done
+
+          if [ "$FOUND_RESTART" = "false" ]; then
+            echo "action=restart" >> "$GITHUB_OUTPUT"
+            echo "reason=runner offline ($RUNNER_STATUS) for >${OFFLINE_THRESHOLD_MIN}m" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Get container info from Portainer
+        id: container
+        if: steps.decide.outputs.action == 'restart'
+        env:
+          PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+        run: |
+          set -euo pipefail
+
+          # Find the container by name on EP5
+          CONTAINERS=$(curl -sf -H "X-API-Key: $PORTAINER_API_KEY" \
+            "${PORTAINER_URL}/api/endpoints/${PORTAINER_EP}/docker/containers/json?all=1")
+
+          CONTAINER_ID=$(echo "$CONTAINERS" | python3 -c "
+          import sys, json
+          containers = json.load(sys.stdin)
+          for c in containers:
+              names = [n.lstrip('/') for n in c.get('Names', [])]
+              if '${CONTAINER_NAME}' in names:
+                  print(c.get('Id', ''))
+                  break
+          ")
+
+          if [ -z "$CONTAINER_ID" ]; then
+            echo "::error::Container '${CONTAINER_NAME}' not found on EP5"
+            echo "action=skip" >> "$GITHUB_OUTPUT"
+            echo "reason=container not found on EP5" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "container_id=$CONTAINER_ID" >> "$GITHUB_OUTPUT"
+          echo "action=restart" >> "$GITHUB_OUTPUT"
+
+      - name: Restart runner container
+        id: restart
+        if: steps.container.outputs.action == 'restart'
+        env:
+          PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+          CONTAINER_ID: ${{ steps.container.outputs.container_id }}
+        run: |
+          set -euo pipefail
+
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST -H "X-API-Key: $PORTAINER_API_KEY" \
+            "${PORTAINER_URL}/api/endpoints/${PORTAINER_EP}/docker/containers/${CONTAINER_ID}/restart?t=30")
+
+          echo "restart_http_code=$HTTP_CODE" >> "$GITHUB_OUTPUT"
+
+          if [ "$HTTP_CODE" = "204" ]; then
+            echo "restart_success=true" >> "$GITHUB_OUTPUT"
+            # Write cooldown marker
+            echo "$(date -u +%FT%TZ)" > "runner-watchdog-last-restart"
+          else
+            echo "restart_success=false" >> "$GITHUB_OUTPUT"
+            echo "::error::Restart returned HTTP $HTTP_CODE"
+          fi
+
+      - name: Alert Discord #incidents
+        if: steps.restart.outputs.restart_success == 'true'
+        env:
+          WEBHOOK_URL: https://n8n.nathanmartina.com/webhook/discord-report
+        run: |
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          CONTAINER_URL="https://portainer.nathanmartina.com/#!/${{ env.PORTAINER_EP }}/docker/containers/${{ steps.container.outputs.container_id }}/logs"
+
+          curl -sf -X POST "$WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"channel\": \"incidents\",
+              \"title\": \"arm64 runner auto-restarted by watchdog\",
+              \"description\": \"gh-runner-autobrain-arm64 was offline (status: ${{ steps.check.outputs.runner_status }}). Watchdog restarted the container on EP5.\",
+              \"color\": \"0xE67E22\",
+              \"author\": \"System Admin\",
+              \"fields\": [
+                {\"name\": \"Runner\", \"value\": \"gh-runner-autobrain-arm64\", \"inline\": true},
+                {\"name\": \"Host\", \"value\": \"EP5 (152.69.188.133)\", \"inline\": true},
+                {\"name\": \"Action\", \"value\": \"Container restarted\", \"inline\": true},
+                {\"name\": \"Logs\", \"value\": \"[Container logs](${CONTAINER_URL})\", \"inline\": false}
+              ]
+            }"
+
+      - name: Alert if restart failed
+        if: steps.restart.outputs.restart_success == 'false'
+        env:
+          WEBHOOK_URL: https://n8n.nathanmartina.com/webhook/discord-report
+        run: |
+          curl -sf -X POST "$WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"channel\": \"incidents\",
+              \"title\": \"arm64 runner watchdog restart FAILED\",
+              \"description\": \"gh-runner-autobrain-arm64 is offline and the watchdog could not restart it (HTTP ${{ steps.restart.outputs.restart_http_code }}). Manual intervention required.\",
+              \"color\": \"0xED4245\",
+              \"author\": \"System Admin\",
+              \"fields\": [
+                {\"name\": \"Runner\", \"value\": \"gh-runner-autobrain-arm64\", \"inline\": true},
+                {\"name\": \"HTTP Code\", \"value\": \"${{ steps.restart.outputs.restart_http_code }}\", \"inline\": true},
+                {\"name\": \"Action\", \"value\": \"Escalate to Deployment Lead\", \"inline\": true}
+              ]
+            }"
+
+      - name: Alert if runner not found
+        if: steps.check.outputs.runner_found == 'false'
+        env:
+          WEBHOOK_URL: https://n8n.nathanmartina.com/webhook/discord-report
+        run: |
+          curl -sf -X POST "$WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"channel\": \"incidents\",
+              \"title\": \"arm64 runner not registered in GitHub Actions\",
+              \"description\": \"gh-runner-autobrain-arm64 is not found in the registered runners list. The runner container may need manual recreation.\",
+              \"color\": \"0xED4245\",
+              \"author\": \"System Admin\",
+              \"fields\": [
+                {\"name\": \"Host\", \"value\": \"EP5 (152.69.188.133)\", \"inline\": true},
+                {\"name\": \"Action\", \"value\": \"Escalate to Deployment Lead\", \"inline\": true}
+              ]
+            }"
