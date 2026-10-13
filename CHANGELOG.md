@@ -10,6 +10,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Added (AUT-6519)
+- docs: add secret-file-pattern.md documenting AUT-1533 *_FILE secret injection pattern for docker-compose (AUT-6519)
+
 ### Fixed (AUT-6431)
 - fix(build): add archive dependency override to fix Dart compile failure (AUT-6431)
 
