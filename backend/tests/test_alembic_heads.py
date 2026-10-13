@@ -46,14 +46,13 @@ def test_alembic_revision_ids_unique() -> None:
 def test_no_duplicate_table_names() -> None:
     """AUT-2277: no two ORM model classes may claim the same ``__tablename__``.
 
-    Scans the model modules without importing them (so this test does not
+    Scans the model modules via AST (no execution) so this test does not
     collide with the SQLAlchemy metadata-collision error it is guarding
-    against). Catches re-introductions of duplicate ``fuel_prices``
+    against. Catches re-introductions of duplicate ``fuel_prices``
     declarations and similar foot-guns before pytest collection or app boot
     fails.
     """
-    import importlib.util
-    from pathlib import Path
+    import ast
 
     models_dir = BACKEND_DIR / "app" / "models"
     assert models_dir.is_dir(), f"models dir missing: {models_dir}"
@@ -63,22 +62,25 @@ def test_no_duplicate_table_names() -> None:
     for py in sorted(models_dir.glob("*.py")):
         if py.name == "__init__.py":
             continue
-        spec = importlib.util.spec_from_file_location(
-            f"_models_scan_{py.stem}", py
-        )
-        assert spec and spec.loader, f"failed to load spec for {py}"
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)  # noqa: S602 — trusted local file
-        for cls_name, cls in vars(module).items():
-            if not isinstance(cls, type):
+        for cls in ast.parse(py.read_text()).body:
+            if not isinstance(cls, ast.ClassDef):
                 continue
-            tbl = getattr(cls, "__tablename__", None)
-            if not tbl or not isinstance(tbl, str):
+            tbl = None
+            for node in ast.walk(cls):
+                if (
+                    isinstance(node, ast.Assign)
+                    and any(isinstance(t, ast.Name) and t.id == "__tablename__" for t in node.targets)
+                    and isinstance(node.value, ast.Constant)
+                    and isinstance(node.value.value, str)
+                ):
+                    tbl = node.value.value
+                    break
+            if not tbl:
                 continue
             if tbl in seen:
-                dups.append((tbl, seen[tbl], f"{py.stem}.{cls_name}"))
+                dups.append((tbl, seen[tbl], f"{py.stem}.{cls.name}"))
             else:
-                seen[tbl] = f"{py.stem}.{cls_name}"
+                seen[tbl] = f"{py.stem}.{cls.name}"
     assert not dups, (
         f"Duplicate __tablename__ across model classes: "
         + "; ".join(f"{t} claimed by {a} and {b}" for t, a, b in dups)
