@@ -26,6 +26,9 @@
 # masked, so the stack no longer depends on the /opt remount workaround
 # (autobrain-opt-guard.sh).
 
+# AUT-5669: commit whose build produced the digests pinned below.
+x-autobrain-pin-source: "737fa615611ac71e9a3627184221f9f20bbadd85"
+
 x-secrets: &secrets
   volumes:
     - type: bind
@@ -74,7 +77,7 @@ services:
     # multi-arch image (amd64 + arm64) is immutable across Demo/Default/Hosted
     # (Hosted = arm64 Oracle VM; dev box = x64). Bump deliberately: verify
     # release notes, then update this digest.
-    image: pgvector/pgvector:pg17@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f
+    image: pgvector/pgvector:pg17@sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER must be set}
@@ -164,7 +167,7 @@ services:
     # AUT-3153: the standalone Celery worker+beat service is merged into this
     # container. The backend image already carries the worker dependencies and
     # its default CMD runs the same topology as docker-compose.prod.yml.
-    image: ghcr.io/cannonfodder151/autobrain-backend:hosted@sha256:161f2b4a75391491b688d796b66e78cc7f349af1f4eaaad476990fbc7e3cc15c
+    image: ghcr.io/cannonfodder151/autobrain-backend:hosted@sha256:196b5462eeacc71610fd51448deca79c88ccf05f356e07c29d6c3ce221d14831
     restart: unless-stopped
     # AUT-5088: `alembic upgrade head` runs first and its failure is fatal.
     # Without it, bootstrap's `create_all` fallback silently swallowed every
@@ -267,15 +270,20 @@ services:
       # /api/backup/ingest.
       BACKUP_OFFSITE_ENABLED: "true"
       BACKUP_OFFSITE_URL: ${BACKUP_OFFSITE_URL:-http://backup:8080}
+      # AUT-3977: BACKUP_OFFSITE_URL is validated at startup against this
+      # exact-match allowlist (fail closed). Overriding BACKUP_OFFSITE_URL
+      # without adding the new host here makes the backend refuse to boot.
+      BACKUP_OFFSITE_HOST_ALLOWLIST: ${BACKUP_OFFSITE_HOST_ALLOWLIST:-["backup"]}
       BACKUP_OFFSITE_GUI_KEY_FILE: /run/secrets/backup_offsite_gui_key
       BACKUP_OFFSITE_INGEST_KEY_FILE: /run/secrets/backup_offsite_ingest_key
       BACKUP_OFFSITE_INSTANCE: ${BACKUP_OFFSITE_INSTANCE:-hosted}
       # Store-native IAP (AUT-610/617): empty = disabled (mobile falls back to
       # the Stripe browser path). Credentials are Paperclip secrets.
+      # AUT-6078: defaults populated from Paperclip secrets so IAP survives redeploys.
       IAP_GOOGLE_SERVICE_ACCOUNT_JSON_FILE: /run/secrets/iap_google_service_account_json
       IAP_GOOGLE_PACKAGE_NAME: ${IAP_GOOGLE_PACKAGE_NAME:-com.autobrainservice.app}
-      IAP_APPLE_ISSUER_ID: ${IAP_APPLE_ISSUER_ID:-}
-      IAP_APPLE_KEY_ID: ${IAP_APPLE_KEY_ID:-}
+      IAP_APPLE_ISSUER_ID: ${IAP_APPLE_ISSUER_ID:-515dfa65-a30f-4b70-9dee-2e2693b5243e}
+      IAP_APPLE_KEY_ID: ${IAP_APPLE_KEY_ID:-A4C35NJJ5A}
       IAP_APPLE_PRIVATE_KEY_FILE: /run/secrets/iap_apple_private_key
       IAP_APPLE_BUNDLE_ID: ${IAP_APPLE_BUNDLE_ID:-com.autobrain.autobrain}
       IAP_REFRESH_WINDOW_DAYS: ${IAP_REFRESH_WINDOW_DAYS:-2}
@@ -338,7 +346,7 @@ services:
       - "8000"
 
   frontend:
-    image: ghcr.io/cannonfodder151/autobrain-frontend:hosted@sha256:9fcf4de8b0edb8bbd6e9cde95a640071f151b626b74aeee0064c698ab5e9ef0f
+    image: ghcr.io/cannonfodder151/autobrain-frontend:hosted@sha256:f9790e6bbfec041c713d3b6a9f4b526f027f5245e12b64e36e2b152b2ea5d32d
     # AUT-2087: pinned to the verified arm64 child manifest digest of the
     # autobrain-frontend :hosted OCI image index. Earlier pin
     # (`@sha256:8937c2bb…`) targeted an arm64 image whose nginx + busybox

@@ -316,6 +316,35 @@ def check_port_collisions(args, services, wanted_ports):
     return problems
 
 
+def cleanup_orphaned_created(args, services):
+    """AUT-5601: delete containers stuck in "created" state whose service is
+    not in the new compose. These are orphans from a previous stack version
+    that Portainer left behind and they wedge the health check (exit 6).
+    """
+    containers = endpoint_containers(args)
+    deleted = []
+    for c in containers:
+        svc = _service_of(c)
+        state = c.get("State")
+        if state == "created" and svc not in services:
+            name = c["Names"][0].lstrip("/")
+            container_id = c["Id"]
+            print(f"Cleaning up orphaned created container: {name} (service {svc!r})", file=sys.stderr)
+            try:
+                req = urllib.request.Request(
+                    f"{args.portainer_url}/api/endpoints/{args.endpoint}/docker/containers/{container_id}?force=true&v=true",
+                    method="DELETE",
+                    headers={"X-API-Key": args.api_key, "Accept": "application/json"},
+                )
+                with urllib.request.urlopen(req, timeout=30) as r:
+                    r.read()
+                deleted.append(name)
+            except urllib.error.HTTPError as e:
+                print(f"WARNING: failed to delete orphan {name}: HTTP {e.code}", file=sys.stderr)
+    if deleted:
+        print(f"Cleaned up {len(deleted)} orphaned created container(s): {', '.join(deleted)}", file=sys.stderr)
+
+
 def verify_running(args, services, attempts=20, delay=5):
     """Wait for every service to have a running container. Returns list of
     problems; empty means healthy."""
@@ -450,6 +479,14 @@ def main():
               f"{args.endpoint}/docker/containers/<NAME>?force=true&v=true\" \\\n"
               f"    -H \"X-API-Key: $PORTAINER_API_KEY\"", file=sys.stderr)
         return 5
+
+    # AUT-5601: clean up orphaned containers stuck in "created" state BEFORE
+    # the PUT. These are leftovers from previous stack versions that Portainer
+    # does not reap (they hold no conflicting port but wedge verify_running).
+    try:
+        cleanup_orphaned_created(args, services)
+    except urllib.error.HTTPError as e:
+        print(f"WARNING: could not clean up orphaned created containers -> HTTP {e.code}", file=sys.stderr)
 
     body = {
         "StackFileContent": content,

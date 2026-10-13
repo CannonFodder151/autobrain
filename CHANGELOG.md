@@ -9,6 +9,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
 ## [Unreleased]
+### Added (AUT-6519)
+- docs: add secret-file-pattern.md documenting AUT-1533 *_FILE secret injection pattern for docker-compose (AUT-6519)
+
+### Fixed (AUT-6431)
+- fix(build): add archive dependency override to fix Dart compile failure (AUT-6431)
+
+### Added/Changed (AUT-3533)
+- fix: Servo Spy map blank white screen on hosted by resolving undefined _kCartoKeyParam and injecting CARTO API key (PR #715)
 
 ### Fixed (AUT-5612)
 - `devices.vehicle_type` rollback data loss: `aut5092_dev_veh_type` is a no-op
@@ -29,6 +37,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed (AUT-4812)
 - fix(backend): `tests/test_advisor_value.py` could not import `BAND_LOW_RATIO` / `BAND_HIGH_RATIO` from `app.services.advisor`, so the entire backend suite failed at collection — masked by `ci-tests.yml` running the suite as `pytest … || true`. The `app.services.advisor` package `__init__.py` already re-exports both constants from `advisor/value.py`; the stale `backend/app/services/advisor.py` module that shadowed the package is deleted (no imports referenced it). Removed `|| true` from the full-suite step in `.github/workflows/ci-tests.yml` so future collection errors fail the build. All 16 `test_advisor_value.py` tests pass; full suite collects without import errors.
+
+### Fixed (AUT-5668)
+- fix(ci): `ci-triage-webhook.yml` fire job was incorrectly pinned to the self-hosted vm2 runner (`runs-on: [self-hosted, linux, x64, vm2]`) despite comments explicitly stating it must run on `ubuntu-latest` to avoid consuming scarce self-hosted runners for 15-minute sleep+curl bursts. The misconfiguration caused the step to hang and be killed by the 20-minute timeout (AUT-5668), silently losing ~half of CI triage wakes. Changed `runs-on` to `ubuntu-latest` (timeout was already increased to 30 minutes).
+
+### Fixed (AUT-5584)
+- fix(frontend): `Sync mobile app` workflow failed on `main` with `lib/core/models/fuel_history.dart is not referenced by a part directive in lib/core/models.dart`. The monorepo `frontend/lib/core/models.dart` was missing the `part 'models/fuel_history.dart';` directive that `autobrain-mobile` PR #60 added to its models.dart. Added the missing `part` directive and the corresponding `fuel_history.dart` model file to the monorepo source-of-truth so the sync guard (AUT-5205) passes and the mobile tree stays in parity. Verified by re-running the `Sync mobile app` workflow.
 
 ### Changed (AUT-5654)
 - ci: moved the last four GitHub-hosted jobs onto the self-hosted vm2 runners, finishing this repo's hosted-runner migration. `visual_regression.yml` (was `ubuntu-latest`) now runs on `[self-hosted, linux, x64, vm2]`; its `subosito/flutter-action@v2` step downloads the Flutter SDK itself, so no pre-installed toolchain is required on the runner. `dockerhub-publish.yml`'s `dedupe-main-queue`, `ci-queue-guard.yml`'s `cancel-orphaned-runs`, and `ci-triage-webhook.yml`'s `fire` also move to `[self-hosted, linux, x64, vm2]`: all three are API-only gates that call `gh api` to cancel superseded/orphaned runs and to fire the triage webhook, and none of them checks out or executes repository code, so they are safe on a persistent runner even under the `pull_request` trigger. `build-hosted.yml`'s matrix already resolved to vm2/ARM64 and is unchanged. After this, no workflow in this repo requests a GitHub-hosted runner.
@@ -123,6 +137,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 - Demo-tier frontend image build (`cannonfodder151/autobrain-frontend:demo`) in `dockerhub-publish.yml` (AUT-5261). The Demo stack had no frontend build job: `API_BASE_URL` is compiled into the Flutter bundle, so Demo needed its own image and the only pre-existing `:demo` artifact was built 2026-09-28 with Hosted's API base.
+
+### Security (AUT-3977)
+- backup: SSRF guard on `BACKUP_OFFSITE_URL` (`backend/app/core/config.py`). The
+  backend now validates the configured off-site backup URL at startup and **fails
+  closed**: only schemes `http`/`https`, only hosts that are loopback-free,
+  link-local-free, and named in the new `BACKUP_OFFSITE_HOST_ALLOWLIST` exact-match
+  list are accepted. Cloud-metadata literals (`169.254.169.254`), their
+  decimal/hex/IPv4-mapped encodings, RFC1918 literals, and loopback aliases are
+  rejected even when allowlisted. Anchoring on anything but the whole label set
+  would let an attacker-registered domain such as `autobrain-backup.attacker.net`
+  satisfy the rule, so the match is an exact, case- and trailing-dot-normalised
+  host comparison.
+- deploy(hosted): `docker-compose.hosted.yml` sets
+  `BACKUP_OFFSITE_HOST_ALLOWLIST: ["backup"]` so the shipped default
+  `BACKUP_OFFSITE_URL` stays authorised. Overriding the URL without adding the new
+  host now makes the backend refuse to boot, by design.
+- docs: `.env.example` documents `BACKUP_OFFSITE_HOST_ALLOWLIST` next to the other
+  `BACKUP_OFFSITE_*` entries (the AUT-2390 compose diff gate requires every
+  compose env key to be declared there).
+- Guarded by `backend/tests/test_aut3977_backup_offsite_ssrff.py` (36 cases).
+
+### Fixed (AUT-3978)
+- fix(backup): `backup_offsite_hourly` wraps `run_backup_offsite()` in the
+  persistent-loop `_run()` wrapper. Before the fix the async function was passed
+  bare, so the coroutine was created and dropped — the task "succeeded" in
+  ~0.001s and the hourly off-site push never fired. Guarded by
+  `backend/tests/test_workers.py` and the real-task regression in
+  `backend/tests/test_backup_offsite.py`.
 
 ## [0.3.302] - 2026-10-02
 - fix(fuel): disable the SA (SAFPIS) feed (AUT-5072).

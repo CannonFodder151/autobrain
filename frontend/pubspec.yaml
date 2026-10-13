@@ -35,6 +35,8 @@ dependencies:
   in_app_purchase: ^3.2.1
   connectivity_plus: ^6.0.3
 
+dependency_overrides:
+  archive: ^4.5.0
 
 dev_dependencies:
   flutter_test:

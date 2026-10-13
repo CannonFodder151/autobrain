@@ -7,6 +7,7 @@ library models;
 
 import 'dart:convert';
 
+part 'models/fuel_history.dart';
 part 'models/vehicle.dart';
 part 'models/service.dart';
 part 'models/fuel.dart';
