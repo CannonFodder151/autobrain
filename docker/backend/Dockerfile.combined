@@ -1,0 +1,70 @@
+# AutoBrain combined backend — API + AI gateway + Celery + dongle-server + backup GUI
+# Single image for hosted stack container consolidation (AUT-6415).
+
+FROM python:3.13.16-slim-trixie@sha256:6906dca82c0e83d5994bbf2e7fc33e6b63ce3e7f27c30eafd01dfabeb3c90bf3 AS base
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl minio-client git \
+    && ln -s /usr/bin/minio-client /usr/local/bin/mc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Backend dependencies
+COPY backend/requirements.txt /tmp/backend-requirements.txt
+RUN pip install --no-cache-dir -r /tmp/backend-requirements.txt
+
+# AI gateway dependencies
+COPY ai/requirements.txt /tmp/ai-requirements.txt
+RUN pip install --no-cache-dir -r /tmp/ai-requirements.txt
+
+# Clone dongle-server (public repo)
+ARG DONGLE_SERVER_REPO=https://github.com/CannonFodder151/autobrain-dongle-server.git
+ARG DONGLE_SERVER_REF=main
+RUN git clone --depth 1 --branch ${DONGLE_SERVER_REF} ${DONGLE_SERVER_REPO} /tmp/dongle-server \
+    && cd /tmp/dongle-server \
+    && pip install --no-cache-dir -r requirements.txt \
+    && cp -r dongle_server /app/dongle_server \
+    && rm -rf /tmp/dongle-server
+
+# Clone backup GUI (public repo - to be created)
+ARG BACKUP_REPO=https://github.com/CannonFodder151/autobrain-backup.git
+ARG BACKUP_REF=main
+RUN git clone --depth 1 --branch ${BACKUP_REF} ${BACKUP_REPO} /tmp/autobrain-backup 2>/dev/null \
+    && cd /tmp/autobrain-backup \
+    && pip install --no-cache-dir -r requirements.txt \
+    && cp -r backup_gui /app/backup_gui \
+    && rm -rf /tmp/autobrain-backup \
+    || echo "backup repo not yet available, skipping"
+
+# App source — backend + AI gateway + dongle-server + backup GUI
+COPY backend/app ./app
+COPY backend/alembic ./alembic
+COPY backend/alembic.ini ./
+COPY ai/app ./ai_app
+COPY ai/requirements.txt ./ai_requirements.txt
+
+# Non-root user
+RUN useradd -m -u 1000 autobrain && chown -R autobrain:autobrain /app
+
+# MinIO init entrypoint (before dropping privileges)
+COPY scripts/init-minio.sh /init-minio.sh
+RUN chmod +x /init-minio.sh
+
+# AUT-1533: *_FILE secret loader wraps the CMD so credentials arrive via
+# bind-mounted files instead of plain env vars.
+COPY docker/entrypoint.sh docker/lib-load-secrets.sh docker/entrypoint-combined.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/lib-load-secrets.sh /usr/local/bin/entrypoint-combined.sh
+
+USER autobrain
+
+EXPOSE 8000 8001 8002 8080
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=5 \
+    CMD curl -fsS http://localhost:8000/health || exit 1
+
+ENTRYPOINT ["/usr/local/bin/entrypoint-combined.sh"]

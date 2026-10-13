@@ -15,7 +15,7 @@ internally. Backend runs the API + AI gateway + Celery worker+beat in one
 container (AUT-3461). Market-data scraper runs as Celery tasks in backend
 (AUT-3810). The separate `ai` image/service was removed (AUT-3461).
 
-## Compose (hosted) — 10 containers
+## Compose (hosted) — 7 containers (AUT-6415)
 
 `docker-compose.hosted.yml`: prebuilt tagged images
 (`ghcr.io/cannonfodder151/autobrain-*:hosted`), Stripe billing env vars,
@@ -23,51 +23,51 @@ self-signup + MFA enforced. Deployed via Portainer on the Oracle Cloud VM (ARM64
 
 | Service | Image | Role |
 |---------|-------|------|
-| postgres | `pgvector/pgvector:pg17@sha256:cf134a76...` | Datastore + `vector` extension (pgvector), digest-pinned |
+| postgres | `pgvector/pgvector:pg17@sha256:ac08538c...` | Datastore + `vector` extension (pgvector), digest-pinned |
 | redis | `redis:7.2.5-alpine@sha256:6aaf3f5e...` | Cache + Celery broker/result backend, auth required |
 | minio | `minio/minio@sha256:14cea493...` | Receipts/photos S3 storage, digest-pinned |
-| backend | `autobrain-backend:hosted@sha256:14543848...` | API :8000 + AI gateway :8001 + Celery worker+beat (AUT-3153), non-root |
-| dongle-server | `autobrain-dongle-server:hosted@sha256:c5768948...` | OBD ESP32 dongle firmware + serial whitelist (AUT-1673), non-root |
-| frontend | `autobrain-frontend:hosted@sha256:02ed10e3...` | Static nginx-unprivileged :8080, localhost-bound, non-root |
+| backend | `autobrain-backend:hosted@sha256:30dcb051...` | API :8000 + AI gateway :8001 + Celery worker+beat + dongle-server :8002 + backup GUI :8080 (AUT-3153, AUT-6415), non-root |
+| frontend | `autobrain-frontend:hosted@sha256:913389aa...` | Static nginx-unprivileged :8080, localhost-bound, non-root |
 | hub | `autobrain-federation-hub:hosted@sha256:d1d9bde1...` | Federation hub (Community Garage), deploy-only; private repo |
 | 9router | `decolua/9router:0.5.55@sha256:f00fe389...` | LLM router + embeddings on 0.0.0.0:20128, host-firewalled, external `9router-data` volume |
-| backup | `autobrain-backup:hosted@sha256:e76fac3c...` | Backup web GUI, localhost-bound :8080, non-root. Service renamed from `autobrain-backup` in AUT-3944; hourly snapshot push runs in the backend Celery beat (AUT-3827), so there is no backup-agent sidecar. |
-| gh-runner | `autobrain-gh-runner:arm64-latest` | ARM64 GitHub Actions self-hosted runner (privileged, AUT-2469) |
 
-The stack uses 10 long-running containers. The standalone Celery worker+beat
+The stack uses 7 long-running containers (reduced from 9 in AUT-6415). The standalone Celery worker+beat
 service was merged into `backend` (AUT-3153): the backend image already carries
 the worker dependencies and its default CMD runs API + Celery worker+beat in
 one container, matching `docker-compose.prod.yml`. The dedicated
 `autobrain-worker` image is no longer referenced by this stack; its build is
 retired from CI (AUT-3172). The `ai` gateway service was consolidated into
 `backend` (AUT-3461): the backend container runs the AI gateway as a
-co-process on :8001. All application services run as non-root (`autobrain` uid
-1000) with `read_only`, `cap_drop: ALL`, and `tmpfs` mounts.
+co-process on :8001. The `market-data` scraper runs as Celery tasks in `backend`
+(AUT-3810). The `dongle-server` and `backup` GUI services were merged into
+`backend` (AUT-6415): dongle-server runs as a co-process on :8002, backup GUI
+runs as a co-process on :8080. All application services run as non-root
+(`autobrain` uid 1000) with `read_only`, `cap_drop: ALL`, and `tmpfs` mounts.
 
 ## Image layout
 
 Each service runs as non-root (`autobrain` uid 1000), has a healthcheck, and
 reads configuration exclusively from environment variables.
 
-- **backend** (`docker/backend/Dockerfile`): unified dev/prod image — API + AI
-  gateway modules + Celery worker/beat entrypoint. The hosted command runs
-  `python -m app.db.bootstrap`, then the Celery worker+beat in the background,
-  then `uvicorn app.main:app` (AUT-3153).
+- **backend** (`docker/backend/Dockerfile`): unified dev/prod/hosted image — API + AI
+  gateway modules + dongle-server + backup GUI + Celery worker/beat entrypoint. The hosted command runs
+  `alembic upgrade head`, `python -m app.db.bootstrap`, then the Celery worker+beat in the background,
+  then `uvicorn ai_app.main:app` on :8001, `uvicorn dongle_server.main:app` on :8002,
+  `uvicorn backup_gui.main:app` on :8080, then `uvicorn app.main:app` on :8000 (AUT-3153, AUT-6415).
 - **ai** (`docker/ai/Dockerfile`): entrypoint runs two uvicorn processes —
-  market-data scraper on :8000 and AI gateway on :8001 (AUT-1242/C3).
+  market-data scraper on :8000 and AI gateway on :8001 (AUT-1242/C3). **Deprecated in hosted** — merged into backend.
 - **worker** (`docker/worker/Dockerfile`): standalone production image from
   `backend/app`. Retained on disk only for k8s/legacy reference; CI no longer
   builds or publishes it (AUT-3153 + AUT-3172). The hosted stack and k8s
   `infra/k8s/worker.yaml` both run the Celery worker+beat from the
-  `autobrain-backend` image (`autobrain-backend:latest`), not the standalone
+  `autobrain-backend` image (`autobrain-backend:hosted`), not the standalone
   worker image.
 
 ## Healthchecks
 
-- backend: `curl -fsS /health` (the Celery worker+beat is a background process
-  inside the same container; its health is covered by the backend healthcheck
-  plus the worker log line).
-- ai: `curl -fsS http://localhost:8001/health && curl -fsS http://localhost:8000/health`
+- backend: `curl -fsS /health` (the Celery worker+beat, dongle-server, and backup GUI are background processes
+  inside the same container; their health is covered by the backend healthcheck
+  plus the worker log lines).
 - hub: python `urllib` GET `/health`
 - postgres/redis/minio: native probes (see compose)
 

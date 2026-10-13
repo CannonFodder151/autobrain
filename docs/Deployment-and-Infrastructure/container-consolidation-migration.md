@@ -1,4 +1,4 @@
-# Container Consolidation — Migration Checklist (AUT-3153, AUT-3810, AUT-3824, AUT-3827)
+# Container Consolidation — Migration Checklist (AUT-3153, AUT-3810, AUT-3824, AUT-3827, AUT-6415)
 
 Phase 1(a): reduce the number of containers in the AutoBrain stack.
 
@@ -52,12 +52,14 @@ Rules:
   - Remove standalone `backup-agent` service; hourly snapshot push runs as Celery beat task in `backend` (AUT-3827).
   - Rename the `autobrain-backup` GUI service to `backup` so the compose service, docker DNS name and image repo agree (AUT-3944).
   - MinIO bucket init folded into `minio` entrypoint (AUT-1242/C2).
-- **Result:** hosted stack reduced from 12 → **9 long-running containers**, which
+  - **Merge `dongle-server` firmware service into `backend` as co-process on :8002 (AUT-6415).**
+  - **Merge `backup` GUI into `backend` as co-process on :8080 (AUT-6415).**
+- **Result:** hosted stack reduced from 12 → **7 long-running containers**, which
   is exactly the service list in `docker-compose.hosted.yml`:
-  postgres, redis, minio, backend (API:8000 + AI:8001 + Celery), dongle-server,
-  frontend, hub, 9router, backup.
+  postgres, redis, minio, backend (API:8000 + AI:8001 + Celery + dongle-server:8002 + backup GUI:8080),
+  frontend, hub, 9router.
   (gh-runner is NOT part of this stack — it runs as a separate Portainer stack
-  `gh-runner-autobrain-arm64` on EP5, so it does not count toward the 9.)
+  `gh-runner-autobrain-arm64` on EP5, so it does not count toward the 7.)
 
 ## What is consolidated
 
@@ -68,15 +70,17 @@ Rules:
 | `market-data` (fuel scraper) | **Merged** (AUT-3810) | Runs as local Celery beat tasks in `backend`. `shm_size: 256m` added for Chromium. |
 | `minio-init` | **Merged** (AUT-1242/C2) | Runs inside `minio` entrypoint; no sidecar. |
 | `backup-agent` | **Removed** (AUT-3827) | Hourly off-site backup push is a Celery beat task in `backend` (`app.workers.tasks.backup_offsite_hourly`). |
-| `autobrain-backup` | **Renamed → `backup`** (AUT-3944) | One backup container serves the GUI; the cron that used to live in the agent sidecar runs in `backend` beat. GUI still on `127.0.0.1:8080`. |
+| `autobrain-backup` | **Renamed → `backup`** (AUT-3944) | One backup container served the GUI; the cron that used to live in the agent sidecar runs in `backend` beat. GUI still on `127.0.0.1:8080`. |
+| `backup` (GUI) | **Merged** (AUT-6415) | Backup GUI runs as co-process on :8080 inside `backend`. No separate `backup` service. |
+| `dongle-server` | **Merged** (AUT-6415) | Dongle firmware + serial whitelist runs as co-process on :8002 inside `backend`. No separate `dongle-server` service. |
 
 ## Pre-deploy
 
 - [ ] Open a PR with the consolidated `docker-compose.hosted.yml` and this
       checklist. Get QA + Security sign-off; auto-merge fires per AUT-2230.
-- [ ] Confirm the new `backend` image digest (with Celery + AI gateway) is
+- [ ] Confirm the new `backend` image digest (with Celery + AI gateway + dongle-server + backup GUI) is
       published to GHCR and multi-arch (amd64 + arm64). The hosted backend
-      image already contains the Celery app, AI gateway, and dependencies.
+      image already contains the Celery app, AI gateway, dongle-server, backup GUI, and dependencies.
 - [ ] Confirm the hosted Portainer stack env still carries the required
       non-secret vars (`POSTGRES_USER`, `POSTGRES_DB`) and the secret files
       under `/data/autobrain/secrets` (see `scripts/seed-secrets.sh`).
@@ -88,17 +92,19 @@ Rules:
       command still exports it for `config.py` (which reads the plain var).
 - [ ] Confirm backup off-site keys are seeded:
       `backup_offsite_gui_key`, `backup_offsite_ingest_key`.
+- [ ] Confirm `DONGLE_SERVER_API_KEY` and `DONGLE_WEB_BASIC_PASSWORD` secret files are seeded.
 
 ## Deploy (promotion order — do not skip tiers)
 
 1. **Demo** → verify `/health`, backend logs, Celery worker+beat startup,
-   AI gateway on :8001, fuel-poll tasks, backup-offsite task, MinIO bucket private.
+   AI gateway on :8001, fuel-poll tasks, backup-offsite task, MinIO bucket private,
+   dongle-server on :8002, backup GUI on :8080.
 2. **Default** → same verification.
 3. **Hosted** (Portainer EP5) → re-apply `docker-compose.hosted.yml` with
    `pullImage=true` (via `scripts/upgrade-instances.sh` or the Portainer API),
    then verify.
 
-The compose re-apply removes the standalone `worker`, `ai`, `market-data`, `backup-agent` containers and recreates `backend` with the merged command.
+The compose re-apply removes the standalone `worker`, `ai`, `market-data`, `backup-agent`, `dongle-server`, `backup` containers and recreates `backend` with the merged command.
 
 ## Verify
 
@@ -107,20 +113,24 @@ The compose re-apply removes the standalone `worker`, `ai`, `market-data`, `back
 - [ ] AI gateway is reachable: `curl -fsS http://backend:8001/health` (internal) → `{"status":"ok"}`.
 - [ ] Backend logs show `celery` worker started with beat (`-B`) and
       `alembic_migrations_applied` after `python -m app.db.bootstrap`.
+- [ ] Dongle-server co-process is running: `curl -fsS http://backend:8002/health` (internal) → `{"status":"ok"}`.
+- [ ] Backup GUI co-process is running: `curl -fsS http://backend:8080/health` (internal) → `{"status":"ok"}`.
 - [ ] Celery tasks still run: trigger a fuel-poll task or inspect the beat
       schedule; confirm no duplicate worker processes.
 - [ ] Backup off-site hourly task runs: check Celery beat schedule for `offsite-backup-hourly`.
 - [ ] MinIO bucket `autobrain-assets` exists and is private (`mc anonymous
       get` → `none`).
-- [ ] No `worker`, `ai`, `market-data`, or `backup-agent` containers exist in the hosted stack.
-- [ ] `docker-compose.hosted.yml` service list has no `worker`, `ai`, `market-data`, or `backup-agent` service.
-- [ ] Container count is 9 (postgres, redis, minio, backend, dongle-server, frontend, hub, 9router, backup) — matches the service list in `docker-compose.hosted.yml`. gh-runner is a separate Portainer stack and is not counted.
-- [ ] No container or network alias named `autobrain-backup` remains; the
-      GUI resolves at `http://backup:8080` from inside the stack.
+- [ ] No `worker`, `ai`, `market-data`, `backup-agent`, `dongle-server`, or `backup` containers exist in the hosted stack.
+- [ ] `docker-compose.hosted.yml` service list has no `worker`, `ai`, `market-data`, `backup-agent`, `dongle-server`, or `backup` service.
+- [ ] Container count is 7 (postgres, redis, minio, backend, frontend, hub, 9router) — matches the service list in `docker-compose.hosted.yml`. gh-runner is a separate Portainer stack and is not counted.
+- [ ] No container or network alias named `backup` remains; the
+      GUI is now at `http://backend:8080` from inside the stack.
 - [ ] `BACKUP_OFFSITE_URL` on the EP5 stack env is either unset (compose
-      default `http://backup:8080`) or explicitly `http://backup:8080` — a
-      stale `http://autobrain-backup:8080` override silently stops hourly
-      pushes (AUT-3944).
+      default `http://localhost:8080`) or explicitly `http://localhost:8080` — the
+      hourly pushes now target the in-process backup GUI.
+- [ ] `DONGLE_SERVER_URL` on the EP5 stack env is either unset (compose
+      default `http://localhost:8002`) or explicitly `http://localhost:8002` — the
+      dongle-server backchannel targets the in-process dongle-server.
 - [ ] An hourly snapshot appears in the GUI backup list (task
       `offsite-backup-hourly`, `crontab(minute=0)`).
 - [ ] `python3 scripts/check-compose-consolidation.py` passes.
@@ -131,7 +141,7 @@ If the merged backend fails health or task execution:
 
 1. Stop the rollout at the failing tier (AUT-107).
 2. Re-apply the previous `docker-compose.hosted.yml` (with the standalone
-   `worker`, `ai`, `market-data`, `backup-agent` services) from the previous commit / Portainer stack history.
+   `worker`, `ai`, `market-data`, `backup-agent`, `dongle-server`, `backup` services) from the previous commit / Portainer stack history.
 3. Redeploy the tier and verify `/health` + Celery tasks.
 4. Keep the DB volume and MinIO volume — they are untouched by this change.
 
@@ -143,3 +153,5 @@ If the merged backend fails health or task execution:
 - **Align the dev `ai` service** to run the full `docker/ai/entrypoint.sh`
   (market-data + AI gateway) instead of the gateway-only command override,
   so dev parity matches prod/hosted.
+- **Create `autobrain-backup` public repo** with the backup GUI code for the combined image build.
+- **Create `autobrain-dongle-server` public repo** with the dongle-server code for the combined image build.
