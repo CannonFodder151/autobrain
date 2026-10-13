@@ -1,15 +1,19 @@
 # Phase 1 Improvement Plan — AutoBrain Code Review & Improvement Initiative
 
 **Prepared by:** CTO  
-**Date:** 2026-09-24  
-**Parent Issue:** [AUT-2000](/AUT/issues/AUT-2000) — Consolidate containers (Phase 1a)  
+**Date:** 2026-10-13 (updated from 2026-09-24)  
+**Parent Issue:** [AUT-6185](/AUT/issues/AUT-6185) — Phase 1: Code review & improvement initiative  
 **Goal:** [4fc32f2e-2489-4333-aa9c-f04aafede71d](/AUT/projects/2e30f2ee-d92b-4f55-8b72-d884ceb2cd39) — Phase 1 Code Review & Improvement
 
 ---
 
 ## Executive Summary
 
-Completed a comprehensive codebase review across backend/, ai/, frontend/, docker/, and docker-compose files. The stack has already made significant progress on container consolidation (backend+AI+worker merged in prod/dev). Remaining work focuses on the hosted stack, AI module hardening, modularisation, vector storage optimisation, and documentation refresh.
+Completed a comprehensive codebase review across backend/, ai/, frontend/, docker/, and docker-compose files. The stack has already made significant progress on container consolidation (backend+AI+worker merged in prod/dev, market-data and backup-agent consolidated). 
+
+**AUT-6415 completed:** Dongle-server and backup GUI merged into backend container, reducing hosted from 9 → 7 containers.
+
+Remaining work focuses on AI module hardening, modularisation, vector storage optimisation, and documentation refresh.
 
 ---
 
@@ -21,32 +25,31 @@ Completed a comprehensive codebase review across backend/, ai/, frontend/, docke
 |-------|----------|------------|
 | **Dev** (docker-compose.yml) | postgres, redis, minio, backend, frontend | **5** |
 | **Prod** (docker-compose.prod.yml) | postgres, redis, minio, backend, frontend | **5** |
-| **Hosted** (docker-compose.hosted.yml) | postgres, redis, minio, backend, market-data, dongle-server, frontend, hub, gh-runner, 9router, autobrain-backup, backup-agent | **12** |
+| **Hosted** (docker-compose.hosted.yml) | postgres, redis, minio, backend, frontend, hub, 9router | **7** |
 
 Dev/Prod already consolidated: backend runs uvicorn (API:8000) + uvicorn (AI gateway:8001) + Celery worker+beat in one container (AUT-2000, AUT-3153).
+Hosted consolidated (AUT-3153, AUT-3810, AUT-3827, AUT-3944, AUT-6415): backend now runs API:8000 + AI gateway:8001 + dongle-server:8002 + backup GUI:8080 + Celery worker+beat.
 
-### Hosted Stack Consolidation Opportunities
+### Hosted Stack Consolidation History
 
-| Service | Image | Purpose | Consolidation Path | Risk |
-|---------|-------|---------|-------------------|------|
-| `market-data` | autobrain-ai:hosted | Fuel price scraping (Chromium) | Move to Celery task in `backend`; add `shm_size: 256m` to backend | Medium (Chromium deps, shm) |
-| `autobrain-backup` + `backup-agent` | autobrain-backup:hosted + autobrain-backup-agent:hosted | Backup GUI + hourly poller | Merge into single `backup` service; agent runs as cron inside backup container | Low |
-| `dongle-server` | autobrain-dongle-server:hosted | Firmware distribution | Keep separate (distinct domain, separate repo) | — |
+| Service | Image | Purpose | Consolidation Path | Status |
+|---------|-------|---------|-------------------|--------|
+| `worker` | autobrain-worker:hosted | Celery worker+beat | Merged into backend (AUT-3153) | ✅ Done |
+| `ai` | autobrain-ai:hosted | AI gateway + market-data | AI gateway merged (AUT-3824), market-data to Celery (AUT-3810) | ✅ Done |
+| `market-data` | autobrain-ai:hosted | Fuel price scraping | Merged into backend Celery tasks (AUT-3810) | ✅ Done |
+| `minio-init` | — | MinIO bucket init | Merged into minio entrypoint (AUT-1242/C2) | ✅ Done |
+| `backup-agent` | autobrain-backup-agent:hosted | Hourly backup poller | Merged into backend Celery beat (AUT-3827) | ✅ Done |
+| `autobrain-backup` | autobrain-backup:hosted | Backup GUI | Renamed to `backup` (AUT-3944), then merged (AUT-6415) | ✅ Done |
+| `dongle-server` | autobrain-dongle-server:hosted | Firmware distribution | Merged into backend as co-process on :8002 (AUT-6415) | ✅ Done |
 | `hub` | autobrain-federation-hub:hosted | Community Garage hub | Keep separate (private repo, separate image) | — |
 | `gh-runner` | autobrain-gh-runner:arm64-latest | GitHub Actions ARM64 runner | Keep separate (privileged, docker.sock) | — |
 | `9router` | decolua/9router:0.5.55 | AI inference router | Keep separate (infra component) | — |
 
-### Target: Reduce hosted from 12 → **9 containers** (-3)
+### Target: Hosted at **7 containers** (postgres, redis, minio, backend, frontend, hub, 9router)
 
-1. **Merge market-data into backend** (1 container) — move scraper to Celery beat task
-2. **Merge backup + backup-agent** (1 container) — single backup service with internal cron
-3. **Remove legacy worker reference** (already done in compose, CI build retired AUT-3172)
+### Child Issues for Container Reduction (COMPLETED)
 
-### Child Issues to Create
-
-- `AUT-XXXX` Merge market-data scraper into backend Celery (hosted)
-- `AUT-XXXX` Consolidate autobrain-backup + backup-agent into single backup service
-- `AUT-XXXX` Verify container count reduction end-to-end on EP5 (smoke test)
+- ✅ `AUT-6415` Merge dongle-server + backup GUI into backend
 
 ---
 
@@ -128,18 +131,17 @@ All 12 AI modules in `ai/app/modules/` already follow deterministic-first patter
 - Schema validation drops unknown/wrong-type keys
 - Telemetry: `ai_path` = `deterministic` | `hybrid` | `router_error`
 
-### Gaps to Close
+### Gaps to Closed (AUT-6417 — PR #1032)
 
-| Module | Missing `_AI_IMMUTABLE` Entry | Action |
-|--------|------------------------------|--------|
-| `diagnostics` | None defined | Add critical fields: `summary, severity, items[*].cause, items[*].confidence, items[*].parts, items[*].estimated_cost` |
-| `service-prediction` | None defined | Add: `service_type, interval_km, interval_months, next_due_km, next_due_date` |
+| Gap | Action Taken |
+|-----|--------------|
+| No per-module confidence floors | Added `_MODULE_CONFIDENCE_FLOORS` in `router_utils.py`: resale 0.85, diagnostics 0.80, advisor 0.80, service-prediction 0.75, ocr 0.70, etc. Overrides global `MIN_AI_CONFIDENCE` per module. |
+| No cost guard | Added daily token budget tracking in `router_client.py` (`AI_DAILY_TOKEN_BUDGET`, default 1M tokens/day). Router auto-disabled when budget exceeded. `/v1/telemetry/tokens` endpoint added. |
+| `_AI_IMMUTABLE` too broad | Removed router-enrichable keys (confidence, reason, based_on, red_flags, green_flags, summary, items, next_due_*, due_in_*, interval_*) so router can actually enrich the baseline. Only deterministic baseline keys remain immutable. |
 
-### Child Issues to Create
+### Child Issues — DONE
 
-- `AUT-XXXX` Add `_AI_IMMUTABLE` entries for `diagnostics` and `service-prediction` in `router_utils.py`
-- `AUT-XXXX` Add corresponding `_SCHEMAS` entries for new immutable keys
-- `AUT-XXXX` Update module docs (AI integration guide) with immutable key rationale
+- `AUT-6417` AI hardening — per-module confidence floors + cost guard (PR #1032)
 
 ---
 
