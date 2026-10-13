@@ -256,6 +256,7 @@ async def advisor_upgrade(
             "min_similarity": min_similarity,
         },
         "candidate_count": len(data.upgrade_options),
+        "tier_offsets": [1, 2, -1],
     }
 
     return AdvisorResponse(
