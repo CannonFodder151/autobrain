@@ -10,6 +10,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Added/Changed (AUT-3973)
+- feat(frontend): Phase 1 demo-site messaging — login screen tagline updated to "Your garage, your data — deterministic-first AI" and demo account banner added explaining read-only mode and feature availability with AI router disabled
+
 ### Added/Changed (AUT-3533)
 - fix: Servo Spy map blank white screen on hosted by resolving undefined _kCartoKeyParam and injecting CARTO API key (PR #715)
 
