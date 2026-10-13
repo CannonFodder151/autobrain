@@ -442,13 +442,14 @@ class _FakeMarketResult:
 async def test_find_upgrade_options_uses_cached_medians(monkeypatch) -> None:
     """Pure-helper test: monkeypatch get_market_data so no real DB / provider."""
     from app.services import advisor as advisor_mod
+    import app.services.advisor.upgrade as upgrade_mod
 
     v = _vehicle(year=date_now_year() - 4)
 
     async def _fake_market(db, make, model, year, vt):
         return _FakeMarketResult(median=20_000 if year == v.year else 22_000).__dict__
 
-    monkeypatch.setattr(advisor_mod, "get_market_data", _fake_market)
+    monkeypatch.setattr(upgrade_mod, "get_market_data", _fake_market)
 
     options = await advisor_mod.find_upgrade_options(None, v)
     assert len(options) == 3  # +1, +2, -1
@@ -465,13 +466,14 @@ async def test_find_upgrade_options_uses_cached_medians(monkeypatch) -> None:
 @pytest.mark.asyncio
 async def test_find_upgrade_options_returns_note_when_no_market_data(monkeypatch) -> None:
     from app.services import advisor as advisor_mod
+    import app.services.advisor.upgrade as upgrade_mod
 
     v = _vehicle(year=date_now_year() - 2)
 
     async def _fake_market(db, make, model, year, vt):
         return {"median_price": None, "note": "no listings"}
 
-    monkeypatch.setattr(advisor_mod, "get_market_data", _fake_market)
+    monkeypatch.setattr(upgrade_mod, "get_market_data", _fake_market)
 
     options = await advisor_mod.find_upgrade_options(None, v)
     assert len(options) == 3
