@@ -15,6 +15,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed (AUT-6431)
 - fix(build): add archive dependency override to fix Dart compile failure (AUT-6431)
 
+### Fixed (AUT-6456)
+- fix(ci): the `pytest` job in `ci-tests.yml` had no PostgreSQL service container, so the full backend test suite died with `ConnectionRefusedError: [Errno 111] Connect call failed (127.0.0.1, 5432)` (e.g. `tests/test_logbook_club_reg.py::test_club_reg_logbook_is_disabled`). Adds a `pgvector/pgvector:pg17` service (same image as the `alembic-migrations` job) to the `pytest` job, exposing `localhost:5432` with `autobrain`/`autobrain`/`autobrain` credentials matching the suite's `DATABASE_URL`.
+
 ### Added/Changed (AUT-3533)
 - fix: Servo Spy map blank white screen on hosted by resolving undefined _kCartoKeyParam and injecting CARTO API key (PR #715)
 
