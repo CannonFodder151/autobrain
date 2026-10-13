@@ -65,5 +65,9 @@ celery_app.conf.update(
             "task": "app.workers.tasks.refresh_sca_parts_cache",
             "schedule": crontab(hour=0, minute=0),
         },
+        "refresh-market-data-cache": {
+            "task": "app.workers.tasks.refresh_market_data_cache",
+            "schedule": crontab(hour=1, minute=0),
+        },
     },
 )
