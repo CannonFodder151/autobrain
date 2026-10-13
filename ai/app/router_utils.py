@@ -165,23 +165,40 @@ _SYSTEM_PROMPTS: dict[str, str] = {
 # stable resale estimates depend on this.
 _TEMPERATURES: dict[str, float] = {}
 
+# Per-module confidence floors. When set, these override the global
+# MIN_AI_CONFIDENCE for that module. Higher floors mean the router must be
+# more confident before its response is merged into the baseline.
+# Modules not listed here use the global default.
+_MODULE_CONFIDENCE_FLOORS: dict[str, float] = {
+    "resale": 0.85,          # Valuation accuracy is critical; require high confidence
+    "diagnostics": 0.80,     # Medical-adjacent; require higher confidence
+    "service-prediction": 0.75,  # Maintenance scheduling; moderate confidence ok
+    "ocr": 0.70,             # Receipt extraction; lower confidence acceptable
+    "fuel-ocr": 0.70,        # Fuel receipt extraction; lower confidence acceptable
+    "mod-impact": 0.75,      # Modification impact; moderate confidence ok
+    "condition": 0.75,       # Condition assessment; moderate confidence ok
+    "advisor": 0.80,         # Financial advice; require higher confidence
+    "car-check": 0.75,       # Deal assessment; moderate confidence ok
+    "parts-guide": 0.70,     # Parts suggestions; lower confidence acceptable
+}
+
 # Keys the rule engines produce deterministically (measurements, identifiers,
 # currency). The router may enrich the baseline but never override these —
 # they are the ground truth and the whole point of deterministic-first.
 _AI_IMMUTABLE: dict[str, frozenset[str]] = {
     "resale": frozenset({"estimated_value", "low", "high", "currency"}),
     "mod-impact": frozenset({"performance_score", "value_impact", "reliability_impact"}),
-    "ocr": frozenset({"vendor", "invoice_date", "total", "tax", "currency", "items"}),
+    "ocr": frozenset({"vendor", "invoice_date", "total", "tax", "currency"}),
     "fuel-ocr": frozenset({"vendor", "date", "litres", "price_per_litre", "total_cost", "currency"}),
-    "advisor": frozenset({"decision", "based_on"}),
-    "car-check": frozenset({"deal_score", "red_flags", "green_flags"}),
+    "advisor": frozenset({"decision"}),
+    "car-check": frozenset({"deal_score"}),
     "diagnostics": frozenset({
-        "summary", "severity", "confidence", "estimated_cost", "cost_range",
-        "items", "parts_needed", "recommended_actions"
+        "severity", "estimated_cost", "cost_range",
+        "parts_needed", "recommended_actions"
     }),
     "service-prediction": frozenset({
-        "service_type", "interval_km", "interval_months", "due_in_km", "due_in_days",
-        "next_due_km", "next_due_date", "confidence", "reason"
+        "service_type", "interval_km", "interval_months",
+        "next_due_km", "next_due_date"
     }),
 }
 
@@ -364,6 +381,7 @@ def _validate_nested(value, depth: int = 0) -> bool:
 __all__ = [
     "_SYSTEM_PROMPTS",
     "_TEMPERATURES",
+    "_MODULE_CONFIDENCE_FLOORS",
     "_AI_IMMUTABLE",
     "_SCHEMAS",
     "_UNTRUSTED_DATA_INSTRUCTION",

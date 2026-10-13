@@ -5,6 +5,7 @@ caps, validation) lives in ``app.router_utils`` so this module only owns:
   * env-var lookups (router_url, router_enabled, router_model)
   * the request/response cycle (route)
   * the deterministic-first merge into the baseline (enhance)
+  * cost guard: token budget tracking to prevent runaway costs
 
 If the router is unreachable, misconfigured, or returns an error, callers
 fall back to their deterministic rule-based implementation so AutoBrain
@@ -15,10 +16,13 @@ Environment variables:
   AI_ROUTER_API_KEY          optional bearer key
   AI_ROUTER_MODEL            model id served by the router (default General-Use)
   AI_ROUTER_TIMEOUT_SECONDS  per-request timeout
+  MIN_AI_CONFIDENCE          global confidence floor (default 0.75)
+  AI_DAILY_TOKEN_BUDGET      daily token budget (default 1000000)
 """
 
 import json
 import os
+import time
 
 import httpx
 
@@ -26,6 +30,7 @@ from .logging import get_logger
 from .router_utils import (
     _AI_IMMUTABLE,
     _MAX_ROUTER_RESPONSE_BYTES,
+    _MODULE_CONFIDENCE_FLOORS,
     _SCHEMAS,
     _SYSTEM_PROMPTS,
     _TEMPERATURES,
@@ -76,6 +81,68 @@ def ai_telemetry_reset() -> None:
     _AI_TELEMETRY.clear()
 
 
+# --- Cost guard (AUT-6417) --------------------------------------------------
+# Token budget tracking to prevent runaway costs. Tracks estimated token usage
+# per module and enforces a daily budget. When the budget is exceeded, the
+# router is disabled for the rest of the day (all modules fall back to
+# deterministic).
+#
+# Budget is estimated from response size (chars / 4 ≈ tokens) since the
+# 9Router API doesn't return token counts. This is a coarse ceiling, not
+# precise accounting.
+_DAILY_TOKEN_BUDGET = int(os.getenv("AI_DAILY_TOKEN_BUDGET", "1000000"))  # ~1M tokens/day
+_token_usage: dict[str, int] = {}  # module -> estimated tokens today
+_token_window_start: int = 0  # epoch seconds when the window started
+
+
+def _current_window_start() -> int:
+    """Return the start of the current daily window (midnight UTC)."""
+    now = int(time.time())
+    return now - (now % 86400)
+
+
+def _reset_token_window_if_needed() -> None:
+    """Reset token counters if we've crossed into a new day."""
+    global _token_window_start
+    current = _current_window_start()
+    if _token_window_start != current:
+        _token_window_start = current
+        _token_usage.clear()
+
+
+def _estimate_tokens(text: str) -> int:
+    """Estimate token count from text length (chars / 4 ≈ tokens)."""
+    return len(text) // 4 + 1
+
+
+def _record_token_usage(module: str, tokens: int) -> None:
+    """Record token usage for a module."""
+    _reset_token_window_if_needed()
+    _token_usage[module] = _token_usage.get(module, 0) + tokens
+
+
+def _total_token_usage() -> int:
+    """Return total estimated tokens used today."""
+    _reset_token_window_if_needed()
+    return sum(_token_usage.values())
+
+
+def _budget_exceeded() -> bool:
+    """Return True if the daily token budget has been exceeded."""
+    return _total_token_usage() >= _DAILY_TOKEN_BUDGET
+
+
+def token_usage_snapshot() -> dict:
+    """Return current token usage stats (for /v1/telemetry)."""
+    _reset_token_window_if_needed()
+    return {
+        "daily_budget": _DAILY_TOKEN_BUDGET,
+        "total_tokens": _total_token_usage(),
+        "by_module": dict(_token_usage),
+        "budget_exceeded": _budget_exceeded(),
+    }
+
+
 def router_url() -> str:
     return os.getenv("AI_ROUTER_URL", "http://10.0.3.17:20128/v1").rstrip("/")
 
@@ -86,6 +153,7 @@ def router_enabled() -> bool:
     Three conditions must all hold:
       1. ``AI_ENABLED`` is not explicitly set to ``false`` / ``0``.
       2. ``AI_ROUTER_URL`` is configured and not the placeholder.
+      3. The daily token budget has not been exceeded.
     Setting ``AI_ENABLED=false`` forces every module into deterministic-only
     mode — useful for cost control, incident response, or offline deploys.
     """
@@ -93,7 +161,12 @@ def router_enabled() -> bool:
     if ai_enabled in ("false", "0", "no"):
         return False
     url = router_url()
-    return bool(url) and "your-9router-instance" not in url
+    if not url or "your-9router-instance" in url:
+        return False
+    if _budget_exceeded():
+        logger.warning("router_budget_exceeded", total_tokens=_total_token_usage(), budget=_DAILY_TOKEN_BUDGET)
+        return False
+    return True
 
 
 def router_model() -> str:
@@ -139,6 +212,8 @@ async def route(module: str, payload: dict) -> dict | None:
             content = data["choices"][0]["message"]["content"]
             result = _clean_json(content)
             result.setdefault("model", router_model())
+            # Track estimated token usage for cost guard
+            _record_token_usage(module, _estimate_tokens(resp.text))
             logger.info("router_response", module=module, model=router_model(), status=resp.status_code)
             return result
     except httpx.HTTPStatusError as exc:
@@ -158,11 +233,13 @@ async def enhance(module: str, payload: dict, baseline: dict) -> dict:
     router is reachable its response is shallow-merged into the baseline, never
     overwriting deterministic-critical keys (see _AI_IMMUTABLE). The router
     response must include a "confidence" field (0-1); only fields from responses
-    with confidence >= MIN_AI_CONFIDENCE are merged. model becomes
-    ``rule-based+ai`` when the router contributed fields, else the baseline is
-    returned untouched. The service stays fully functional with the router down.
+    with confidence >= the module's floor (or global MIN_AI_CONFIDENCE) are merged.
+    model becomes ``rule-based+ai`` when the router contributed fields, else the
+    baseline is returned untouched. The service stays fully functional with the
+    router down.
     """
-    min_confidence = float(os.getenv("MIN_AI_CONFIDENCE", "0.75"))
+    global_min_confidence = float(os.getenv("MIN_AI_CONFIDENCE", "0.75"))
+    min_confidence = _MODULE_CONFIDENCE_FLOORS.get(module, global_min_confidence)
     result = await route(module, payload)
     if not isinstance(result, dict):
         logger.info("ai_path", module=module, path="deterministic", reason="router_unavailable")

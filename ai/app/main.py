@@ -29,7 +29,7 @@ from pydantic import BaseModel
 
 from .logging import get_logger, setup_logging
 from .modules import MODULES
-from .router_client import ai_telemetry_reset, ai_telemetry_snapshot, router_enabled, router_url
+from .router_client import ai_telemetry_reset, ai_telemetry_snapshot, router_enabled, router_url, token_usage_snapshot
 
 logger = get_logger(__name__)
 
@@ -142,6 +142,12 @@ async def health() -> dict:
 async def telemetry(_: None = Depends(require_gateway_key)) -> dict:
     """Return AI vs deterministic usage counters per module (AUT-3813)."""
     return {"telemetry": ai_telemetry_snapshot()}
+
+
+@app.get("/v1/telemetry/tokens")
+async def telemetry_tokens(_: None = Depends(require_gateway_key)) -> dict:
+    """Return token usage stats for cost guard (AUT-6417)."""
+    return token_usage_snapshot()
 
 
 @app.post("/v1/telemetry/reset")
