@@ -1,5 +1,7 @@
 # AutoBrain DEMO stack — Portainer stack "autobrain-demo" (EP2, Portainer-Host 10.0.3.17).
-# Public demo: https://demo.autobrainservice.app (demo@autobrainservice.app / demo).
+# Public demo: https://demo.autobrainservice.app (login email + password are NOT
+# in this file or any other public repo — they live in the demo/demo-account-password
+# secret on the host, posted to the Sales owner only; see AUT-5063 / AUT-5686).
 #
 # AUT-5582: this file is the Demo instance's only definition. Until it
 # existed, the Demo stack ran as six plain containers — invisible to every
@@ -38,6 +40,8 @@
 # is public):
 #   POSTGRES_PASSWORD MINIO_ACCESS_KEY MINIO_SECRET_KEY SECRET_KEY
 #   AI_GATEWAY_API_KEY AI_ROUTER_API_KEY MARKET_DATA_API_KEY REGO_LOOKUP_API_KEY
+#   DEMO_PASSWORD (required — the demo account is seeded with this; without it
+#   seed_demo() fails closed and the tier boots with no demo login at all)
 # Demo runs Redis WITHOUT auth, so the redis URLs carry no password.
 
 name: autobrain-demo
@@ -140,6 +144,13 @@ services:
       PYTHONPATH: /app
       # DEMO_MODE is what /health reports as "env":"demo".
       DEMO_MODE: "true"
+      DEMO_EMAIL: ${DEMO_EMAIL:-demo@autobrainservice.app}
+      # AUT-5063: never default or omit DEMO_PASSWORD — if unset, seed_demo()
+      # fails closed and skips the demo account. The real value is the host
+      # secret demo/demo-account-password, provisioned via scripts/seed-secrets.sh
+      # into /run/secrets and loaded by docker/lib-load-secrets.sh as
+      # DEMO_PASSWORD_FILE.
+      DEMO_PASSWORD: "${DEMO_PASSWORD:?DEMO_PASSWORD must be set in .env (secret: demo/demo-account-password)}"
       SELF_SIGNUP_ENABLED: "false"
       APP_BASE_URL: ${APP_BASE_URL:-https://demo.autobrainservice.app}
       # Presigned-object URLs must be browser-reachable via the frontend.

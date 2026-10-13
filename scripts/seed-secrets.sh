@@ -53,7 +53,8 @@ seed() {
             -e 's/^IAP_APPLE_PRIVATE_KEY$/iap_apple_private_key/' \
             -e 's/^SOCIAL_FEDERATION_HOSTED_REGISTRATION_KEY$/hub_hosted_registration_key/' \
             -e 's/^BACKUP_OFFSITE_GUI_KEY$/backup_offsite_gui_key/' \
-            -e 's/^BACKUP_OFFSITE_INGEST_KEY$/backup_offsite_ingest_key/')
+            -e 's/^BACKUP_OFFSITE_INGEST_KEY$/backup_offsite_ingest_key/' \
+            -e 's/^DEMO_PASSWORD$/demo-account-password/')
         [ "$name" = "$key" ] && continue   # not a mapped secret — skip
         # AUT-2241: never overwrite an existing non-empty secret. The running
         # services already consumed the old value (postgres volume, redis
