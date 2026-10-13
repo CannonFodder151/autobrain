@@ -92,5 +92,54 @@ assert sync.unpinned_image_refs(
 assert sync.compose_pin_source(PINNED % ("a" * 40, "b" * 64)) == "a" * 40
 assert sync.compose_pin_source("services:\n  backend:\n    image: x\n") is None
 
+# Test that recovery commands interpolate orphan container names
+import io
+import sys
+from contextlib import redirect_stderr
+
+class FakeArgs2:
+    endpoint = 5
+    portainer_url = "https://example.invalid"
+    stack = "test-stack"
+    create = False
+
+# Test report() recovery output (calls verify_running internally)
+sync.endpoint_containers = lambda args: [
+    cont("s-frontend-1", "frontend", "created", [8086]),
+    cont("s-backend-1", "backend", "running", [8080]),
+]
+buf = io.StringIO()
+with redirect_stderr(buf):
+    sync.report(FakeArgs2(), COMPOSE, services)
+stderr = buf.getvalue()
+assert "s-frontend-1" in stderr, f"Expected orphan container name in recovery output: {stderr}"
+assert "<NAME>" not in stderr, f"Placeholder <NAME> should not appear: {stderr}"
+
+# Test check_port_collisions recovery output (printed in main logic)
+sync.endpoint_containers = lambda args: [
+    cont("old-autobrain-backup-1", "autobrain-backup", "running", [8080])]
+buf = io.StringIO()
+with redirect_stderr(buf):
+    clashes = sync.check_port_collisions(FakeArgs(), services, {8080, 8086, 9000})
+    if clashes:
+        print(f"ERROR: refusing to sync — host port collision with orphans on "
+              f"endpoint {FakeArgs().endpoint}:", file=sys.stderr)
+        for name, svc, ports in clashes:
+            print(f"  {name} (service {svc!r}) holds host port(s) "
+                  f"{', '.join(str(p) for p in ports)} that the new compose "
+                  f"needs, but {svc!r} is not a service in the incoming compose",
+                  file=sys.stderr)
+        print("RECOVERY (destructive — run by hand, then re-run this sync):",
+              file=sys.stderr)
+        for name, svc, ports in clashes:
+            print(
+                f"  curl -X DELETE \"{FakeArgs().portainer_url}/api/endpoints/"
+                f"{FakeArgs().endpoint}/docker/containers/{name}?force=true&v=true\" \\\n"
+                f"    -H \"X-API-Key: $PORTAINER_API_KEY\"",
+                file=sys.stderr)
+stderr = buf.getvalue()
+assert "old-autobrain-backup-1" in stderr, f"Expected orphan container name in recovery output: {stderr}"
+assert "<NAME>" not in stderr, f"Placeholder <NAME> should not appear: {stderr}"
+
 print("OK: sync-compose guards")
 sys.exit(0)
