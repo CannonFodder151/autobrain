@@ -26,7 +26,6 @@ from app.services.advisor.replace import (
     age_years,
     _clamp_horizon,
 )
-from app.services.market_data import get_market_data
 
 logger = get_logger(__name__)
 
@@ -196,6 +195,7 @@ async def _median_for(db: AsyncSession, make: str, model: str, year: int | None,
     ``note`` on the response so the UI can render a graceful "no market
     data" badge.
     """
+    from app.services.market_data import get_market_data
     market = await get_market_data(db, make, model, year, vehicle_type)
     return _safe(market.get("median_price"))
 
