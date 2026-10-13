@@ -10,6 +10,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Added (AUT-6520)
+- docs: add mobile-app-split.md documenting autobrain-mobile repo creation, sync workflow, and release process (AUT-6520)
+
 ### Fixed (AUT-6431)
 - fix(build): add archive dependency override to fix Dart compile failure (AUT-6431)
 
