@@ -496,7 +496,7 @@ async def moderate_issue(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Hide/restore an issue post and optionally change its status."""
-    from app.api.v1.issues import ISSUE_STATUSES
+    from app.api.v1.issues_pkg.schemas import ISSUE_STATUSES
     from app.social.models import SocialIssuePost
 
     post = await db.get(SocialIssuePost, issue_id)
