@@ -23,6 +23,7 @@ from app.schemas.mod import (
     ModUpdate,
 )
 from app.services.ai_client import mod_impact
+from app.services.ai_fallbacks import mod_impact_fallback
 from app.services.export import export_build_sheet_csv, export_build_sheet_pdf, export_zip
 from app.services.rate_limit import require_ai_rate_limit
 
@@ -114,7 +115,7 @@ async def get_impact(
         data["vehicle"]["vehicle_type"] = "car"
     result = await mod_impact(data)
     if not result:
-        raise HTTPException(status_code=503, detail="Mod impact engine unavailable")
+        result = mod_impact_fallback(data)
     return ModImpactResponse(**result)
 
 

@@ -22,6 +22,7 @@ from app.schemas.diagnostic import (
     DiagnosticResponse,
 )
 from app.services.ai_client import run_diagnostics
+from app.services.ai_fallbacks import diagnose_fallback
 
 router = APIRouter(prefix="/vehicles/{vehicle_id}/diagnostics", tags=["diagnostics"])
 
@@ -55,9 +56,10 @@ async def diagnose(
         "engine": vehicle.engine, "odometer_km": vehicle.odometer_km,
         "vehicle_type": vehicle.vehicle_type,
     })
-    result = await run_diagnostics({"symptoms": payload.symptoms, **context, "obd_codes": payload.obd_codes})
+    symptoms_payload = {"symptoms": payload.symptoms, **context, "obd_codes": payload.obd_codes}
+    result = await run_diagnostics(symptoms_payload)
     if not result:
-        raise HTTPException(status_code=503, detail="Diagnostics engine unavailable")
+        result = diagnose_fallback(payload.symptoms, context.get("vehicle"), payload.obd_codes)
     record = Diagnostic(
         vehicle_id=vehicle_id,
         symptoms=payload.symptoms,
