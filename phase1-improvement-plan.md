@@ -131,18 +131,17 @@ All 12 AI modules in `ai/app/modules/` already follow deterministic-first patter
 - Schema validation drops unknown/wrong-type keys
 - Telemetry: `ai_path` = `deterministic` | `hybrid` | `router_error`
 
-### Gaps to Close
+### Gaps to Closed (AUT-6417 — PR #1032)
 
-| Module | Missing `_AI_IMMUTABLE` Entry | Action |
-|--------|------------------------------|--------|
-| `diagnostics` | None defined | Add critical fields: `summary, severity, items[*].cause, items[*].confidence, items[*].parts, items[*].estimated_cost` |
-| `service-prediction` | None defined | Add: `service_type, interval_km, interval_months, next_due_km, next_due_date` |
+| Gap | Action Taken |
+|-----|--------------|
+| No per-module confidence floors | Added `_MODULE_CONFIDENCE_FLOORS` in `router_utils.py`: resale 0.85, diagnostics 0.80, advisor 0.80, service-prediction 0.75, ocr 0.70, etc. Overrides global `MIN_AI_CONFIDENCE` per module. |
+| No cost guard | Added daily token budget tracking in `router_client.py` (`AI_DAILY_TOKEN_BUDGET`, default 1M tokens/day). Router auto-disabled when budget exceeded. `/v1/telemetry/tokens` endpoint added. |
+| `_AI_IMMUTABLE` too broad | Removed router-enrichable keys (confidence, reason, based_on, red_flags, green_flags, summary, items, next_due_*, due_in_*, interval_*) so router can actually enrich the baseline. Only deterministic baseline keys remain immutable. |
 
-### Child Issues to Create
+### Child Issues — DONE
 
-- `AUT-XXXX` Add `_AI_IMMUTABLE` entries for `diagnostics` and `service-prediction` in `router_utils.py`
-- `AUT-XXXX` Add corresponding `_SCHEMAS` entries for new immutable keys
-- `AUT-XXXX` Update module docs (AI integration guide) with immutable key rationale
+- `AUT-6417` AI hardening — per-module confidence floors + cost guard (PR #1032)
 
 ---
 
