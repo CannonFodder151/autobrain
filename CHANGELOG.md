@@ -10,6 +10,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+
+### Fixed (AUT-3944, AUT-3908)
+- fix(ci): `scripts/check-compose-consolidation.py` now enforces the AUT-3944 backup invariants that were previously only prose: the `backup` GUI service must bind 127.0.0.1:8080, `BACKUP_OFFSITE_URL` must target the `backup` service (not the retired `autobrain-backup` DNS name), and `BACKUP_OFFSITE_ENABLED` must stay `true`. `scripts/test_check_compose_consolidation.py` adds negative regression tests for each invariant.
+- fix(ci): `scripts/verify-hosted-containers.py` removes the stale `gh-runner` default companion stack (AUT-4911 dropped it from `docker-compose.hosted.yml`); every declared service now runs in the main stack, companions are opt-in only.
+- fix(test): `backend/tests/test_advisor_upgrade.py` mocks `get_accessible_vehicle` as an async function, fixing a `TypeError: SimpleNamespace can't be used in 'await' expression` that broke the route envelope test.
+
 ### Added/Changed (AUT-3533)
 - fix: Servo Spy map blank white screen on hosted by resolving undefined _kCartoKeyParam and injecting CARTO API key (PR #715)
 
