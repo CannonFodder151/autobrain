@@ -176,7 +176,7 @@ services:
     # sat at `aut4925_missing_tables` while `fuel_price_snapshots` existed only
     # because create_all happened to build it. bootstrap still runs after it,
     # for the admin/demo seed.
-    command: sh -c "export AI_ROUTER_API_KEY=$(cat /run/secrets/ai_router_api_key) && alembic upgrade head && python -m app.db.bootstrap && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && (uvicorn ai_app.main:app --host 0.0.0.0 --port 8001 &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    command: sh -c "export AI_ROUTER_API_KEY=$(cat /run/secrets/ai_router_api_key) && alembic upgrade head && python -m app.db.bootstrap && (celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &) && (uvicorn ai_app.main:app --host 0.0.0.0 --port 8001 &) && (uvicorn app.dongle.main:app --host 0.0.0.0 --port 8002 &) && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
       <<: [*db-env, *core-env, *router-env]
       PYTHONPATH: /app
@@ -263,7 +263,9 @@ services:
       # the dongle-server to upsert the serial whitelist, and the dongle-server
       # calls the backend's /devices/verify to check paid status at the edge.
       DONGLE_SERVER_API_KEY_FILE: /run/secrets/dongle_server_api_key
-      DONGLE_SERVER_URL: http://dongle-server:8000
+      DONGLE_SERVER_URL: http://localhost:8002
+      WEB_UI_BASIC_PASSWORD_FILE: /run/secrets/dongle_web_basic_password
+      AUTOBRAIN_BACKEND_URL: http://localhost:8000
       # AUT-3827/AUT-3944: off-site backup push (replaces the standalone
       # backup-agent container). The backend's Celery beat runs
       # backup_offsite_hourly at :00 and pushes snapshots to backup
@@ -298,6 +300,7 @@ services:
     expose:
       - "8000"
       - "8001"
+      - "8002"
     # Backend pinned to .15 (AUT-439): the frontend's static .14 was being
     # grabbed by the recreated backend during redeploys, stalling the stack.
     networks:
@@ -312,37 +315,9 @@ services:
   # background process in the same container, matching docker-compose.prod.yml).
   # The dedicated autobrain-worker image is no longer built by CI (AUT-3172);
   # docker/worker/Dockerfile is retained on disk only for reference.
-
-  # AUT-1673: firmware release + distribution service for OBD ESP32 dongles.
-  # Owns firmware manifests, MinIO signed blob URLs, the serial-number
-  # whitelist (paid-account gate), and the ops web GUI. Shares the hosted
-  # stack's MinIO and Postgres where applicable (SQLite in the local compose).
-  dongle-server:
-    image: ghcr.io/cannonfodder151/autobrain-dongle-server:hosted@sha256:c5768948a9dfd85f2b6e513896b3cbf2b77f6046576cd39152327f2ce9d47b28
-    restart: unless-stopped
-    environment:
-      <<: *core-env
-      AUTOBRAIN_BACKEND_URL: http://backend:8000
-      DONGLE_SERVER_API_KEY_FILE: /run/secrets/dongle_server_api_key
-      MINIO_ENDPOINT: minio:9000
-      # AUT-2211: default to the hosted public URL + TLS so signed-URL host
-      # headers resolve on first deploy. Stack env (Portainer EP5) can still
-      # override via MINIO_EXTERNAL_ENDPOINT/MINIO_SECURE if needed.
-      MINIO_EXTERNAL_ENDPOINT: ${MINIO_EXTERNAL_ENDPOINT:-${APP_BASE_URL:-https://hosted.autobrainservice.app}}
-      MINIO_BUCKET: ${MINIO_BUCKET:-autobrain-assets}
-      MINIO_ACCESS_KEY_FILE: /run/secrets/minio_access_key
-      MINIO_SECRET_KEY_FILE: /run/secrets/minio_secret_key
-      MINIO_SECURE: ${MINIO_SECURE:-true}
-      WEB_UI_BASIC_USER: ${WEB_UI_BASIC_USER:-admin}
-      WEB_UI_BASIC_PASSWORD_FILE: /run/secrets/dongle_web_basic_password
-      FIRMWARE_BUCKET_PREFIX: dongle_firmware
-      SIGNED_URL_TTL_SECONDS: 900
-      MAX_FIRMWARE_BYTES: 16777216
-    <<: *secrets
-    depends_on:
-      - backend
-    expose:
-      - "8000"
+  # AUT-1673 Phase 1a: dongle-server merged into backend on :8002 (see backend
+  # command above). The dedicated autobrain-dongle-server image is no longer
+  # referenced here; its build is retired from CI.
 
   frontend:
     image: ghcr.io/cannonfodder151/autobrain-frontend:hosted@sha256:913389aa1ff2609fcfd98ebbb445e53d9f391aa1349fbf607b7481becc2b005b

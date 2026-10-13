@@ -13,6 +13,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Added/Changed (AUT-3533)
 - fix: Servo Spy map blank white screen on hosted by resolving undefined _kCartoKeyParam and injecting CARTO API key (PR #715)
 
+### Added (AUT-1673)
+- feat(backend): merge dongle-server into backend as sub-app on :8002, consolidating containers and exposing dongle APIs at `http://localhost:8002`.
+
+
+### Fixed (AUT-6265)
+- fix(backend): `tests/test_advisor_upgrade.py::test_advisor_upgrade_route_envelope` failed with `TypeError: object types.SimpleNamespace can't be used in await expression`. The test mocked `get_accessible_vehicle` with a sync lambda returning a `SimpleNamespace`, but the real function is `async def` and the route handler does `await get_accessible_vehicle(...)`. Changed the mock to an `async def` so it returns an awaitable. Also added missing `id` field to the test vehicle mock and added `tier_offsets` to the route response factors to match the test expectation.
+- fix(backend): Several tests in `test_advisor_upgrade.py` monkeypatched the wrong `get_market_data` reference (they patched `app.services.advisor.get_market_data` but the upgrade module imports directly from `app.services.market_data`). Fixed all affected tests to monkeypatch the correct module. Also fixed `test_compute_upgrade_*` tests to monkeypatch `compute_market_value` (which is called with the DB session) instead of the lower-level `get_market_data`.
+
+
+### Fixed (AUT-6237)
+- fix(ci): added `AUTOBRAIN_BACKEND_URL`, `WEB_UI_BASIC_USER`, `WEB_UI_BASIC_PASSWORD` to `.env.example` so the compose env-var rename detector (AUT-2390) passes. These vars moved from the standalone `dongle-server` service into the backend when dongle-server was merged on :8002 (AUT-1673 Phase 1a).
+
+### Fixed (AUT-6236)
+- fix(ci): compose structural check updated for AUT-1673 Phase 1a dongle-server merge into backend on :8002. Removed `dongle-server` from expected services in `scripts/check-compose-consolidation.py` (hosted stack now 8 long-running containers). Added validation that backend command includes dongle-server uvicorn on :8002. CI now green on phase1-dongle-merge branch.
+
 ### Removed (AUT-5718)
 - Removed the dead `POST /api/v1/ci/webhook` CI triage receiver. The GitHub Actions `ci-triage-webhook.yml` fire job has never posted to the AutoBrain backend — it fires `secrets.CI_TRIAGE_WEBHOOK_URL`, the Paperclip routine trigger on the `CI Triage` routine, and that routine trigger is the only thing that wakes the CI Triage Agent. The backend route had no callers: AutoBrain-Hosted answered `503 CI triage webhook not configured` to every request since at least 2026-09-03 because `docker-compose.hosted.yml` wired `CI_TRIAGE_WEBHOOK_SECRET`/`CI_TRIAGE_PARENT_ISSUE_ID`/`CI_TRIAGE_GOAL_ID` to empty defaults the Hosted env file never set, and the Hosted access log contains no POST from any Actions runner to that path. Deletes `backend/app/api/v1/ci.py`, its router registration, the `CI_TRIAGE_*` + server-side `PAPERCLIP_*` settings in `backend/app/core/config.py`, the same block in `docker-compose.hosted.yml`, the `CI_TRIAGE_*` block in `.env.example`, and the `/ci/webhook` row in `docs/Engineering/api-spec.md`; `ci-triage-webhook.yml` and the deployment guide now state that the Paperclip routine trigger is the canonical receiver so the route is not re-added or repointed. The Hosted stack no longer needs `PAPERCLIP_API_KEY`/`CI_TRIAGE_WEBHOOK_SECRET` to boot. `backend/tests/test_ci_receiver_removed_aut5718.py` asserts the route is gone (404) and the settings no longer exist, so a re-added receiver fails CI.
 

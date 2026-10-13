@@ -255,6 +255,7 @@ async def advisor_upgrade(
             "max_monthly": max_monthly,
             "min_similarity": min_similarity,
         },
+        "tier_offsets": [1, 2, -1],
         "candidate_count": len(data.upgrade_options),
     }
 

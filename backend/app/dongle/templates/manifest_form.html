@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Publish firmware manifest</h2>
+<form method="post" action="{{ action }}">
+  <p><label>Model<br><input name="model" required maxlength="64"></label></p>
+  <p><label>Version<br><input name="version" required maxlength="32"></label></p>
+  <p><label>SHA-256 (64 hex)<br><input name="sha256" required pattern="[0-9a-fA-F]{64}" maxlength="64"></label></p>
+  <p><label>Size bytes<br><input type="number" name="size_bytes" required></label></p>
+  <p><label>MinIO blob key<br><input name="blob_key" required maxlength="256"></label></p>
+  <p><label>Release notes<br><textarea name="release_notes" rows="3"></textarea></label></p>
+  <p><button type="submit">Publish</button></p>
+</form>
+<p class="muted">Upload the firmware blob to MinIO (prefix <code>dongle_firmware/</code>) first, then create the manifest row pointing at the blob key.</p>
+{% endblock %}

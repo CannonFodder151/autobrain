@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Firmware manifests</h2>
+<p><a href="/admin/manifest/new">＋ Publish manifest</a></p>
+
+{% if manifests %}
+<table>
+  <tr><th>Model</th><th>Version</th><th>SHA-256</th><th>Size</th><th>Released</th><th>Blob key</th></tr>
+  {% for m in manifests %}
+  <tr>
+    <td>{{ m.model }}</td>
+    <td>{{ m.version }}</td>
+    <td><code>{{ m.sha256 }}</code></td>
+    <td>{{ m.size_bytes }}</td>
+    <td>{{ m.created_at }}</td>
+    <td><code>{{ m.blob_key }}</code></td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">No manifests published yet.</p>
+{% endif %}
+
+<h3 style="margin-top:28px">Serial whitelist</h3>
+{% if serials %}
+<table>
+  <tr><th>Serial number</th><th>Device id</th><th>Paid at</th><th>Added</th></tr>
+  {% for s in serials %}
+  <tr>
+    <td><code>{{ s.serial_number }}</code></td>
+    <td>{{ s.device_id }}</td>
+    <td>{{ s.paid_at }}</td>
+    <td>{{ s.added_at }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">Whitelist is empty.</p>
+{% endif %}
+{% endblock %}

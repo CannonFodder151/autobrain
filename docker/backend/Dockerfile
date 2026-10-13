@@ -48,7 +48,7 @@ RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/lib-load-secrets.sh
 
 USER autobrain
 
-EXPOSE 8000
+EXPOSE 8000 8001 8002
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=5 \
     CMD curl -fsS http://localhost:8000/health || exit 1
