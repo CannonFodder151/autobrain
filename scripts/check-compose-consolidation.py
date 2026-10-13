@@ -87,6 +87,26 @@ def main():
             f"missing={sorted(EXPECTED - set(svcs))}"
         )
 
+    # AUT-3944: backup service must exist with GUI port bound to loopback 8080.
+    if "backup" not in svcs:
+        errors.append("`backup` service missing (AUT-3944)")
+    else:
+        backup_ports = [str(p) for p in (svcs["backup"].get("ports") or [])]
+        if not any(p.endswith(":8080") and p.startswith("127.0.0.1:") for p in backup_ports):
+            errors.append("`backup` GUI port binding changed — must stay on 127.0.0.1:8080 (AUT-3944)")
+
+    # AUT-3944: BACKUP_OFFSITE_URL must target the `backup` service.
+    offsite_url = str(backend_env.get("BACKUP_OFFSITE_URL", ""))
+    if "autobrain-backup:" in offsite_url:
+        errors.append("BACKUP_OFFSITE_URL still points at the old dns name (AUT-3944)")
+    elif "backup:" not in offsite_url:
+        errors.append("BACKUP_OFFSITE_URL does not target the `backup` service (AUT-3944)")
+
+    # AUT-3944: BACKUP_OFFSITE_ENABLED must stay true.
+    offsite_enabled = str(backend_env.get("BACKUP_OFFSITE_ENABLED", "")).lower()
+    if offsite_enabled != "true":
+        errors.append('BACKUP_OFFSITE_ENABLED must stay "true" (AUT-3944)')
+
     if errors:
         print("\n".join(f"FAIL: {e}" for e in errors))
         sys.exit(1)

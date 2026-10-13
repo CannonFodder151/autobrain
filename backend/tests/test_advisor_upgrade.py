@@ -355,8 +355,9 @@ async def test_advisor_upgrade_route_envelope(monkeypatch) -> None:
         }
 
     monkeypatch.setattr(advisor_mod, "compute_upgrade", _fake_compute_upgrade)
-    monkeypatch.setattr(advisor_mod, "get_accessible_vehicle",
-                        lambda db, vid, user: fake_vehicle)
+    async def _fake_get_accessible(db, vid, user):
+        return fake_vehicle
+    monkeypatch.setattr(advisor_mod, "get_accessible_vehicle", _fake_get_accessible)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
