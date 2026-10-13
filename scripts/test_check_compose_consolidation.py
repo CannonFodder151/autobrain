@@ -8,6 +8,9 @@ them, so either kind of regression would ship silently: the GUI binding could
 widen off loopback, or the hourly push could keep addressing the retired
 `autobrain-backup` DNS name and quietly stop.
 
+AUT-6415: dongle-server and backup GUI merged into backend container.
+Dongle-server runs on :8002, backup GUI runs on :8080 inside the backend container.
+
 These tests drive the real script against the real compose file and against
 deliberately broken copies of it, so the invariants are enforced by CI rather
 than by memory.
@@ -81,20 +84,6 @@ def drop_backend_env(*keys):
     return apply
 
 
-def set_backup_ports(ports):
-    """Mutator: replace the backup service's port bindings."""
-    def apply(doc):
-        svc = doc["services"]["backup"]
-        if ports is None:
-            svc.pop("ports", None)
-        else:
-            svc["ports"] = ports
-    return apply
-
-
-def drop_backup_service(doc):
-    del doc["services"]["backup"]
-
 def set_backend_command(cmd):
     """Mutator: replace the backend container command."""
     def apply(doc):
@@ -113,24 +102,43 @@ class TestComposeConsolidationRealFile(unittest.TestCase):
         self.assertEqual(self.rc, 0, self.out)
         self.assertIn("OK:", self.out)
 
-    def test_backup_service_present(self):
-        self.assertIn("backup", self.doc["services"])
+    def test_services_count_is_seven(self):
+        # AUT-6415: consolidated to 7 services (postgres, redis, minio, backend, frontend, hub, 9router)
+        self.assertEqual(len(self.doc["services"]), 7)
+        expected = {"postgres", "redis", "minio", "backend", "frontend", "hub", "9router"}
+        self.assertEqual(set(self.doc["services"].keys()), expected)
 
-    def test_backup_gui_port_bound_to_loopback_8080(self):
-        ports = [str(p) for p in (self.doc["services"]["backup"].get("ports") or [])]
-        self.assertTrue(
-            any(p.endswith(":8080") and p.startswith("127.0.0.1:") for p in ports),
-            f"backup GUI must stay on 127.0.0.1:8080, got {ports}",
-        )
+    def test_dongle_server_merged_into_backend(self):
+        # dongle-server should not be a separate service
+        self.assertNotIn("dongle-server", self.doc["services"])
+        # backend command should include dongle-server uvicorn
+        cmd = self.doc["services"]["backend"]["command"]
+        self.assertIn("dongle_server.main:app", cmd)
+        # DONGLE_SERVER_URL should point to localhost:8002
+        dongle_url = str(self.doc["services"]["backend"]["environment"]["DONGLE_SERVER_URL"])
+        self.assertIn("localhost:8002", dongle_url)
 
-    def test_offsite_url_targets_backup_service(self):
+    def test_backup_gui_merged_into_backend(self):
+        # backup should not be a separate service
+        self.assertNotIn("backup", self.doc["services"])
+        # backend command should include backup GUI uvicorn
+        cmd = self.doc["services"]["backend"]["command"]
+        self.assertIn("backup_gui.main:app", cmd)
+        # BACKUP_OFFSITE_URL should point to localhost:8080
         url = str(self.doc["services"]["backend"]["environment"]["BACKUP_OFFSITE_URL"])
-        self.assertIn("backup:", url)
-        self.assertNotIn("autobrain-backup:", url)
+        self.assertIn("localhost:8080", url)
 
     def test_offsite_enabled_is_true(self):
         enabled = self.doc["services"]["backend"]["environment"]["BACKUP_OFFSITE_ENABLED"]
         self.assertEqual(str(enabled).lower(), "true")
+
+    def test_backend_exposes_all_ports(self):
+        # backend should expose 8000 (API), 8001 (AI gateway), 8002 (dongle-server), 8080 (backup GUI)
+        expose = self.doc["services"]["backend"].get("expose", [])
+        self.assertIn("8000", expose)
+        self.assertIn("8001", expose)
+        self.assertIn("8002", expose)
+        self.assertIn("8080", expose)
 
 
 class TestComposeConsolidationBackupInvariants(unittest.TestCase):
@@ -142,27 +150,23 @@ class TestComposeConsolidationBackupInvariants(unittest.TestCase):
         self.assertIn("FAIL:", out)
         self.assertIn(expected, out)
 
-    def test_missing_backup_service_fails(self):
-        self.assert_fails_with(
-            drop_backup_service, "`backup` service missing (AUT-3944)"
-        )
+    def test_dongle_server_service_reappears_fails(self):
+        # Adding back dongle-server service should fail
+        def mutate(doc):
+            doc["services"]["dongle-server"] = {
+                "image": "test:latest",
+                "expose": ["8000"]
+            }
+        self.assert_fails_with(mutate, "retired `dongle-server` service is back")
 
-    def test_backup_port_off_loopback_fails(self):
-        self.assert_fails_with(
-            set_backup_ports(["0.0.0.0:8080:8080"]),
-            "`backup` GUI port binding changed",
-        )
-
-    def test_backup_port_dropped_fails(self):
-        self.assert_fails_with(
-            set_backup_ports(None), "`backup` GUI port binding changed"
-        )
-
-    def test_backup_port_moved_off_8080_fails(self):
-        self.assert_fails_with(
-            set_backup_ports(["127.0.0.1:9090:9090"]),
-            "`backup` GUI port binding changed",
-        )
+    def test_backup_service_reappears_fails(self):
+        # Adding back backup service should fail
+        def mutate(doc):
+            doc["services"]["backup"] = {
+                "image": "test:latest",
+                "ports": ["127.0.0.1:8080:8080"]
+            }
+        self.assert_fails_with(mutate, "retired `backup` service is back")
 
     def test_offsite_url_on_retired_dns_name_fails(self):
         self.assert_fails_with(
@@ -170,16 +174,16 @@ class TestComposeConsolidationBackupInvariants(unittest.TestCase):
             "BACKUP_OFFSITE_URL still points at the old dns name",
         )
 
-    def test_offsite_url_not_targeting_backup_fails(self):
+    def test_offsite_url_targeting_backup_service_fails(self):
         self.assert_fails_with(
-            backend_env(BACKUP_OFFSITE_URL="http://localhost:8080"),
-            "BACKUP_OFFSITE_URL does not target the `backup` service",
+            backend_env(BACKUP_OFFSITE_URL="http://backup:8080"),
+            "BACKUP_OFFSITE_URL should point to localhost, not `backup` service",
         )
 
-    def test_offsite_url_absent_fails(self):
+    def test_offsite_url_not_localhost_fails(self):
         self.assert_fails_with(
-            drop_backend_env("BACKUP_OFFSITE_URL"),
-            "BACKUP_OFFSITE_URL does not target the `backup` service",
+            backend_env(BACKUP_OFFSITE_URL="http://someotherhost:8080"),
+            "BACKUP_OFFSITE_URL should target localhost:8080",
         )
 
     def test_offsite_disabled_fails(self):
@@ -192,6 +196,12 @@ class TestComposeConsolidationBackupInvariants(unittest.TestCase):
         self.assert_fails_with(
             drop_backend_env("BACKUP_OFFSITE_ENABLED"),
             'BACKUP_OFFSITE_ENABLED must stay "true"',
+        )
+
+    def test_dongle_server_url_not_localhost_fails(self):
+        self.assert_fails_with(
+            backend_env(DONGLE_SERVER_URL="http://dongle-server:8000"),
+            "DONGLE_SERVER_URL should target localhost:8002",
         )
 
 
@@ -230,6 +240,35 @@ class TestComposeConsolidationMigrations(unittest.TestCase):
         rc, out = run_check(broken(set_backend_command(reordered)))
         self.assertEqual(rc, 1, out)
         self.assertIn("must run before bootstrap/uvicorn (AUT-5088)", out)
+
+    def test_missing_celery_fails(self):
+        doc_cmd = load_compose()["services"]["backend"]["command"]
+        stripped = doc_cmd.replace("celery -A app.workers.celery_app:celery_app worker -B -l info --concurrency=2 &", "")
+        rc, out = run_check(broken(set_backend_command(stripped)))
+        self.assertEqual(rc, 1, out)
+        self.assertIn("backend command missing Celery worker+beat", out)
+
+    def test_missing_ai_gateway_fails(self):
+        doc_cmd = load_compose()["services"]["backend"]["command"]
+        stripped = doc_cmd.replace("uvicorn ai_app.main:app --host 0.0.0.0 --port 8001 &", "")
+        rc, out = run_check(broken(set_backend_command(stripped)))
+        self.assertEqual(rc, 1, out)
+        self.assertIn("backend command missing the AI gateway uvicorn on :8001", out)
+
+    def test_missing_dongle_server_fails(self):
+        doc_cmd = load_compose()["services"]["backend"]["command"]
+        stripped = doc_cmd.replace("uvicorn dongle_server.main:app --host 0.0.0.0 --port 8002 &", "")
+        rc, out = run_check(broken(set_backend_command(stripped)))
+        self.assertEqual(rc, 1, out)
+        self.assertIn("backend command missing dongle-server uvicorn on :8002", out)
+
+    def test_missing_backup_gui_fails(self):
+        doc_cmd = load_compose()["services"]["backend"]["command"]
+        stripped = doc_cmd.replace("uvicorn backup_gui.main:app --host 0.0.0.0 --port 8080 &", "")
+        rc, out = run_check(broken(set_backend_command(stripped)))
+        self.assertEqual(rc, 1, out)
+        self.assertIn("backend command missing backup GUI uvicorn on :8080", out)
+
 
 if __name__ == "__main__":
     unittest.main()
