@@ -68,26 +68,38 @@ async def test_enhance_drops_nested_array_too_long(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_enhance_drops_junk_and_typed_keys() -> None:
-    baseline = {"confidence": 0.9, "model": "rule-based-fallback"}
-    # Malformed router response: junk fields, wrong-typed fields, valid fields.
+    # Baseline provides ground-truth immutable fields including reason and confidence
+    baseline = {
+        "confidence": 0.9,
+        "reason": "deterministic reason",
+        "next_due_date": "2026-01-01",
+        "model": "rule-based-fallback",
+    }
+    # Malformed router response: junk fields, wrong-typed fields, tries to override immutable fields.
+    # Use confidence=0.9 to pass the service-prediction floor (0.85)
     malicious = {
         "model": "General-Use",
-        "confidence": "0.999999",        # wrong type — must be dropped, baseline kept
-        "interval_km": "five",            # wrong type
-        "junk_field": {"x": 1},           # not in whitelist
-        "__proto__": {"polluted": True},  # not in whitelist
-        "reason": "mileage-based",        # valid
-        "next_due_date": "2026-01-01",    # valid
+        "confidence": 0.95,               # higher confidence - should be ignored (immutable)
+        "interval_km": "five",            # wrong type - dropped
+        "junk_field": {"x": 1},           # not in whitelist - dropped
+        "__proto__": {"polluted": True},  # not in whitelist - dropped
+        "reason": "ai reason",            # immutable - should NOT override baseline
+        "next_due_date": "2027-01-01",    # immutable - should NOT override baseline
+        "new_field": "enrichment",        # not in schema - dropped
     }
     with patch("app.router_client.route", new=AsyncMock(return_value=malicious)):
         out = await enhance("service-prediction", {}, baseline)
-    assert out["confidence"] == 0.9           # baseline preserved
-    assert out["reason"] == "mileage-based"   # valid key merged
+    # Immutable fields from baseline preserved
+    assert out["confidence"] == 0.9
+    assert out["reason"] == "deterministic reason"
     assert out["next_due_date"] == "2026-01-01"
+    # Invalid fields dropped
     assert "interval_km" not in out
     assert "junk_field" not in out
     assert "__proto__" not in out
-    assert out["model"] == "rule-based+ai"
+    assert "new_field" not in out
+    # Model indicates hybrid when any enrichment happened (but here nothing enrichable)
+    assert out["model"] == "rule-based-fallback"
 
 
 @pytest.mark.asyncio
@@ -101,7 +113,8 @@ async def test_enhance_no_schema_module_gets_no_enrichment() -> None:
 @pytest.mark.asyncio
 async def test_enhance_immutable_never_overridden() -> None:
     baseline = {"estimated_value": 30000.0, "model": "rule-based-fallback"}
-    malicious = {"estimated_value": 1.0, "rrp": 60000.0}
+    # Use confidence=0.9 to pass the resale floor (0.80)
+    malicious = {"estimated_value": 1.0, "rrp": 60000.0, "confidence": 0.9}
     with patch("app.router_client.route", new=AsyncMock(return_value=malicious)):
         out = await enhance("resale", {}, baseline)
     assert out["estimated_value"] == 30000.0  # immutable survives
