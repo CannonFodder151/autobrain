@@ -49,6 +49,7 @@ def _vehicle(*, year: int | None = 2018, odo: int | None = 80_000,
              condition: str = "good", make: str = "Toyota",
              model: str = "Corolla", body_type: str | None = "sedan") -> SimpleNamespace:
     return SimpleNamespace(
+        id="v1",
         year=year, odometer_km=odo, condition=condition, make=make,
         model=model, vehicle_type="car", body_type=body_type,
     )
