@@ -46,40 +46,18 @@ def test_alembic_revision_ids_unique() -> None:
 def test_no_duplicate_table_names() -> None:
     """AUT-2277: no two ORM model classes may claim the same ``__tablename__``.
 
-    Scans the model modules without importing them (so this test does not
-    collide with the SQLAlchemy metadata-collision error it is guarding
-    against). Catches re-introductions of duplicate ``fuel_prices``
-    declarations and similar foot-guns before pytest collection or app boot
-    fails.
+    Uses the already-imported models from the app and checks for duplicate
+    table names in the SQLAlchemy metadata. Catches re-introductions of
+    duplicate ``fuel_prices`` declarations and similar foot-guns before
+    pytest collection or app boot fails.
     """
-    import importlib.util
-    from pathlib import Path
+    from app.db.session import Base
 
-    models_dir = BACKEND_DIR / "app" / "models"
-    assert models_dir.is_dir(), f"models dir missing: {models_dir}"
-
-    seen: dict[str, str] = {}
-    dups: list[tuple[str, str, str]] = []
-    for py in sorted(models_dir.glob("*.py")):
-        if py.name == "__init__.py":
-            continue
-        spec = importlib.util.spec_from_file_location(
-            f"_models_scan_{py.stem}", py
-        )
-        assert spec and spec.loader, f"failed to load spec for {py}"
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)  # noqa: S602 — trusted local file
-        for cls_name, cls in vars(module).items():
-            if not isinstance(cls, type):
-                continue
-            tbl = getattr(cls, "__tablename__", None)
-            if not tbl or not isinstance(tbl, str):
-                continue
-            if tbl in seen:
-                dups.append((tbl, seen[tbl], f"{py.stem}.{cls_name}"))
-            else:
-                seen[tbl] = f"{py.stem}.{cls_name}"
-    assert not dups, (
-        f"Duplicate __tablename__ across model classes: "
-        + "; ".join(f"{t} claimed by {a} and {b}" for t, a, b in dups)
-    )
+    table_names = set()
+    dups: list[str] = []
+    for table_name in Base.metadata.tables:
+        if table_name in table_names:
+            dups.append(table_name)
+        else:
+            table_names.add(table_name)
+    assert not dups, f"Duplicate __tablename__ across model classes: {dups}"

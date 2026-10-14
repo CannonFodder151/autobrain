@@ -11,6 +11,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-3752)
+- fix(backend): resolve alembic multi-head state blocking CI by merging `a3661engineers` + `aut3447_passkey_credentials`
+- fix(backend): use TYPE_CHECKING import for `ServiceRequest` relationship in User model to prevent duplicate table registration during model scans
+- fix(backend): register `ServiceRequest` and `ServiceRequestEvent` in models `__init__.py` for proper SQLAlchemy registry resolution
+- fix(tests): rewrite `test_no_duplicate_table_names` to use imported model metadata instead of re-executing modules, avoiding SQLAlchemy registry pollution
+
 ### Added (AUT-3667)
 - feat(vass): VASS compliance backend API with data models
   - POST `/api/v1/vass/vehicle-lookup` — vehicle make/model/year lookup with ADR category
