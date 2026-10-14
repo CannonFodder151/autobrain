@@ -44,6 +44,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed (AUT-5584)
 - fix(frontend): `Sync mobile app` workflow failed on `main` with `lib/core/models/fuel_history.dart is not referenced by a part directive in lib/core/models.dart`. The monorepo `frontend/lib/core/models.dart` was missing the `part 'models/fuel_history.dart';` directive that `autobrain-mobile` PR #60 added to its models.dart. Added the missing `part` directive and the corresponding `fuel_history.dart` model file to the monorepo source-of-truth so the sync guard (AUT-5205) passes and the mobile tree stays in parity. Verified by re-running the `Sync mobile app` workflow.
 
+### Security (AUT-4726)
+- fix(ci): wire `backend/tests/test_deps_transitive_cves.py` into the required
+  `Backend — pytest smoke` CI job so transitive dependency CVE pins (starlette,
+  PyJWT, python-jose/ecdsa) are enforced on every PR and push. The guard runs
+  offline (reads `requirements.txt` only), needs no database, and blocks merges
+  when pins fall below the fixed floors (starlette ≥1.3.1, PyJWT ≥2.15.0,
+  no python-jose/ecdsa).
+
 ### Changed (AUT-5654)
 - ci: moved the last four GitHub-hosted jobs onto the self-hosted vm2 runners, finishing this repo's hosted-runner migration. `visual_regression.yml` (was `ubuntu-latest`) now runs on `[self-hosted, linux, x64, vm2]`; its `subosito/flutter-action@v2` step downloads the Flutter SDK itself, so no pre-installed toolchain is required on the runner. `dockerhub-publish.yml`'s `dedupe-main-queue`, `ci-queue-guard.yml`'s `cancel-orphaned-runs`, and `ci-triage-webhook.yml`'s `fire` also move to `[self-hosted, linux, x64, vm2]`: all three are API-only gates that call `gh api` to cancel superseded/orphaned runs and to fire the triage webhook, and none of them checks out or executes repository code, so they are safe on a persistent runner even under the `pull_request` trigger. `build-hosted.yml`'s matrix already resolved to vm2/ARM64 and is unchanged. After this, no workflow in this repo requests a GitHub-hosted runner.
 
