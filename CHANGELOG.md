@@ -9,6 +9,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
 ## [Unreleased]
+### Changed (AUT-6252)
+- refactor(backend): split social.py into social/ subpackage with posts.py, comments.py, reactions.py, feed.py, _common.py for modularisation (Phase 1d)
+
 ### Added (AUT-6519)
 - docs: add secret-file-pattern.md documenting AUT-1533 *_FILE secret injection pattern for docker-compose (AUT-6519)
 
