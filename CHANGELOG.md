@@ -9,6 +9,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
 ## [Unreleased]
+### Added (AUT-6645)
+- feat(ai): per-module AI confidence floors with env override; default raised from 0.75 to 0.85 (AUT-6645)
+- feat(ai): cost tracking endpoints `/v1/cost` and `/v1/cost/reset` for AI gateway (AUT-6646)
+- docs: update router validation tests for new confidence floor behavior
+
 ### Added (AUT-6519)
 - docs: add secret-file-pattern.md documenting AUT-1533 *_FILE secret injection pattern for docker-compose (AUT-6519)
 
