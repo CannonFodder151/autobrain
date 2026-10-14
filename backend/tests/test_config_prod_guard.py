@@ -89,3 +89,31 @@ def test_development_accepts_db_defaults_but_regenerates_secret() -> None:
     )
     assert s.SECRET_KEY != "change-me"
     assert len(s.SECRET_KEY) >= 64
+
+
+def test_production_refuses_short_secret_key() -> None:
+    """AUT-4934: PyJWT 2.15.1+ emits InsecureKeyLengthWarning for HMAC keys
+    under 32 bytes. Production must refuse short keys at startup."""
+    with pytest.raises(ValidationError, match="SECRET_KEY must be at least 32"):
+        _make(**_prod(SECRET_KEY="a" * 31))
+
+
+def test_production_accepts_32_byte_secret_key() -> None:
+    """32 bytes is the minimum threshold — exactly 32 should pass."""
+    s = _make(**_prod(SECRET_KEY="a" * 32))
+    assert s.SECRET_KEY == "a" * 32
+
+
+def test_development_allows_short_secret_key_no_autogen() -> None:
+    """Development allows short keys (no auto-gen for non-insecure values).
+    Only known-insecure keys (change-me, etc.) are replaced."""
+    s = _make(
+        ENVIRONMENT="development",
+        SECRET_KEY="short",
+        POSTGRES_PASSWORD="autobrain",
+        MINIO_SECRET_KEY="autobrain",
+        POSTGRES_USER="u",
+        MINIO_ACCESS_KEY="a",
+    )
+    # Short key is allowed in dev but NOT auto-regenerated (only known-insecure are)
+    assert s.SECRET_KEY == "short"
