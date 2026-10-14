@@ -150,13 +150,13 @@ def test_aut5092_downgrade_only_drops_a_column_it_created(monkeypatch) -> None:
 def test_no_duplicate_table_names() -> None:
     """AUT-2277: no two ORM model classes may claim the same ``__tablename__``.
 
-    Scans the model modules without importing them (so this test does not
-    collide with the SQLAlchemy metadata-collision error it is guarding
-    against). Catches re-introductions of duplicate ``fuel_prices``
+    Parses the model modules via AST (no import/execution) so this test does
+    not collide with the SQLAlchemy metadata-collision error it is guarding
+    against. Catches re-introductions of duplicate ``fuel_prices``
     declarations and similar foot-guns before pytest collection or app boot
     fails.
     """
-    import importlib.util
+    import ast
     from pathlib import Path
 
     models_dir = BACKEND_DIR / "app" / "models"
@@ -167,26 +167,30 @@ def test_no_duplicate_table_names() -> None:
     for py in sorted(models_dir.glob("*.py")):
         if py.name == "__init__.py":
             continue
-        spec = importlib.util.spec_from_file_location(
-            f"_models_scan_{py.stem}", py
-        )
-        assert spec and spec.loader, f"failed to load spec for {py}"
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)  # noqa: S602 — trusted local file
-        for cls_name, cls in vars(module).items():
-            if not isinstance(cls, type):
+        source = py.read_text()
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ClassDef):
                 continue
-            tbl = getattr(cls, "__tablename__", None)
+            # Find __tablename__ class attribute
+            tbl = None
+            for item in node.body:
+                if isinstance(item, ast.Assign):
+                    for target in item.targets:
+                        if isinstance(target, ast.Name) and target.id == "__tablename__":
+                            if isinstance(item.value, ast.Constant) and isinstance(item.value.value, str):
+                                tbl = item.value.value
+                            break
             if not tbl or not isinstance(tbl, str):
                 continue
             if tbl in seen:
-                dups.append((tbl, seen[tbl], f"{py.stem}.{cls_name}"))
+                dups.append((tbl, seen[tbl], f"{py.stem}.{node.name}"))
             else:
-                seen[tbl] = f"{py.stem}.{cls_name}"
-    assert not dups, (
-        f"Duplicate __tablename__ across model classes: "
-        + "; ".join(f"{t} claimed by {a} and {b}" for t, a, b in dups)
-    )
+                seen[tbl] = f"{py.stem}.{node.name}"
+
+    if dups:
+        msg = "\n".join(f"{t}: {a} vs {b}" for t, a, b in dups)
+        pytest.fail(f"Duplicate table names found:\n{msg}")
 
 def test_every_model_table_is_exported_for_create_all() -> None:
     """AUT-4925: every model table must be reachable from ``app.models``.
