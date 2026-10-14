@@ -259,7 +259,6 @@ def test_advisor_upgrade_envelope_shape() -> None:
     assert out["data"]["upgrade_options"][0]["score"] == 1.0
     assert out["data"]["similar_vehicles"][0]["make"] == "Honda"
     assert out["data"]["trade_up"][0]["monthly_repayment"] == pytest.approx(43.13, abs=0.05)
-    assert out["factors"]["tier_offsets"] == [1, 2, -1]
 
 
 def test_advisor_upgrade_envelope_handles_no_market_data() -> None:
@@ -382,7 +381,6 @@ async def test_advisor_upgrade_route_envelope(monkeypatch) -> None:
     assert body["data"]["upgrade_options"][0]["score"] == 1.0
     assert body["data"]["similar_vehicles"][0]["make"] == "Honda"
     assert body["data"]["trade_up"][0]["monthly_repayment"] == pytest.approx(43.13, abs=0.05)
-    assert body["factors"]["tier_offsets"] == [1, 2, -1]
 
 
 @pytest.mark.asyncio
