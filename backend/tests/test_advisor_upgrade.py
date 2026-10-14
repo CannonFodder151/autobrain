@@ -576,6 +576,7 @@ async def test_compute_upgrade_returns_empty_when_no_market_data(monkeypatch) ->
         return {"median_price": None, "note": "no listings"}
 
     monkeypatch.setattr("app.services.advisor.upgrade.get_market_data", _fake_market)
+    monkeypatch.setattr("app.services.advisor.value.get_market_data", _fake_market)
 
     plan = await advisor_mod.compute_upgrade(None, v)
     assert plan["current_value"] is None
