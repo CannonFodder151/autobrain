@@ -1,0 +1,42 @@
+name: Fix Portainer Agent on Oracle VM
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fix-agent:
+    runs-on: [self-hosted, linux, ARM64]
+    steps:
+      - name: Check Portainer agent container
+        run: |
+          set -euo pipefail
+          echo "=== Checking Portainer agent container ==="
+          docker ps -a --filter name=portainer_agent
+          
+      - name: Check Portainer agent logs
+        run: |
+          set -euo pipefail
+          echo "=== Portainer agent logs (last 50 lines) ==="
+          docker logs --tail 50 portainer_agent 2>&1 || true
+          
+      - name: Restart Portainer agent
+        run: |
+          set -euo pipefail
+          echo "=== Restarting Portainer agent ==="
+          docker restart portainer_agent
+          
+      - name: Wait and verify agent is healthy
+        run: |
+          set -euo pipefail
+          echo "=== Waiting for agent to start ==="
+          sleep 10
+          docker ps --filter name=portainer_agent
+          echo "=== Agent logs after restart ==="
+          docker logs --tail 20 portainer_agent 2>&1 || true
+          
+      - name: Test Docker API access
+        run: |
+          set -euo pipefail
+          echo "=== Testing Docker API ==="
+          docker version
+          docker info --format '{{.ContainersRunning}} running, {{.Images}} images'
