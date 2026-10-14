@@ -24,10 +24,12 @@ import '../../core/auth_state.dart';
 import '../../core/fuel_types.dart';
 import '../../core/geoloc.dart';
 import '../../core/models.dart';
+import '../../services/fuel_prices_api.dart';
+import 'favourite_stations_screen.dart';
 import 'servo_spy_list_model.dart';
 import 'servo_spy_station_history_screen.dart';
 
-enum _ServoSpyView { map, list }
+enum _ServoSpyView { map, list, favourites }
 
 
 ///
@@ -75,6 +77,11 @@ class _ServoSpyScreenState extends State<ServoSpyScreen> {
                         label: Text('List'),
                         icon: Icon(Icons.list_alt_outlined),
                       ),
+                      ButtonSegment(
+                        value: _ServoSpyView.favourites,
+                        label: Text('Favourites'),
+                        icon: Icon(Icons.favorite_outlined),
+                      ),
                     ],
                     selected: {_view},
                     onSelectionChanged: (s) => setState(() => _view = s.first),
@@ -83,7 +90,9 @@ class _ServoSpyScreenState extends State<ServoSpyScreen> {
                 Expanded(
                   child: _view == _ServoSpyView.map
                       ? const _ServoSpyMap()
-                      : const _ServoSpyList(),
+                      : _view == _ServoSpyView.list
+                          ? const _ServoSpyList()
+                          : const FavouriteStationsScreen(),
                 ),
               ],
             ),
@@ -176,7 +185,7 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
   List<String> _fuelTypes = List<String>.from(defaultFuelTypes);
   String? _selectedFuelType;
   String? _vehicleId;  // AUT-2053: for $/km + avg fill cost projection
-  double _maxDistanceKm = 25;
+  double _maxDistanceKm = 5000;
   final MapController _mapController = MapController();
   LatLng? _mapCenter;
 
@@ -282,6 +291,76 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
     }
   }
 
+  /// Cluster stations that are within [clusterRadiusKm] of each other.
+  /// Returns a list of clusters, each containing one or more stations.
+  List<List<_MapStation>> _clusterStations(List<_MapStation> stations, double clusterRadiusKm) {
+    final clusters = <List<_MapStation>>[];
+    final assigned = <_MapStation>{};
+
+    for (final station in stations) {
+      if (assigned.contains(station)) continue;
+      if (station.lat == null || station.lon == null) continue;
+
+      final cluster = <_MapStation>[station];
+      assigned.add(station);
+
+      for (final other in stations) {
+        if (assigned.contains(other)) continue;
+        if (other.lat == null || other.lon == null) continue;
+
+        final dist = _distanceKm(
+          station.lat!, station.lon!,
+          other.lat!, other.lon!,
+        );
+        if (dist <= clusterRadiusKm) {
+          cluster.add(other);
+          assigned.add(other);
+        }
+      }
+      clusters.add(cluster);
+    }
+    return clusters;
+  }
+
+  /// Haversine distance in km between two coordinates.
+  double _distanceKm(double lat1, double lon1, double lat2, double lon2) {
+    const earthRadiusKm = 6371.0;
+    final dLat = _toRadians(lat2 - lat1);
+    final dLon = _toRadians(lon2 - lon1);
+    final a = _sin2(dLat / 2) +
+        _cos(_toRadians(lat1)) * _cos(_toRadians(lat2)) * _sin2(dLon / 2);
+    final c = 2 * _atan2(_sqrt(a), _sqrt(1 - a));
+    return earthRadiusKm * c;
+  }
+
+  double _toRadians(double deg) => deg * 3.141592653589793 / 180.0;
+  double _sin2(double x) {
+    final s = _sin(x);
+    return s * s;
+  }
+  double _sin(double x) {
+    // Taylor series approximation for sin(x) where x is small
+    return x - (x * x * x) / 6 + (x * x * x * x * x) / 120;
+  }
+  double _cos(double x) {
+    // Taylor series approximation for cos(x) where x is small
+    return 1 - (x * x) / 2 + (x * x * x * x) / 24;
+  }
+  double _sqrt(double x) {
+    if (x <= 0) return 0;
+    var z = x;
+    for (var i = 0; i < 10; i++) {
+      z = (z + x / z) / 2;
+    }
+    return z;
+  }
+  double _atan2(double y, double x) {
+    // Approximation of atan2 for small angles
+    if (x == 0) return y > 0 ? 3.141592653589793 / 2 : -3.141592653589793 / 2;
+    final ratio = y / x;
+    return ratio - (ratio * ratio * ratio) / 3 + (ratio * ratio * ratio * ratio * ratio) / 5;
+  }
+
   double? get _cheapestPrice {
     if (_selectedFuelType == null) return null;
     final prices = _stations
@@ -300,15 +379,66 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
     );
   }
 
+  void _openStationCluster(List<_MapStation> cluster) {
+    if (cluster.length == 1) {
+      _openStation(cluster.first);
+      return;
+    }
+    // For clusters, show a bottom sheet with list of stations
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.5,
+        maxChildSize: 0.85,
+        expand: false,
+        builder: (_, scroll) => ListView(
+          controller: scroll,
+          padding: const EdgeInsets.all(16),
+          children: [
+            Text('${cluster.length} stations nearby',
+                style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 16),
+            for (final s in cluster)
+              ListTile(
+                leading: s.logoUrl != null
+                    ? CircleAvatar(
+                        backgroundImage: NetworkImage(s.logoUrl!),
+                      )
+                    : CircleAvatar(
+                        child: Text(s.name?.substring(0, 1).toUpperCase() ?? '?'),
+                      ),
+                title: Text(s.name ?? 'Unknown'),
+                subtitle: Text(s.address ?? ''),
+                trailing: _selectedFuelType != null
+                    ? Text(
+                        s.priceFor(_selectedFuelType!) != null
+                            ? '\$${(s.priceFor(_selectedFuelType!)! / 100).toStringAsFixed(3)}'
+                            : '—',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      )
+                    : null,
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _openStation(s);
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _openFilter() {
     String fuel = _selectedFuelType ?? (_fuelTypes.isNotEmpty ? _fuelTypes.first : '91');
-    double dist = _maxDistanceKm;
+// Filter now only fuel type; distance removed
+    String fuel = _selectedFuelType ?? (_fuelTypes.isNotEmpty ? _fuelTypes.first : '91');
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) => Padding(
-          padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+          const EdgeInsets.fromLTRB(16, 20, 16, 32),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -327,16 +457,6 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
                     .toList(),
                 onChanged: (v) => setSheet(() => fuel = v ?? fuel),
               ),
-              const SizedBox(height: 20),
-              Text('Max distance: ${dist.toInt()} km'),
-              Slider(
-                value: dist,
-                min: 5,
-                max: 200,
-                divisions: 39,
-                label: '${dist.toInt()} km',
-                onChanged: (v) => setSheet(() => dist = v),
-              ),
               const SizedBox(height: 16),
               Align(
                 alignment: AlignmentDirectional.centerEnd,
@@ -345,7 +465,6 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
                     Navigator.of(ctx).pop();
                     setState(() {
                       _selectedFuelType = fuel;
-                      _maxDistanceKm = dist;
                     });
                     _fetchStations();
                   },
@@ -366,20 +485,31 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final scheme = Theme.of(context).colorScheme;
     final LatLng center = _userLoc ?? _auCenter;
+    
+    // Cluster stations that are within ~100m of each other
+    final clusters = _clusterStations(_stations, 0.1);
     final markers = <Marker>[
-      for (final s in _stations)
-        if (s.lat != null && s.lon != null)
+      for (final cluster in clusters)
+        if (cluster.first.lat != null && cluster.first.lon != null)
           Marker(
-            point: LatLng(s.lat!, s.lon!),
-            width: 72,
-            height: 48,
+            point: LatLng(cluster.first.lat!, cluster.first.lon!),
+            width: cluster.length > 1 ? 80 : 72,
+            height: cluster.length > 1 ? 60 : 48,
             alignment: Alignment.topCenter,
-            child: _StationMarker(
-              station: s,
-              selectedFuelType: _selectedFuelType,
-              isCheapest: _cheapestPrice != null && s.priceFor(_selectedFuelType!) == _cheapestPrice,
-              onTap: () => _openStation(s),
-            ),
+            child: cluster.length == 1
+                ? _StationMarker(
+                    station: cluster.first,
+                    selectedFuelType: _selectedFuelType,
+                    isCheapest: _cheapestPrice != null &&
+                        cluster.first.priceFor(_selectedFuelType!) == _cheapestPrice,
+                    onTap: () => _openStation(cluster.first),
+                  )
+                : _ClusterMarker(
+                    stations: cluster,
+                    selectedFuelType: _selectedFuelType,
+                    cheapestPrice: _cheapestPrice,
+                    onTap: () => _openStationCluster(cluster),
+                  ),
           ),
       if (_userLoc != null)
         Marker(
@@ -606,9 +736,10 @@ class _StationMarker extends StatelessWidget {
     final priceStr = priceCents != null && priceCents > 0
         ? '\$${(priceCents / 100).toStringAsFixed(1)}'
         : '—';
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final color = isCheapest
-        ? const Color(0xFF57F287)
-        : const Color(0xFF008C45);
+        ? const Color(0xFF3B82F6) // Blue for cheapest
+        : (isDark ? Colors.white : Colors.black);
 
     Widget? logo;
     if (station.logoUrl != null) {
@@ -645,8 +776,8 @@ class _StationMarker extends StatelessWidget {
                 const SizedBox(width: 4),
                 Text(
                   priceStr,
-                  style: const TextStyle(
-                    color: Colors.black,
+                  style: TextStyle(
+                    color: isCheapest ? Colors.white : (isDark ? Colors.black : Colors.white),
                     fontWeight: FontWeight.w800,
                     fontSize: 12,
                   ),
@@ -684,6 +815,79 @@ class _TrianglePainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter old) => false;
 }
 
+class _ClusterMarker extends StatelessWidget {
+  const _ClusterMarker({
+    required this.stations,
+    required this.selectedFuelType,
+    required this.cheapestPrice,
+    required this.onTap,
+  });
+  final List<_MapStation> stations;
+  final String? selectedFuelType;
+  final double? cheapestPrice;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final count = stations.length;
+    
+    // Find cheapest in cluster
+    double? clusterCheapest;
+    if (selectedFuelType != null) {
+      final prices = stations
+          .map((s) => s.priceFor(selectedFuelType!))
+          .where((p) => p != null)
+          .cast<double>();
+      if (prices.isNotEmpty) {
+        clusterCheapest = prices.reduce((a, b) => a < b ? a : b);
+      }
+    }
+    
+    final isCheapestCluster = cheapestPrice != null && clusterCheapest == cheapestPrice;
+    final color = isCheapestCluster
+        ? const Color(0xFF3B82F6)
+        : (isDark ? Colors.white : Colors.black);
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white, width: 1.5),
+              boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 3)],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.local_gas_station, size: 16, color: isCheapestCluster ? Colors.white : (isDark ? Colors.black : Colors.white)),
+                const SizedBox(width: 4),
+                Text(
+                  '$count',
+                  style: TextStyle(
+                    color: isCheapestCluster ? Colors.white : (isDark ? Colors.black : Colors.white),
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          CustomPaint(
+            size: const Size(12, 8),
+            painter: _TrianglePainter(color),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _StationSheet extends StatelessWidget {
   const _StationSheet({required this.station, this.userLoc});
   final _MapStation station;
@@ -713,6 +917,43 @@ class _StationSheet extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _addFavourite(BuildContext context, String fuelType) async {
+    final scheme = Theme.of(context).colorScheme;
+    final state = 'NSW'; // TODO: determine state from location
+    final api = context.read<AuthState>().api;
+    final fuelApi = FuelPricesApi(api);
+    try {
+      await fuelApi.addWatch(
+        state: state,
+        stationCode: station.id,
+        fuelType: fuelType,
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Added ${station.name} ($fuelType) to favourites'),
+          backgroundColor: scheme.primary,
+        ),
+      );
+    } on ApiException catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to add favourite (${e.statusCode})'),
+          backgroundColor: scheme.error,
+        ),
+      );
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Failed to add favourite'),
+          backgroundColor: scheme.error,
+        ),
+      );
+    }
   }
 
   @override
@@ -750,11 +991,21 @@ class _StationSheet extends StatelessWidget {
                     : '—',
                 style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
               ),
-              trailing: Text(
-                p.priceCents == null
-                    ? '—'
-                    : '\$${(p.priceCents! / 100).toStringAsFixed(3)}',
-                style: const TextStyle(fontWeight: FontWeight.w700),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    p.priceCents == null
+                        ? '—'
+                        : '\$${(p.priceCents! / 100).toStringAsFixed(3)}',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  IconButton(
+                    tooltip: 'Add to favourites',
+                    icon: const Icon(Icons.favorite_border),
+                    onPressed: () => _addFavourite(context, p.fuelType),
+                  ),
+                ],
               ),
             ),
           const SizedBox(height: 12),
@@ -764,6 +1015,15 @@ class _StationSheet extends StatelessWidget {
               onPressed: () => _navigate(context),
               icon: const Icon(Icons.navigation),
               label: const Text('Navigate'),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => _openHistory(context),
+              icon: const Icon(Icons.history),
+              label: const Text('Price History'),
             ),
           ),
         ],
@@ -787,7 +1047,7 @@ class _ServoSpyListState extends State<_ServoSpyList> {
   List<String> _fuelTypes = List<String>.from(defaultFuelTypes);
   String? _selectedFuelType;
   String? _vehicleId;  // AUT-2053
-  double _maxDistanceKm = 25;
+  double _maxDistanceKm = 5000;
   ServoSortMetric _sortMetric = ServoSortMetric.price;
   late final ApiClient _api;
   Map<String, double>? _pos;
@@ -877,9 +1137,8 @@ class _ServoSpyListState extends State<_ServoSpyList> {
     }
   }
 
-  void _openFilter() {
+void _openFilter() {
     String fuel = _selectedFuelType ?? (_fuelTypes.isNotEmpty ? _fuelTypes.first : '91');
-    double dist = _maxDistanceKm;
     ServoSortMetric metric = _sortMetric;
 
     showModalBottomSheet(
@@ -887,7 +1146,7 @@ class _ServoSpyListState extends State<_ServoSpyList> {
       isScrollControlled: true,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) => Padding(
-          padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+          const EdgeInsets.fromLTRB(16, 20, 16, 32),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -905,16 +1164,6 @@ class _ServoSpyListState extends State<_ServoSpyList> {
                     .map((f) => DropdownMenuItem(value: f, child: Text(f)))
                     .toList(),
                 onChanged: (v) => setSheet(() => fuel = v ?? fuel),
-              ),
-              const SizedBox(height: 20),
-              Text('Max distance: ${dist.toInt()} km'),
-              Slider(
-                value: dist,
-                min: 5,
-                max: 200,
-                divisions: 39,
-                label: '${dist.toInt()} km',
-                onChanged: (v) => setSheet(() => dist = v),
               ),
               const SizedBox(height: 16),
               Text('Sort by', style: Theme.of(context).textTheme.bodyMedium),
@@ -935,7 +1184,6 @@ class _ServoSpyListState extends State<_ServoSpyList> {
                     Navigator.of(ctx).pop();
                     setState(() {
                       _selectedFuelType = fuel;
-                      _maxDistanceKm = dist;
                       _sortMetric = metric;
                     });
                     _fetchStations();
