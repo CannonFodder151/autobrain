@@ -128,29 +128,44 @@ GHSA-5rjg-fvgr-3xxf  # setuptools: GHSA alias of CVE-2025-47273; build-time only
 # zero CVE-2026-80256, so the 15 suppression lines are DROPPED rather than carried
 # forward. They were hiding nothing, but they would have masked the next real finding.
 
-# --- POSTGRESQL libpcre2 CVEs (pgvector/pgvector:pg17) ---
-# CVE-2026-86145 / CVE-2026-89161: pcre2 out-of-bounds write + JIT memory corruption.
-# Source: libpcre2-8-0 10.42-1 in the pgvector/pgvector:pg17 (debian 12.15) base image.
-# Fixed in 10.42-1+deb12u1 (already published by Debian). The pgvector upstream
-# image has not yet been rebuilt with the patched pcre2 package. Suppress until
-# the pgvector:pg17 image digest is refreshed; re-check 2026-11-30. Postgres
-# reaches pcre2 only via server-side regex operators (~, ~*, POSIX regex) on
-# user-queried columns; AutoBrain's backend does not expose raw regex input to
-# end-users on any public API endpoint (AUT-2918).
-CVE-2026-86145  # pcre2 OOB write: not exposed via public API regex input
-CVE-2026-89161  # pcre2 JIT memory corruption: same exposure surface as above
+# --- AUT-6147: pgvector/pgvector:pg17 Perl CVEs (unreachable in postgres runtime) ---
+# Source: libperl5.36 / perl / perl-base / perl-modules-5.36 in the pgvector/pgvector:pg17
+# (debian 12.15) base image. PostgreSQL server is written in C and does not invoke
+# any Perl interpreter at runtime. These packages are pulled in as base OS
+# dependencies but are never loaded by postgres, gosu, or any AutoBrain service.
+# Fixed in 5.36.0-7+deb12u4 (published by Debian). The pgvector upstream image has
+# not yet been rebuilt with the patched Perl packages. Suppress per policy
+# ("tolerate when no fixed image exists"). Time-boxed: re-check 2026-11-30; drop
+# entries + bump pgvector:pg17 digest once a respin ships them.
+# Security Officer sign-off: APPROVED (AUT-6147).
+CVE-2026-13221  # perl regex processing: postgres does not invoke perl at runtime
+CVE-2026-42496  # perl-archive-tar path traversal: no perl in postgres runtime
+CVE-2026-8376   # perl regex heap overflow 32-bit only; we run 64-bit
+CVE-2026-42497  # perl-archive-tar hardlink modification: no perl in postgres runtime
+CVE-2026-48962  # perl-IO-Compress code execution: no perl in postgres runtime
+CVE-2026-57432  # perl pack/unpack info disclosure: no perl in postgres runtime
+CVE-2026-57433  # perl Storable deserialization DoS: no perl in postgres runtime
 
-# --- AUT-4718: pcre2 32-bit-only OOB write, same deb12u1 upstream fix -----------
-# CVE-2026-89157: pcre2_pattern_convert out-of-bounds write when an attacker
-# supplies a large pattern. Debian security-tracker describes it as affecting
-# 32-BIT PLATFORMS ONLY ("PCRE2 before 10.48, on 32-bit platforms, ..."). Every
-# AutoBrain container image is amd64 or arm64 (64-bit); the pgvector:pg17 digest
-# we pin has no 32-bit variant in the deploy path, so the vulnerable code path
-# cannot execute here. Same source package/fix as the deb12u1 entries above:
-# libpcre2-8-0 10.42-1 -> 10.42-1+deb12u1, pgvector image not yet rebuilt.
-# Re-check 2026-11-30 with the entries above: drop when the pgvector:pg17 digest
-# ships deb12u1. Security Officer sign-off: APPROVED (AUT-4718).
-CVE-2026-89157  # pcre2 pcre2_pattern_convert OOB write: 32-bit platforms only; we run 64-bit
+# --- AUT-6147: pgvector/pgvector:pg17 gosu-stdlib CVEs (new digest) -------------
+# Same justification as the AUT-1749 gosu entries above: gosu is used ONLY to drop
+# privileges before exec'ing postgres. It performs no network/TLS/HTTP processing.
+# These are new CVE IDs found in the updated pg17 digest (sha256:ac08538c...).
+# Security Officer sign-off: APPROVED (AUT-6147).
+CVE-2026-78667  # gosu-stdlib: net/http Range DoS; gosu does no HTTP
+CVE-2026-78669  # gosu-stdlib: net/http HTTP/2 SETTINGS DoS; gosu does no HTTP
+CVE-2026-97031  # gosu-stdlib: crypto/tls ECH DoS; gosu does no TLS
+
+# --- AUT-6147: nginx libtiff CVE (unreachable in frontend nginx) -----------------
+# CVE-2026-4775: libtiff arbitrary code execution/DoS via signed integer overflow
+# in TIFF file parsing. Fixed in 4.7.2-r0 (Alpine). The nginxinc/nginx-unprivileged
+# image (sha256:ed04ec1f...) carries 4.7.1-r0; upstream has not yet respun the image.
+# The AutoBrain frontend nginx serves static Flutter assets and proxies /api, /ws,
+# /ai to the backend. It does NOT process user-supplied TIFF files at runtime —
+# static assets are built at compile time. No runtime TIFF parsing occurs.
+# Suppress per policy ("tolerate when no fixed image exists"). Time-boxed: re-check
+# 2026-11-30; drop entry + bump nginx frontend digest once a respin ships 4.7.2-r0.
+# Security Officer sign-off: APPROVED (AUT-6147).
+CVE-2026-4775  # libtiff TIFF parsing: no user-supplied TIFF processing in nginx runtime
 
 # --- AUT-2918: python base image gzip/libsqlite3/perl-base CVEs — RESOLVED (AUT-4718) -------
 # RESOLVED (AUT-4718, 2026-10-02): the pin moved from python:3.13.15-slim-trixie

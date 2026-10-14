@@ -5,7 +5,7 @@
 All three tiers (Demo, Default, Hosted) run **PostgreSQL 17** with the **pgvector** extension pre-installed:
 
 ```yaml
-image: pgvector/pgvector:pg17@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f
+image: pgvector/pgvector:pg17@sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d
 ```
 
 - **Major bump:** pg16 → pg17 (AUT-1749).
@@ -37,7 +37,7 @@ The postgres service runs with `read_only: true`, `cap_drop: [ALL]`, and `tmpfs`
 
 ## Digest pin rationale
 
-The Oracle Cloud VM (EP5) is ARM64; the dev box and Demo/Default are x86_64. Pinning the multi-arch manifest-list digest (`pgvector/pgvector:pg17@sha256:cf134a76...`) guarantees the same bits on every architecture — a floating `:pg17` tag can resolve to different manifests per node and break the arm64 deploy. Bump deliberately: check the release notes, update the digest in all three compose files (`docker-compose.yml`, `docker-compose.prod.yml`, `docker-compose.hosted.yml`) in one PR, and run `scripts/check-compose-config.py` to validate.
+The Oracle Cloud VM (EP5) is ARM64; the dev box and Demo/Default are x86_64. Pinning the multi-arch manifest-list digest (`pgvector/pgvector:pg17@sha256:ac08538c...`) guarantees the same bits on every architecture — a floating `:pg17` tag can resolve to different manifests per node and break the arm64 deploy. Bump deliberately: check the release notes, update the digest in all three compose files (`docker-compose.yml`, `docker-compose.prod.yml`, `docker-compose.hosted.yml`) in one PR, and run `scripts/check-compose-config.py` to validate.
 
 ## Upgrade procedure (pg16 → pg17, for future bumps)
 
