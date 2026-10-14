@@ -140,3 +140,52 @@ def test_pending_revision_actually_applies(fresh_db):
         _sql(fresh_db, "select to_regclass('public.fuel_price_snapshots') is not null")
     ), "head revision did not create fuel_price_snapshots"
     assert asyncio.run(_sql(fresh_db, "select version_num from alembic_version")) == _head()
+
+
+def test_downgrade_keeps_a_pre_existing_vehicle_type_column(fresh_db):
+    """AUT-5612: a rollback must not drop a column ``upgrade()`` never added.
+
+    This revision exists to repair the hosted ``create_all`` drift, where
+    ``devices.vehicle_type`` is *already there* and ``upgrade()`` is a no-op. The
+    old ``downgrade()`` dropped it anyway — data loss on exactly the database the
+    migration targets. Roll the head revision back and the column must survive.
+    """
+    _create_all(fresh_db)
+    _alembic(fresh_db, "stamp", "aut4925_missing_tables")
+    _alembic(fresh_db, "upgrade", "head")
+    _alembic(fresh_db, "downgrade", "-1")
+    assert asyncio.run(
+        _sql(
+            fresh_db,
+            "select exists(select 1 from information_schema.columns "
+            "where table_name='devices' and column_name='vehicle_type')",
+        )
+    ), "AUT-5612: downgrade dropped a pre-existing devices.vehicle_type"
+
+
+def test_downgrade_drops_the_column_this_revision_created(fresh_db):
+    """AUT-5612: the guard must not neuter a real rollback.
+
+    Mirror image: drop the column first so ``upgrade()`` genuinely creates it
+    (stamping the provenance marker), then ``downgrade()`` has to remove it —
+    otherwise every future rollback silently no-ops.
+    """
+    _create_all(fresh_db)
+    _alembic(fresh_db, "stamp", "aut4925_missing_tables")
+    asyncio.run(_exec(fresh_db, "ALTER TABLE devices DROP COLUMN IF EXISTS vehicle_type"))
+    _alembic(fresh_db, "upgrade", "head")
+    assert asyncio.run(
+        _sql(
+            fresh_db,
+            "select col_description('devices'::regclass, attnum) from pg_attribute "
+            "where attrelid='devices'::regclass and attname='vehicle_type'",
+        )
+    ), "upgrade() did not stamp the provenance marker on the column it created"
+    _alembic(fresh_db, "downgrade", "-1")
+    assert not asyncio.run(
+        _sql(
+            fresh_db,
+            "select exists(select 1 from information_schema.columns "
+            "where table_name='devices' and column_name='vehicle_type')",
+        )
+    ), "downgrade() refused to drop the column this revision created"

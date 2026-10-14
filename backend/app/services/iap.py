@@ -22,7 +22,6 @@ Renewal model (self-hosted friendly, AUT-617):
 
 import base64
 import json
-import logging
 import time
 import urllib.parse
 from collections import defaultdict, deque
@@ -34,10 +33,13 @@ from cryptography.exceptions import InvalidSignature
 from sqlalchemy import select
 
 from app.core.config import settings
+from app.core.logging import get_logger
 from app.models.user import User
 from app.services import billing
 
-logger = logging.getLogger(__name__)
+# AUT-5092: structlog-style kwargs need the project logger; the
+# stdlib logger raises TypeError on `logger.info("x", k=v)`.
+logger = get_logger(__name__)
 
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_APIS_BASE = "https://androidpublisher.googleapis.com"

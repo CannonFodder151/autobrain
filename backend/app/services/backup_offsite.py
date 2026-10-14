@@ -26,8 +26,12 @@ logger = get_logger("autobrain.backup_offsite")
 
 
 async def _push_offsite(payload: bytes, filename: str) -> bool:
-    """POST backup to autobrain-backup /api/backup/ingest."""
-    url = settings.BACKUP_OFFSITE_URL.rstrip("/") + "/api/backup/ingest"
+    """POST backup to the autobrain-backup ingest endpoint.
+
+    AUT-5092: the GUI serves `POST /ingest?instance=<id>` (autobrain-backup
+    server.py); the old `/api/backup/ingest` path 404s, so every push failed.
+    """
+    url = settings.BACKUP_OFFSITE_URL.rstrip("/") + "/ingest"
     params = {"instance": settings.BACKUP_OFFSITE_INSTANCE} if settings.BACKUP_OFFSITE_INSTANCE else {}
     headers = {"Content-Type": "application/json"}
     if settings.BACKUP_OFFSITE_INGEST_KEY:
