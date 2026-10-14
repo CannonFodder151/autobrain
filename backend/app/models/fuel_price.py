@@ -27,6 +27,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     String,
+    Text,
     UniqueConstraint,
     func,
 )
@@ -60,6 +61,7 @@ class FuelPriceSnapshot(Base):
     # AUT-1859: last *distinct* price, used to compute day-over-day % change.
     previous_price: Mapped[float | None] = mapped_column(Float, nullable=True)
     previous_price_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    embedding: Mapped[list[float] | None] = mapped_column(Text, nullable=True)
 
 
 class FuelPriceWatchlist(Base):

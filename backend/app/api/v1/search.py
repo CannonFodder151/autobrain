@@ -19,7 +19,7 @@ class SearchRequest(BaseModel):
     q: str = Field(..., min_length=1, max_length=500, description="Search query")
     entity_types: list[str] | None = Field(
         default=None,
-        description="Limit to these entity types (diagnostic/service/modification/receipt/issue)",
+        description="Limit to these entity types (diagnostic/service/modification/receipt/issue/fuel_price/device/market_listing/vehicle)",
     )
     limit: int = Field(default=20, ge=1, le=100)
 
@@ -77,7 +77,7 @@ async def search(
     user: User = Depends(get_current_user),
 ):
     """Hybrid search across diagnostics, services, modifications, receipts,
-    and community issues.
+    community issues, fuel prices, devices, market listings, and vehicles.
 
     Results are scoped to the requesting user's own vehicles plus vehicles
     shared with them (accepted shares only). Community issues are visible to
