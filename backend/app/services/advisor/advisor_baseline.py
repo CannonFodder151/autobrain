@@ -93,13 +93,8 @@ def _advisor_decision(modules: dict) -> str:
     elif isinstance(dream_raw, str):
         dream_affordable = dream_raw.lower() == "affordable"
 
-    # 1. Dream affordable + no clear upgrade win -> strategy
+    # 1. Dream affordable -> strategy
     if dream_affordable:
-        # Check if upgrade is a clear win (gap small)
-        if value_mid and funding_gap is not None:
-            ratio = funding_gap / value_mid if value_mid > 0 else 1.0
-            if ratio > _ADVISOR_UPGRADE_GAP_RATIO:
-                return "strategy"
         return "strategy"
 
     # 2. Funding gap <= 25% of value -> upgrade

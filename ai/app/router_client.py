@@ -47,7 +47,7 @@ _validate_nested = _validate_nested
 
 
 def router_url() -> str:
-    return os.getenv("AI_ROUTER_URL", "http://10.0.3.17:20128/v1").rstrip("/")
+    return os.getenv("AI_ROUTER_URL", "http://your-9router-instance:port").rstrip("/")
 
 
 def router_enabled() -> bool:
@@ -80,7 +80,7 @@ async def route(module: str, payload: dict) -> dict | None:
         return None
 
     url = f"{router_url()}/chat/completions"
-    timeout = int(os.getenv("AI_ROUTER_TIMEOUT_SECONDS", "120"))
+    timeout = int(os.getenv("AI_ROUTER_TIMEOUT_SECONDS", "60"))
     headers = {"Content-Type": "application/json"}
     api_key = os.getenv("AI_ROUTER_API_KEY", "")
     if api_key:
@@ -97,25 +97,34 @@ async def route(module: str, payload: dict) -> dict | None:
             {"role": "user", "content": user_data},
         ],
     }
-    try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            resp = await client.post(url, json=body, headers=headers)
-            resp.raise_for_status()
-            if len(resp.content) > _MAX_ROUTER_RESPONSE_BYTES:
-                logger.warning("router_response_oversized", module=module, size=len(resp.content))
-                return None
-            data = _clean_json(resp.text)
-            content = data["choices"][0]["message"]["content"]
-            result = _clean_json(content)
-            result.setdefault("model", router_model())
-            logger.info("router_response", module=module, model=router_model(), status=resp.status_code)
-            return result
-    except httpx.HTTPStatusError as exc:
-        logger.warning("router_http_error", module=module, status=exc.response.status_code)
-        return None
-    except Exception as exc:
-        logger.warning("router_unreachable_using_fallback", module=module, error=str(exc))
-        return None
+    import asyncio
+    for attempt in range(2):
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                resp = await client.post(url, json=body, headers=headers)
+                resp.raise_for_status()
+                if len(resp.content) > _MAX_ROUTER_RESPONSE_BYTES:
+                    logger.warning("router_response_oversized", module=module, size=len(resp.content))
+                    return None
+                data = _clean_json(resp.text)
+                content = data["choices"][0]["message"]["content"]
+                result = _clean_json(content)
+                result.setdefault("model", router_model())
+                logger.info("router_response", module=module, model=router_model(), status=resp.status_code)
+                return result
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code >= 500 and attempt == 0:
+                await asyncio.sleep(0.5)
+                continue
+            logger.warning("router_http_error", module=module, status=exc.response.status_code)
+            return None
+        except Exception as exc:
+            if attempt == 0:
+                await asyncio.sleep(0.5)
+                continue
+            logger.warning("router_unreachable_using_fallback", module=module, error=str(exc))
+            return None
+    return None
 
 
 async def enhance(module: str, payload: dict, baseline: dict) -> dict:

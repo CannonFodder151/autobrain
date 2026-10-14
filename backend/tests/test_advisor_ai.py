@@ -111,6 +111,26 @@ async def test_compute_advisor_recommendation_strategy_when_dream_affordable() -
 
 
 @pytest.mark.asyncio
+async def test_compute_advisor_recommendation_strategy_when_dream_affordable_even_with_small_gap() -> None:
+    """Dream affordable => strategy ALWAYS (even if upgrade gap <= 25%).
+
+    Validates the dead-code removal: the old logic had a no-op branch that
+    checked if gap <= 25% but both branches returned "strategy".
+    """
+    from app.services.advisor import compute_advisor_recommendation
+
+    modules = {
+        "value": {"mid": 20_000.0},
+        "replace": {"used_replacement_cost": 22_000.0, "funding_gap": 2_000.0},  # gap = 10% of value
+        "upgrade": {},
+        "finance": {},
+        "dream": {"affordability": "affordable"},
+    }
+    out = await compute_advisor_recommendation(modules)
+    assert out["decision"] == "strategy"
+
+
+@pytest.mark.asyncio
 async def test_compute_advisor_recommendation_handles_empty_modules() -> None:
     """All-empty modules => keep with low confidence, no crash."""
     from app.services.advisor import compute_advisor_recommendation

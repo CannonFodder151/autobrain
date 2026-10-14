@@ -54,12 +54,19 @@ def _gateway_key() -> str:
 
 
 def _auth_disabled() -> bool:
-    return os.environ.get("AI_GATEWAY_AUTH_DISABLED") == "1"
+    return (
+        os.environ.get("AI_GATEWAY_AUTH_DISABLED") == "1"
+        and os.environ.get("ENVIRONMENT", "production") == "development"
+    )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
+    if not _gateway_key() and not _auth_disabled():
+        raise RuntimeError(
+            "AI_GATEWAY_API_KEY must be set (or AI_GATEWAY_AUTH_DISABLED=1 for dev)"
+        )
     logger.info(
         "ai_gateway_started",
         router_url=router_url(),

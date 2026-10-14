@@ -11,6 +11,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-3668)
+- fix(ai): add fail-fast startup validation for AI_GATEWAY_API_KEY; gateway now crashes on boot if key is missing (dev opt-out via AI_GATEWAY_AUTH_DISABLED=1 only works in ENVIRONMENT=development)
+- fix(ai): AI_GATEWAY_AUTH_DISABLED=1 no longer disables auth in production; restricted to ENVIRONMENT=development only
+- fix(ai): align AI_ROUTER_URL default to placeholder "http://your-9router-instance:port" (was hardcoded 10.0.3.17); align AI_ROUTER_TIMEOUT_SECONDS default to 60s (was 120s) to match backend config
+- fix(ai): add 1 retry with 500ms backoff on 5xx errors from 9Router in router_client.route(); transient errors no longer immediately fall back
+- fix(advisor): remove dead code in advisor_baseline._advisor_decision(); dream_affordable now unconditionally returns "strategy" (the old no-op gap check branch is deleted)
+- fix(fuel): fuel receipt AI failure now sets ocr_status="pending" (was "failed") so receipts can be retried instead of permanently failing
+
 ### Added (AUT-3667)
 - feat(vass): VASS compliance backend API with data models
   - POST `/api/v1/vass/vehicle-lookup` — vehicle make/model/year lookup with ADR category

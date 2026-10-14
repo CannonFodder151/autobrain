@@ -164,7 +164,7 @@ async def upload_fuel_receipt(
         except Exception:
             logger.exception("fuel_receipt_ai_failed")
             parsed = {}
-        receipt.ocr_status = "done" if parsed else "failed"
+        receipt.ocr_status = "done" if parsed else "pending"
         if parsed:
             receipt.vendor = parsed.get("vendor")
             receipt.total = parsed.get("total_cost")
