@@ -588,6 +588,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   community-hub photos load instead of serving the SPA shell; the regex
   location forwards the original URI (with its bucket prefix) to MinIO
 
+### Added (AUT-3813)
+- Added deterministic AI fallbacks at backend level for diagnostics, service prediction, valuation, mod impact, and odometer OCR endpoints. When the AI gateway is unreachable, these routes now return rule-based responses instead of 503. New `backend/app/services/ai_fallbacks.py` with 435 lines of deterministic rule-based implementations.
+
 ## [0.3.283] - 2026-09-28
 
 ### Fixed (AUT-4327, AUT-4357)
