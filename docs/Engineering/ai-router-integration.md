@@ -72,6 +72,7 @@ reachable from Oracle Cloud.
 - `enhance()` protects per-module immutable keys (`_AI_IMMUTABLE`): measured
   numbers, identifiers, currency and value ranges are ground truth and can
   never be overridden by the model — it may only fill in gaps and add advice.
+  See [Deterministic-First AI: Immutable Key Rationale](deterministic-first-ai.md#rationale-why-immutable-keys-exist) for the full design rationale.
 - The `model` field reports the path: `rule-based-fallback` /
   `rrp-depreciation` (resale baseline) / `rule-based+ai` (enriched).
 - LLM output variance (missing/null optional fields) is absorbed by tolerant
