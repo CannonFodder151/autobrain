@@ -19,6 +19,7 @@ spec.loader.exec_module(ucp)
 
 REPO = "ghcr.io/cannonfodder151/autobrain-backend"
 BASE = f"services:\n  backend:\n    image: {REPO}:hosted@sha256:{'0' * 64}\n"
+BASE_TAGGED = f"services:\n  backend:\n    image: {REPO}:hosted-sha-abc123@sha256:{'0' * 64}\n"
 PLAIN = "services:\n  backend:\n    image: x\n"
 
 

@@ -13,9 +13,13 @@ after a newer one already pinned) and must never move the pin backwards.
 The recorded sha also makes "which commit built the running image"
 answerable straight from git.
 
+AUT-5502: optionally pins to an immutable tag (e.g. hosted-sha-abc123)
+instead of the mutable :hosted tag, so QA can verify a named digest that
+won't be superseded by subsequent pushes.
+
 Usage: python3 scripts/update-compose-pins.py \
         backend=sha256:... ai=sha256:... frontend=sha256:... \
-        [--file docker-compose.hosted.yml] [--source-sha <commit>]
+        [--file docker-compose.hosted.yml] [--source-sha <commit>] [--tag <tag>]
 """
 import argparse
 import re
@@ -35,6 +39,8 @@ PIN_MAP = {
 PROVENANCE_KEY = "x-autobrain-pin-source"
 _PROV_RE = re.compile(rf'^{PROVENANCE_KEY}:\s*"?([0-9a-f]{{40}})"?\s*$', re.M)
 _PROV_LINE_RE = re.compile(rf"^{PROVENANCE_KEY}:.*$", re.M)
+
+DEFAULT_TAG = "hosted"
 
 
 def pin_source(text):
@@ -100,6 +106,8 @@ def parse_args():
                     help="compose file to rewrite (default: docker-compose.hosted.yml)")
     ap.add_argument("--source-sha", default=None,
                     help="commit whose build produced the pins (AUT-5669)")
+    ap.add_argument("--tag", default=DEFAULT_TAG,
+                    help=f"image tag to use in pins (default: {DEFAULT_TAG})")
     ap.add_argument("pairs", nargs="*",
                     help="svc=sha256:hexdigest, e.g. backend=sha256:abc123..")
     return ap.parse_args()
@@ -122,6 +130,7 @@ def main():
             return 2
         pins[k] = v
 
+    tag = args.tag
     p = Path(args.file)
     text = p.read_text()
     orig = text
@@ -141,7 +150,7 @@ def main():
             r"(" + re.escape(repo_prefix) + r"(?::[a-z0-9_.-]+)?)"
             r"@sha256:[a-f0-9]{64}"
         )
-        new_ref = f"{repo_prefix}:hosted@{digest}"
+        new_ref = f"{repo_prefix}:{tag}@{digest}"
         text, n = pattern.subn(new_ref, text)
         if n == 0:
             print(f"WARN: no pin matched for {svc} ({new_ref})", file=sys.stderr)

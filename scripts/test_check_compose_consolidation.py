@@ -10,7 +10,8 @@ widen off loopback, or the hourly push could keep addressing the retired
 
 These tests drive the real script against the real compose file and against
 deliberately broken copies of it, so the invariants are enforced by CI rather
-than by memory.
+than by memory. A final pair asserts the trigger that makes CI run them at all
+(AUT-5069: the compose file was not in ci-tests.yml's `paths:` filter).
 
 Run: python3 -m unittest scripts/test_check_compose_consolidation.py -v
 """
@@ -26,12 +27,11 @@ import yaml
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCRIPT = os.path.join(REPO, "scripts", "check-compose-consolidation.py")
 COMPOSE = os.path.join(REPO, "docker-compose.hosted.yml")
-
+CI_WORKFLOW = os.path.join(REPO, ".github", "workflows", "ci-tests.yml")
 
 def load_compose():
     with open(COMPOSE) as f:
         return yaml.safe_load(f)
-
 
 def run_check(compose_text=None):
     """Run the consolidation check and return (returncode, combined output).
@@ -57,20 +57,17 @@ def run_check(compose_text=None):
         if tmp:
             shutil.rmtree(tmp, ignore_errors=True)
 
-
 def broken(mutate):
     """Return YAML text for the real compose file with `mutate` applied."""
     doc = load_compose()
     mutate(doc)
     return yaml.safe_dump(doc)
 
-
 def backend_env(**changes):
     """Mutator: set keys on backend.environment."""
     def apply(doc):
         doc["services"]["backend"]["environment"].update(changes)
     return apply
-
 
 def drop_backend_env(*keys):
     """Mutator: remove keys from backend.environment."""
@@ -79,7 +76,6 @@ def drop_backend_env(*keys):
         for key in keys:
             env.pop(key, None)
     return apply
-
 
 def set_backup_ports(ports):
     """Mutator: replace the backup service's port bindings."""
@@ -91,7 +87,6 @@ def set_backup_ports(ports):
             svc["ports"] = ports
     return apply
 
-
 def drop_backup_service(doc):
     del doc["services"]["backup"]
 
@@ -100,7 +95,6 @@ def set_backend_command(cmd):
     def apply(doc):
         doc["services"]["backend"]["command"] = cmd
     return apply
-
 
 class TestComposeConsolidationRealFile(unittest.TestCase):
     """The live compose file must satisfy every asserted invariant."""
@@ -131,7 +125,6 @@ class TestComposeConsolidationRealFile(unittest.TestCase):
     def test_offsite_enabled_is_true(self):
         enabled = self.doc["services"]["backend"]["environment"]["BACKUP_OFFSITE_ENABLED"]
         self.assertEqual(str(enabled).lower(), "true")
-
 
 class TestComposeConsolidationBackupInvariants(unittest.TestCase):
     """Negative cases: each broken invariant must fail the check loudly."""
@@ -194,6 +187,27 @@ class TestComposeConsolidationBackupInvariants(unittest.TestCase):
             'BACKUP_OFFSITE_ENABLED must stay "true"',
         )
 
+class TestComposeConsolidationIsTriggered(unittest.TestCase):
+    """The invariants above are only enforced if CI runs on the file they read.
+
+    AUT-5069: `docker-compose.hosted.yml` was absent from ci-tests.yml's
+    `paths:` filters, so a PR touching only the hosted compose file skipped
+    the release-scripts job entirely and the AUT-3944 invariants went
+    unenforced for exactly the file they guard.
+    """
+
+    def setUp(self):
+        with open(CI_WORKFLOW) as f:
+            doc = yaml.safe_load(f)
+        # YAML 1.1 parses a bare `on:` key as the boolean True.
+        self.on = doc.get("on", doc.get(True))
+        self.assertIsNotNone(self.on, "ci-tests.yml has no trigger block")
+
+    def test_pull_request_triggered_by_hosted_compose(self):
+        self.assertIn("docker-compose.hosted.yml", self.on["pull_request"]["paths"])
+
+    def test_push_to_main_triggered_by_hosted_compose(self):
+        self.assertIn("docker-compose.hosted.yml", self.on["push"]["paths"])
 
 class TestComposeConsolidationMigrations(unittest.TestCase):
     """AUT-5088: the backend must run `alembic upgrade head` before it serves.
@@ -230,6 +244,7 @@ class TestComposeConsolidationMigrations(unittest.TestCase):
         rc, out = run_check(broken(set_backend_command(reordered)))
         self.assertEqual(rc, 1, out)
         self.assertIn("must run before bootstrap/uvicorn (AUT-5088)", out)
+
 
 if __name__ == "__main__":
     unittest.main()
