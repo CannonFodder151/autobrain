@@ -70,6 +70,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed (AUT-5460)
 - fix(nginx): a customer's first login attempt could return `429 Too many failed login attempts` instead of `401` — behind Cloudflare, nginx's `$remote_addr` is the Cloudflare **edge** IP, so the `X-Real-IP` header the frontend proxy set was the edge IP and every visitor on that edge node shared one `login:fail:ip:<edge>` bucket (`LOGIN_MAX_ATTEMPTS=5`, `LOGIN_WINDOW_SECONDS=3h`). Five failed logins by *anyone* locked out *everyone* behind that edge for three hours, which is why the report looked intermittent (the shared bucket refills). `docker/frontend/nginx.conf` and `docker/frontend/nginx-proxy.conf` now enable nginx's realip module (`real_ip_header CF-Connecting-IP` + `set_real_ip_from` for Cloudflare's published edge ranges), so the `X-Real-IP` they already send carries the real visitor. Deliberately **no** backend change: `client_ip()` keeps trusting only the proxy-set `X-Real-IP` and the socket peer, never a client-supplied `CF-Connecting-IP` / `X-Forwarded-For`, so the AUT-303 spoof bypass stays closed — `set_real_ip_from` is the trust boundary, and a request arriving from outside a Cloudflare range is never rewritten. Adds `backend/tests/test_aut5460_cf_real_ip.py`, which pins every edge range in both configs, the `/api` proxy header that forwards the rewritten address, and the AUT-303 behaviour of `client_ip()`.
 
+- feat(ops): detect #marketing approval decisions from text (AUT-4535, AUT-5450).
+  Approval monitoring only read emoji reactions, so Nathan's text
+  approvals ("Approved", "I approve all", "Approve all") were never
+  seen — AUT-3989 and AUT-4507 both sat unanswered. New
+  `scripts/approval_watcher.py` polls `GET /channels/{id}/messages`,
+  resolves the target `AUT-XXXX` per message (own text, the message
+  it replies to, else the nearest preceding bot post), and reports
+  text and reaction decisions for any approval task in the channel.
+  `scripts/test_approval_watcher.py` covers the text path, target
+  resolution for already-posted tasks, and no-double-apply on repoll.
+
 ## [0.3.311] - 2026-10-04
 
 ### Changed (AUT-5532)
@@ -166,8 +177,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   `backend/tests/test_workers.py` and the real-task regression in
   `backend/tests/test_backup_offsite.py`.
 
-## [0.3.302] - 2026-10-02
-- fix(fuel): disable the SA (SAFPIS) feed (AUT-5072).
+## [0.3.302] - 2026-10-02- fix(fuel): disable the SA (SAFPIS) feed (AUT-5072).
   `FUEL_SA_ENABLED: "true"` was set in both compose files
   (AUT-2610) with a seeded `fuel_sa_api_key` secret, but no
   `ingest_sa_*` function exists — `ingest_all_fuel()` only
