@@ -65,5 +65,13 @@ celery_app.conf.update(
             "task": "app.workers.tasks.refresh_sca_parts_cache",
             "schedule": crontab(hour=0, minute=0),
         },
+        # AUT-4113: daily market-data cache refresh — re-scrape CarsGuide/BikesGuide
+        # for every distinct make/model/year in the fleet so valuations stay fresh.
+        # Deterministic-first (no AI, no spend); a single vehicle failure is logged
+        # and skipped, never aborting the rest of the sweep.
+        "refresh-market-data-daily": {
+            "task": "app.workers.tasks.refresh_market_data",
+            "schedule": crontab(hour=3, minute=0),
+        },
     },
 )

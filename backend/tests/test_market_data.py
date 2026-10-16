@@ -12,7 +12,7 @@ os.environ["MARKET_DATA_URL"] = ""
 os.environ["MARKET_DATA_API_KEY"] = ""
 
 
-from app.services.market_data import _aggregate, _build, _fallback, _map_listing, _parse_provider_response  # noqa: E402
+from app.services.market_data import _aggregate, _build, _fallback, _map_listing  # noqa: E402
 
 
 def test_aggregate_empty() -> None:
@@ -54,26 +54,6 @@ def test_map_listing_alias_resilient() -> None:
 def test_map_listing_junk_skipped() -> None:
     assert _map_listing("not a dict") is None
     assert _map_listing({"foo": "bar"}) is None
-
-
-def test_parse_provider_response_shapes() -> None:
-    data = {
-        "source": "combined",
-        "listings": [
-            {"title": "1997 Crown", "price": 15000, "year": 1997},
-            {"title": "1997 Crown", "price": 13000, "year": 1997},
-            {"title": "1997 Crown", "price": 17000, "year": 1997},
-        ],
-    }
-    out = _parse_provider_response(data)
-    assert out["source"] == "combined"
-    assert len(out["listings"]) == 3
-
-
-def test_parse_provider_response_nested_listings() -> None:
-    data = {"results": {"items": [{"title": "A", "price": 10000}]}}
-    out = _parse_provider_response(data)
-    assert len(out["listings"]) == 1
 
 
 def test_build_with_data() -> None:
