@@ -1,7 +1,10 @@
-// Regression guard for AUT-2383: the CARTO basemap URL must use the
-// `?key=` query parameter. The old `?api_key=` was silently ignored by
-// CARTO, so tiles rendered with the "API key required" watermark even
-// when the key was injected via --dart-define=CARTO_API_KEY.
+// Regression guard for AUT-2383 / AUT-4736: the CARTO basemap URL must use
+// the `?key=` query parameter (the legacy `?api_key=` is silently ignored by
+// CARTO, leaving the "API key required" watermark) AND the tile urlTemplate
+// must actually interpolate the key param -- declaring it without using it
+// fails silently (AUT-4736).
+
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
@@ -23,6 +26,27 @@ void main() {
       expect(out, isNot(contains('api_key')),
           reason: 'CARTO ignores ?api_key= and shows the watermark');
       expect(out, contains('?key='));
+    });
+  });
+
+  group('tile urlTemplate wiring (AUT-4736)', () {
+    late String source;
+
+    setUpAll(() {
+      source = File('lib/screens/servo_spy/servo_spy_screen.dart').readAsStringSync();
+    });
+
+    test('both dark and light urlTemplates interpolate _kCartoKeyParam', () {
+      final templates = RegExp(r"'https://\{s\}\.basemaps\.cartocdn\.com/[^']+'")
+          .allMatches(source)
+          .map((m) => m.group(0)!)
+          .toList();
+      expect(templates, hasLength(2));
+      for (final t in templates) {
+        expect(t, contains(r'${_kCartoKeyParam}'),
+            reason: 'urlTemplate without the key param renders watermapped '
+                'tiles even when CARTO_API_KEY is injected at build time');
+      }
     });
   });
 }
