@@ -7,6 +7,7 @@ import 'package:autobrain/core/api_client.dart';
 import 'package:autobrain/core/auth_state.dart';
 import 'package:autobrain/core/theme.dart';
 import 'package:autobrain/core/models.dart';
+import 'package:autobrain/core/connectivity_service.dart';
 import 'package:autobrain/screens/home/home_screen.dart';
 import 'package:autobrain/screens/vehicles/vehicle_list_screen.dart';
 import 'package:autobrain/widgets/responsive.dart';
@@ -34,15 +35,6 @@ class _FakeApi extends ApiClient {
         ),
       ];
     }
-    if (path == '/vehicle-shares') return <dynamic>[];
-    return <String, dynamic>{};
-  }
-
-  @override
-  Future<dynamic>? getCachedDecoded(String path, Map<String, String>? query) {
-    return null;
-  }
-}
     if (path == '/vehicle-shares') return <dynamic>[];
     return <String, dynamic>{};
   }
@@ -88,6 +80,8 @@ Future<void> _pumpAtSize(WidgetTester tester, Widget child, Size size) async {
 }
 
 void main() {
+  ConnectivityService.testMode = true;
+  ConnectivityService.instance.setOnline(true);
   group('HomeScreen desktop layout goldens', () {
     for (final entry in _kSizes.entries) {
       final width = entry.key;
