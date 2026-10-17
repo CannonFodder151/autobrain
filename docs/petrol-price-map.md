@@ -31,18 +31,41 @@ FUEL_NSW_API_URL        # optional override (defaults to the official endpoint)
 FUEL_NSW_POLL_HOURS     # optional override (default 24)
 ```
 
-VIC (implemented):
+VIC (fully implemented via AUT-2132 polling consumer):
 
 ```
 FUEL_VIC_API_KEY        # Servo Saver approved partner key
+FUEL_VIC_API_SECRET     # optional, server-cached secret
 FUEL_VIC_ENABLED        # "true" to poll; "false"/empty disables
+FUEL_VIC_URL            # defaults to https://api.servosaver.com.au/v1/prices
 ```
 
-The normaliser (`backend/app/services/fuel_prices.py`) reads these from the
+The normaliser (`backend/app/services/fuel_feeds.py`) reads these from the
 process environment via `app.core.config` settings. There are **no baked-in
-keys** — if `FUEL_NSW_API_KEY`/`FUEL_NSW_API_SECRET` are absent the source is
-silently skipped (`enabled()` returns False), so an unconfigured instance never
-polls an external feed (AUT-1858 / AUT-1817).
+keys** — if `FUEL_VIC_API_KEY` is absent or `FUEL_VIC_ENABLED` is false the
+source is silently skipped (no network call), so an unconfigured instance never
+polls the external feed.
+
+## VIC Servo Saver polling (AUT-2132)
+
+The `poll_vic_fuel_prices` Celery task runs once per day via the
+`poll-vic-fuel-prices` beat schedule entry. It checks `FUEL_VIC_ENABLED` and
+`FUEL_VIC_API_KEY` before fetching; absent either, the task is a silent no-op.
+Results are stored in the `fuel_stations` / `fuel_prices` tables and served by
+`GET /api/fuel/vic` (stations within the VIC Servo Saver feed with their latest
+prices).
+
+## API
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/fuel/stations` | All Servo Spy stations within radius (WA/NSW/QLD/VIC) |
+| `GET /api/fuel/vic` | VIC Servo Saver stations + latest prices (AUT-2132) |
+| `GET /fuel/stations/{id}/history` | 30-day price history for one station |
+
+The `GET /api/fuel/vic` endpoint accepts an optional `fuel_type` query param
+and returns `FuelStationOut` records (same schema as `/fuel/stations`), filtered
+to `source="vic"`.
 
 ## Scoping (AUT-1858)
 
@@ -79,15 +102,19 @@ Set them in your `.env` (copy of `.env.example`):
 FUEL_NSW_API_KEY=your-nsw-key
 FUEL_NSW_API_SECRET=your-nsw-secret
 FUEL_NSW_ENABLED=true
+FUEL_VIC_API_KEY=your-vic-key
+FUEL_VIC_API_SECRET=your-vic-secret  # optional
+FUEL_VIC_ENABLED=true
 ```
 
 `docker compose up -d` then injects them via `env_file: .env`. Leave any you
-don't have blank (and `FUEL_NSW_ENABLED=false`) to disable that source.
+don't have blank (and `*_ENABLED=false`) to disable that source.
 
 ## Hosted / Default (AutoBrain-operated)
 
-Nathan sets the real NSW key/secret in the Portainer stack env for EP5 (hosted)
-and the default dev/EP6 stack, then runs `scripts/seed-secrets.sh <stack-env>`
-so they become `fuel_nsw_api_key` / `fuel_nsw_api_secret` under
+Nathan sets the real NSW key/secret and VIC key/secret in the Portainer stack
+env for EP5 (hosted) and the default dev/EP6 stack, then runs
+`scripts/seed-secrets.sh <stack-env>` so they become `fuel_nsw_api_key` /
+`fuel_nsw_api_secret` and `fuel_vic_api_key` / `fuel_vic_api_secret` under
 `/opt/autobrain/secrets`. The compose files reference them via `*_FILE`; they
 never appear in git or `docker inspect`.

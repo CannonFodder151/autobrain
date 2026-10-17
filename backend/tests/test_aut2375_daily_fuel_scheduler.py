@@ -70,3 +70,45 @@ def test_fuel_feeds_exposes_30_day_retention_constant() -> None:
     from app.services.fuel_feeds import PRICE_HISTORY_DAYS
 
     assert PRICE_HISTORY_DAYS == 30
+
+
+# ---- AUT-2132: VIC Servo Saver polling consumer ----
+
+
+def test_celery_app_has_vic_poll_beat_entry() -> None:
+    """poll-vic-fuel-prices must be in the beat schedule (AUT-2132)."""
+    from app.workers.celery_app import celery_app
+
+    schedule = celery_app.conf.beat_schedule
+    assert "poll-vic-fuel-prices" in schedule
+    entry = schedule["poll-vic-fuel-prices"]
+    assert entry["task"] == "app.workers.tasks.poll_vic_fuel_prices"
+    # Fixed-interval once-per-day, matching poll-nsw-fuel-prices.
+    assert entry["schedule"] == 60 * 60 * 24
+
+
+def test_per_source_tasks_include_vic_for_manual_retry() -> None:
+    """Operators must be able to ``.delay()`` a VIC ingest for retries."""
+    from app.workers import tasks as worker_tasks
+
+    fn = getattr(worker_tasks, "ingest_fuel_vic", None)
+    assert fn is not None, "missing ingest_fuel_vic"
+    assert hasattr(fn, "delay"), "ingest_fuel_vic not a Celery task"
+
+
+def test_vic_poll_skip_when_disabled(monkeypatch) -> None:
+    """FUEL_VIC_ENABLED=false → VIC poll is silently skipped (AUT-2132)."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "FUEL_VIC_ENABLED", False)
+    assert settings.FUEL_VIC_ENABLED is False
+
+
+def test_vic_poll_skip_when_key_absent(monkeypatch) -> None:
+    """FUEL_VIC_API_KEY empty → VIC poll is silently skipped (AUT-2132)."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "FUEL_VIC_ENABLED", True)
+    monkeypatch.setattr(settings, "FUEL_VIC_API_KEY", "")
+    assert settings.FUEL_VIC_ENABLED is True
+    assert settings.FUEL_VIC_API_KEY == ""

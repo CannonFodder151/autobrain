@@ -170,6 +170,40 @@ If ``vehicle_id`` is provided and the user can access that vehicle, each
     return out
 
 
+@router.get("/vic", response_model=list[FuelStationOut])
+async def fuel_vic_stations(
+    response: Response,
+    fuel_type: str | None = Query(default=None, description="Filter to a canonical fuel type (91/95/98/E10/Diesel/LPG)"),
+    limit: int = Query(200, ge=1, le=500),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_fuel_access),
+):
+    """VIC Servo Saver stations + latest prices (AUT-2132).
+
+    Returns all VIC-sourced stations from the cached ``fuel_stations`` table,
+    optionally filtered to one fuel type. Serves only cached rows written by the
+    daily ``fuel-ingest-all-daily`` beat task — never fans out to the upstream
+    Servo Saver API on a client request.
+    """
+    _set_attribution(response)
+    q = select(FuelStation).where(FuelStation.source == "vic")
+    if fuel_type:
+        q = q.where(FuelStation.id.in_(
+            select(FuelPrice.station_id)
+            .where(FuelPrice.fuel_type == fuel_type)
+            .distinct()
+        ))
+    stations = list((await db.scalars(q.limit(limit))).all())
+    out: list[FuelStationOut] = []
+    for s in stations:
+        prices = list((await db.scalars(
+            select(FuelPrice).where(FuelPrice.station_id == s.id)
+            .order_by(FuelPrice.fuel_type, FuelPrice.effective_at.desc())
+        )).all())
+        out.append(_station_out(s, prices, None, None))
+    return out
+
+
 @router.get("/station/{station_id}/prices", response_model=FuelStationOut)
 async def station_prices(
     station_id: str,
