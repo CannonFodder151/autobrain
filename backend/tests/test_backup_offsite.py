@@ -151,7 +151,7 @@ def test_hourly_push_deletes_nothing_on_an_in_policy_store(monkeypatch):
     asyncio.run(backup_offsite.run_backup_offsite())
 
     assert [c for c in calls if c[0] == "DELETE"] == [], "backend must never delete off-site backups"
-    assert [c for c in calls if c[0] == "POST"] == [("POST", "/api/backup/ingest")]
+    assert [c for c in calls if c[0] == "POST"] == [("POST", "/ingest")]
 
 
 def test_hourly_push_skips_when_disabled(monkeypatch):

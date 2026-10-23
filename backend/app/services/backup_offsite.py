@@ -69,6 +69,8 @@ async def run_backup_offsite() -> None:
         payload = dump_backup(data)
 
     ok = await _push_offsite(payload, filename)
+    if not ok:
+        raise RuntimeError("Offsite backup push failed")
 
     logger.info(
         "offsite_backup_done",
