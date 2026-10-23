@@ -12,7 +12,7 @@ playwright-stealth==2.0.3
 
 # Local OCR fallback (Tesseract via pytesseract, optional runtime dep)
 pytesseract==0.3.13
-pillow==12.3.0
+pillow==13.0.0
 pypdf==6.19.0
 
 # AUT-1189: exact transitive pins for known-CVE packages. The resolved-tree
