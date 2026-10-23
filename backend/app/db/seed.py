@@ -109,6 +109,18 @@ async def seed_demo() -> None:
     async with SessionLocal() as db:
         existing = await db.scalar(select(User).where(User.email == email))
         if existing:
+            # Idempotent re-seed of demo fuel stations (AUT-4103): if the
+            # demo user pre-exists but fuel stations are missing (e.g. an
+            # instance deployed before AUT-3162), seed them now without
+            # duplicating existing data.
+            from app.models.fuel_station import FuelStation
+
+            has_stations = await db.scalar(
+                select(FuelStation.id).where(FuelStation.source == "demo").limit(1)
+            )
+            if has_stations is None:
+                await _seed_demo_fuel_stations(db)
+                await db.commit()
             logger.info("demo_seed_already_exists", email=email)
             return
         demo = User(
