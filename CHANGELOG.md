@@ -9,6 +9,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
 ## [Unreleased]
+### Added (AUT-3810)
+- feat(backend): merge market-data scraper into backend as in-process services (Phase 1a container consolidation); CarsGuide search + SCA parts-guide taxonomy scrapers (pure HTTP, no browser); refresh_market_data_cache Celery task + daily beat schedule (01:00 AEST); container count stays at 10 on hosted (market-data already removed, capability restored in-process) (PR #782)
+
 ### Added (AUT-6519)
 - docs: add secret-file-pattern.md documenting AUT-1533 *_FILE secret injection pattern for docker-compose (AUT-6519)
 
