@@ -1,6 +1,8 @@
 # Container Consolidation — Migration Checklist (AUT-3153, AUT-3810, AUT-3824, AUT-3827)
 
-Phase 1(a): reduce the number of containers in the AutoBrain stack.
+Status: complete — hosted stack is at the 9-container target; worker/ai/market-data/backup-agent already merged.
+
+Phase 1(a): reduce the number of containers in the AutoBrain stack (done).
 
 ## Exception — EP2 personal/non-AutoBrain containers STAY (AUT-4502, board directive 2026-09-29)
 
