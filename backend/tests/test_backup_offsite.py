@@ -151,7 +151,7 @@ def test_hourly_push_deletes_nothing_on_an_in_policy_store(monkeypatch):
     asyncio.run(backup_offsite.run_backup_offsite())
 
     assert [c for c in calls if c[0] == "DELETE"] == [], "backend must never delete off-site backups"
-    assert [c for c in calls if c[0] == "POST"] == [("POST", "/api/backup/ingest")]
+    assert [c for c in calls if c[0] == "POST"] == [("POST", "/ingest")]
 
 
 def test_hourly_push_skips_when_disabled(monkeypatch):
@@ -169,6 +169,54 @@ def test_hourly_push_skips_when_disabled(monkeypatch):
 
     asyncio.run(backup_offsite.run_backup_offsite())
     assert calls == []
+
+def test_push_failure_raises(monkeypatch):
+    """AUT-4821 regression: a failed push must propagate as an exception.
+
+    Before the fix `run_backup_offsite` returned `False` from `_push_offsite`
+    and then logged `offsite_backup_done pushed=False` — the Celery task
+    therefore reported **succeeded** on a no-op, exactly the silent-failure
+    class AUT-4821 is about. A push failure is now a RuntimeError so the beat
+    scheduler and Celery retry see a real failure.
+    """
+    from app.core.config import settings
+    from app.db import session as session_mod
+
+    class _FakeClient:
+        def __init__(self, *a, **kw):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def post(self, url, **kw):
+            return httpx.Response(500, request=httpx.Request("POST", str(url)))
+
+    class _FakeSession:
+        async def __aenter__(self):
+            return object()
+
+        async def __aexit__(self, *exc):
+            return False
+
+    async def _fake_serialize(db):
+        return {"data": {"cars": []}}
+
+    monkeypatch.setattr(backup_offsite.httpx, "AsyncClient", _FakeClient)
+    monkeypatch.setattr(backup_offsite, "serialize_all", _fake_serialize)
+    monkeypatch.setattr(session_mod, "SessionLocal", _FakeSession)
+    monkeypatch.setattr(settings, "BACKUP_OFFSITE_ENABLED", True)
+    monkeypatch.setattr(settings, "BACKUP_OFFSITE_URL", "http://backup:8080")
+    monkeypatch.setattr(settings, "BACKUP_OFFSITE_INSTANCE", "hosted")
+
+    import pytest
+
+    with pytest.raises(RuntimeError):
+        asyncio.run(backup_offsite.run_backup_offsite())
+
 
 def test_celery_task_actually_awaits_the_push(monkeypatch):
     """The @shared_task entrypoint must drive the coroutine to completion.
