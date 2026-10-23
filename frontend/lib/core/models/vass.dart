@@ -982,97 +982,100 @@ class ModificationItem {
 }
 
 class ModificationChecklistRequest {
+  final String vehicleId;
   final List<ModificationItem> modifications;
-  final String vehicleCategory;
   final VassJurisdiction jurisdiction;
 
   const ModificationChecklistRequest({
-    required this.modifications,
-    this.vehicleCategory = 'passenger',
+    required this.vehicleId,
+    this.modifications = const [],
     this.jurisdiction = VassJurisdiction.VIC,
   });
 
   Map<String, dynamic> toJson() => {
+        'vehicle_id': vehicleId,
         'modifications': modifications.map((m) => m.toJson()).toList(),
-        'vehicle_category': vehicleCategory,
-        'jurisdiction': jurisdiction.value,
+        'state': jurisdiction.value,
       };
 }
 
 class ChecklistItemOut {
-  final String id;
   final String category;
   final String name;
   final String description;
-  final bool required;
   final List<String> adrReferences;
   final List<String> vsbReferences;
-  final int? estCostAud;
+  final List<String> vsiReferences;
+  final bool requiresEngineerCertification;
+  final bool requiresLabTesting;
   final String? notes;
 
   const ChecklistItemOut({
-    required this.id,
     required this.category,
     required this.name,
     required this.description,
-    required this.required,
     this.adrReferences = const [],
     this.vsbReferences = const [],
-    this.estCostAud,
+    this.vsiReferences = const [],
+    this.requiresEngineerCertification = false,
+    this.requiresLabTesting = false,
     this.notes,
   });
 
   factory ChecklistItemOut.fromJson(Map<String, dynamic> json) {
     return ChecklistItemOut(
-      id: json['id'] as String,
       category: json['category'] as String,
-      name: json['name'] as String,
+      name: json['modification_name'] as String,
       description: json['description'] as String,
-      required: json['required'] as bool? ?? true,
       adrReferences: (json['adr_references'] as List? ?? [])
           .map((e) => e as String)
           .toList(),
-      vsbReferences: (json['vsb_references'] as List? ?? [])
+      vsbReferences: (json['vsb6_references'] as List? ?? [])
           .map((e) => e as String)
           .toList(),
-      estCostAud: json['est_cost_aud'] as int?,
+      vsiReferences: (json['vsi_references'] as List? ?? [])
+          .map((e) => e as String)
+          .toList(),
+      requiresEngineerCertification:
+          json['requires_engineer_certification'] as bool? ?? false,
+      requiresLabTesting: json['requires_lab_testing'] as bool? ?? false,
       notes: json['notes'] as String?,
     );
   }
 }
 
 class ModificationChecklistResponse {
-  final List<ModificationItem> modifications;
-  final String vehicleCategory;
-  final String jurisdiction;
+  final String vehicleId;
+  final String state;
   final List<ChecklistItemOut> checklist;
+  final String generatedAt;
   final int totalItems;
-  final int requiredItems;
-  final int estTotalCostAud;
+  final int itemsRequiringCertification;
+  final int itemsRequiringLabTesting;
 
   const ModificationChecklistResponse({
-    required this.modifications,
-    required this.vehicleCategory,
-    required this.jurisdiction,
+    required this.vehicleId,
+    required this.state,
     required this.checklist,
+    required this.generatedAt,
     required this.totalItems,
-    required this.requiredItems,
-    required this.estTotalCostAud,
+    required this.itemsRequiringCertification,
+    required this.itemsRequiringLabTesting,
   });
 
   factory ModificationChecklistResponse.fromJson(Map<String, dynamic> json) {
     return ModificationChecklistResponse(
-      modifications: (json['modifications'] as List? ?? [])
-          .map((e) => ModificationItem.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      vehicleCategory: json['vehicle_category'] as String? ?? 'passenger',
-      jurisdiction: json['jurisdiction'] as String? ?? 'VIC',
+      vehicleId: json['vehicle_id'] as String? ?? '',
+      state: json['state'] as String? ?? '',
       checklist: (json['checklist'] as List? ?? [])
           .map((e) => ChecklistItemOut.fromJson(e as Map<String, dynamic>))
           .toList(),
+      generatedAt: json['generated_at'] as String? ?? '',
       totalItems: json['total_items'] as int? ?? 0,
-      requiredItems: json['required_items'] as int? ?? 0,
-      estTotalCostAud: json['est_total_cost_aud'] as int? ?? 0,
+      itemsRequiringCertification:
+          json['items_requiring_certification'] as int? ?? 0,
+      itemsRequiringLabTesting:
+          json['items_requiring_lab_testing'] as int? ?? 0,
     );
   }
 }
