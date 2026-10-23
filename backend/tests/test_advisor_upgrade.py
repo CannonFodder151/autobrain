@@ -499,6 +499,7 @@ async def test_find_upgrade_options_empty_when_make_or_model_missing() -> None:
 @pytest.mark.asyncio
 async def test_find_similar_vehicles_excludes_own_make_model(monkeypatch) -> None:
     from app.services import advisor as advisor_mod
+    from app.services.advisor import upgrade as upgrade_mod
 
     v = _vehicle(make="Toyota", model="Corolla", year=date_now_year() - 4)
 
@@ -506,6 +507,7 @@ async def test_find_similar_vehicles_excludes_own_make_model(monkeypatch) -> Non
         return {"median_price": 20_000 if year == v.year else 22_000}
 
     monkeypatch.setattr(advisor_mod, "get_market_data", _fake_market)
+    monkeypatch.setattr(upgrade_mod, "get_market_data", _fake_market)
 
     # Build a fake session whose scalars() returns two Honda rows + one Toyota.
     class _Scalars:
