@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AUT-1720 + AUT-4949: free queued workflow runs that are dead weight on the
+# AUT-1720 + AUT-4949 + AUT-5106: free queued workflow runs that are dead weight on the
 # self-hosted runner fleet.
 #
 # Three classes are cancelled:
@@ -22,8 +22,15 @@
 set -euo pipefail
 
 repo="${1:?usage: ci-queue-guard.sh <repo>}"
+# AUT-5106: explicit UTC timestamp check for schedule reliability debugging
+echo "ci-queue-guard: tick at $(date -u -Iseconds) UTC"
 # NOW_EPOCH is a test seam so fixture timestamps are deterministic.
 now=${NOW_EPOCH:-$(date -u +%s)}
+# Sanity check: ensure we have a valid UTC timestamp
+if [ -z "$now" ] || [ "$now" -lt 0 ] 2>/dev/null; then
+  echo "::error::ci-queue-guard: invalid UTC timestamp" >&2
+  exit 1
+fi
 push_ttl="${PUSH_TTL_MINUTES:-45}"
 pr_ttl="${PR_TTL_MINUTES:-240}"
 
