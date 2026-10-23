@@ -45,15 +45,17 @@ jobs:
             *) echo "unsupported arch: $ARCH"; exit 1 ;;
           esac
           curl -fsSL "https://github.com/regclient/regclient/releases/latest/download/regctl-linux-${REGCTL_ARCH}" \
-            -o /usr/local/bin/regctl
-          chmod +x /usr/local/bin/regctl
+            -o "$RUNNER_TEMP/regctl"
+          chmod +x "$RUNNER_TEMP/regctl"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
           regctl version
 
       - name: Resolve current stable-alpine digest
         id: digest
         run: |
           set -euo pipefail
-          DIGEST="$(regctl image digest --platform linux/amd64 "${{ env.IMAGE_TAG }}")"
+          # Resolve the multi-arch INDEX digest, not a per-arch manifest digest.
+          DIGEST="$(regctl image digest "${{ env.IMAGE_TAG }}")"
           echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
           echo "current stable-alpine digest: $DIGEST"
           if [ "$DIGEST" = "${{ env.PINNED_DIGEST }}" ]; then
