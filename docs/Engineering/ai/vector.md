@@ -133,3 +133,143 @@ model. The chain is linear — single head `m3rge06` (verified by
 - 9Router unreachable → keyword-only search
 - Embedding generation fails → entity skipped, keyword-only
 - pgvector extension missing → search endpoint returns empty results (no crash)
+
+## Embedding model upgrade runbook
+
+Upgrading `EMBEDDING_MODEL` / `EMBEDDING_DIMENSION` (e.g. moving from
+`text-embedding-3-small` (1536) to a new model) is a data-migration, not just
+a config change. Columns are typed `vector(N)`; changing N requires a new
+column. Follow this order to avoid downtime.
+
+### 0. Pre-checks
+
+- Confirm the new model is served by 9Router (`POST /v1/embeddings` with the new
+  model name returns the new dimension). Record old/new dimensions.
+- Back up the database (pg_dump) — embedding columns are large; the dump
+  includes them.
+- Note the current migration head (`alembic current`) — every step below must
+  keep `backend/tests/test_alembic_heads.py` green (single head).
+
+### 1. Dual-write (add new column, keep old)
+
+Create a new Alembic migration that, for each of the five embedding tables
+(`diagnostics`, `service_records`, `modifications`, `receipts`,
+`social_issue_posts`):
+
+1. Adds `embedding_new vector(<NEW_DIM>)` (nullable).
+2. Creates an HNSW index on `embedding_new`.
+3. Leaves the old `embedding` column and its index in place.
+
+Update `EMBEDDING_DIMENSION` to the new value **only** after this migration is
+applied in production. Until then keep the old value so embed-on-create keeps
+writing the old column.
+
+Code change: in `backend/app/services/vector_search.py`, `generate_embedding`
+writes to **both** columns during the dual-write window (old + new). Guard the
+new-column write behind `settings.EMBEDDING_DIMENSION_NEW` (add this setting,
+default `None` = no dual-write) so the change is opt-in and reversible.
+
+### 2. Backfill
+
+Run a one-off Celery task (or extend `backfill_entity_embeddings`) that
+re-embeds every row's source text with the new model and writes
+`embedding_new`. Process in batches of 100, checkpoint progress in a small
+`embedding_backfill_state` table (table, last_id, done). Re-runnable and
+idempotent. Do not block reads during backfill.
+
+### 3. Flip reads
+
+Once backfill coverage is 100% (verify with
+`SELECT count(*) FILTER (WHERE embedding_new IS NULL) FROM <table>` = 0 for all
+five tables):
+
+1. Switch `EMBEDDING_DIMENSION` to the new value.
+2. In `vector_search.py` read from `embedding_new` (rename usage) and stop
+   writing the old column.
+3. Deploy. Verify `GET /api/v1/search` returns results and that new entities
+   get embeddings.
+
+### 4. Drop old (after soak)
+
+After at least one full release cycle with no rollback:
+
+1. Migration: drop `embedding` column + its HNSW index on all five tables.
+2. Rename `embedding_new` → `embedding` (so the schema stays stable for the
+   next upgrade cycle).
+3. Remove `EMBEDDING_DIMENSION_NEW` and dual-write code.
+4. Update this doc's "Columns" table dimension.
+
+### Rollback
+
+At any point before step 4, revert by setting `EMBEDDING_DIMENSION` back to
+the old value and redeploying — the old column is untouched until step 4.
+
+## Embedding model upgrade runbook
+
+Upgrading `EMBEDDING_MODEL` / `EMBEDDING_DIMENSION` (e.g. moving from
+`text-embedding-3-small` (1536) to a new model) is a data-migration, not just
+a config change. Columns are typed `vector(N)`; changing N requires a new
+column. Follow this order to avoid downtime.
+
+### 0. Pre-checks
+
+- Confirm the new model is served by 9Router (`POST /v1/embeddings` with the new
+  model name returns the new dimension). Record old/new dimensions.
+- Back up the database (pg_dump) — embedding columns are large; the dump
+  includes them.
+- Note the current migration head (`alembic current`) — every step below must
+  keep `backend/tests/test_alembic_heads.py` green (single head).
+
+### 1. Dual-write (add new column, keep old)
+
+Create a new Alembic migration that, for each of the five embedding tables
+(`diagnostics`, `service_records`, `modifications`, `receipts`,
+`social_issue_posts`):
+
+1. Adds `embedding_new vector(<NEW_DIM>)` (nullable).
+2. Creates an HNSW index on `embedding_new`.
+3. Leaves the old `embedding` column and its index in place.
+
+Update `EMBEDDING_DIMENSION` to the new value **only** after this migration is
+applied in production. Until then keep the old value so embed-on-create keeps
+writing the old column.
+
+Code change: in `backend/app/services/vector_search.py`, `generate_embedding`
+writes to **both** columns during the dual-write window (old + new). Guard the
+new-column write behind `settings.EMBEDDING_DIMENSION_NEW` (add this setting,
+default `None` = no dual-write) so the change is opt-in and reversible.
+
+### 2. Backfill
+
+Run a one-off Celery task (or extend `backfill_entity_embeddings`) that
+re-embeds every row's source text with the new model and writes
+`embedding_new`. Process in batches of 100, checkpoint progress in a small
+`embedding_backfill_state` table (table, last_id, done). Re-runnable and
+idempotent. Do not block reads during backfill.
+
+### 3. Flip reads
+
+Once backfill coverage is 100% (verify with
+`SELECT count(*) FILTER (WHERE embedding_new IS NULL) FROM <table>` = 0 for all
+five tables):
+
+1. Switch `EMBEDDING_DIMENSION` to the new value.
+2. In `vector_search.py` read from `embedding_new` (rename usage) and stop
+   writing the old column.
+3. Deploy. Verify `GET /api/v1/search` returns results and that new entities
+   get embeddings.
+
+### 4. Drop old (after soak)
+
+After at least one full release cycle with no rollback:
+
+1. Migration: drop `embedding` column + its HNSW index on all five tables.
+2. Rename `embedding_new` → `embedding` (so the schema stays stable for the
+   next upgrade cycle).
+3. Remove `EMBEDDING_DIMENSION_NEW` and dual-write code.
+4. Update this doc's "Columns" table dimension.
+
+### Rollback
+
+At any point before step 4, revert by setting `EMBEDDING_DIMENSION` back to
+the old value and redeploying — the old column is untouched until step 4.
