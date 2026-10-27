@@ -19,19 +19,59 @@ def parse(s):
     return datetime.fromisoformat(s.replace('Z','+00:00'))
 
 def get_issues(params=None):
-    r = requests.get(f"{API_URL}/api/companies/{COMPANY_ID}/issues", headers=HEADERS, params=params or {})
-    r.raise_for_status()
-    data = r.json()
-    return data.get('issues', data) if isinstance(data, dict) else data
+    # AUT-5567: on 504 (proxy gave up), retry once after 5s; on second 504 return [].
+    for attempt in (1, 2):
+        try:
+            r = requests.get(f"{API_URL}/api/companies/{COMPANY_ID}/issues", headers=HEADERS, params=params or {}, timeout=90)
+            if r.status_code == 504:
+                if attempt == 1:
+                    time.sleep(5); continue
+                return []
+            r.raise_for_status()
+            data = r.json()
+            return data.get('issues', data) if isinstance(data, dict) else data
+        except requests.exceptions.RequestException:
+            if attempt == 1:
+                time.sleep(5); continue
+            return []
+    return []
 
 def get_issue(iid):
-    r = requests.get(f"{API_URL}/api/issues/{iid}", headers=HEADERS)
-    r.raise_for_status()
-    return r.json()
+    for attempt in (1, 2):
+        try:
+            r = requests.get(f"{API_URL}/api/issues/{iid}", headers=HEADERS, timeout=90)
+            if r.status_code == 504:
+                if attempt == 1:
+                    time.sleep(5); continue
+                return None
+            r.raise_for_status()
+            return r.json()
+        except requests.exceptions.RequestException:
+            if attempt == 1:
+                time.sleep(5); continue
+            return None
+    return None
 
 def patch_issue(iid, payload):
-    r = requests.patch(f"{API_URL}/api/issues/{iid}", headers=HEADERS, json=payload, timeout=90)
-    return r.status_code, r.text
+    # AUT-5567: on 504, verify by GET first; retry once only if change absent; stop after double 504.
+    for attempt in (1, 2):
+        try:
+            r = requests.patch(f"{API_URL}/api/issues/{iid}", headers=HEADERS, json=payload, timeout=90)
+            if r.status_code == 504:
+                # verify whether it committed
+                cur = get_issue(iid)
+                if cur is not None and all(cur.get(k) == v for k, v in payload.items()):
+                    return 200, 'committed-after-504'
+                if attempt == 1:
+                    time.sleep(5); continue
+                return 504, 'double-504-stop'
+            r.raise_for_status()
+            return r.status_code, r.text
+        except requests.exceptions.RequestException:
+            if attempt == 1:
+                time.sleep(5); continue
+            return 504, 'exception'
+    return 504, 'exhausted'
 
 def discord(channel, title, description, color='0xED4245', fields=None):
     payload = {'channel': channel, 'title': title, 'description': description, 'color': color, 'author': 'CEO', 'fields': fields or []}
