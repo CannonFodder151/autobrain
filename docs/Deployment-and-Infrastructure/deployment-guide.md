@@ -408,3 +408,12 @@ On Portainer: redeploy the previous stack definition / image tag. In a
 migration, keep the old host running and flip DNS back to roll back — see
 `server-migration.md`.
 
+
+## Hosted image supply chain (AUT-4262)
+
+- **Signing identity**: GitHub Actions OIDC via `sigstore/cosign-installer` in `.github/workflows/build-hosted.yml` (job `build-manifest`). Only that workflow may produce a valid signature for `ghcr.io/cannonfodder151/autobrain-*:hosted*`.
+- **Publisher credential**: `GHCR_PAT` (repo secret) — fine-grained PAT scoped to `write:packages` on this repo only. No human has a standing credential that can push `:hosted`.
+- **Tag protection**: GitHub rulesets protect `hosted*` tags from force-push/deletion without review.
+- **Digest pins**: `worker`/`ai`/`frontend` (and `backend`) are digest-pinned in `docker-compose.hosted.yml` and re-pinned by the `compose-pin` job on every hosted build. A stale pin reintroduces manifest-not-found outages.
+- **Verification**: deploy path must verify cosign signature before pulling; trivy gates the build.
+- **Regression guard**: `build-hosted.yml` is the sole publisher; any `:hosted` push outside it fails signature verification at deploy.

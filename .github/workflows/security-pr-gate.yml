@@ -186,7 +186,24 @@ jobs:
   flutter-audit:
     name: Flutter — osv-scanner (pubspec.lock)
     runs-on: [self-hosted, linux, x64]
+    # AUT-1919: gate to frontend changes only. The flutter-audit job
+    # (osv-scanner against pubspec.lock) is meaningless when no Flutter
+    # files changed, and running it unconditionally made every non-Flutter
+    # PR red on the security gate. Paths filter mirrors the sync-mobile
+    # trigger so the gate stays in sync with what actually matters.
+    if: ${{ github.event_name != 'pull_request' || steps.changed-files.outputs.frontend == 'true' }}
     steps:
+      - name: Detect frontend changes (AUT-1919)
+        id: changed-files
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+              - 'frontend/pubspec.yaml'
+              - 'frontend/pubspec.lock'
+              - 'frontend/lib/**'
+              - 'frontend/assets/**'
       - uses: actions/checkout@v4
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -454,9 +471,13 @@ jobs:
     steps:
       - name: Report to Discord #status
         env:
-          RESULT: ${{ needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit-direct.result == 'success' && needs.pip-audit-resolved.result == 'success' && needs.flutter-audit.result == 'success' && needs.compose-config-diff.result == 'success' && needs.pin-guard.result == 'success' && 'clean' || 'findings' }}
-          COLOR: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit-direct.result == 'success' && needs.pip-audit-resolved.result == 'success' && needs.flutter-audit.result == 'success' && needs.compose-config-diff.result == 'success' && needs.pin-guard.result == 'success') && '0x57F287' || '0xED4245' }}
-          TITLE: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit-direct.result == 'success' && needs.pip-audit-resolved.result == 'success' && needs.flutter-audit.result == 'success' && needs.compose-config-diff.result == 'success' && needs.pin-guard.result == 'success') && 'PR security gate clean' || 'PR security gate found issues' }}
+          # AUT-1919: flutter-audit is paths-gated, so its result can be
+          # 'skipped' on non-Flutter PRs. Treat skipped as acceptable —
+          # the job only runs when there's something to scan.
+          FLUTTER_OK: ${{ needs.flutter-audit.result == 'success' || needs.flutter-audit.result == 'skipped' }}
+          RESULT: ${{ needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit-direct.result == 'success' && needs.pip-audit-resolved.result == 'success' && env.FLUTTER_OK == 'true' && needs.compose-config-diff.result == 'success' && needs.pin-guard.result == 'success' && 'clean' || 'findings' }}
+          COLOR: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit-direct.result == 'success' && needs.pip-audit-resolved.result == 'success' && env.FLUTTER_OK == 'true' && needs.compose-config-diff.result == 'success' && needs.pin-guard.result == 'success') && '0x57F287' || '0xED4245' }}
+          TITLE: ${{ (needs.gitleaks.result == 'success' && needs.trivy-config.result == 'success' && needs.pip-audit-direct.result == 'success' && needs.pip-audit-resolved.result == 'success' && env.FLUTTER_OK == 'true' && needs.compose-config-diff.result == 'success' && needs.pin-guard.result == 'success') && 'PR security gate clean' || 'PR security gate found issues' }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \

@@ -79,6 +79,10 @@ class Engineer(Base):
         Index("ix_engineers_postcode_active", "postcode", "is_active"),
     )
 
+    reviews: Mapped[list["EngineerReview"]] = relationship(
+        back_populates="engineer", lazy="selectin", cascade="all, delete-orphan"
+    )
+
 
 class EngineerReview(Base):
     __tablename__ = "engineer_reviews"
@@ -114,9 +118,3 @@ class EngineerReview(Base):
     __table_args__ = (
         Index("ix_engineer_reviews_engineer_created", "engineer_id", "created_at"),
     )
-
-
-# Back-reference for Engineer
-Engineer.reviews: Mapped[list["EngineerReview"]] = relationship(
-    back_populates="engineer", lazy="selectin", cascade="all, delete-orphan"
-)

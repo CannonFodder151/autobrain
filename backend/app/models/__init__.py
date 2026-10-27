@@ -15,12 +15,13 @@ from app.models.receipt import Receipt, ExtractedItem
 from app.models.valuation import ValuationSnapshot
 from app.models.market_listing import MarketListingCache
 from app.models.sca_parts import SCAPartsCache
+from app.models.engineer import Engineer, EngineerReview
 from app.models.fuel_station import FuelStation, FuelPrice, FuelPriceArbitration
 from app.models.fuel_price import FuelPricePollState, FuelPriceSnapshot, FuelPriceWatchlist
 from app.models.notification import NotificationPreference, NotificationDelivery
 from app.models.share import VehicleShare
 from app.models.refresh_token import RevokedRefreshToken
-from app.models.ha import HaIntegration
+from app.models.workshop import Workshop, WorkshopUser, SubscriptionTier, WorkshopUserRole
 from app.social.models import (
     SocialBuild,
     SocialComment,
@@ -70,4 +71,9 @@ __all__ = [
     "SocialShareScope",
     "SocialServerConfig",
     "SocialRemoteTombstone",
+    "Engineer",
+    "Workshop",
+    "WorkshopUser",
+    "SubscriptionTier",
+    "WorkshopUserRole",
 ]

@@ -174,6 +174,7 @@ async def _serialize(db: AsyncSession, post: SocialIssuePost, viewer: User) -> d
         "resolved_comment_id": post.resolved_comment_id,
         "vehicle_snapshot": loads(post.vehicle_snapshot_json),
         "comment_count": await _comment_count(db, post.id),
+        "reply_count": await _comment_count(db, post.id),
         "photos": await _photo_urls(db, post),
         # F1 pattern: photo ids only to the author, never leaked to viewers.
         "photo_ids": list(await db.scalars(

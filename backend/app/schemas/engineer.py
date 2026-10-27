@@ -3,11 +3,19 @@
 from __future__ import annotations
 
 from datetime import time
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 from app.models.vehicle import Vehicle
+
+
+class EngineerSortBy(StrEnum):
+    """Sort key enumeration."""
+    RATING = "rating"
+    DISTANCE = "distance"
+    PRICE = "price"
 
 
 class EngineerSearchFilters(BaseModel):
@@ -46,13 +54,6 @@ class EngineerSearchFilters(BaseModel):
     available_day: int | None = Field(default=None, ge=1, le=7, description="ISO weekday for availability search.")
     available_from: time | None = Field(default=None, description="Earliest start time (HH:MM:SS).")
     available_to: time | None = Field(default=None, description="Latest end time (HH:MM:SS).")
-
-
-class EngineerSortBy(str, list):
-    """Sort key enumeration."""
-    RATING = "rating"
-    DISTANCE = "distance"
-    PRICE = "price"
 
 
 class EngineerSearchResult(BaseModel):

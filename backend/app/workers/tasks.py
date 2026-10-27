@@ -11,6 +11,7 @@ from app.core.logging import get_logger
 from pypdf import PdfReader
 
 from app.core.storage import get_object
+from app.db.seed import reset_demo
 from app.db.session import SessionLocal
 from app.models.part import Part
 from app.models.receipt import ExtractedItem, Receipt
@@ -622,3 +623,16 @@ def _pdf_text(data: bytes) -> str:
     except Exception:
         logger.exception("pdf_text_extraction_failed")
         return ""
+
+
+@shared_task
+def reset_demo_account() -> None:
+    """Periodic task to reset demo account to demo/demo credentials.
+
+    Overrides any external password rotation by re-seeding the demo user
+    with the hardcoded DEMO_PASSWORD ("demo"). Runs via Celery beat.
+    """
+    async def _reset():
+        await reset_demo()
+
+    _run(_reset())

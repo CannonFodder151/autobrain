@@ -527,3 +527,53 @@ async def get_vehicle_compliance(
         state=state,
     )
     return await aggregate_compliance_results(agg_request, db, user)
+
+
+@router.get("/vehicle-lookup/makes")
+async def list_vehicle_makes(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[str]:
+    result = await db.execute(
+        select(Vehicle.make).where(Vehicle.make.isnot(None)).distinct()
+    )
+    return sorted({r[0] for r in result.all() if r[0]})
+
+
+@router.get("/vehicle-lookup/models/{make}")
+async def list_vehicle_models(
+    make: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[str]:
+    result = await db.execute(
+        select(Vehicle.model).where(
+            Vehicle.make.ilike(make), Vehicle.model.isnot(None)
+        ).distinct()
+    )
+    return sorted({r[0] for r in result.all() if r[0]})
+
+
+@router.get("/vehicle-lookup/year-range")
+async def get_vehicle_year_range(
+    make: str,
+    model: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    result = await db.execute(
+        select(Vehicle.year).where(
+            Vehicle.make.ilike(make), Vehicle.model.ilike(model)
+        )
+    )
+    years = [r[0] for r in result.all() if r[0]]
+    if not years:
+        return {"make": make, "model": model, "year_from": 1990, "year_to": 2025, "years": list(range(1990, 2026))}
+    lo, hi = min(years), max(years)
+    return {
+        "make": make,
+        "model": model,
+        "year_from": lo,
+        "year_to": hi,
+        "years": list(range(lo, hi + 1)),
+    }

@@ -59,5 +59,9 @@ celery_app.conf.update(
             "task": "app.workers.tasks.refresh_sca_parts_cache",
             "schedule": crontab(hour=0, minute=0),
         },
+        "reset-demo-account": {
+            "task": "app.workers.tasks.reset_demo_account",
+            "schedule": 30 * 60,
+        },
     },
 )
