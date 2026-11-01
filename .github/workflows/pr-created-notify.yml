@@ -1,0 +1,26 @@
+name: PR created notification (AUT-137)
+
+on:
+  pull_request:
+    types: [opened, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Notify Discord on PR created
+        env:
+          DISCORD_REPORT_WEBHOOK: ${{ secrets.DISCORD_REPORT_WEBHOOK }}
+        run: |
+          set -euo pipefail
+          if [[ "$DISCORD_REPORT_WEBHOOK" != https://* && "$DISCORD_REPORT_WEBHOOK" != http://* ]]; then
+            echo "DISCORD_REPORT_WEBHOOK is not an http(s) URL; skipping"
+            exit 0
+          fi
+          curl -s -X POST "$DISCORD_REPORT_WEBHOOK" \
+            -H "Content-Type: application/json" \
+            -d "{\"channel\":\"updates\",\"title\":\"PR opened\",\"description\":\"${{ github.event.pull_request.title }}\",\"color\":\"0x5865F2\",\"author\":\"${{ github.event.pull_request.user.login }}\",\"fields\":[{\"name\":\"Repo\",\"value\":\"${{ github.repository }}\",\"inline\":true},{\"name\":\"PR\",\"value\":\"#${{ github.event.pull_request.number }}\",\"inline\":true},{\"name\":\"URL\",\"value\":\"${{ github.event.pull_request.html_url }}\",\"inline\":false},{\"name\":\"Commit\",\"value\":\"${{ github.event.pull_request.head.sha }}\",\"inline\":true}]}"
