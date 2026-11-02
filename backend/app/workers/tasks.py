@@ -636,3 +636,18 @@ def _pdf_text(data: bytes) -> str:
     except Exception:
         logger.exception("pdf_text_extraction_failed")
         return ""
+
+
+@shared_task
+def reset_demo() -> None:
+    """Reset the demo account + sample data on a recurring schedule (AUT-148)."""
+    from app.core.config import settings
+    from app.db.seed import reset_demo as _reset
+
+    async def _do():
+        if not settings.DEMO_MODE:
+            logger.info("demo_reset_skipped_not_demo_mode")
+            return
+        await _reset()
+
+    _run(_do())

@@ -65,5 +65,11 @@ celery_app.conf.update(
             "task": "app.workers.tasks.refresh_sca_parts_cache",
             "schedule": crontab(hour=0, minute=0),
         },
+        # AUT-148: nightly demo data reset. reset_demo() fails closed without
+        # DEMO_MODE/DEMO_PASSWORD; isolation is by source='demo' + separate stack.
+        "reset-demo-daily": {
+            "task": "app.workers.tasks.reset_demo",
+            "schedule": crontab(hour=3, minute=0),
+        },
     },
 )
