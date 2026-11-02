@@ -39,14 +39,13 @@ jobs:
           set -euo pipefail
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
-      - name: Run pytest smoke (model metadata + alembic heads)
+      - name: Run pytest smoke (model metadata + alembic heads + deps CVE pins)
         run: |
           set -euo pipefail
-          # AUT-2277 regression guard only. Runs the offline alembic-graph +
-          # duplicate-tablename tests, which do not import the app and cannot
-          # be broken by unrelated test-module rot (e.g. AUT-2201/2203 station
-          # annotation tests, which still pull in app.api.v1.fuel and are out
-          # of scope here).
+          # AUT-2277 regression guard + AUT-4727 (AUT-794/AUT-4701) deps CVE pin guard.
+          # All tests here are offline: they read requirements.txt and/or alembic
+          # metadata, import no app code, and need no database.
           python -m pytest \
             tests/test_alembic_heads.py \
+            tests/test_deps_transitive_cves.py \
             -q
