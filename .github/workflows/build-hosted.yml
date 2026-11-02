@@ -637,10 +637,17 @@ jobs:
       contents: read
     env:
       PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+      GHCR_PAT: ${{ secrets.GHCR_PAT }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
+
+      - name: Pre-pull private dongle-server image (AUT-179)
+        run: |
+          set -euo pipefail
+          echo "$GHCR_PAT" | docker login ghcr.io -u CannonFodder151 --password-stdin
+          docker pull ghcr.io/cannonfodder151/autobrain-dongle-server:hosted
 
       - name: Wait for the AUT-2409 deploy window (03:00-04:00 AEST)
         # AUT-5396: sleep until 17:00Z (03:00 AEST) when the schedule
