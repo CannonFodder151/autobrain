@@ -1,0 +1,98 @@
+name: CI Billing Monitor
+
+# Detects GitHub Actions billing failures (0-step runs) and posts a clear
+# alert to Discord, so they show up as "billing issue" instead of mystery
+# red PRs. Runs hourly and after each push to main.
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  actions: read
+
+jobs:
+  check-billing-failures:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for 0-step failures
+        id: check
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          repos=("CannonFodder151/autobrain" "CannonFodder151/autobrain-mobile")
+          total_failures=0
+          failure_details=""
+          
+          for repo in "${repos[@]}"; do
+            # Get recent completed runs that failed
+            failed_runs=$(gh api "repos/$repo/actions/runs?per_page=20&status=completed&conclusion=failure" --jq '.workflow_runs[] | select(.created_at > (now - 3600 | todate)) | {id, name, head_branch, html_url, created_at}')
+            
+            if [ -n "$failed_runs" ]; then
+              # Check each failed run for 0-step jobs
+              while IFS= read -r run; do
+                run_id=$(echo "$run" | jq -r '.id')
+                run_name=$(echo "$run" | jq -r '.name')
+                run_branch=$(echo "$run" | jq -r '.head_branch')
+                run_url=$(echo "$run" | jq -r '.html_url')
+                run_created=$(echo "$run" | jq -r '.created_at')
+                
+                # Get jobs for this run
+                jobs=$(gh api "repos/$repo/actions/runs/$run_id/jobs" --jq '.jobs[] | {name, conclusion, labels, steps: (.steps | length)}')
+                
+                # Check for 0-step jobs (billing failure signature)
+                zero_step_jobs=$(echo "$jobs" | jq -r 'select(.steps == 0) | .name' || true)
+                
+                if [ -n "$zero_step_jobs" ]; then
+                  total_failures=$((total_failures + 1))
+                  failure_details="${failure_details}\n- **$repo** [$run_branch] $run_name ($run_created): $run_url"
+                fi
+              done <<< "$failed_runs"
+            fi
+          done
+          
+          echo "Found $total_failures runs with 0-step failures (possible billing issue)"
+          echo "failure_details<<EOF" >> "$GITHUB_OUTPUT"
+          echo -e "$failure_details" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+          
+          if [ $total_failures -gt 0 ]; then
+            echo "::warning::Found $total_failures runs with 0-step failures — likely GitHub Actions billing issue"
+            exit 1
+          fi
+          echo "No 0-step failures detected"
+
+      - name: Post Discord alert
+        if: steps.check.outcome == 'failure'
+        shell: bash
+        env:
+          DISCORD_REPORT_WEBHOOK: ${{ secrets.DISCORD_REPORT_WEBHOOK }}
+          FAILURE_DETAILS: ${{ steps.check.outputs.failure_details }}
+        run: |
+          set -euo pipefail
+          discord_url="${DISCORD_REPORT_WEBHOOK:-}"
+          case "$discord_url" in
+            https://*|http://*) ;;
+            *)
+              echo "::warning::DISCORD_REPORT_WEBHOOK not set; skipping Discord alert"
+              exit 0
+              ;;
+          esac
+          
+          details="${FAILURE_DETAILS:-No details available}"
+          payload=$(jq -n \
+            --arg title "CI Billing Failure Detected" \
+            --arg desc "Found runs with 0-step failures — likely GitHub Actions billing issue.\n$details" \
+            --arg color "0xFEE75C" \
+            --arg author "CI Billing Monitor" \
+            --arg channel "incidents" \
+            '{channel:$channel,title:$title,description:$desc,color:$color,author:$author}')
+          
+          curl -sS --max-time 20 -X POST "$discord_url" \
+            -H "Content-Type: application/json" \
+            -d "$payload"
