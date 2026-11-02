@@ -74,6 +74,50 @@ _AI_IMMUTABLE = {
 }
 ```
 
+#### Rationale: Why Immutable Keys Exist
+
+The immutable-key mechanism is the **safety backbone** of the deterministic-first architecture. It ensures the LLM can *enrich* but never *corrupt* the result.
+
+**1. Ground Truth Protection**
+The deterministic engine computes values from verifiable sources: database lookups, manufacturer specifications, mathematical formulas, OCR engines (Tesseract), and market APIs. These are *measured* or *calculated* facts. An LLM, by contrast, generates plausible-sounding text — it can hallucinate prices, invent part numbers, or misstate safety-critical severity levels. Immutable keys draw a hard line: *measured facts stay measured*.
+
+**2. Safety & Liability**
+- **Resale valuation** (`estimated_value`, `low`, `high`): An LLM inflating a car's value by 20% could mislead a buyer/seller.
+- **Diagnostics** (`severity`, `items[*].confidence`, `estimated_cost`): Overriding `critical` → `low` or hallucinating a $50 repair as $5000 creates real-world risk.
+- **Service prediction** (`interval_km`, `next_due_date`): Wrong intervals cause missed maintenance or unnecessary cost.
+- **Car check** (`deal_score`, `red_flags`, `green_flags`): A model downplaying red flags on a salvage-title car is dangerous.
+
+**3. Deterministic Reproducibility**
+With immutable keys, the same vehicle + same inputs → same core outputs, *regardless of LLM availability or version*. Operators can debug, audit, and replay without LLM non-determinism polluting the baseline.
+
+**4. Confidence Calibration**
+The `confidence` field itself is immutable for modules where the deterministic engine sets it (diagnostics, service-prediction). This prevents the LLM from self-reporting high confidence on its own hallucinations.
+
+**5. How the Merge Enforces It**
+In `router_client.enhance()`:
+```python
+immutable = _AI_IMMUTABLE.get(module, frozenset())
+for key, value in result.items():
+    if key in immutable:
+        continue  # <-- hard skip, never merged
+    # ... schema + type validation for non-immutable keys
+```
+This is a *shallow* skip — nested structures inside immutable keys are also protected because the entire key is excluded from the merge.
+
+**Per-Module Rationale Summary**
+
+| Module | Immutable Keys | Why These Specifically |
+|--------|---------------|------------------------|
+| `resale` | `estimated_value`, `low`, `high`, `currency` | Market-anchored AUD estimate from deterministic depreciation model; LLM only adds *context* (rrp, used_price, factors) |
+| `mod-impact` | `performance_score`, `value_impact`, `reliability_impact` | Semi-quantitative scores from rule engine; LLM adds `summary` narrative only |
+| `ocr` / `fuel-ocr` | All extracted fields (`vendor`, `total`, `items`, etc.) | Tesseract OCR output is the ground truth; LLM only refines `notes` / `next_recommended_service` |
+| `advisor` | `decision`, `based_on` | Decision (keep/upgrade/delay/strategy) comes from financial rules; `based_on` is the audit trail — neither can be LLM-influenced |
+| `car-check` | `deal_score`, `red_flags`, `green_flags` | Score and flags computed from listing data; LLM only writes the `summary` narrative |
+| `diagnostics` | Full output structure | Diagnostic conclusions are safety-critical; LLM may only enrich *narrative* fields within the validated schema |
+| `service-prediction` | Full schedule output | Manufacturer intervals + odometer math = ground truth; LLM only adds `reason` text |
+
+**Design Principle**: *If the deterministic engine can compute it reliably, the LLM must not touch it.* The LLM's role is strictly: **fill gaps, add narrative, provide context — never override measurements.**
+
 ### Output Schemas (`_SCHEMAS`)
 
 Whitelist of keys the router may contribute, with accepted Python types. Anything not listed or type-mismatched is dropped.
