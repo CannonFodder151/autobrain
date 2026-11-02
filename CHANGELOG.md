@@ -769,6 +769,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Security (AUT-3482)
 - fix(market-data): change transitive CVE pins from floor (`>=`) to exact (`==`) in `market-data/requirements.txt` to match `backend/requirements.txt`. `idna==3.18` (PYSEC-2026-215), `pycryptodome==3.23` (PYSEC-2026-1811), `pygments==2.20` (PYSEC-2023-117 + PYSEC-2026-2987). Floor pins allowed pip to resolve to vulnerable versions if upstream constraints drifted.
 
+### Fixed (AUT-3170)
+- fix(backend): `DiagnosticOut` (`backend/app/schemas/diagnostic.py`) now exposes `status: str` and `resolved_at: datetime | None`, matching the `Diagnostic` model fields. `GET /vehicles/{id}/diagnostics` returns open + resolved entries with their state, so AC6 ("Diagnostics: open + resolved entries present") is verifiable and the frontend can render resolved state.
+
+### Fixed (AUT-3149)
+- fix(ai): clamp `odometer.run()` fallback results through `_clamp()`, enforcing 0..9,999,999 bounds, numeric coercion, and the `rule-based-fallback` model. Added regression coverage for bounds, coercion, and empty OCR output.
+
 ## [0.3.271] - 2026-09-18
 
 ### Added (AUT-3447)
