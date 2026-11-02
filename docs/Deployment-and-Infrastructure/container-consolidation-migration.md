@@ -73,7 +73,8 @@ Rules:
 ## Pre-deploy
 
 - [ ] Open a PR with the consolidated `docker-compose.hosted.yml` and this
-      checklist. Get QA + Security sign-off; auto-merge fires per AUT-2230.
+      checklist. Get QA + Security sign-off; then merge with the AUT-2230 gate
+      script (`merge-gated.mjs`, AUT-5561). Do not arm GitHub auto-merge.
 - [ ] Confirm the new `backend` image digest (with Celery + AI gateway) is
       published to GHCR and multi-arch (amd64 + arm64). The hosted backend
       image already contains the Celery app, AI gateway, and dependencies.
