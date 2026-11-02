@@ -2,7 +2,7 @@
 # Mobile (Android/iOS) artifacts are built with Flutter tooling outside this image.
 # Build from repo root:  docker build -f docker/frontend/Dockerfile .
 
-ARG FLUTTER_IMAGE=ghcr.io/cirruslabs/flutter:3.38.2
+ARG FLUTTER_IMAGE=ghcr.io/cirruslabs/flutter:3.38.2@sha256:f207a06162d1335cf44e4cc8ed997d605ab41dbd88fdc70e528fb32f2c663ef0
 
 FROM ${FLUTTER_IMAGE} AS build
 
