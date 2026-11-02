@@ -1,0 +1,60 @@
+name: CD
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'hosted'
+        type: choice
+        options:
+          - hosted
+          - staging
+          - production
+  schedule:
+    - cron: '0 17 * * *'
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'hosted' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Build Docker image
+        run: docker build -t vehicle-health:stack-122 .
+
+      - name: Deploy to hosted EP5 (152.69.188.133)
+        if: github.event_name == 'schedule' || github.event.inputs.environment == 'hosted'
+        env:
+          HOST: 152.69.188.133
+          STACK: '122'
+          STACK_DIGEST: 'sha256:${{ github.sha }}'
+          EXCLUDE_STACKS: 'demo,default'
+        run: bash scripts/deploy.sh
+
+      - name: Health check (GET /api)
+        if: github.event_name == 'schedule' || github.event.inputs.environment == 'hosted'
+        run: |
+          echo "Verifying deployment health..."
+          curl -f -s http://152.69.188.133:8000/health
+          curl -f -s http://152.69.188.133:8000/api
+
+      - name: Notify deployment
+        if: always()
+        run: |
+          echo "Deployment completed with status: ${{ job.status }}"
