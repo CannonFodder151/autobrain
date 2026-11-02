@@ -13,6 +13,16 @@
 # retired from CI (AUT-3172).
 # The fuel-poll tasks that used to live in the worker now run in the backend
 # container, so FUEL_*_FILE secrets moved from the worker block to backend env.
+# AUT-5132: the app images stay digest-pinned on purpose. The pin ADVANCES —
+# build-hosted.yml runs scripts/update-compose-pins.py with the digests it just
+# published and pushes the result to main, so `main` always names the fresh
+# images. What a digest pin does NOT do is move by itself: `redeploy?
+# pullImage=true` re-resolves the same immutable digest, and Portainer stack 122
+# is an INLINE stack (GitConfig: null) that re-applies its STORED compose
+# verbatim. So the deploy must UPLOAD this file
+# (scripts/sync-compose-to-portainer.py), and the sync asserts the running image
+# digests + container commands against this file or it exits non-zero. A 200
+# from Portainer is not evidence that anything shipped.
 
 # Secret-file pattern (AUT-1533): secret-class values are bind-mounted from
 # ${SECRETS_DIR:-/data/autobrain/secrets} (root:1000, 0640) and loaded into

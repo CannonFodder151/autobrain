@@ -8,7 +8,11 @@ Three behaviours that each took a production incident to pin down:
   from /file sent Env: [] and wiped all stack env vars (AUT-4778), which made
   Portainer fail compose interpolation with HTTP 500;
 * a 200 PUT is not a healthy stack — a host-port orphan must block the PUT and
-  an unhealthy result after the PUT must fail the job (AUT-4911, AUT-4946).
+  an unhealthy result after the PUT must fail the job (AUT-4911, AUT-4946);
+* a healthy stack is not a deployed one — the running image digest and
+  container command must match the compose, because an inline stack re-pulls
+  the same immutable digest and reports success without shipping code
+  (AUT-5132).
 
 Mocks are routed by URL rather than by call order: the script makes a variable
 number of calls (the health poll repeats), and an ordered list silently went
@@ -37,6 +41,12 @@ spec.loader.exec_module(scp)
 
 STACKS = [{"Id": 42, "Name": "autobrain-hosted"}]
 
+# Full 64-hex digests: verify_image_digests compares repo@digest, so a
+# truncated "sha256:aaa" fixture would never match a real RepoDigest.
+BACKEND_REF = "ghcr.io/x/backend:hosted@sha256:" + "a" * 64
+FRONTEND_REF = "ghcr.io/x/frontend:hosted@sha256:" + "b" * 64
+OLD_BACKEND_DIGEST = "ghcr.io/x/backend@sha256:" + "c" * 64
+
 
 class _Args:
     """Minimal stand-in for the parsed argparse namespace."""
@@ -47,10 +57,13 @@ class _Args:
 
 def _container(name, service, state="running", ports=()):
     return {
+        "Id": f"cid-{service}" if service else "cid-foreign",
+        "Image": f"sha256:{service}" if service else "sha256:foreign",
         "Names": ["/" + name],
         "State": state,
         "Status": f"Up (mock) {state}",
-        "Labels": {"com.docker.compose.service": service},
+        "Labels": ({"com.docker.compose.service": service} if service
+                   else {"autobrain.role": "verify-once"}),
         "Ports": [{"PublicPort": p} for p in ports],
     }
 
@@ -137,11 +150,15 @@ class SyncComposeTestBase(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         self.compose_file = os.path.join(self.tmp, "docker-compose.hosted.yml")
+        self.write_compose()
+
+    def write_compose(self, command=None):
+        cmd = (f"    command: {json.dumps(command)}\n" if command else "")
         with open(self.compose_file, "w") as f:
             f.write("version: '3.8'\nservices:\n"
-                    "  backend:\n    image: ghcr.io/x/backend@sha256:aaa\n"
+                    f"  backend:\n    image: {BACKEND_REF}\n{cmd}"
                     "    ports:\n      - \"8000:8000\"\n"
-                    "  frontend:\n    image: ghcr.io/x/frontend@sha256:bbb\n"
+                    f"  frontend:\n    image: {FRONTEND_REF}\n"
                     "    ports:\n      - \"80:80\"\n")
 
     def tearDown(self):
@@ -177,12 +194,21 @@ class SyncComposeTestBase(unittest.TestCase):
             sys.argv, sys.stdout, sys.stderr = old_argv, old_out, old_err
         return rc, out.getvalue(), err.getvalue()
 
-    def healthy_routes(self, containers):
+    def healthy_routes(self, containers, backend_digest=None, command=None):
+        """Routes for a stack that matches the compose written by setUp."""
+        backend_digest = backend_digest or BACKEND_REF.split("@", 1)[1]
+        frontend_digest = FRONTEND_REF.split("@", 1)[1]
         return {
             ("GET", "/api/stacks"): STACKS,
             ("GET", "/api/stacks/42"): {"Id": 42, "Env": [
                 {"name": "POSTGRES_USER", "value": "autobrain"}]},
             ("GET", "/docker/containers/json"): containers,
+            ("GET", "/docker/containers/cid-backend/json"): {"Config": {
+                "Cmd": ["/bin/sh", "-c", command] if command else []}},
+            ("GET", "/docker/images/sha256:backend"): {"RepoDigests": [
+                f"ghcr.io/x/backend@{backend_digest}"]},
+            ("GET", "/docker/images/sha256:frontend"): {"RepoDigests": [
+                f"ghcr.io/x/frontend@{frontend_digest}"]},
             ("PUT", "/api/stacks/42"): {"Id": 42},
         }
 
@@ -285,6 +311,93 @@ class TestPostUpdateHealthGate(SyncComposeTestBase):
         self.assertIn("verified:", out)
 
 
+class TestNoopDeployDetection(SyncComposeTestBase):
+    """AUT-5132: a healthy stack on the wrong image/command is a failed deploy."""
+
+    def _containers(self):
+        return [_container("autobrain-hosted-backend-1", "backend"),
+                _container("autobrain-hosted-frontend-1", "frontend")]
+
+    def test_fails_when_running_digest_is_not_the_pinned_one(self):
+        r = _Responder(self.healthy_routes(self._containers(),
+                                           backend_digest=OLD_BACKEND_DIGEST))
+
+        rc, _, err = self.run_main(r)
+
+        self.assertEqual(rc, 7)
+        self.assertIn("deploy did not land", err)
+        self.assertIn("no-op", err)
+        self.assertIn("autobrain-hosted-backend-1", err)
+
+    def test_succeeds_when_digests_match(self):
+        r = _Responder(self.healthy_routes(self._containers()))
+
+        rc, out, _ = self.run_main(r)
+
+        self.assertEqual(rc, 0)
+        self.assertIn("image digests", out)
+
+    def test_fails_when_container_command_is_stale(self):
+        self.write_compose(command="sh -c \"alembic upgrade head\"")
+        r = _Responder(self.healthy_routes(self._containers(),
+                                           command="sh -c \"./old.sh\""))
+
+        rc, _, err = self.run_main(r)
+
+        self.assertEqual(rc, 7)
+        self.assertIn("command is", err)
+        self.assertIn("sh -c alembic upgrade head", err)
+
+    def test_unpinned_image_is_not_asserted_on(self):
+        with open(self.compose_file, "w") as f:
+            f.write("services:\n  backend:\n    image: ghcr.io/x/backend:hosted\n")
+        r = _Responder(self.healthy_routes(self._containers()))
+
+        rc, _, _ = self.run_main(r)
+
+        self.assertEqual(rc, 0)  # no digest declared -> the tag is the contract
+
+    def test_interpolates_stack_env_before_comparing(self):
+        """$$ must be compared as $, else every well-formed stack looks stale."""
+        # healthy_routes wraps `command` in ["/bin/sh","-c",command], so the
+        # compose side spells the same argv explicitly.
+        self.write_compose(command='/bin/sh -c "echo $$REDIS_PASSWORD"')
+        r = _Responder(self.healthy_routes(self._containers(),
+                                           command="echo $REDIS_PASSWORD"))
+
+        rc, out, err = self.run_main(r)
+
+        self.assertEqual(rc, 0, err)
+        self.assertIn("image digests", out)
+
+    def test_defaulted_var_is_interpolated_from_the_compose_default(self):
+        self.write_compose(command='/bin/sh -c "echo ${NOPE:-fallback}"')
+        r = _Responder(self.healthy_routes(self._containers(),
+                                           command="echo fallback"))
+
+        rc, _, err = self.run_main(r)
+
+        self.assertEqual(rc, 0, err)
+
+    def test_verify_only_does_not_put(self):
+        r = _Responder(self.healthy_routes(self._containers()))
+
+        rc, out, _ = self.run_main(r, extra_args=["--verify-only"])
+
+        self.assertEqual(rc, 0)
+        self.assertNotIn("PUT", r.methods_for("/api/stacks/42"))
+        self.assertIn("verified", out)
+
+    def test_verify_only_reports_drift_without_touching_the_stack(self):
+        r = _Responder(self.healthy_routes(self._containers(),
+                                           backend_digest=OLD_BACKEND_DIGEST))
+
+        rc, _, err = self.run_main(r, extra_args=["--verify-only"])
+
+        self.assertEqual(rc, 7)
+        self.assertNotIn("PUT", r.methods_for("/api/stacks/42"))
+
+
 class TestVerifyRunning(SyncComposeTestBase):
     """The poll itself, driven by fake container state rather than a stub."""
 
@@ -304,7 +417,8 @@ class TestVerifyRunning(SyncComposeTestBase):
         r = _Responder({("GET", "/docker/containers/json"): [
             _container("autobrain-hosted-backend-1", "backend"),
             _container("autobrain-hosted-frontend-1", "frontend"),
-            _container("autobrain-hosted-worker-1", "worker", state="created"),
+            _container("autobrain-hosted-backend-new", "backend",
+                       state="created"),
         ]})
         args = _Args()
 
@@ -314,6 +428,27 @@ class TestVerifyRunning(SyncComposeTestBase):
 
         self.assertEqual([w for _, w in problems if "stuck" in w],
                          ["stuck in state created"])
+
+    def test_foreign_stuck_container_does_not_fail_the_gate(self):
+        """AUT-5601: a foreign container wedged in `created` must not fail
+        every subsequent hosted deploy.
+
+        `fw-verify-aut5511` (AUT-5511's verify-once diagnostic) sat in
+        `created` on EP5 with no compose labels and made both
+        `Build hosted images (multi-arch)` runs on main red with exit 6.
+        """
+        r = _Responder({("GET", "/docker/containers/json"): [
+            _container("autobrain-hosted-backend-1", "backend"),
+            _container("autobrain-hosted-frontend-1", "frontend"),
+            _container("fw-verify-aut5511", None, state="created"),
+        ]})
+        args = _Args()
+
+        with patch("urllib.request.urlopen", r):
+            problems = scp.verify_running(args, {"backend", "frontend"},
+                                          attempts=1, delay=0)
+
+        self.assertEqual(problems, [])
 
 
 class TestDeployWindowGate(SyncComposeTestBase):
@@ -399,8 +534,8 @@ class TestNightlyHostedSync(SyncComposeTestBase):
 
         self.assertEqual(rc, 0)
         self.assertIn("PUT", r.methods_for("/api/stacks/42"))
-        self.assertIn("applied: backend -> ghcr.io/x/backend@sha256:aaa", out)
-        self.assertIn("applied: frontend -> ghcr.io/x/frontend@sha256:bbb", out)
+        self.assertIn(f"applied: backend -> {BACKEND_REF}", out)
+        self.assertIn(f"applied: frontend -> {FRONTEND_REF}", out)
 
     def test_cron_misfire_out_of_window_skips_and_logs_no_digest(self):
         # GitHub cron can fire late or early. Outside the window the run must
@@ -445,6 +580,14 @@ class TestCreateStack(SyncComposeTestBase):
         routes[("POST", "/api/stacks/create/standalone/file")] = {
             "Id": 43, "Name": "autobrain-demo"}
         routes[("GET", "/docker/containers/json")] = containers
+        routes[("GET", "/docker/containers/cid-backend/json")] = {
+            "Config": {"Cmd": []}}
+        routes[("GET", "/docker/images/sha256:backend")] = {
+            "RepoDigests": [f"ghcr.io/x/backend@"
+                            f"{BACKEND_REF.split('@', 1)[1]}"]}
+        routes[("GET", "/docker/images/sha256:frontend")] = {
+            "RepoDigests": [f"ghcr.io/x/frontend@"
+                            f"{FRONTEND_REF.split('@', 1)[1]}"]}
         return routes
 
     def test_create_posts_stack_with_env_file_and_audits(self):
@@ -477,7 +620,7 @@ class TestCreateStack(SyncComposeTestBase):
         self.assertIn("id=43", out)
         self.assertIn("created", out)
         self.assertIn("verified: 2 services running", out)
-        self.assertIn("applied: backend -> ghcr.io/x/backend@sha256:aaa", out)
+        self.assertIn(f"applied: backend -> {BACKEND_REF}", out)
 
     def test_create_refuses_without_env_file(self):
         r = _Responder(self._routes([]))
