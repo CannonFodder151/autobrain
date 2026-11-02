@@ -11,7 +11,6 @@ entitlement mapping (what a product grants) so plan_for_user treats an active
 IAP entitlement exactly like a Stripe subscription.
 """
 
-import logging
 from datetime import datetime, timezone
 
 import stripe
@@ -19,9 +18,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.logging import get_logger
 from app.models.user import User
 
-logger = logging.getLogger(__name__)
+# AUT-5092: structlog-style kwargs need the project logger; the
+# stdlib logger raises TypeError on `logger.info("x", k=v)`.
+logger = get_logger(__name__)
 
 FREE_PLAN = "free"
 

@@ -8,10 +8,29 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > user-facing change ships with an entry here under `[Unreleased]` — see
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
-
 ## [Unreleased]
+### Added (AUT-6519)
+- docs: add secret-file-pattern.md documenting AUT-1533 *_FILE secret injection pattern for docker-compose (AUT-6519)
+
+### Fixed (AUT-6431)
+- fix(build): add archive dependency override to fix Dart compile failure (AUT-6431)
+
 ### Added/Changed (AUT-3533)
 - fix: Servo Spy map blank white screen on hosted by resolving undefined _kCartoKeyParam and injecting CARTO API key (PR #715)
+
+### Fixed (AUT-5612)
+- `devices.vehicle_type` rollback data loss: `aut5092_dev_veh_type` is a no-op
+  on the hosted `create_all` database it exists to repair (the column is already
+  there), yet its `downgrade()` dropped the column anyway, destroying real data
+  on rollback. `upgrade()` now stamps the column it adds with a provenance
+  marker (`COMMENT ON COLUMN`) and `downgrade()` drops only a column carrying
+  that marker — a pre-existing column is left alone, while a genuine rollback of
+  a column this revision created still drops it. Covered by
+  `tests/test_alembic_heads.py` (offline) and two new cases in
+  `tests/test_alembic_migration_only.py` (real Postgres, `alembic-migrations` CI
+  job).
+- `BACKUP_OFFSITE_INGEST_KEY`'s docstring still said `/api/backup/ingest`, an
+  endpoint that 404s; the value is the `X-Ingest-Key` for `/ingest`.
 
 ### Removed (AUT-5718)
 - Removed the dead `POST /api/v1/ci/webhook` CI triage receiver. The GitHub Actions `ci-triage-webhook.yml` fire job has never posted to the AutoBrain backend — it fires `secrets.CI_TRIAGE_WEBHOOK_URL`, the Paperclip routine trigger on the `CI Triage` routine, and that routine trigger is the only thing that wakes the CI Triage Agent. The backend route had no callers: AutoBrain-Hosted answered `503 CI triage webhook not configured` to every request since at least 2026-09-03 because `docker-compose.hosted.yml` wired `CI_TRIAGE_WEBHOOK_SECRET`/`CI_TRIAGE_PARENT_ISSUE_ID`/`CI_TRIAGE_GOAL_ID` to empty defaults the Hosted env file never set, and the Hosted access log contains no POST from any Actions runner to that path. Deletes `backend/app/api/v1/ci.py`, its router registration, the `CI_TRIAGE_*` + server-side `PAPERCLIP_*` settings in `backend/app/core/config.py`, the same block in `docker-compose.hosted.yml`, the `CI_TRIAGE_*` block in `.env.example`, and the `/ci/webhook` row in `docs/Engineering/api-spec.md`; `ci-triage-webhook.yml` and the deployment guide now state that the Paperclip routine trigger is the canonical receiver so the route is not re-added or repointed. The Hosted stack no longer needs `PAPERCLIP_API_KEY`/`CI_TRIAGE_WEBHOOK_SECRET` to boot. `backend/tests/test_ci_receiver_removed_aut5718.py` asserts the route is gone (404) and the settings no longer exist, so a re-added receiver fails CI.
@@ -21,6 +40,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed (AUT-5668)
 - fix(ci): `ci-triage-webhook.yml` fire job was incorrectly pinned to the self-hosted vm2 runner (`runs-on: [self-hosted, linux, x64, vm2]`) despite comments explicitly stating it must run on `ubuntu-latest` to avoid consuming scarce self-hosted runners for 15-minute sleep+curl bursts. The misconfiguration caused the step to hang and be killed by the 20-minute timeout (AUT-5668), silently losing ~half of CI triage wakes. Changed `runs-on` to `ubuntu-latest` (timeout was already increased to 30 minutes).
+
+### Fixed (AUT-5584)
+- fix(frontend): `Sync mobile app` workflow failed on `main` with `lib/core/models/fuel_history.dart is not referenced by a part directive in lib/core/models.dart`. The monorepo `frontend/lib/core/models.dart` was missing the `part 'models/fuel_history.dart';` directive that `autobrain-mobile` PR #60 added to its models.dart. Added the missing `part` directive and the corresponding `fuel_history.dart` model file to the monorepo source-of-truth so the sync guard (AUT-5205) passes and the mobile tree stays in parity. Verified by re-running the `Sync mobile app` workflow.
 
 ### Changed (AUT-5654)
 - ci: moved the last four GitHub-hosted jobs onto the self-hosted vm2 runners, finishing this repo's hosted-runner migration. `visual_regression.yml` (was `ubuntu-latest`) now runs on `[self-hosted, linux, x64, vm2]`; its `subosito/flutter-action@v2` step downloads the Flutter SDK itself, so no pre-installed toolchain is required on the runner. `dockerhub-publish.yml`'s `dedupe-main-queue`, `ci-queue-guard.yml`'s `cancel-orphaned-runs`, and `ci-triage-webhook.yml`'s `fire` also move to `[self-hosted, linux, x64, vm2]`: all three are API-only gates that call `gh api` to cancel superseded/orphaned runs and to fire the triage webhook, and none of them checks out or executes repository code, so they are safe on a persistent runner even under the `pull_request` trigger. `build-hosted.yml`'s matrix already resolved to vm2/ARM64 and is unchanged. After this, no workflow in this repo requests a GitHub-hosted runner.
