@@ -1,0 +1,55 @@
+name: Backend image build check
+
+# AUT-4979: no workflow built `docker/backend/Dockerfile` on a pull request, so
+# a layer-ordering bug (`python -m playwright install` above the `pip install`
+# that provides playwright) broke every backend image build — including the
+# hosted ARM64 build — and was only found during QA review (AUT-4945).
+# The publish pipeline cannot cover this: `dockerhub-publish.yml` only builds
+# on `main`, and its heavy jobs sit behind the `pip-audit-gate`.
+# This job builds the backend image on every PR that touches the image, for
+# both architectures, and pushes nothing.
+
+on:
+  pull_request:
+    paths:
+      - 'docker/backend/**'
+      - 'docker/entrypoint.sh'
+      - 'docker/lib-load-secrets.sh'
+      - 'backend/requirements.txt'
+      - 'ai/requirements.txt'
+      - '.github/workflows/backend-image-build-check.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: backend-image-build-check-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [linux/amd64, linux/arm64]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image (${{ matrix.platform }})
+        run: |
+          set -euo pipefail
+          docker buildx build \
+            --platform "${{ matrix.platform }}" \
+            --file docker/backend/Dockerfile \
+            --tag autobrain-backend:build-check \
+            --load \
+            .
+

@@ -81,6 +81,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed (AUT-5584, AUT-4772)
 - fix(mobile-sync): reverted `autobrain-mobile` PR #60, which red-lined `Sync mobile app` on `main` (run 37212706670) with `lib/core/models/fuel_history.dart is not referenced by a part directive in lib/core/models.dart`. #60 added a **mobile-only** 30-day Servo Spy station price chart (model file `lib/core/models/fuel_history.dart` + an inline chart in `lib/screens/servo_spy/servo_spy_screen.dart`). `sync-mobile.sh` copies `frontend/lib/` verbatim over the mobile tree, so every sync overwrote the mobile `models.dart` and the chart source, orphaning the model file on disk and tripping the AUT-5205 part-directive guard. The same chart already ships in the shared lineage: `frontend/lib/screens/servo_spy/servo_spy_station_history_screen.dart` (AUT-2376) renders it from `FuelPricesApi.stationHistory` and converts cents to dollars on both the axis and the tooltip, so the duplicate only cost the cents-vs-dollars bug tracked as AUT-4772. Store app keeps the chart through the synced `ServoSpyStationHistoryScreen`.
 
+### Fixed (AUT-5306)
+- docker(backend): merged `origin/main` into `feat/AUT-4113-market-data-celery` (PR #777), resolving the `docker/backend/Dockerfile` conflict — keeps AUT-4718's `python:3.13.16-slim-trixie@sha256:6906dca8…` base repin (clears the `image-scan` HIGH/CRITICAL findings from the stale 3.13.15 digest) together with AUT-3843's Playwright Chromium layer (`ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright` after the backend `pip install`, `chown -R autobrain:autobrain /ms-playwright`, and the chrome-sandbox re-SUID gate).
 ### Changed (AUT-5654)
 - ci: moved the last four GitHub-hosted jobs onto the self-hosted vm2 runners, finishing this repo's hosted-runner migration. `visual_regression.yml` (was `ubuntu-latest`) now runs on `[self-hosted, linux, x64, vm2]`; its `subosito/flutter-action@v2` step downloads the Flutter SDK itself, so no pre-installed toolchain is required on the runner. `dockerhub-publish.yml`'s `dedupe-main-queue`, `ci-queue-guard.yml`'s `cancel-orphaned-runs`, and `ci-triage-webhook.yml`'s `fire` also move to `[self-hosted, linux, x64, vm2]`: all three are API-only gates that call `gh api` to cancel superseded/orphaned runs and to fire the triage webhook, and none of them checks out or executes repository code, so they are safe on a persistent runner even under the `pull_request` trigger. `build-hosted.yml`'s matrix already resolved to vm2/ARM64 and is unchanged. After this, no workflow in this repo requests a GitHub-hosted runner.
 
@@ -171,6 +173,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   value so a padded secret still matches what the operator types (as
   `seed_admin()` already did). Whitespace-only regression cases added to
   `backend/tests/test_seed_reset_demo.py`.
+
 
 ## [0.3.308] - 2026-10-04
 
@@ -440,6 +443,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [0.3.294] - 2026-10-01
 
+### Fixed (AUT-4979)
+- fix(docker): repair the layer ordering in `docker/backend/Dockerfile` that broke every
+  backend image build. The Playwright Chromium download sat above the backend
+  `pip install`, so `python -m playwright install --with-deps chromium` ran against the
+  bare `python:3.13.15-slim-trixie` base and aborted with `No module named playwright` —
+  including the hosted ARM64 build that AUT-4153 / AUT-4160 depend on. The install block
+  (with `ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright`) now runs immediately after
+  `pip install -r backend/requirements.txt`; the root/SUID `chrome_sandbox` re-own stays
+  the final root layer. Guarded by `ai/tests/test_dockerfile_layer_order.py`.
 ### Fixed (AUT-4911)
 - deploy(hosted): remove the `gh-runner` service from `docker-compose.hosted.yml`.
   It carried an inline `build:` block, and Portainer cannot build service images for
@@ -679,6 +691,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Added (AUT-4120)
 - feat(backend): Redis cache (TTL 1h) for query embeddings in `vector_search.py`; repeated searches return cached vector without 9Router call
 - fix(backend): cached vectors are re-validated against `EMBEDDING_DIMENSION` on read; a poisoned/wrong-dimension cache entry is rejected and the router path re-derives the vector instead of binding it to SQL (22P02)
+
+### Added (AUT-3843 / AUT-4113)
+- feat(backend): merge market-data Chromium scraper into backend Celery tasks
+  (removes standalone market-data container; hosted stack −1 container)
+  - New `app/services/market_scraper/` package: CarsGuide, BikesGuide, SCA
+    parts-guide scrapers (deterministic HTTP + Playwright subprocess for gated portals)
+  - New Celery beat task `refresh_market_data` (daily 03:00 AEST) refreshes
+    market cache for every vehicle in fleet
+  - Backend Dockerfile installs Playwright + Chromium; `shm_size: "256m"` added
+    to backend service for Chromium shared memory
+
+### Fixed (AUT-4113)
+- fix(browser): hoist `carsguide`/`sca` imports to module top so script-mode
+  invocation (`python browser.py ...`) resolves without ImportError
+- fix(tests): derive the browser-script path from `Path(__file__).resolve()` in
+  `test_market_scraper.py` instead of hardcoding `/home/node/autobrain/...`, which
+  only resolved on the dev box and broke collection on CI runners and the hosted
+  ARM64 VM (QA finding on PR #777)
+- fix(docs): update market-data architecture doc and container-consolidation
+  migration checklist to reflect local scraping in backend
 
 ## [0.3.279] - 2026-09-26
 
