@@ -68,6 +68,17 @@ async def health() -> dict:
     return {"status": "ok", "service": "autobrain-backend", "version": settings.APP_VERSION, "env": env}
 
 
+@app.get("/api")
+async def api_root() -> dict:
+    if settings.DEMO_MODE:
+        env = "demo"
+    elif settings.SOCIAL_FEDERATION_HOSTED:
+        env = "hosted"
+    else:
+        env = "default"
+    return {"status": "ok", "service": "autobrain-backend", "version": settings.APP_VERSION, "env": env}
+
+
 # Kubernetes-style alias for the boot-probe used by the Flutter app
 # (AppConfig.validate -> ${apiOrigin}/healthz). Same handler, no extra
 # surface. AUT-2284 N1.
