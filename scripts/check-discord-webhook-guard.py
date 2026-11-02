@@ -36,6 +36,10 @@ import yaml
 TARGETS = [
     (".github/workflows/ci-triage-webhook.yml", 1),
     (".github/workflows/libexpat-version-check.yml", 0),
+    (".github/workflows/build-hosted.yml", 0),
+    (".github/workflows/cd.yml", 0),
+    (".github/workflows/ci-tests.yml", 0),
+    (".github/workflows/sync-mobile.yml", 0),
 ]
 
 GOOD_SECRETS = [
