@@ -583,6 +583,37 @@ jobs:
           echo "::error::could not push the k8s pin bump after 3 attempts (AUT-5669)"
           exit 1
 
+  build-report:
+    needs: [build-manifest, compose-pin, k8s-pin]
+    if: github.event_name != 'pull_request' && github.event_name != 'schedule'
+    runs-on: [self-hosted, linux, x64, vm2]
+    env:
+      DISCORD_REPORT_WEBHOOK: ${{ secrets.DISCORD_REPORT_WEBHOOK }}
+    steps:
+      - name: Report build + pin status to Discord
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ "${{ job.status }}" = "success" ]; then
+            COLOR="0x2ECC71"; STATE="published"
+          else
+            COLOR="0xE74C3C"; STATE="${{ job.status }}"
+          fi
+          discord_url="${DISCORD_REPORT_WEBHOOK:-}"
+          case "$discord_url" in
+            https://*|http://*) ;;
+            *)
+              echo "::warning::DISCORD_REPORT_WEBHOOK is not an http(s) URL; skipping Discord report"
+              exit 0
+              ;;
+          esac
+          curl -sS --max-time 30 -X POST "$discord_url" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -nc --arg c deployments --arg t "Build hosted — $STATE" --arg col "$COLOR" \
+              --arg d "Multi-arch images built, manifests assembled, compose/k8s pins bumped.\nCommit: ${{ github.sha }}\nRun: [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" \
+              '{channel:$c,title:$t,description:$d,color:$col,author:"Build Hosted",fields:[{name:"Status",value:"${{ job.status }}",inline:true}]}')" \
+            || echo "::warning::Discord report POST failed"
+
   nightly-hosted-sync:
     # AUT-5186: the cron path back to an automatic hosted deploy. AUT-5172
     # stopped push-triggered merges from redeploying EP5, which left the
