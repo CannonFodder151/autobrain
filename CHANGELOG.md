@@ -781,6 +781,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed (AUT-3105)
 - fix(frontend): force re-authentication when legacy plaintext JWT is detected in SharedPreferences, preventing silent token downgrade attacks.
 
+### Fixed (AUT-3104)
+- fix(frontend): gate AuthState.test() behind kDebugMode guard so debug-profile tests cannot override production auth state checks.
+
 ## [0.3.271] - 2026-09-18
 
 ### Added (AUT-3447)
