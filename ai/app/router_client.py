@@ -53,6 +53,47 @@ _validate_nested = _validate_nested
 # read the cumulative log lines.
 _AI_TELEMETRY: dict[str, dict[str, int]] = {}
 
+# --- AI cost tracking (AUT-6646) -------------------------------------------
+# Rough cost estimates per module based on typical token usage and 9Router pricing.
+# These are ORDER-OF-MAGNITUDE estimates for guardrails, not precise billing.
+_MODULE_COST_ESTIMATES: dict[str, float] = {
+    "diagnostics": 0.002,
+    "service-prediction": 0.0015,
+    "ocr": 0.003,
+    "fuel-ocr": 0.002,
+    "odometer": 0.002,
+    "resale": 0.002,
+    "mod-impact": 0.0015,
+    "condition": 0.001,
+    "parts-guide": 0.002,
+    "advisor": 0.003,
+    "car-check": 0.002,
+    "social-image": 0.001,
+}
+
+_COST_TRACKING: dict[str, dict[str, float]] = {}
+
+
+def _cost_tracking_record(module: str, path: str, estimated_cost: float = 0.0) -> None:
+    """Record an inference call with estimated cost."""
+    bucket = _COST_TRACKING.setdefault(module, {"calls": 0, "ai_calls": 0, "estimated_cost_usd": 0.0})
+    bucket["calls"] = bucket.get("calls", 0) + 1
+    if path == "hybrid":
+        bucket["ai_calls"] = bucket.get("ai_calls", 0) + 1
+        bucket["estimated_cost_usd"] = bucket.get("estimated_cost_usd", 0.0) + estimated_cost
+    elif path == "router_error":
+        pass  # No cost for errors
+
+
+def _cost_tracking_snapshot() -> dict[str, dict[str, float]]:
+    """Return a copy of the current cost tracking counters."""
+    return {m: dict(c) for m, c in _COST_TRACKING.items()}
+
+
+def _cost_tracking_reset() -> None:
+    """Clear all cost tracking counters (admin endpoint)."""
+    _COST_TRACKING.clear()
+
 
 def _telemetry_record(module: str, path: str, **extra) -> None:
     """Record one inference-path decision for later audit.
@@ -63,6 +104,9 @@ def _telemetry_record(module: str, path: str, **extra) -> None:
     """
     bucket = _AI_TELEMETRY.setdefault(module, {"deterministic": 0, "hybrid": 0, "router_error": 0})
     bucket[path] = bucket.get(path, 0) + 1
+    # Also record cost tracking
+    estimated_cost = _MODULE_COST_ESTIMATES.get(module, 0.0) if path == "hybrid" else 0.0
+    _cost_tracking_record(module, path, estimated_cost)
     logger.info("ai_path", module=module, path=path, **extra)
 
 
@@ -151,6 +195,36 @@ async def route(module: str, payload: dict) -> dict | None:
         return None
 
 
+# Per-module minimum confidence floors (can be overridden via env MIN_AI_CONFIDENCE_<MODULE>)
+# Higher floors for safety-critical or high-cost modules
+_MODULE_CONFIDENCE_FLOORS: dict[str, float] = {
+    "diagnostics": 0.85,
+    "service-prediction": 0.85,
+    "ocr": 0.80,
+    "fuel-ocr": 0.80,
+    "odometer": 0.90,
+    "resale": 0.80,
+    "mod-impact": 0.80,
+    "condition": 0.75,
+    "parts-guide": 0.75,
+    "advisor": 0.85,
+    "car-check": 0.85,
+    "social-image": 0.70,
+}
+
+
+def _get_module_confidence_floor(module: str) -> float:
+    """Get the minimum confidence floor for a module, with env override support."""
+    env_key = f"MIN_AI_CONFIDENCE_{module.upper().replace('-', '_')}"
+    env_val = os.getenv(env_key)
+    if env_val:
+        try:
+            return float(env_val)
+        except ValueError:
+            pass
+    return _MODULE_CONFIDENCE_FLOORS.get(module, float(os.getenv("MIN_AI_CONFIDENCE", "0.85")))
+
+
 async def enhance(module: str, payload: dict, baseline: dict) -> dict:
     """Deterministic baseline, optionally enriched by 9Router.
 
@@ -158,14 +232,14 @@ async def enhance(module: str, payload: dict, baseline: dict) -> dict:
     router is reachable its response is shallow-merged into the baseline, never
     overwriting deterministic-critical keys (see _AI_IMMUTABLE). The router
     response must include a "confidence" field (0-1); only fields from responses
-    with confidence >= MIN_AI_CONFIDENCE are merged. model becomes
+    with confidence >= module-specific floor are merged. model becomes
     ``rule-based+ai`` when the router contributed fields, else the baseline is
     returned untouched. The service stays fully functional with the router down.
     """
-    min_confidence = float(os.getenv("MIN_AI_CONFIDENCE", "0.75"))
+    min_confidence = _get_module_confidence_floor(module)
     result = await route(module, payload)
     if not isinstance(result, dict):
-        logger.info("ai_path", module=module, path="deterministic", reason="router_unavailable")
+        _telemetry_record(module, "deterministic", reason="router_unavailable")
         return baseline
 
     confidence = result.get("confidence")
@@ -175,7 +249,7 @@ async def enhance(module: str, payload: dict, baseline: dict) -> dict:
         conf_val = 0.0
 
     if conf_val < min_confidence:
-        logger.info("ai_path", module=module, path="deterministic", reason="low_confidence", confidence=conf_val, threshold=min_confidence)
+        _telemetry_record(module, "deterministic", reason="low_confidence", confidence=conf_val, threshold=min_confidence)
         return baseline
 
     immutable = _AI_IMMUTABLE.get(module, frozenset())
@@ -195,7 +269,21 @@ async def enhance(module: str, payload: dict, baseline: dict) -> dict:
         enriched = True
     if enriched:
         merged["model"] = "rule-based+ai"
-        logger.info("ai_path", module=module, path="hybrid", confidence=conf_val)
+        _telemetry_record(module, "hybrid", confidence=conf_val)
     else:
-        logger.info("ai_path", module=module, path="deterministic", reason="no_enrichable_fields")
+        _telemetry_record(module, "deterministic", reason="no_enrichable_fields")
     return merged
+
+
+# Exports for AI gateway endpoints
+__all__ = [
+    "router_url",
+    "router_enabled",
+    "router_model",
+    "route",
+    "enhance",
+    "ai_telemetry_snapshot",
+    "ai_telemetry_reset",
+    "_cost_tracking_snapshot",
+    "_cost_tracking_reset",
+]
