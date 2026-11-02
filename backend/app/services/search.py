@@ -8,6 +8,10 @@ from app.models.diagnostic import Diagnostic
 from app.models.mod import Modification
 from app.models.receipt import Receipt
 from app.models.service import ServiceRecord
+from app.models.fuel_price import FuelPriceSnapshot
+from app.models.device import Device
+from app.models.market_listing import MarketListingCache
+from app.models.vehicle import Vehicle
 from app.services.vector_search import generate_embedding
 from app.social.models import SocialIssuePost
 
@@ -42,6 +46,29 @@ _ENTITY_MAP = {
         "columns": ["title", "body"],
         "vector_col": "embedding",
         "community": True,
+    },
+    "fuel_price": {
+        "model": FuelPriceSnapshot,
+        "columns": ["state", "station_code", "fuel_type", "price"],
+        "vector_col": "embedding",
+        "community": True,
+    },
+    "device": {
+        "model": Device,
+        "columns": ["name"],
+        "vector_col": "embedding",
+    },
+    "market_listing": {
+        "model": MarketListingCache,
+        "columns": ["make", "model", "year"],
+        "vector_col": "embedding",
+        "community": True,
+    },
+    "vehicle": {
+        "model": Vehicle,
+        "columns": ["nickname", "make", "model", "year"],
+        "vector_col": "embedding",
+        "scope_field": "id",
     },
 }
 
@@ -82,7 +109,10 @@ async def semantic_search(
 
         base_filters = []
         if vehicle_ids is not None and not cfg.get("community"):
-            base_filters.append(model.vehicle_id.in_(vehicle_ids))
+            scope_field = cfg.get("scope_field", "vehicle_id")
+            col = getattr(model, scope_field, None)
+            if col is not None:
+                base_filters.append(col.in_(vehicle_ids))
         if cfg.get("community"):
             # Hidden/modded posts must never surface in search.
             base_filters.append(model.status_hidden.is_(False))
@@ -196,6 +226,34 @@ def _serialise(etype: str, row, *, score: float, method: str) -> dict:
             "status": row.status,
             "author_display_name": row.author_display_name,
         })
+    elif etype == "fuel_price":
+        data.update({
+            "state": row.state,
+            "station_code": row.station_code,
+            "station_name": row.station_name,
+            "brand": row.brand,
+            "fuel_type": row.fuel_type,
+            "price": row.price,
+        })
+    elif etype == "device":
+        data.update({
+            "name": row.name,
+            "vehicle_id": row.vehicle_id,
+        })
+    elif etype == "market_listing":
+        data.update({
+            "make": row.make,
+            "model": row.model,
+            "year": row.year,
+            "median_price": row.median_price,
+        })
+    elif etype == "vehicle":
+        data.update({
+            "nickname": row.nickname,
+            "make": row.make,
+            "model": row.model,
+            "year": row.year,
+        })
 
     return data
 
@@ -266,5 +324,31 @@ def _row_to_dict(row, entity_type: str) -> dict:
             "title": row.title,
             "body": row.body,
             "tags": list(row.tags or []),
+        }
+    if entity_type == "fuel_price":
+        return {
+            "state": row.state,
+            "station_code": row.station_code,
+            "station_name": row.station_name,
+            "brand": row.brand,
+            "fuel_type": row.fuel_type,
+            "price": row.price,
+        }
+    if entity_type == "device":
+        return {
+            "name": row.name,
+        }
+    if entity_type == "market_listing":
+        return {
+            "make": row.make,
+            "model": row.model,
+            "year": row.year,
+        }
+    if entity_type == "vehicle":
+        return {
+            "nickname": row.nickname,
+            "make": row.make,
+            "model": row.model,
+            "year": row.year,
         }
     return {}
