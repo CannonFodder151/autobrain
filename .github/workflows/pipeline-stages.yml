@@ -1,0 +1,103 @@
+name: Pipeline stages (demo -> default -> hosted)
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: Why (e.g. manual pipeline run by the Deployment Lead)
+        required: false
+        default: manual dispatch
+  workflow_run:
+    workflows:
+      - Publish images to Docker Hub
+      - Build hosted images (multi-arch)
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pipeline-stages
+  cancel-in-progress: false
+
+jobs:
+  stage-demo:
+    name: Stage 1 — Demo deploy + health gate
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    runs-on: [self-hosted, linux, x64, vm2]
+    timeout-minutes: 30
+    env:
+      PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+      PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Redeploy demo tier (pullImage)
+        run: |
+          set -euo pipefail
+          UPGRADE_TIERS="autobrain-demo|2|https://demo.autobrainservice.app/health|" ./scripts/upgrade-instances.sh
+      - name: Test gate — demo health
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 10 https://demo.autobrainservice.app/health >/dev/null 2>&1; then
+              echo "demo healthy"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "demo health gate FAILED"
+          exit 1
+
+  stage-default:
+    name: Stage 2 — Default deploy + health gate
+    needs: stage-demo
+    runs-on: [self-hosted, linux, x64, vm2]
+    timeout-minutes: 30
+    env:
+      PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+      PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Redeploy default tier (pullImage)
+        run: |
+          set -euo pipefail
+          UPGRADE_TIERS="autobrain-default|2|https://default.autobrainservice.app/health|" ./scripts/upgrade-instances.sh
+      - name: Test gate — default health
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 10 https://default.autobrainservice.app/health >/dev/null 2>&1; then
+              echo "default healthy"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "default health gate FAILED"
+          exit 1
+
+  stage-hosted:
+    name: Stage 3 — Hosted deploy + health gate
+    needs: stage-default
+    runs-on: [self-hosted, linux, x64, vm2]
+    timeout-minutes: 30
+    env:
+      PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+      PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Redeploy hosted tier (pullImage)
+        run: |
+          set -euo pipefail
+          UPGRADE_TIERS="autobrain-hosted|5|https://hosted.autobrainservice.app/health|POSTGRES_USER=autobrain,POSTGRES_DB=autobrain" ./scripts/upgrade-instances.sh
+      - name: Test gate — hosted health
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 10 https://hosted.autobrainservice.app/health >/dev/null 2>&1; then
+              echo "hosted healthy"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "hosted health gate FAILED"
+          exit 1
