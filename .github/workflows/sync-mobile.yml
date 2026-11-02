@@ -144,6 +144,32 @@ jobs:
           echo "::error::mobile sync push failed after 3 attempts (non-fast-forward)"
           exit 1
 
+      - name: Report mobile parity status to Discord
+        if: always()
+        env:
+          DISCORD_REPORT_WEBHOOK: ${{ secrets.DISCORD_REPORT_WEBHOOK }}
+        run: |
+          set -euo pipefail
+          if [ "${{ job.status }}" = "success" ]; then
+            COLOR="0x2ECC71"; STATE="in sync"
+          else
+            COLOR="0xE74C3C"; STATE="${{ job.status }}"
+          fi
+          discord_url="${DISCORD_REPORT_WEBHOOK:-}"
+          case "$discord_url" in
+            https://*|http://*) ;;
+            *)
+              echo "::warning::DISCORD_REPORT_WEBHOOK is not an http(s) URL; skipping Discord report"
+              exit 0
+              ;;
+          esac
+          curl -sS --max-time 30 -X POST "$discord_url" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -nc --arg c updates --arg t "Mobile parity — $STATE" --arg col "$COLOR" \
+              --arg d "Synced frontend lineage + version to autobrain-mobile.\nRun: [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" \
+              '{channel:$c,title:$t,description:$d,color:$col,author:"Sync Mobile",fields:[{name:"Status",value:"${{ job.status }}",inline:true}]}')" \
+            || echo "::warning::Discord report POST failed"
+
       - name: Tag version and trigger mobile release pipeline
         if: steps.commit.outputs.changed == 'true'
         env:
