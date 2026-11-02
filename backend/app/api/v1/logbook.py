@@ -33,6 +33,7 @@ from app.schemas.logbook import (
     OdometerPhotoResult,
 )
 from app.services.ai_client import read_odometer
+from app.services.ai_fallbacks import odometer_fallback
 from app.services.odometer import sync_odometer
 from app.services.rate_limit import require_ai_rate_limit
 
@@ -215,7 +216,7 @@ async def read_odometer_photo(
         "filename": file.filename,
     })
     if not result:
-        raise HTTPException(status_code=503, detail="Odometer OCR engine unavailable")
+        result = odometer_fallback({})
     return OdometerPhotoResult(**result)
 
 
