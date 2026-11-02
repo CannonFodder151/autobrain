@@ -80,6 +80,14 @@ class _SocialScreenState extends State<SocialScreen> {
     }
   }
 
+  bool _followingOnly = false;
+
+  void _toggleFollowing(bool value) {
+    if (_followingOnly == value) return;
+    setState(() => _followingOnly = value);
+    _load();
+  }
+
   Future<void> _load() async {
     final auth = context.read<AuthState>();
     if (auth.freeAccount) {
@@ -93,7 +101,8 @@ class _SocialScreenState extends State<SocialScreen> {
       _disabled = false;
     });
     try {
-      final builds = await api.feed(q: _query);
+      final builds =
+          await api.feed(q: _query, followedOnly: _followingOnly);
       setState(() => _builds = builds);
     } on ApiException catch (e) {
       if (e.message.contains('Disabled by your admin')) {
@@ -113,7 +122,7 @@ class _SocialScreenState extends State<SocialScreen> {
     setState(() => _loadingMore = true);
     try {
       final more = await SocialApi(context.read<AuthState>().api)
-          .feed(q: _query);
+          .feed(q: _query, followedOnly: _followingOnly);
       if (more.isNotEmpty && mounted) {
         final known = _builds.map((b) => b.id).toSet();
         setState(() => _builds = [
@@ -284,6 +293,17 @@ class _SocialScreenState extends State<SocialScreen> {
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(24),
               ),
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: FilterChip(
+              label: const Text('Following only'),
+              selected: _followingOnly,
+              onSelected: _toggleFollowing,
             ),
           ),
         ),

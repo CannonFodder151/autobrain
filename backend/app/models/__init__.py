@@ -31,6 +31,7 @@ from app.social.models import (
     SocialRemoteTombstone,
     SocialServerConfig,
     SocialShareScope,
+    SocialFollow,
 )
 
 __all__ = [
@@ -75,4 +76,5 @@ __all__ = [
     "SocialShareScope",
     "SocialServerConfig",
     "SocialRemoteTombstone",
+    "SocialFollow",
 ]

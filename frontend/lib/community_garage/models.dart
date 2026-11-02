@@ -45,6 +45,7 @@ class SocialBuild {
     this.title,
     this.caption,
     this.authorDisplayName,
+    this.authorUserId,
     this.serverName,
     this.origin,
     this.snapshot = const SocialSnapshot(),
@@ -53,6 +54,7 @@ class SocialBuild {
     this.shareScope = const {},
     this.likeCount = 0,
     this.likedByMe = false,
+    this.followedByMe = false,
     this.commentCount = 0,
     this.createdAt,
   });
@@ -61,6 +63,7 @@ class SocialBuild {
   final String? title;
   final String? caption;
   final String? authorDisplayName;
+  final String? authorUserId;
   final String? serverName;
   final String? origin;
   final SocialSnapshot snapshot;
@@ -69,18 +72,25 @@ class SocialBuild {
   final Map<String, bool> shareScope;
   final int likeCount;
   final bool likedByMe;
+  final bool followedByMe;
   final int commentCount;
   final DateTime? createdAt;
 
   bool get isRemote => origin == 'remote';
   bool get isDemo => origin == 'demo';
 
-  SocialBuild copyWith({bool? likedByMe, int? likeCount, int? commentCount}) =>
+  SocialBuild copyWith({
+    bool? likedByMe,
+    int? likeCount,
+    int? commentCount,
+    bool? followedByMe,
+  }) =>
       SocialBuild(
         id: id,
         title: title,
         caption: caption,
         authorDisplayName: authorDisplayName,
+        authorUserId: authorUserId,
         serverName: serverName,
         origin: origin,
         snapshot: snapshot,
@@ -89,6 +99,7 @@ class SocialBuild {
         shareScope: shareScope,
         likeCount: likeCount ?? this.likeCount,
         likedByMe: likedByMe ?? this.likedByMe,
+        followedByMe: followedByMe ?? this.followedByMe,
         commentCount: commentCount ?? this.commentCount,
         createdAt: createdAt,
       );
@@ -98,6 +109,7 @@ class SocialBuild {
         title: json['title'] as String?,
         caption: json['caption'] as String?,
         authorDisplayName: json['author_display_name'] as String?,
+        authorUserId: json['author_user_id'] as String?,
         serverName: json['server_name'] as String?,
         origin: json['origin'] as String?,
         snapshot:
@@ -108,6 +120,7 @@ class SocialBuild {
             .map((k, v) => MapEntry(k, v == true)),
         likeCount: json['like_count'] as int? ?? 0,
         likedByMe: json['liked_by_me'] == true,
+        followedByMe: json['followed_by_me'] == true,
         commentCount: json['comment_count'] as int? ?? 0,
         createdAt:
             DateTime.tryParse(json['created_at'] as String? ?? '')?.toLocal(),

@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_premium, require_premium_write
@@ -28,6 +28,7 @@ from app.social.models import (
     SocialBuild,
     SocialBuildFlag,
     SocialComment,
+    SocialFollow,
     SocialLike,
     SocialPhoto,
     SocialRemoteTombstone,
@@ -149,11 +150,28 @@ async def _serialize(db: AsyncSession, build: SocialBuild, viewer: User | None) 
         )
     ) is not None
     is_author = viewer is not None and build.author_user_id is not None and viewer.id == build.author_user_id
+    followed = False
+    if viewer is not None and build.author_user_id is not None and not is_author:
+        followed = await db.scalar(
+            select(SocialFollow).where(
+                SocialFollow.follower_user_id == viewer.id,
+                SocialFollow.followed_user_id == build.author_user_id,
+            )
+        ) is not None
+    elif viewer is not None and build.server_name is not None and build.author_user_id is None:
+        # Remote build: follow by server name
+        followed = await db.scalar(
+            select(SocialFollow).where(
+                SocialFollow.follower_user_id == viewer.id,
+                SocialFollow.followed_server_name == build.server_name,
+            )
+        ) is not None
     return {
         "id": build.id,
         "title": build.title,
         "caption": build.caption,
         "author_display_name": build.remote_author_display_name or build.author_display_name,
+        "author_user_id": build.author_user_id,
         "server_name": build.server_name,
         "origin": build.origin,
         "snapshot": snapshot,
@@ -162,6 +180,7 @@ async def _serialize(db: AsyncSession, build: SocialBuild, viewer: User | None) 
         "share_scope": share_scope,
         "like_count": await _like_count(db, build.id),
         "liked_by_me": liked,
+        "followed_by_me": followed,
         "comment_count": await _comment_count(db, build.id),
         "created_at": build.created_at.isoformat(),
     }
@@ -408,6 +427,7 @@ async def _push_outbox_safe(cfg, build: SocialBuild, snapshot: dict, photo_keys:
 async def feed(
     limit: int = Query(default=20, ge=1, le=100),
     q: str | None = Query(default=None, max_length=120),
+    followed_only: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_premium),
     _rl: None = Depends(social_rate_limit(24)),
@@ -415,6 +435,20 @@ async def feed(
     await _sync_federation(db)
     await db.commit()
     stmt = select(SocialBuild).where(SocialBuild.status == "published")
+    if followed_only:
+        follows = list(await db.scalars(
+            select(SocialFollow).where(SocialFollow.follower_user_id == user.id)
+        ))
+        followed_users = {f.followed_user_id for f in follows if f.followed_user_id}
+        followed_servers = {f.followed_server_name for f in follows if f.followed_server_name}
+        if not followed_users and not followed_servers:
+            return {"items": []}
+        conds = []
+        if followed_users:
+            conds.append(SocialBuild.author_user_id.in_(followed_users))
+        if followed_servers:
+            conds.append(SocialBuild.server_name.in_(followed_servers))
+        stmt = stmt.where(or_(*conds))
     if q and q.strip():
         needle = f"%{q.strip()}%"
         stmt = stmt.where(
@@ -427,6 +461,87 @@ async def feed(
         stmt.order_by(SocialBuild.created_at.desc()).limit(limit)
     )
     return {"items": [await _serialize(db, b, user) for b in rows]}
+
+
+class FollowIn(BaseModel):
+    user_id: str | None = Field(default=None, max_length=36)
+    server_name: str | None = Field(default=None, max_length=120)
+
+
+def _follow_where(follower_user_id: str, payload: FollowIn):
+    """Build a WHERE clause matching the caller's follow on (follower, target).
+
+    A follow targets either a user or a server; the opposite column is NULL.
+    """
+    conds = [SocialFollow.follower_user_id == follower_user_id]
+    if payload.user_id:
+        conds.append(SocialFollow.followed_user_id == payload.user_id)
+    else:
+        conds.append(SocialFollow.followed_user_id.is_(None))
+    if payload.server_name:
+        conds.append(SocialFollow.followed_server_name == payload.server_name)
+    else:
+        conds.append(SocialFollow.followed_server_name.is_(None))
+    return and_(*conds)
+
+
+@router.post("/follow", status_code=201)
+async def follow(
+    payload: FollowIn,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_premium_write),
+    _rl: None = Depends(social_rate_limit(24)),
+) -> dict:
+    if not payload.user_id and not payload.server_name:
+        raise HTTPException(status_code=422, detail="user_id or server_name required")
+    if payload.user_id:
+        target = await db.get(User, payload.user_id)
+        if not target:
+            raise HTTPException(status_code=404, detail="User not found")
+    existing = await db.scalar(
+        select(SocialFollow).where(_follow_where(user.id, payload))
+    )
+    if existing is not None:
+        return {"status": "already_following"}
+    db.add(SocialFollow(
+        follower_user_id=user.id,
+        followed_user_id=payload.user_id,
+        followed_server_name=payload.server_name,
+    ))
+    await db.commit()
+    return {"status": "following"}
+
+
+@router.delete("/follow", status_code=204)
+async def unfollow(
+    user_id: str | None = Query(default=None, max_length=36),
+    server_name: str | None = Query(default=None, max_length=120),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_premium_write),
+    _rl: None = Depends(social_rate_limit(24)),
+) -> None:
+    payload = FollowIn(user_id=user_id, server_name=server_name)
+    if not payload.user_id and not payload.server_name:
+        raise HTTPException(status_code=422, detail="user_id or server_name required")
+    await db.execute(delete(SocialFollow).where(_follow_where(user.id, payload)))
+    await db.commit()
+
+
+@router.get("/follows")
+async def follows(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_premium),
+    _rl: None = Depends(social_rate_limit(24)),
+) -> dict:
+    rows = list(await db.scalars(
+        select(SocialFollow).where(SocialFollow.follower_user_id == user.id)
+    ))
+    return {
+        "items": [
+            {"user_id": r.followed_user_id, "server_name": r.followed_server_name}
+            for r in rows
+        ]
+    }
 
 
 @router.get("/my-posts")

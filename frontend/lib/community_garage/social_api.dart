@@ -339,4 +339,56 @@ class SocialApi {
       (await _api.post('/admin/social/register')) as Map<String, dynamic>;
 
   Future<void> unregisterFromHub() => _api.post('/admin/social/unregister');
+
+  /// Follow a user or server (AUT-139).
+  Future<void> follow({String? userId, String? serverName}) async {
+    await _api.post('/social/follow', {
+      if (userId != null) 'user_id': userId,
+      if (serverName != null) 'server_name': serverName,
+    });
+  }
+
+  /// Unfollow a user or server (AUT-139).
+  Future<void> unfollow({String? userId, String? serverName}) async {
+    final params = <String, String>{};
+    if (userId != null) params['user_id'] = userId;
+    if (serverName != null) params['server_name'] = serverName;
+    await _api.delete('/social/follow', queryParameters: params);
+  }
+
+  /// List the current user's follows (AUT-139).
+  Future<({List<String> userIds, List<String> serverNames})> follows() async {
+    final data = await _api.get('/social/follows') as Map<String, dynamic>;
+    final items = (data['items'] as List?) ?? const [];
+    return (
+      userIds: items
+          .where((e) => e['user_id'] != null)
+          .map((e) => e['user_id'] as String)
+          .toList(),
+      serverNames: items
+          .where((e) => e['server_name'] != null)
+          .map((e) => e['server_name'] as String)
+          .toList(),
+    );
+  }
+
+  /// Feed with optional followed-only filter (AUT-139).
+  Future<List<SocialBuild>> feed({
+    int limit = 20,
+    String? q,
+    bool followedOnly = false,
+  }) async {
+    final params = <String>['limit=$limit'];
+    if (q != null && q.trim().isNotEmpty) {
+      params.add('q=${Uri.encodeQueryComponent(q.trim())}');
+    }
+    if (followedOnly) {
+      params.add('followed_only=true');
+    }
+    final data =
+        await _api.get('/social/feed?${params.join('&')}') as Map<String, dynamic>;
+    return ((data['items'] as List?) ?? const [])
+        .map((e) => SocialBuild.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
 }

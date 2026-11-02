@@ -311,3 +311,34 @@ async def get_server_config(db: AsyncSession) -> SocialServerConfig:
     db.add(cfg)
     await db.flush()
     return cfg
+
+
+class SocialFollow(Base):
+    """A follow relationship: a local user follows another user or a server
+    (federated). At least one of followed_user_id / followed_server_name must
+    be set; both represent the follow target. Deduped per (follower, target)."""
+
+    __tablename__ = "social_follows"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    follower_user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id"), index=True
+    )
+    followed_user_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id"), index=True, nullable=True
+    )
+    followed_server_name: Mapped[str | None] = mapped_column(
+        String(120), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "follower_user_id", "followed_user_id", name="uq_social_follow_user"
+        ),
+        UniqueConstraint(
+            "follower_user_id", "followed_server_name", name="uq_social_follow_server"
+        ),
+    )

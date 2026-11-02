@@ -29,6 +29,7 @@ class _SocialPostDetailScreenState extends State<SocialPostDetailScreen> {
   bool _loading = true;
   bool _loadingComments = false;
   bool _disabled = false;
+  bool _followBusy = false;
   final _commentController = TextEditingController();
   int _photoIndex = 0;
 
@@ -163,10 +164,43 @@ class _SocialPostDetailScreenState extends State<SocialPostDetailScreen> {
     }
   }
 
+Future<void> _toggleFollow() async {
+    final build = _build;
+    if (build == null || _followBusy) return;
+    setState(() => _followBusy = true);
+    final api = SocialApi(context.read<AuthState>().api);
+    try {
+      if (build.followedByMe) {
+        if (build.authorUserId != null) {
+          await api.unfollow(userId: build.authorUserId);
+        } else if (build.serverName != null) {
+          await api.unfollow(serverName: build.serverName);
+        }
+      } else {
+        if (build.authorUserId != null) {
+          await api.follow(userId: build.authorUserId);
+        } else if (build.serverName != null) {
+          await api.follow(serverName: build.serverName);
+        }
+      }
+      if (mounted) {
+        setState(() {
+          _build = build.copyWith(followedByMe: !build.followedByMe);
+        });
+      }
+    if (mounted) {
+        ScaffoldMessenger.of(context)
+            .show(const Snack(content: Text('Could not update follow')));
+      }
+    } finally {
+      if (mounted) setState(() => _followBusy = false);
+    }
+  }
+
   void _toast(String message) {
     if (mounted) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
+          .show(const Snack(content: Text(message)));
     }
   }
 
@@ -260,6 +294,32 @@ class _SocialPostDetailScreenState extends State<SocialPostDetailScreen> {
                 ' · ${socialRelativeTime(build.createdAt)}',
                 style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
               ),
+              if (auth.premium && build.authorUserId != null && build.authorUserId != auth.userId)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: ActionChip(
+                    label: _followBusy
+                        ? const SizedBox(
+                            width: 16, height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : Text(build.followedByMe ? 'Following' : 'Follow'),
+                    onPressed: _followBusy ? null : _toggleFollow,
+                    backgroundColor: build.followedByMe ? scheme.surfaceContainerHighest : null,
+                  ),
+                )
+              else if (auth.premium && build.authorUserId == null && build.serverName != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: ActionChip(
+                    label: _followBusy
+                        ? const SizedBox(
+                            width: 16, height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : Text(build.followedByMe ? 'Following' : 'Follow server'),
+                    onPressed: _followBusy ? null : _toggleFollow,
+                    backgroundColor: build.followedByMe ? scheme.surfaceContainerHighest : null,
+                  ),
+                ),
               const SizedBox(height: 6),
               if (build.snapshot.makeModel.isNotEmpty)
                 Text(build.snapshot.makeModel,
