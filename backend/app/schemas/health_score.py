@@ -18,6 +18,15 @@ class HealthScoreComponent(BaseModel):
     details: Optional[str] = None
 
 
+class EngineeringHelperSummary(BaseModel):
+    primary_state: str
+    primary_severity: str
+    primary_title: str
+    primary_message: str
+    ai_explanation: Optional[str] = None
+    used_fallback: bool = True
+
+
 class HealthScoreResponse(BaseModel):
     vehicle_id: str
     overall_score: float = Field(ge=0, le=100)
@@ -25,6 +34,7 @@ class HealthScoreResponse(BaseModel):
     components: list[HealthScoreComponent]
     last_updated: str
     mileage: Optional[int] = None
+    engineering_helper: Optional[EngineeringHelperSummary] = None
 
 
 class VehicleNotFoundError(BaseModel):

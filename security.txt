@@ -1,0 +1,19 @@
+# Security Contact & Disclosure
+
+## Contact
+Security issues should be reported via GitHub Security Advisories.
+
+## Scope
+This policy applies to the AutoBrain Vehicle Health API and associated services.
+
+## Preferred Languages
+English
+
+## Encryption
+Reports may be encrypted using the maintainers' PGP keys (see GitHub Security Advisories).
+
+## Acknowledgments
+Security researchers who follow responsible disclosure will be acknowledged.
+
+## Canonical URL
+https://github.com/AutoBrain/security.txt

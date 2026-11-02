@@ -1,28 +1,28 @@
-# Secrets
-.env*
+# Secrets and credentials
+.env
+.env.*
 *.key
 *.pem
 *.p12
 *.pfx
 *.crt
+*.cer
 secrets/
-credentials/
 
 # Python
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
+*.egg-info/
 .venv/
 venv/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
 
 # Node
 node_modules/
-dist/
-build/
+frontend/dist/
 
-# IDE
-.vscode/
+# IDE / OS
 .idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
