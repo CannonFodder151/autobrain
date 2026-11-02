@@ -15,6 +15,10 @@ from app.api.v1 import social
 from app.api.v1 import fuel_service
 from app.api.v1 import fuel_watchlist
 from app.api.v1 import workshop
+from app.api.v1 import rego_lookup
+from app.api.v1 import resale
+from app.api.v1 import reminders
+from app.api.v1 import receipt_scan
 from app.core.middleware import SecurityMiddleware, ErrorHandlerMiddleware
 
 _CHECK_INTERVAL_SECONDS = 60
@@ -65,6 +69,10 @@ app.include_router(social.router, prefix="/api/v1")
 app.include_router(fuel_service.router, prefix="/api/v1/fuel-service")
 app.include_router(fuel_watchlist.router, prefix="/api/v1")
 app.include_router(workshop.router, prefix="/api/v1")
+app.include_router(rego_lookup.router, prefix="/api/v1/rego")
+app.include_router(resale.router, prefix="/api/v1/resale")
+app.include_router(reminders.router, prefix="/api/v1/reminders")
+app.include_router(receipt_scan.router, prefix="/api/v1/receipts")
 
 app.add_middleware(SecurityMiddleware)
 app.add_middleware(ErrorHandlerMiddleware)
@@ -79,3 +87,13 @@ async def api_root():
         "service": "Vehicle Health API",
         "status": "operational",
     }
+
+@app.get("/privacy", tags=["privacy"])
+async def privacy():
+    from fastapi.responses import HTMLResponse
+    import os
+    path = "/app/docs/app-store/PRIVACY.md"
+    md = open(path).read() if os.path.exists(path) else None
+    if md is None:
+        md = "# AutoBrain Privacy Policy\n\nAll data stored locally on device. No collection, no trackers."
+    return HTMLResponse(content=f"<html><head><title>Privacy</title></head><body><pre>{md}</pre></body></html>")

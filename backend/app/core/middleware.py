@@ -22,7 +22,7 @@ from app.core.security import (
 _load_keys()
 
 # Paths that don't require authentication (read-only health/metadata).
-PUBLIC_PATHS = {"/health", "/api", "/openapi.json", "/docs", "/redoc"}
+PUBLIC_PATHS = {"/health", "/api", "/openapi.json", "/docs", "/redoc", "/privacy"}
 
 # Admin paths require authentication.
 ADMIN_PREFIX = "/api/v1/admin"
