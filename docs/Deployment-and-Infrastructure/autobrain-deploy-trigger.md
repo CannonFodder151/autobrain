@@ -53,13 +53,21 @@ The PAT must be able to create issues in the `41d8aeaf` company.
    {
      "parentId": "cdf4f384-29ad-4584-9bf2-4ddc461f6a12",
      "goalId": "4fc32f2e-2489-4333-aa9c-f04aafede71d",
-     "title": "Deploy v{version}: roll out Demo→test→Default→test→Hosted→test",
-     "description": "Image v{version} published. Run upgrade path with per-tier health gating (scripts/upgrade-instances.sh). (Template: AUT-1908.)",
+     "title": "Deploy v{version}: roll out Hosted (EP5) in the nightly window",
+     "description": "Image v{version} published. Per AUT-2409 deploys are hosted-only in the 03:00-04:00 AEST window: run scripts/upgrade-instances.sh with UPGRADE_TIERS=autobrain-hosted|5|... (pullImage:true), verify /health, then prune EP2+EP5. Demo/Default redeploys are paused.",
      "assigneeAgentId": "2d3d6e7b-ec81-45c2-8c1e-95456d55bb6e",
      "priority": "medium",
      "labels": ["deploy:{version}"]
    }
    ```
+
+   > **AUT-2409 override (current).** The original title was
+   > `roll out Demo→test→Default→test→Hosted→test`. The three-tier promotion
+   > chain is **PAUSED**: all deploys are hosted-only (Oracle Cloud
+   > `152.69.188.133`, Portainer endpoint 5) in the nightly 03:00–04:00 AEST
+   > window. Demo and Default redeploys are suspended. When the override is
+   > lifted, restore the original three-tier title/description.
+
 5. **Error handling** — on any node failure, POST to
    `webhook/discord-report` channel `incidents` so the Deployment Lead is paged.
 
