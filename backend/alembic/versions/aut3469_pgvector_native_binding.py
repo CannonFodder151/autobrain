@@ -10,7 +10,7 @@ from alembic import op
 from app.core.config import settings
 
 revision = "aut3469_pgvector_native_binding"
-down_revision = "u1v2w3x4y5z6"
+down_revision = ("h1i2j3k4l5m6", "h1i2j3k4l5m7", "u1v2w3x4y5z6", "aut3448_fuel_price_snapshots")
 branch_labels = None
 depends_on = None
 
