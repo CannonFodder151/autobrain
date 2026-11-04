@@ -165,8 +165,30 @@ def export_logbook_csv(entries: list, fy: int) -> bytes:
             e.distance_km or "", e.purpose, e.reason or "",
             e.start_location or "", e.end_location or "",
         ])
+    writer.writerow([])
+    writer.writerow(["Total km", "", "", "", "", sum((e.distance_km or 0) for e in entries)])
+    writer.writerow(["Business %", ""]) 
     return b"\xef\xbb\xbf" + buf.getvalue().encode("utf-8")
 
+
+def export_logbook_pdf(entries: list, fy: int) -> bytes:
+    """ATO logbook PDF for an Australian financial year (ends 30 June)."""
+    rows = []
+    for i, e in enumerate(entries, 1):
+        rows.append([
+            i,
+            e.started_at.strftime("%Y-%m-%d %H:%M") if e.started_at else "",
+            e.ended_at.strftime("%Y-%m-%d %H:%M") if e.ended_at else "",
+            e.start_odometer_km or "", e.end_odometer_km or "",
+            e.distance_km or "", e.purpose, e.reason or "",
+            e.start_location or "", e.end_location or "",
+        ])
+    return _pdf_table(
+        title=f"AutoBrain Logbook - FY{fy-1}/{str(fy)[2:]}",
+        header=["Trip", "Start time", "End time", "Start odo", "End odo",
+                "Distance (km)", "Purpose", "Reason", "Start location", "End location"],
+        rows=rows,
+    )
 
 def export_fuel_csv(logs: list, fy: int) -> bytes:
     """Fuel CSV for a financial year (fuel tax / reimbursement records)."""
