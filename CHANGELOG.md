@@ -10,6 +10,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Changed (AUT-6415)
+- deploy: merge dongle-server + backup GUI into the backend container (container consolidation Phase 1b) — the hosted stack drops from 9 to 7 containers, with the dongle server (port 8002) and backup GUI (port 8080) now running as co-processes inside the combined backend image alongside uvicorn (API on 8000, AI on 8001), Celery worker/beat, and alembic. Updates `docker-compose.hosted.yml`, `docker/backend/Dockerfile`, `docker/backend/Dockerfile.combined`, `docker/entrypoint-combined.sh`, `scripts/check-compose-consolidation.py`, and the container-architecture / migration docs accordingly (PR #1029).
+
 ### Added/Changed (AUT-3533)
 - fix: Servo Spy map blank white screen on hosted by resolving undefined _kCartoKeyParam and injecting CARTO API key (PR #715)
 
