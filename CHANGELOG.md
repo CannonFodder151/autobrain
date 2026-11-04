@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-225)
+- fix(ci): resolve alembic migration head fork — deleted duplicate revision `m3rge07`, re-pointed `g7h8i9j0k1l3` down_revision to actual head, added `m3rge08` merge revision (AUT-225, PR #1082)
+
 ## [0.3.312] - 2026-11-04
 ### Added (AUT-6645)
 - feat(ai): per-module AI confidence floors with env override; default raised from 0.75 to 0.85 (AUT-6645)
