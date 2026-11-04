@@ -8,7 +8,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > user-facing change ships with an entry here under `[Unreleased]` — see
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
+
 ## [Unreleased]
+
+## [0.3.312] - 2026-11-04
 ### Added (AUT-6645)
 - feat(ai): per-module AI confidence floors with env override; default raised from 0.75 to 0.85 (AUT-6645)
 - feat(ai): cost tracking endpoints `/v1/cost` and `/v1/cost/reset` for AI gateway (AUT-6646)
@@ -173,7 +176,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   value so a padded secret still matches what the operator types (as
   `seed_admin()` already did). Whitespace-only regression cases added to
   `backend/tests/test_seed_reset_demo.py`.
-
 
 ## [0.3.308] - 2026-10-04
 
