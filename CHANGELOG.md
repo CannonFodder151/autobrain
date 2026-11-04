@@ -52,6 +52,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Added (AUT-3512)
 - feat(backend): extend pgvector embeddings to `fuel_price_snapshots`, `devices`, `market_listing_cache`, and `vehicles` tables with HNSW indexes. New Alembic migration `g7h8i9j0k1l3` adds `embedding vector(1536)` columns and cosine-similarity indexes. Search service `_ENTITY_MAP` expanded with `fuel_price`, `device`, `market_listing`, `vehicle` entity types (including `scope_field` override for vehicle-scoped search). Vector embedding service `_to_text` updated for new types. API `/api/v1/search` entity_types description updated.
 
+### Fixed (AUT-1605)
+- fix(ai): rate limiter now evicts stale entries on overflow instead of clearing all state, preventing rotating-IP attackers from resetting limits for all clients (PR #274)
+
 ## [0.3.312] - 2026-11-04
 ### Changed
 - Bump version to 0.3.312
