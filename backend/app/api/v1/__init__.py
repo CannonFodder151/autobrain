@@ -24,6 +24,9 @@ from app.api.v1 import (
     obd,
     parts,
     passkey,
+    rego_lookup,
+    reminders,
+    resale,
     receipts,
     search,
     services,
@@ -63,3 +66,6 @@ api_router.include_router(engineer.router)
 api_router.include_router(search.router)
 api_router.include_router(social.router)
 api_router.include_router(issues.router)
+api_router.include_router(rego_lookup.router)
+api_router.include_router(reminders.router)
+api_router.include_router(resale.router)
