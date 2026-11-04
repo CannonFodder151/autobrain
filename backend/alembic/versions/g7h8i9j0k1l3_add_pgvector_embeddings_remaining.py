@@ -6,7 +6,7 @@ from alembic import op
 from app.core.config import settings  # noqa: E402
 
 revision = "g7h8i9j0k1l3"
-down_revision = "h1i2j3k4l5m6"
+down_revision = "h1i2j3k4l5m7"
 branch_labels = None
 depends_on = None
 
