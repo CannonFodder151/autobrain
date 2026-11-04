@@ -243,18 +243,21 @@ jobs:
           : "${CARTO_API_KEY:?GitHub secret CARTO_API_KEY is unset or empty — the frontend build requires it (AUT-4690)}"
           VERSION="$(grep -E 'APP_VERSION: str' backend/app/core/config.py | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/')"
           echo "==> building images tagged with version $VERSION (linux/amd64)"
+          # AUT-807: build each service once with all tags (prevents OOM on self-hosted runner)
           for svc in backend ai frontend; do
             case "$svc" in
               backend)  ctx=.;        df=docker/backend/Dockerfile;   args="";;
               ai)       ctx=.;        df=docker/ai/Dockerfile;         args="";;
               frontend) ctx=.;        df=docker/frontend/Dockerfile;   args="--build-arg API_BASE_URL=${API_BASE_URL} --build-arg WS_BASE_URL=${WS_BASE_URL} --build-arg CARTO_API_KEY=${CARTO_API_KEY}";;
             esac
+            tags=()
             for tag in latest hosted "$VERSION"; do
-              echo "==> building autobrain-${svc}:${tag}-amd64"
-              docker buildx build --platform linux/amd64 --push \
-                -t "cannonfodder151/autobrain-${svc}:${tag}-amd64" \
-                ${args} -f "${df}" "${ctx}"
+              tags+=("-t" "cannonfodder151/autobrain-${svc}:${tag}-amd64")
             done
+            echo "==> building autobrain-${svc} with tags: ${tags[*]}"
+            docker buildx build --platform linux/amd64 --push \
+              "${tags[@]}" \
+              ${args} -f "${df}" "${ctx}"
           done
 
       - name: Build and push default-tier frontend image (linux/amd64)
