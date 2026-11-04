@@ -10,6 +10,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 ### Changed (AUT-217)
+- refactor(phase1d): split social.py + issues.py into subpackages, remove legacy advisor.py (PR #992)
+
+### Changed (AUT-217)
 - fix(ci): add CHANGELOG.md entry for phase1d-modularize-services PR to satisfy changelog gate (AUT-217)
 
 ### Added (AUT-6645)
