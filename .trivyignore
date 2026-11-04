@@ -192,3 +192,18 @@ CVE-2026-103111  # pcre2 OOB write: needs attacker-controlled regex AND JIT; JIT
 # vendors urllib3 >= 2.8.0, and re-verify that no requirements.txt gained urllib3.
 CVE-2026-97687  # urllib3 proxy-TLS override: pip's vendored copy, build-time only; runtime uses httpx
 CVE-2026-97689  # urllib3 chunk-parser DoS: pip's vendored copy, build-time only; runtime uses httpx
+
+# --- AUT-978: pgvector/pgvector:pg17 Perl CVEs (fixed in 5.36.0-7+deb12u4) --------------
+# Seven Perl CVEs in libperl5.36/perl/perl-base/perl-modules-5.36 on Debian 12.15.
+# Installed 5.36.0-7+deb12u3; fixed in 5.36.0-7+deb12u4 (DSA-5902-1). pgvector upstream
+# has not yet rebuilt with patched Perl packages. PostgreSQL server is written in C and
+# does not invoke any Perl interpreter at runtime. No user-supplied Perl code/archives/
+# regex/Storable data processed. Suppress until pgvector:pg17 digest refreshed;
+# re-check 2026-11-30. Security Officer sign-off: APPROVED (AUT-978).
+CVE-2026-13221  # perl: incorrect regex processing via large regexes
+CVE-2026-42496  # perl-archive-tar: path traversal via crafted symlinks
+CVE-2026-8376   # perl: heap buffer overflow on 32-bit regex compile (we run 64-bit)
+CVE-2026-42497  # perl-Archive-Tar: arbitrary file modification via crafted hardlinks
+CVE-2026-48962  # perl-IO-Compress: arbitrary code execution via output glob
+CVE-2026-57432  # perl: integer overflow in pack/unpack
+CVE-2026-57433  # Storable: DoS via signed integer overflow in deserialization
