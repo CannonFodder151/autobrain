@@ -51,12 +51,16 @@ jobs:
             aarch64|arm64) REGCTL_ARCH=arm64 ;;
             *) echo "unsupported arch: $ARCH"; exit 1 ;;
           esac
+          INSTALL_DIR="${HOME}/.local/bin"
+          mkdir -p "$INSTALL_DIR"
           REGCTL_URL="https://github.com/regclient/regclient/releases/download/${REGCTL_VERSION}/regctl-linux-${REGCTL_ARCH}"
           MAX_RETRIES=3
           RETRY_DELAY=5
           for i in $(seq 1 $MAX_RETRIES); do
-            if curl -fsSL --retry 3 --retry-delay 2 --retry-connrefused "$REGCTL_URL" -o /usr/local/bin/regctl; then
-              chmod +x /usr/local/bin/regctl
+            if curl -fsSL --retry 3 --retry-delay 2 --retry-connrefused "$REGCTL_URL" -o "$INSTALL_DIR/regctl"; then
+              chmod +x "$INSTALL_DIR/regctl"
+              export PATH="$INSTALL_DIR:$PATH"
+              echo "$INSTALL_DIR" >> "$GITHUB_PATH"
               regctl version
               echo "regctl installed successfully on attempt $i"
               break

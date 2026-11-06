@@ -15,6 +15,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Changed (AUT-217)
 - fix(ci): add CHANGELOG.md entry for phase1d-modularize-services PR to satisfy changelog gate (AUT-217)
 
+
+## [0.3.312] - 2026-11-04
 ### Added (AUT-6645)
 - feat(ai): per-module AI confidence floors with env override; default raised from 0.75 to 0.85 (AUT-6645)
 - feat(ai): cost tracking endpoints `/v1/cost` and `/v1/cost/reset` for AI gateway (AUT-6646)
