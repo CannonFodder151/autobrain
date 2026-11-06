@@ -9,6 +9,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
 ## [Unreleased]
+### Fixed (AUT-345)
+- fix(frontend): add ackReauth method to AuthState (AUT-345)
+
 ### Added (AUT-6645)
 - feat(ai): per-module AI confidence floors with env override; default raised from 0.75 to 0.85 (AUT-6645)
 - feat(ai): cost tracking endpoints `/v1/cost` and `/v1/cost/reset` for AI gateway (AUT-6646)
