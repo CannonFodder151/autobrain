@@ -502,10 +502,28 @@ jobs:
         run: |
           echo "OK: no env-var renames or undeclared keys detected (AUT-2390)."
 
-  # (6b) AUT-1881 pin-guard — fail any compose `image:` reference that is not
-  # pinned by `@sha256` digest. Complements the postgres/nginx/python pin
-  # guards in trivy-image-scan.yml and ensures the floating `:hosted` /
-  # `:latest` tags cannot re-appear in compose without a digest pin.
+   # (6c) AUT-1964 preventive env-var check — every ${VAR} interpolation
+   # referenced by any docker-compose*.yml must be declared in .env.example.
+   # A missing required var (no default / `${VAR:?...}`) silently interpolates
+   # empty at deploy time — the stack starts, then crashes or misbehaves when
+   # the missing value is actually read. This gate fails the PR before that
+   # happens. Optional vars (`${VAR:-...}`) are reported but not blocking —
+   # they carry a safe default.
+  env-var-check:
+    name: "Env-var check — every compose ${VAR} declared in .env.example (AUT-1964)"
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run env-var check
+        run: |
+          set -euo pipefail
+          python3 scripts/check-env-vars.py
+
+   # (6b) AUT-1881 pin-guard — fail any compose `image:` reference that is not
+   # pinned by `@sha256` digest. Complements the postgres/nginx/python pin
+   # guards in trivy-image-scan.yml and ensures the floating `:hosted` /
+   # `:latest` tags cannot re-appear in compose without a digest pin.
+
   pin-guard:
     name: "Pin guard — every compose image: must carry @sha256"
     runs-on: ubuntu-latest
