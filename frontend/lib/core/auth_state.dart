@@ -327,4 +327,6 @@ class AuthState extends ChangeNotifier {
     await _tokens.ackReauth();
     notifyListeners();
   }
+
+  Future<void> ackReauth() => _tokens.ackReauth();
 }
