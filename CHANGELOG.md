@@ -9,6 +9,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
 ## [Unreleased]
+### Added (AUT-322)
+- chore(mobile): mobile release v0.3.311+253 — `release-mobile.yml` `promote_to_production` flag now promotes the closed-testing release to Google Play production (staged rollout 10% → 50% → 100%); shared changelog entry for mobile GitHub Release (AUT-322)
 ### Added (AUT-6645)
 - feat(ai): per-module AI confidence floors with env override; default raised from 0.75 to 0.85 (AUT-6645)
 - feat(ai): cost tracking endpoints `/v1/cost` and `/v1/cost/reset` for AI gateway (AUT-6646)
