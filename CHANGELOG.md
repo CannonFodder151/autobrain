@@ -8,8 +8,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > user-facing change ships with an entry here under `[Unreleased]` — see
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
-
 ## [Unreleased]
+### Changed (AUT-217)
+- refactor(phase1d): split social.py + issues.py into subpackages, remove legacy advisor.py (PR #992)
+
+### Changed (AUT-217)
+- fix(ci): add CHANGELOG.md entry for phase1d-modularize-services PR to satisfy changelog gate (AUT-217)
+
 
 ## [0.3.312] - 2026-11-04
 ### Added (AUT-6645)
@@ -176,6 +181,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   value so a padded secret still matches what the operator types (as
   `seed_admin()` already did). Whitespace-only regression cases added to
   `backend/tests/test_seed_reset_demo.py`.
+
 
 ## [0.3.308] - 2026-10-04
 
