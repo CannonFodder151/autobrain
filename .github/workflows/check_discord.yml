@@ -1,0 +1,16 @@
+name: Check Discord Poster
+on:
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: [self-hosted, linux, x64, vm2]
+    steps:
+      - name: Check discord_poster.js
+        run: |
+          if [ -f /app/discord_poster.js ]; then
+            echo "EXISTS"
+            ls -la /app/discord_poster.js
+          else
+            echo "NOT FOUND"
+            ls -la /app/
+          fi
