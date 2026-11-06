@@ -497,10 +497,10 @@ jobs:
             rm -f "$f.main" render.err
           done <<< "$CHANGED_FILES"
           exit $fail
-       - name: Result
-         if: steps.detect.outputs.changed != ''
-         run: |
-           echo "OK: no env-var renames or undeclared keys detected (AUT-2390)."
+      - name: Result
+        if: steps.detect.outputs.changed != ''
+        run: |
+          echo "OK: no env-var renames or undeclared keys detected (AUT-2390)."
 
    # (6c) AUT-1964 preventive env-var check — every ${VAR} interpolation
    # referenced by any docker-compose*.yml must be declared in .env.example.
@@ -509,15 +509,15 @@ jobs:
    # the missing value is actually read. This gate fails the PR before that
    # happens. Optional vars (`${VAR:-...}`) are reported but not blocking —
    # they carry a safe default.
-   env-var-check:
-     name: "Env-var check — every compose ${VAR} declared in .env.example (AUT-1964)"
-     runs-on: [self-hosted, linux, x64]
-     steps:
-       - uses: actions/checkout@v4
-       - name: Run env-var check
-         run: |
-           set -euo pipefail
-           python3 scripts/check-env-vars.py
+  env-var-check:
+    name: "Env-var check — every compose ${VAR} declared in .env.example (AUT-1964)"
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run env-var check
+        run: |
+          set -euo pipefail
+          python3 scripts/check-env-vars.py
 
    # (6b) AUT-1881 pin-guard — fail any compose `image:` reference that is not
    # pinned by `@sha256` digest. Complements the postgres/nginx/python pin
