@@ -1,4 +1,4 @@
-# AUT-293: 2-day automated upgrade cycle.
+# AUT-364: 2-day automated upgrade cycle.
 # Runs every 2 days. Checks for new commits on main. If updates exist:
 #   builds Docker containers (dockerhub-publish.yml),
 #   builds mobile apps Android+iOS (sync-mobile.yml -> release-mobile.yml / release-ios.yml),
@@ -54,7 +54,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "No new commits on main since ${LAST:-none} — skipping upgrade cycle."
-          /usr/bin/node /app/discord_poster.js deployments "Upgrade cycle — skipped" "No new commits on main. Nothing to build or deploy." 0x3498DB AUT-293 2>&1 || true
+          /usr/bin/node /app/discord_poster.js deployments "Upgrade cycle — skipped" "No new commits on main. Nothing to build or deploy." 0x3498DB AUT-364 2>&1 || true
 
       - name: Publish Docker images
         if: steps.last.outputs.has_updates == 'true'
@@ -98,4 +98,4 @@ jobs:
         if: steps.last.outputs.has_updates == 'true'
         run: |
           set -euo pipefail
-          /usr/bin/node /app/discord_poster.js deployments "Upgrade cycle — deployed" "New commits detected on main. Docker images published, mobile apps (Android+iOS) building + uploading to stores, instances upgrading. Last commit: ${{ steps.last.outputs.head }}." 0x9B59B6 AUT-293 2>&1 || true
+          /usr/bin/node /app/discord_poster.js deployments "Upgrade cycle — deployed" "New commits detected on main. Docker images published, mobile apps (Android+iOS) building + uploading to stores, instances upgrading. Last commit: ${{ steps.last.outputs.head }}." 0x9B59B6 AUT-364 2>&1 || true
