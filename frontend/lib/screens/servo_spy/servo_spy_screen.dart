@@ -432,7 +432,6 @@ class _ServoSpyMapState extends State<_ServoSpyMap> {
   void _openFilter() {
     String fuel = _selectedFuelType ?? (_fuelTypes.isNotEmpty ? _fuelTypes.first : '91');
 // Filter now only fuel type; distance removed
-    String fuel = _selectedFuelType ?? (_fuelTypes.isNotEmpty ? _fuelTypes.first : '91');
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
