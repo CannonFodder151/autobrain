@@ -263,6 +263,8 @@ class AuthState extends ChangeNotifier {
     }
   }
 
+  Future<void> ackReauth() => _tokens.ackReauth();
+
   Future<void> logout() async {
     final refreshToken = _refreshToken;
     _token = null;
