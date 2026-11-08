@@ -10,6 +10,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Added (AUT-6415)
+- feat(docker): merge dongle-server + backup GUI into backend container (AUT-6415)
+
 ### Added/Changed (AUT-3533)
 - fix: Servo Spy map blank white screen on hosted by resolving undefined _kCartoKeyParam and injecting CARTO API key (PR #715)
 
