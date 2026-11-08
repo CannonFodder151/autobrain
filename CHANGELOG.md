@@ -11,6 +11,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-226)
+- fix(test): `tests/test_advisor_upgrade.py` mocked the async `get_accessible_vehicle` with a sync lambda, causing "object types.SimpleNamespace can't be used in await expression" during the advisor upgrade route test. Use `AsyncMock(return_value=fake_vehicle)` so the await expression resolves correctly. Backend pytest suite no longer fails at this test.
+
+
 ### Fixed (AUT-4812)
 - fix(backend): `tests/test_advisor_value.py` could not import `BAND_LOW_RATIO` / `BAND_HIGH_RATIO` from `app.services.advisor`, so the entire backend suite failed at collection — masked by `ci-tests.yml` running the suite as `pytest … || true`. The `app.services.advisor` package `__init__.py` already re-exports both constants from `advisor/value.py`; the stale `backend/app/services/advisor.py` module that shadowed the package is deleted (no imports referenced it). Removed `|| true` from the full-suite step in `.github/workflows/ci-tests.yml` so future collection errors fail the build. All 16 `test_advisor_value.py` tests pass; full suite collects without import errors.
 
