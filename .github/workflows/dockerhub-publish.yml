@@ -179,14 +179,19 @@ jobs:
           set -euo pipefail
           git config user.name "AutoBrain Release Bot"
           git config user.email "release@autobrainservice.app"
+          # Record HEAD before auto-bump.sh: the script's changelog-dedupe
+          # block rewrites CHANGELOG.md even when nothing is bumped, so a
+          # working-tree diff against origin/main is not a reliable "did we
+          # bump?" signal (AUT-296). Only a new commit means a release was cut.
+          BEFORE_HEAD=$(git rev-parse HEAD)
           ./scripts/auto-bump.sh
-          # PR-based auto-bump (AUT-296): push to a branch and merge via PR,
-          # because main is protected (GH006 blocks direct pushes).
-          if git diff --quiet origin/main --; then
+          if [[ "$(git rev-parse HEAD)" == "$BEFORE_HEAD" ]]; then
             echo "==> nothing to bump — no push needed"
             echo "bumped=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          # PR-based auto-bump (AUT-296): push to a branch and merge via PR,
+          # because main is protected (GH006 blocks direct pushes).
           VERSION=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')
           BRANCH="auto-bump/v${VERSION}-$(date +%s)"
           git checkout -b "$BRANCH"

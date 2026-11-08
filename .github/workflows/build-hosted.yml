@@ -82,9 +82,13 @@ jobs:
           set -euo pipefail
           git config user.name "AutoBrain Release Bot"
           git config user.email "release@autobrainservice.app"
+          # Record HEAD before auto-bump.sh: the script's changelog-dedupe
+          # block rewrites CHANGELOG.md even when nothing is bumped, so a
+          # working-tree diff against origin/main is not a reliable "did we
+          # bump?" signal (AUT-296). Only a new commit means a release was cut.
+          BEFORE_HEAD=$(git rev-parse HEAD)
           ./scripts/auto-bump.sh
-          # Check if auto-bump produced a new commit (i.e. HEAD differs from origin/main)
-          if git diff --quiet origin/main --; then
+          if [[ "$(git rev-parse HEAD)" == "$BEFORE_HEAD" ]]; then
             echo "==> nothing to bump — no push needed"
             echo "bumped=false" >> "$GITHUB_OUTPUT"
             exit 0
