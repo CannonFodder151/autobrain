@@ -22,6 +22,7 @@ os.environ.setdefault("MINIO_SECRET_KEY", "test-minio-secret-key")
 os.environ.setdefault("MINIO_BUCKET", "test-minio-bucket")
 
 from types import SimpleNamespace  # noqa: E402
+from unittest.mock import AsyncMock  # noqa: E402
 
 import pytest  # noqa: E402
 from fastapi import HTTPException  # noqa: E402
@@ -355,9 +356,8 @@ async def test_advisor_upgrade_route_envelope(monkeypatch) -> None:
         }
 
     monkeypatch.setattr(advisor_mod, "compute_upgrade", _fake_compute_upgrade)
-    async def _fake_get_vehicle(db, vid, user):
-        return fake_vehicle
-    monkeypatch.setattr(advisor_mod, "get_accessible_vehicle", _fake_get_vehicle)
+    monkeypatch.setattr(advisor_mod, "get_accessible_vehicle",
+                        AsyncMock(return_value=fake_vehicle))
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:

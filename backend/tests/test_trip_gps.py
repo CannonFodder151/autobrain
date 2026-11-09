@@ -20,6 +20,7 @@ import asyncio  # noqa: E402
 import uuid  # noqa: E402
 
 import pytest  # noqa: E402
+import pytest_asyncio  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 
 from app.core.security import create_access_token, hash_password  # noqa: E402
@@ -31,9 +32,9 @@ from app.schemas.logbook import LogEntryCreate  # noqa: E402
 from app.services.trip_gps import MAX_GPS_SAMPLES, clean_samples, parse_board_csv  # noqa: E402
 
 
-@pytest.fixture(scope="module", autouse=True)
-def _init_schema() -> None:
-    asyncio.run(init_db())
+@pytest_asyncio.fixture(scope="module", autouse=True, loop_scope="session")
+async def _init_schema() -> None:
+    await init_db()
 
 
 # --- board CSV parser (pure, deterministic) --------------------------------
