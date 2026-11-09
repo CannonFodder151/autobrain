@@ -20,6 +20,7 @@ import asyncio  # noqa: E402
 import uuid  # noqa: E402
 
 import pytest  # noqa: E402
+import pytest_asyncio  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 
 from app.core.security import create_access_token, create_password_reset_token  # noqa: E402
@@ -29,9 +30,9 @@ from app.models.refresh_token import RevokedRefreshToken  # noqa: E402
 from app.models.user import User  # noqa: E402
 
 
-@pytest.fixture(scope="module", autouse=True)
-def _reinit_schema() -> None:
-    asyncio.run(init_db())
+@pytest_asyncio.fixture(scope="module", autouse=True, loop_scope="session")
+async def _reinit_schema() -> None:
+    await init_db()
 
 
 async def _make_user(email: str = "tok") -> User:
