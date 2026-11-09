@@ -63,7 +63,9 @@ jobs:
         run: |
           set -euo pipefail
           echo "No new commits on main since ${LAST:-none} — skipping upgrade cycle."
-          /usr/bin/node /home/administrator/discord_poster.js deployments "Upgrade cycle — skipped" "No new commits on main. Nothing to build or deploy." 0x3498DB AUT-364 2>&1 || true
+          curl -s -X POST -H "Content-Type: application/json" \
+            -d '{"embeds":[{"title":"Upgrade cycle — skipped","description":"No new commits on main. Nothing to build or deploy.\n\nIssue: AUT-373","color":3447003,"timestamp":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}]}' \
+            "${{ secrets.DISCORD_REPORT_WEBHOOK }}" 2>&1 || true
 
       - name: Publish Docker images
         if: steps.last.outputs.has_updates == 'true'
@@ -107,4 +109,6 @@ jobs:
         if: steps.last.outputs.has_updates == 'true'
         run: |
           set -euo pipefail
-          /usr/bin/node /home/administrator/discord_poster.js deployments "Upgrade cycle — deployed" "New commits detected on main. Docker images published, mobile apps (Android+iOS) building + uploading to stores, instances upgrading. Last commit: ${{ steps.last.outputs.head }}." 0x9B59B6 AUT-364 2>&1 || true
+          curl -s -X POST -H "Content-Type: application/json" \
+            -d '{"embeds":[{"title":"Upgrade cycle — deployed","description":"New commits detected on main. Docker images published, mobile apps (Android+iOS) building + uploading to stores, instances upgrading. Last commit: ${{ steps.last.outputs.head }}.\n\nIssue: AUT-373","color":10181046,"timestamp":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}]}' \
+            "${{ secrets.DISCORD_REPORT_WEBHOOK }}" 2>&1 || true
