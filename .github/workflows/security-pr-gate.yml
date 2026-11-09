@@ -198,11 +198,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
       - name: Install pip-audit (+ packaging for PEP 440 version compare in the direct-deps dedup pass)
         run: |
-          python3 -m pip --version 2>/dev/null || \
-            curl -sS https://bootstrap.pypa.io/get-pip.py | PIP_BREAK_SYSTEM_PACKAGES=1 python3 -
-          PIP_BREAK_SYSTEM_PACKAGES=1 python3 -m pip install --quiet pip-audit
+          python -m pip --version 2>/dev/null || \
+            curl -sS https://bootstrap.pypa.io/get-pip.py | PIP_BREAK_SYSTEM_PACKAGES=1 python -
+          PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet pip-audit
       - name: Direct-deps pass — fail on known-vuln pinned deps
         run: |
           set -euo pipefail
@@ -211,11 +215,11 @@ jobs:
           # so backend/ai (pydantic 2.10.4) and market-data (pydantic 2.13.4)
           # don't trip the duplicate-line reject.
           TMPREQ="$(mktemp)"
-          python3 - > "$TMPREQ" <<'PY'
+          python - > "$TMPREQ" <<'PY'
           import re
           from packaging.version import Version  # transitive dep of pip-audit
           pkgs = {}
-          float_re = re.compile(r'^([A-Za-z0-9_.+\-]+)\s*(>=|<=|==|!=|~=|>|<)\s*([^\s#]+)(?:\s*#\s*(.*))?$')
+          float_re = re.compile(r'^([A-Za-z0-9_.+\\-]+)\s*(>=|<=|==|!=|~=|>|<)\s*([^\s#]+)(?:\s*#\s*(.*))?$')
           for f in ('backend/requirements.txt', 'ai/requirements.txt', 'market-data/requirements.txt'):
               for line in open(f):
                   line = line.strip()
@@ -237,7 +241,7 @@ jobs:
                   out += f"  # {comment}"
               print(out)
           PY
-          python3 -m pip_audit --disable-pip --no-deps -r "$TMPREQ"
+          python -m pip_audit --disable-pip --no-deps -r "$TMPREQ"
           rm -f "$TMPREQ"
 
   # (3b) resolved-tree pass — fail on transitive CVE drift (AUT-1189).
@@ -252,18 +256,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
       - name: Install virtualenv + pip-audit
         run: |
-          python3 -m pip --version 2>/dev/null || \
-            curl -sS https://bootstrap.pypa.io/get-pip.py | PIP_BREAK_SYSTEM_PACKAGES=1 python3 -
-          PIP_BREAK_SYSTEM_PACKAGES=1 python3 -m pip install --quiet virtualenv pip-audit
+          python -m pip --version 2>/dev/null || \
+            curl -sS https://bootstrap.pypa.io/get-pip.py | PIP_BREAK_SYSTEM_PACKAGES=1 python -
+          PIP_BREAK_SYSTEM_PACKAGES=1 python -m pip install --quiet virtualenv pip-audit
       - name: Resolved-tree pass — fail on transitive CVE drift (AUT-1189)
         run: |
           set -euo pipefail
           for req in backend/requirements.txt ai/requirements.txt market-data/requirements.txt; do
             svc="$(echo "$req" | cut -d/ -f1)"
             echo "==> creating venv and installing $svc deps"
-            python3 -m virtualenv "/tmp/audit-${svc}"
+            python -m virtualenv "/tmp/audit-${svc}"
             "/tmp/audit-${svc}/bin/pip" install --quiet -r "$req"
             # pip-audit isn't installed inside the venv by default — install it
             # per-service so /tmp/audit-${svc}/bin/pip-audit resolves (AUT-2947).

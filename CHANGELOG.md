@@ -11,12 +11,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-## [0.3.314] - 2026-11-09
-### Added (AUT-6415)
-- feat(docker): merge dongle-server + backup GUI into backend container (AUT-6415)
+### Fixed (AUT-226)
+- fix(backend): resolve duplicate alembic merge revision m3rge07; add m3rge08 merge to unify pgvector embedding chain with device vehicle_type repair chain (AUT-226)
+- fix(test): use AsyncMock for async get_accessible_vehicle in advisor upgrade route test (AUT-226)
+- fix(test): add PostgreSQL service to pytest job for full backend suite (AUT-6456)
+
+### Fixed (AUT-374)
+- fix(alembic): idempotent pgvector embedding column/index creation; handles hosted `create_all` pre-creating columns as text (AUT-374)
+- fix(alembic): merge heads m3rge07 (engineers+passkey) and m3rge08 (embedding chain) to restore single-head alembic upgrade path (AUT-374)
+- test: add async fixture for passkey token lifecycle tests
 
 ### Added (AUT-322)
 - chore(mobile): mobile release v0.3.311+253 — `release-mobile.yml` `promote_to_production` flag now promotes the closed-testing release to Google Play production (staged rollout 10% → 50% → 100%); shared changelog entry for mobile GitHub Release (AUT-322)
+
+## [0.3.314] - 2026-11-09
+### Added (AUT-6415)
+- feat(docker): merge dongle-server + backup GUI into backend container (AUT-6415)
 
 ## [0.3.313] - 2026-11-06
 ### Changed (AUT-217)
