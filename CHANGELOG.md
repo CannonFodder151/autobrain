@@ -10,20 +10,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
-<<<<<<< HEAD
+### Added (AUT-6415)
+- feat(docker): merge dongle-server + backup GUI into backend container (AUT-6415)
 
-## [0.3.313] - 2026-11-06
+### Added (AUT-322)
+- chore(mobile): mobile release v0.3.311+253 — `release-mobile.yml` `promote_to_production` flag now promotes the closed-testing release to Google Play production (staged rollout 10% → 50% → 100%); shared changelog entry for mobile GitHub Release (AUT-322)
+
 ### Changed (AUT-217)
 - refactor(phase1d): split social.py + issues.py into subpackages, remove legacy advisor.py (PR #992)
 
 ### Changed (AUT-217)
 - fix(ci): add CHANGELOG.md entry for phase1d-modularize-services PR to satisfy changelog gate (AUT-217)
 
+## [0.3.313] - 2026-11-06
+
 ## [0.3.312] - 2026-11-04
-=======
-### Added (AUT-322)
-- chore(mobile): mobile release v0.3.311+253 — `release-mobile.yml` `promote_to_production` flag now promotes the closed-testing release to Google Play production (staged rollout 10% → 50% → 100%); shared changelog entry for mobile GitHub Release (AUT-322)
->>>>>>> 7dc86f3b (docs(AUT-322): add mobile release v0.3.311+253 changelog entry (PR #275))
 ### Added (AUT-6645)
 - feat(ai): per-module AI confidence floors with env override; default raised from 0.75 to 0.85 (AUT-6645)
 - feat(ai): cost tracking endpoints `/v1/cost` and `/v1/cost/reset` for AI gateway (AUT-6646)
