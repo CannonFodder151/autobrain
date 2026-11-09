@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+
+## [0.3.314] - 2026-11-09
 ### Added (AUT-6415)
 - feat(docker): merge dongle-server + backup GUI into backend container (AUT-6415)
 
