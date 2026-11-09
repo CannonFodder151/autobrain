@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.315] - 2026-11-09
+
 ### Fixed (AUT-226)
 - fix(backend): resolve duplicate alembic merge revision m3rge07; add m3rge08 merge to unify pgvector embedding chain with device vehicle_type repair chain (AUT-226)
 - fix(test): use AsyncMock for async get_accessible_vehicle in advisor upgrade route test (AUT-226)
