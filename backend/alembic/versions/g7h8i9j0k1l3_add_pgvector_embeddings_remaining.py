@@ -13,9 +13,12 @@ depends_on = None
 _DIM = settings.EMBEDDING_DIMENSION
 
 
-def _has_column(conn, table: str, column: str) -> bool:
+def _column_type(conn, table: str, column: str) -> str | None:
     insp = sa.inspect(conn)
-    return any(c["name"] == column for c in insp.get_columns(table))
+    for c in insp.get_columns(table):
+        if c["name"] == column:
+            return str(c["type"])
+    return None
 
 
 def _has_index(conn, table: str, index: str) -> bool:
@@ -28,9 +31,17 @@ def upgrade() -> None:
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
 
     # Add embedding columns (dimension from config, matches the embedding model).
+    # Idempotent: on hosted-shaped DBs SQLAlchemy ``create_all`` pre-creates the
+    # column as ``text`` (the model declares ``Mapped[list[float]]`` as Text),
+    # so a naive ``ADD COLUMN embedding vector(...)`` fails with either
+    # DuplicateColumnError or DatatypeMismatchError. Drop the text column first
+    # when present, then add the vector column.
     conn = op.get_bind()
     for table in ("fuel_price_snapshots", "devices", "market_listing_cache", "vehicles"):
-        if not _has_column(conn, table, "embedding"):
+        ctype = _column_type(conn, table, "embedding")
+        if ctype is not None and "vector" not in ctype:
+            op.execute(f"ALTER TABLE {table} DROP COLUMN embedding")
+        if ctype is None:
             op.execute(f"ALTER TABLE {table} ADD COLUMN embedding vector({_DIM})")
 
     # HNSW index (pgvector >= 0.5): no training data or tuning required, and on
