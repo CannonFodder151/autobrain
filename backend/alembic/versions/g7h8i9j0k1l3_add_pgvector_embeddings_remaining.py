@@ -13,22 +13,47 @@ depends_on = None
 _DIM = settings.EMBEDDING_DIMENSION
 
 
+def _column_type(conn, table: str, column: str) -> str | None:
+    insp = sa.inspect(conn)
+    for c in insp.get_columns(table):
+        if c["name"] == column:
+            return str(c["type"])
+    return None
+
+
+def _has_index(conn, table: str, index: str) -> bool:
+    insp = sa.inspect(conn)
+    return any(i["name"] == index for i in insp.get_indexes(table))
+
+
 def upgrade() -> None:
     # Install pgvector extension if not already present (idempotent).
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
 
     # Add embedding columns (dimension from config, matches the embedding model).
+    # Idempotent: on hosted-shaped DBs SQLAlchemy ``create_all`` pre-creates the
+    # column as ``text`` (the model declares ``Mapped[list[float]]`` as Text),
+    # so a naive ``ADD COLUMN embedding vector(...)`` fails with either
+    # DuplicateColumnError or DatatypeMismatchError. Drop the text column first
+    # when present, then add the vector column.
+    conn = op.get_bind()
     for table in ("fuel_price_snapshots", "devices", "market_listing_cache", "vehicles"):
-        op.execute(f"ALTER TABLE {table} ADD COLUMN embedding vector({_DIM})")
+        ctype = _column_type(conn, table, "embedding")
+        if ctype is not None and "vector" not in ctype:
+            op.execute(f"ALTER TABLE {table} DROP COLUMN embedding")
+        if ctype is None:
+            op.execute(f"ALTER TABLE {table} ADD COLUMN embedding vector({_DIM})")
 
     # HNSW index (pgvector >= 0.5): no training data or tuning required, and on
     # small per-user tables it beats IVFFlat — which needs lists tuned to row
     # count and a training probe pass. Cosine ops matches search's `a <=> b`.
     for table in ("fuel_price_snapshots", "devices", "market_listing_cache", "vehicles"):
-        op.execute(
-            f"CREATE INDEX idx_{table}_embedding ON {table} "
-            "USING hnsw (embedding vector_cosine_ops)"
-        )
+        idx = f"idx_{table}_embedding"
+        if not _has_index(conn, table, idx):
+            op.execute(
+                f"CREATE INDEX {idx} ON {table} "
+                "USING hnsw (embedding vector_cosine_ops)"
+            )
 
 
 def downgrade() -> None:
