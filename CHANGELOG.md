@@ -11,6 +11,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-226)
+- fix(test): `tests/test_advisor_upgrade.py` mocked the async `get_accessible_vehicle` with a sync lambda, causing "object types.SimpleNamespace can't be used in await expression" during the advisor upgrade route test. Use `AsyncMock(return_value=fake_vehicle)` so the await expression resolves correctly. Backend pytest suite no longer fails at this test.
+- fix(test): `tests/test_aut207_token_lifecycle.py`, `tests/test_aut3447_passkey.py`, `tests/test_logbook_club_reg.py`, `tests/test_odometer_priority.py`, `tests/test_trip_gps.py` used `asyncio.run(init_db())` in module-scoped fixtures, which created a separate event loop conflicting with pytest-asyncio's session-scoped loop and caused "Future attached to a different loop" flakiness in the full pytest suite. Changed to `@pytest_asyncio.fixture(scope="module", autouse=True, loop_scope="session")` with `await init_db()` so all tests share the session loop.
+- fix(alembic): migrations `g7h8i9j0k1l2` and `g7h8i9j0k1l3` (pgvector embedding columns) were not idempotent — `init_db()` (create_all) creates the columns first, then `alembic upgrade head` fails with "column already exists" on the test DB built by `test_hosted_shaped_database_reaches_head`. Changed `ALTER TABLE ... ADD COLUMN` to `ADD COLUMN IF NOT EXISTS` so migrations survive create_all-first test runs.
+
 ## [0.3.313] - 2026-11-06
 ### Changed (AUT-217)
 - refactor(phase1d): split social.py + issues.py into subpackages, remove legacy advisor.py (PR #992)
