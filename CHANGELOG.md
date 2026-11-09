@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 
 ## [Unreleased]
+### Fixed (AUT-380)
+- fix(alembic): merge migration heads `aut5092_dev_veh_type` + `g7h8i9j0k1l3` via `m3rge08`; remove duplicate `m3rge07` revision; `alembic upgrade head` now resolves to single head (PR #1110)
 
 ## [0.3.314] - 2026-11-09
 ### Added (AUT-6415)
