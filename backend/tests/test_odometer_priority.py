@@ -18,6 +18,7 @@ import asyncio  # noqa: E402
 import uuid  # noqa: E402
 
 import pytest  # noqa: E402
+import pytest_asyncio  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 
 from app.core.security import create_access_token, hash_password  # noqa: E402
@@ -29,9 +30,9 @@ from app.models.vehicle import Vehicle, VehicleEvent  # noqa: E402
 from sqlalchemy import select  # noqa: E402
 
 
-@pytest.fixture(scope="module", autouse=True)
-def _init_schema() -> None:
-    asyncio.run(init_db())
+@pytest_asyncio.fixture(scope="module", autouse=True, loop_scope="session")
+async def _init_schema() -> None:
+    await init_db()
 
 
 async def _setup() -> dict:

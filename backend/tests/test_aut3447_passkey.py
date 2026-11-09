@@ -23,6 +23,7 @@ import asyncio  # noqa: E402
 import uuid  # noqa: E402
 
 import pytest  # noqa: E402
+import pytest_asyncio  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 
 from app.db.session import SessionLocal, init_db  # noqa: E402
@@ -31,9 +32,9 @@ from app.models.passkey import PasskeyCredential  # noqa: E402
 from app.models.user import User  # noqa: E402
 
 
-@pytest.fixture(scope="module", autouse=True)
-def _reinit_schema() -> None:
-    asyncio.run(init_db())
+@pytest_asyncio.fixture(scope="module", autouse=True, loop_scope="session")
+async def _reinit_schema() -> None:
+    await init_db()
 
 
 async def _make_user(email: str = "passkey") -> User:
