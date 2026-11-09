@@ -24,11 +24,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Added (AUT-322)
 - chore(mobile): mobile release v0.3.311+253 — `release-mobile.yml` `promote_to_production` flag now promotes the closed-testing release to Google Play production (staged rollout 10% → 50% → 100%); shared changelog entry for mobile GitHub Release (AUT-322)
 
+## [0.3.314] - 2026-11-09
+### Added (AUT-6415)
+- feat(docker): merge dongle-server + backup GUI into backend container (AUT-6415)
+
 ## [0.3.313] - 2026-11-06
 ### Changed (AUT-217)
 - refactor(phase1d): split social.py + issues.py into subpackages, remove legacy advisor.py (PR #992)
-
-### Changed (AUT-217)
 - fix(ci): add CHANGELOG.md entry for phase1d-modularize-services PR to satisfy changelog gate (AUT-217)
 
 ## [0.3.312] - 2026-11-04
