@@ -25,11 +25,20 @@ jobs:
     runs-on: [self-hosted, linux, x64, vm2]
     timeout-minutes: 30
     steps:
-      - name: Checkout main
+      - name: Checkout main + marker branch
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
+          ref: main
+
+      - name: Fetch marker branch
+        run: |
+          set -euo pipefail
+          git fetch origin upgrade-cycle-marker 2>/dev/null || true
+          git branch -r | grep -q "upgrade-cycle-marker" && \
+            git checkout -b upgrade-cycle-marker origin/upgrade-cycle-marker || \
+            git checkout -b upgrade-cycle-marker
 
       - name: Resolve last processed commit
         id: last
@@ -92,7 +101,7 @@ jobs:
           git config user.email "upgrade@autobrainservice.app"
           git add .upgrade-cycle-last-commit
           git commit -m "chore: record upgrade cycle last commit ${{ steps.last.outputs.head }} [skip ci]" || true
-          git push origin main || true
+          git push origin upgrade-cycle-marker --force-with-lease || git push origin HEAD:upgrade-cycle-marker
 
       - name: Notify Discord #deployments
         if: steps.last.outputs.has_updates == 'true'
