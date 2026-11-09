@@ -19,7 +19,7 @@ def upgrade() -> None:
 
     # Add embedding columns (dimension from config, matches the embedding model).
     for table in ("fuel_price_snapshots", "devices", "market_listing_cache", "vehicles"):
-        op.execute(f"ALTER TABLE {table} ADD COLUMN embedding vector({_DIM})")
+        op.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS embedding vector({_DIM})")
 
     # HNSW index (pgvector >= 0.5): no training data or tuning required, and on
     # small per-user tables it beats IVFFlat — which needs lists tuned to row
