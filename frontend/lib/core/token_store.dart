@@ -11,7 +11,8 @@ const _needsReauthKey = 'autobrain_legacy_jwt_needs_reauth';
 const _aOptions = AndroidOptions(encryptedSharedPreferences: true);
 const _iOptions = IOSOptions(accessibility: KeychainAccessibility.first_unlock);
 const _lOptions = LinuxOptions();
-const _wOptions = WebOptions();
+const _webOptions = WebOptions();
+const _winOptions = WindowsOptions();
 const _mOptions = MacOsOptions();
 
 class TokenStore {
@@ -20,7 +21,8 @@ class TokenStore {
           aOptions: _aOptions,
           iOptions: _iOptions,
           lOptions: _lOptions,
-          wOptions: _wOptions,
+          webOptions: _webOptions,
+          wOptions: _winOptions,
           mOptions: _mOptions,
         );
 
