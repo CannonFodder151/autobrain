@@ -12,6 +12,11 @@
 # finished via the emailed setup link. Omitting display_name returns 422 and was
 # misreported as a deploy failure (AUT-4687).
 #
+# AUT-IMP-009: tier-aware signup check — if /api/v1/auth/config reports
+# signup_enabled=false, a 403 "signup disabled" response is treated as PASS
+# (expected for tiers with admin-only provisioning). If signup is enabled, a
+# 201 is required.
+#
 # Exit code: 0 all checks pass, 1 any check fails.
 set -uo pipefail
 
@@ -40,7 +45,9 @@ else
   pass "/flutter_bootstrap.js" "skipped (no expected SHA passed)"
 fi
 
-# 3. Signup round-trip. Unique email per run so repeat runs stay 201.
+# 3. Signup round-trip (tier-aware).
+signup_enabled=$(curl -fsS --max-time 20 "$BASE_URL/api/v1/auth/config" 2>/dev/null \
+  | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('signup_enabled', False)).lower())" 2>/dev/null || echo "unknown")
 signup_email="qa.smoke.$(date +%s)@example.com"
 signup_body=$(curl -sS --max-time 30 -w '\n%{http_code}' -X POST \
   "$BASE_URL/api/v1/auth/signup" \
@@ -48,10 +55,16 @@ signup_body=$(curl -sS --max-time 30 -w '\n%{http_code}' -X POST \
   -d "{\"display_name\":\"QA Smoke\",\"email\":\"$signup_email\"}" 2>&1)
 signup_code=$(printf '%s' "$signup_body" | tail -n1)
 signup_json=$(printf '%s' "$signup_body" | sed '$d')
-if [ "$signup_code" = "201" ]; then
+if [ "$signup_enabled" = "false" ]; then
+  if [ "$signup_code" = "403" ]; then
+    pass "/api/v1/auth/signup" "403 (signup disabled, expected) $signup_json"
+  else
+    fail "/api/v1/auth/signup" "expected 403 when disabled, got $signup_code $signup_json"
+  fi
+elif [ "$signup_code" = "201" ]; then
   pass "/api/v1/auth/signup" "201 $signup_json"
 else
-  fail "/api/v1/auth/signup" "$signup_code $signup_json"
+  fail "/api/v1/auth/signup" "$signup_code $signup_json (signup_enabled=$signup_enabled)"
 fi
 
 # 4. Ready probe
