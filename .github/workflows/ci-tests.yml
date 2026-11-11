@@ -254,6 +254,15 @@ jobs:
         working-directory: backend
         env:
           ALEMBIC_TEST_ADMIN_URL: "postgresql://autobrain:autobrain@localhost:5432/postgres"
+          DATABASE_URL: "postgresql+asyncpg://autobrain:autobrain@localhost:5432/autobrain"
+          SECRET_KEY: "ci-test-secret"
+          ENVIRONMENT: "development"
+          POSTGRES_USER: "ci-test-postgres-user"
+          POSTGRES_PASSWORD: "ci-test-postgres-password"
+          POSTGRES_DB: "ci-test-postgres-db"
+          MINIO_ACCESS_KEY: "ci-test-minio-access-key"
+          MINIO_SECRET_KEY: "ci-test-minio-secret-key"
+          MINIO_BUCKET: "ci-test-minio-bucket"
         run: pytest tests/test_alembic_migration_only.py -v --maxfail=1 --tb=short
 
   # AUT-5031: scripts/test_sync_compose_to_portainer.py had no CI job, so the
