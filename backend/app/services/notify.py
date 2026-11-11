@@ -172,14 +172,15 @@ async def _send_apns(apns_token: str, title: str, body: str, data: dict | None =
         return False
 
     bundle_id = settings.APNS_BUNDLE_ID or "com.autobrain.autobrain"
-    environment = "development" if settings.APNS_USE_SANDBOX else "production"
-    url = f"https://api.{environment}.push.apple.com/3/device/{apns_token}"
+    if settings.APNS_USE_SANDBOX:
+        url = f"https://api.development.push.apple.com/3/device/{apns_token}"
+    else:
+        url = f"https://api.push.apple.com/3/device/{apns_token}"
 
     aps = {"alert": {"title": title, "body": body}, "sound": "default"}
-    if data:
-        aps["data"] = data
-
     payload = {"aps": aps}
+    if data:
+        payload.update({k: str(v) for k, v in data.items()})
     headers = {
         "authorization": f"bearer {auth_token}",
         "apns-topic": bundle_id,
@@ -241,8 +242,9 @@ async def deliver_due_service(db, pref: NotificationPreference, vehicle: Vehicle
     if pref.discord_enabled and pref.discord_webhook_url:
         if await _send_discord(pref.discord_webhook_url, title, description):
             channels.append("discord")
-    if pref.push_enabled and pref.fcm_token:
-        if await _send_push(pref.fcm_token, title, description.replace("**", "")):
+    push_token = pref.apns_token or pref.fcm_token
+    if pref.push_enabled and push_token:
+        if await _send_push(push_token, title, description.replace("**", "")):
             channels.append("push")
 
     if channels:
@@ -299,7 +301,7 @@ async def _check_pref(db, pref: NotificationPreference, vehicle: Vehicle) -> Non
                 ServiceRecord.vehicle_id == vehicle.id,
                 ServiceRecord.next_due_km.is_not(None),
                 ServiceRecord.next_due_km >= odo,
-                ServiceRecord.next_due_km - odo <= pref.service_km,
+                ServiceRecord.next_due_km - odo <= pref.service_due_km,
             ).order_by(ServiceRecord.next_due_km.asc())
         )).all())
         for svc in by_km:
@@ -390,8 +392,9 @@ async def deliver_rego_expiry(
     if pref.discord_enabled and pref.discord_webhook_url:
         if await _send_discord(pref.discord_webhook_url, title, description):
             channels.append("discord")
-    if pref.push_enabled and pref.fcm_token:
-        if await _send_push(pref.fcm_token, title, description.replace("**", "")):
+    push_token = pref.apns_token or pref.fcm_token
+    if pref.push_enabled and push_token:
+        if await _send_push(push_token, title, description.replace("**", "")):
             channels.append("push")
 
     if channels:
@@ -482,8 +485,9 @@ async def deliver_fuel_price_alert(
     if pref.discord_enabled and pref.discord_webhook_url:
         if await _send_discord(pref.discord_webhook_url, title, description):
             channels.append("discord")
-    if pref.push_enabled and pref.fcm_token:
-        if await _send_push(pref.fcm_token, title, description.replace("**", ""), push_data):
+    push_token = pref.apns_token or pref.fcm_token
+    if pref.push_enabled and push_token:
+        if await _send_push(push_token, title, description.replace("**", ""), push_data):
             channels.append("push")
 
     if channels:
