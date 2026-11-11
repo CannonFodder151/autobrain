@@ -36,6 +36,7 @@ from app.services.ai_client import read_odometer
 from app.services.ai_fallbacks import odometer_fallback
 from app.services.odometer import sync_odometer
 from app.services.rate_limit import require_ai_rate_limit
+from app.services.webhook_trigger import fire_logbook_trip
 
 router = APIRouter(prefix="/vehicles/{vehicle_id}/logbook", tags=["logbook"])
 
@@ -75,6 +76,7 @@ async def start_trip(
     db.add(entry)
     await db.commit()
     await db.refresh(entry)
+    fire_logbook_trip(db, entry.id, vehicle_id, user.id)
     return entry
 
 
@@ -150,6 +152,7 @@ async def update_entry(
         await sync_odometer(db, vehicle, entry.end_odometer_km, entry.ended_at)
     await db.commit()
     await db.refresh(entry)
+    fire_logbook_trip(db, entry.id, vehicle_id, user.id)
     return entry
 
 

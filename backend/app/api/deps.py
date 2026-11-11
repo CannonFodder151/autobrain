@@ -16,6 +16,7 @@ from app.models.user import User
 from app.services.device_keys import key_prefix, verify_key
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
 _credentials_exc = HTTPException(
     status_code=status.HTTP_401_UNAUTHORIZED,
@@ -25,21 +26,35 @@ _credentials_exc = HTTPException(
 
 
 async def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    request: Request,
+    token: str | None = Depends(oauth2_scheme_optional),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    payload = decode_token(token)
-    if not payload or payload.get("type") != "access":
-        raise _credentials_exc
-    user_id = payload.get("sub")
-    if not user_id:
-        raise _credentials_exc
-    user = await db.get(User, user_id)
-    if not user or not user.is_active:
-        raise _credentials_exc
-    if payload.get("ver", 0) != user.token_version:
-        raise _credentials_exc
-    return user
+    """Authenticate via JWT bearer token, falling back to X-API-Key.
+
+    Public REST endpoints accept either a session JWT or a developer API key.
+    When no bearer token is supplied, the request is authenticated with the
+    X-API-Key header if present; otherwise the original 401 is raised.
+    """
+    if token:
+        payload = decode_token(token)
+        if not payload or payload.get("type") != "access":
+            raise _credentials_exc
+        user_id = payload.get("sub")
+        if not user_id:
+            raise _credentials_exc
+        user = await db.get(User, user_id)
+        if not user or not user.is_active:
+            raise _credentials_exc
+        if payload.get("ver", 0) != user.token_version:
+            raise _credentials_exc
+        return user
+
+    # No bearer token — try API key
+    if request.headers.get("X-API-Key"):
+        return await get_user_from_api_key(request, db)
+
+    raise _credentials_exc
 
 
 def _extract_ws_token(ws: WebSocket) -> str | None:
@@ -87,13 +102,41 @@ async def require_admin(user: User = Depends(get_current_user)) -> User:
     return user
 
 
-async def require_write(user: User = Depends(get_current_user)) -> User:
-    """Demo accounts are read-only: reject any mutating request."""
+async def require_write(
+    request: Request = None,
+    user: User = Depends(get_current_user),
+) -> User:
+    """Demo accounts are read-only: reject any mutating request.
+
+    When authenticated via an API key, the key must also carry a write scope
+    (write:vehicles, write:services, write:fuel, write:diagnostics,
+    write:logbook, or admin:keys). JWT-authenticated users are governed by the
+    existing demo/free-account rules.
+    """
+    from app.services.api_keys import has_scope
+
     if user.role == "demo":
         raise HTTPException(
             status_code=403,
             detail="This is a read-only demo account. Sign up or self-host to make changes.",
         )
+
+    if request is not None:
+        key = getattr(request.state, "api_key", None)
+        if key is not None:
+            write_scopes = (
+                "write:vehicles",
+                "write:services",
+                "write:fuel",
+                "write:diagnostics",
+                "write:logbook",
+                "admin:keys",
+            )
+            if not any(has_scope(key, s) for s in write_scopes):
+                raise HTTPException(
+                    status_code=403,
+                    detail="API key missing a write scope",
+                )
     return user
 
 
@@ -259,4 +302,148 @@ async def get_ha_user(
     user = await db.get(User, integration.user_id)
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="Invalid or expired HA API key")
+    return user
+
+
+async def get_user_from_api_key(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """Authenticate a request via X-API-Key header.
+
+    Returns the owning User if valid. Raises 401 if invalid/missing.
+    """
+    from app.services.api_keys import find_key_by_raw, touch_last_used
+
+    supplied = request.headers.get("X-API-Key", "")
+    if not supplied:
+        raise HTTPException(
+            status_code=401,
+            detail="Missing X-API-Key header",
+            headers={"WWW-Authenticate": "ApiKey"},
+        )
+
+    key = await find_key_by_raw(db, supplied)
+    if not key:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or revoked API key",
+            headers={"WWW-Authenticate": "ApiKey"},
+        )
+
+    # Check rate limit for this specific key
+    await check_api_key_rate_limit(db, key)
+
+    # Update last_used_at
+    await touch_last_used(db, key)
+
+    # Get the user
+    user = await db.get(User, key.user_id)
+    if not user or not user.is_active:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or revoked API key",
+            headers={"WWW-Authenticate": "ApiKey"},
+        )
+
+    # Attach key info to request state for scope checks
+    request.state.api_key = key
+    return user
+
+
+async def check_api_key_rate_limit(db: AsyncSession, key) -> None:
+    """Enforce per-key rate limit using Redis."""
+    if not key.rate_limit or not key.rate_window_seconds:
+        return  # No limit configured
+
+    from app.core.config import settings
+    from app.core.logging import get_logger
+    from app.services.rate_limit import _client as _redis_client
+
+    logger = get_logger(__name__)
+    r = _redis_client()
+    try:
+        now = int(datetime.now(timezone.utc).timestamp())
+        window_key = f"apikey:{key.id}:{now // key.rate_window_seconds}"
+        pipe = r.pipeline()
+        pipe.incr(window_key)
+        pipe.expire(window_key, key.rate_window_seconds * 2)
+        count = int((await pipe.execute())[0])
+
+        if count > key.rate_limit:
+            logger.warning("api_key_rate_limit_exceeded", key_id=key.id, count=count, limit=key.rate_limit)
+            raise HTTPException(
+                status_code=429,
+                detail=f"API key rate limit exceeded ({key.rate_limit} requests per {key.rate_window_seconds}s)",
+                headers={"Retry-After": str(key.rate_window_seconds)},
+            )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("api_key_rate_limit_unavailable", key_id=key.id, error=str(exc))
+        # Fail open for rate limit (don't block legitimate traffic if Redis is down)
+    finally:
+        await r.aclose()
+
+
+def require_scope(scope: str):
+    """Dependency factory to require a specific scope on the API key."""
+    async def _check(
+        request: Request,
+        user: User = Depends(get_user_from_api_key),
+    ) -> User:
+        from app.services.api_keys import has_scope
+        key = getattr(request.state, "api_key", None)
+        if not key or not has_scope(key, scope):
+            raise HTTPException(
+                status_code=403,
+                detail=f"API key missing required scope: {scope}",
+            )
+        return user
+    return _check
+
+
+async def get_current_user_or_api_key(
+    request: Request,
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """Authenticate via API key (X-API-Key) if present, else JWT bearer token."""
+    if request.headers.get("X-API-Key"):
+        return await get_user_from_api_key(request, db)
+    # Fall back to JWT
+    payload = decode_token(token)
+    if not payload or payload.get("type") != "access":
+        raise _credentials_exc
+    user_id = payload.get("sub")
+    if not user_id:
+        raise _credentials_exc
+    user = await db.get(User, user_id)
+    if not user or not user.is_active:
+        raise _credentials_exc
+    if payload.get("ver", 0) != user.token_version:
+        raise _credentials_exc
+    return user
+
+
+async def require_write_or_api_key(
+    request: Request,
+    user: User = Depends(get_current_user_or_api_key),
+) -> User:
+    """Allow writes for authenticated users (not demo) or API keys with write scope."""
+    from app.services.api_keys import has_scope
+    key = getattr(request.state, "api_key", None)
+    if key:
+        # API key path: check for any write scope
+        write_scopes = {"write:vehicles", "write:services", "write:fuel", "write:diagnostics", "write:logbook", "admin:keys"}
+        for s in write_scopes:
+            if has_scope(key, s):
+                return user
+        raise HTTPException(status_code=403, detail="API key missing write scope")
+    # JWT path: original behavior
+    if user.role == "demo":
+        raise HTTPException(
+            status_code=403,
+            detail="This is a read-only demo account. Sign up or self-host to make changes.",
+        )
     return user

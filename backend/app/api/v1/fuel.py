@@ -28,6 +28,7 @@ from app.services import fuel as fuel_svc
 from app.services import fuel_prices as fp_svc
 from app.services.odometer import sync_odometer
 from app.services.rate_limit import require_ai_rate_limit_best_effort
+from app.services.webhook_trigger import fire_fuel_entry, fire_fuel_receipt
 
 router = APIRouter(prefix="/vehicles/{vehicle_id}/fuel", tags=["fuel"])
 
@@ -85,6 +86,7 @@ async def add_fuel(
     await db.refresh(log)
     from app.workers.tasks import fire_and_forget, check_due_notifications
     fire_and_forget(check_due_notifications, vehicle_id)
+    fire_fuel_entry(db, log.id, vehicle_id, user.id)
     return log
 
 
@@ -205,6 +207,7 @@ async def upload_fuel_receipt(
     await get_accessible_vehicle(db, vehicle_id, user)
     data = await file.read()
     receipt, url, parsed = await fuel_svc.upload_fuel_receipt(db, vehicle_id, file.filename, file.content_type, data, ai=ai)
+    fire_fuel_receipt(db, receipt.id, vehicle_id, user.id)
     return FuelReceiptResult(
         receipt_id=receipt.id,
         file_url=url,

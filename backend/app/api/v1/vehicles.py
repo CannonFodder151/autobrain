@@ -52,6 +52,12 @@ from app.services.vehicle import (
     list_user_vehicles,
     list_vehicle_shares,
 )
+from app.services.webhook_trigger import (
+    fire_vehicle_created,
+    fire_vehicle_deleted,
+    fire_vehicle_updated,
+    fire_odometer_updated,
+)
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/vehicles", tags=["vehicles"])
@@ -206,6 +212,7 @@ async def create_vehicle(
     db.add(vehicle)
     await db.commit()
     await db.refresh(vehicle)
+    fire_vehicle_created(db, vehicle.id, user.id)
     return vehicle
 
 
@@ -236,8 +243,10 @@ async def update_vehicle(
     if odo_set is not None:
         from app.services.odometer import sync_odometer
         await sync_odometer(db, vehicle, odo_set)
+        fire_odometer_updated(db, vehicle.id, user.id, odo_set)
     await db.commit()
     await db.refresh(vehicle)
+    fire_vehicle_updated(db, vehicle.id, user.id)
     return vehicle
 
 
@@ -253,6 +262,7 @@ async def delete_vehicle(
     )
     await db.delete(vehicle)
     await db.commit()
+    fire_vehicle_deleted(db, vehicle_id, user.id)
 
 
 @router.post("/rego-lookup", response_model=RegoLookupResponse)

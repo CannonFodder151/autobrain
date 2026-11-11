@@ -23,6 +23,7 @@ from app.schemas.diagnostic import (
 )
 from app.services.ai_client import run_diagnostics
 from app.services.ai_fallbacks import diagnose_fallback
+from app.services.webhook_trigger import fire_diagnostic_created, fire_diagnostic_resolved
 
 router = APIRouter(prefix="/vehicles/{vehicle_id}/diagnostics", tags=["diagnostics"])
 
@@ -73,6 +74,7 @@ async def diagnose(
     await db.commit()
     await db.refresh(record)
     queue_embedding("diagnostic", str(record.id))
+    fire_diagnostic_created(db, record.id, vehicle_id, user.id)
     return DiagnosticResponse(**result)
 
 
@@ -165,6 +167,7 @@ async def resolve_diagnostic(
     diag.resolved_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(diag)
+    fire_diagnostic_resolved(db, diag.id, vehicle_id, user.id)
     return diag
 
 

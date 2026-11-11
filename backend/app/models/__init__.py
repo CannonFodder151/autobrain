@@ -23,6 +23,8 @@ from app.models.refresh_token import RevokedRefreshToken
 from app.models.passkey import PasskeyCredential
 from app.models.engineer import Engineer, EngineerReview
 from app.models.ha import HaIntegration
+from app.models.api_key import ApiKey
+from app.models.webhook import Webhook, WebhookDelivery, WebhookEventType, WebhookStatus
 from app.social.models import (
     SocialBuild,
     SocialComment,
@@ -68,6 +70,11 @@ __all__ = [
     "Engineer",
     "EngineerReview",
     "HaIntegration",
+    "ApiKey",
+    "Webhook",
+    "WebhookDelivery",
+    "WebhookEventType",
+    "WebhookStatus",
     "SocialBuild",
     "SocialPhoto",
     "SocialComment",

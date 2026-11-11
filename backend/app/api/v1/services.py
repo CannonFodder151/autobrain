@@ -35,6 +35,10 @@ from app.services.service_records import (
     reconcile_part_stock,
     service_or_404,
 )
+from app.services.webhook_trigger import (
+    fire_service_completed,
+    fire_service_due,
+)
 from app.workers.tasks import queue_embedding
 
 logger = get_logger(__name__)
@@ -82,6 +86,10 @@ async def create_service(
     await db.refresh(record)
     await queue_due_notification(db, vehicle_id, record)
     queue_embedding("service", str(record.id))
+    if record.status == "completed":
+        fire_service_completed(db, record.id, vehicle_id, user.id)
+    elif record.next_due_km is not None or record.next_due_date is not None:
+        fire_service_due(db, record.id, vehicle_id, user.id)
     return record
 
 

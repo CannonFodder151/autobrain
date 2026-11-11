@@ -9,6 +9,7 @@ from app.api.v1 import (
     analytics,
     auth,
     billing,
+    developer,
     devices,
     diagnostics,
     dongle_firmware,
@@ -41,6 +42,7 @@ api_router.include_router(auth.router)
 api_router.include_router(passkey.router)
 api_router.include_router(ha.router)
 api_router.include_router(billing.router)
+api_router.include_router(developer.router)
 api_router.include_router(admin.router)
 api_router.include_router(admin.admin_ops)
 api_router.include_router(admin_api.router)
