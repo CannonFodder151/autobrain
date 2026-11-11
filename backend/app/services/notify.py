@@ -4,22 +4,30 @@ Delivery channels (per user preference):
 - Email  — always via the global system SMTP (credentials are never exposed).
 - Discord — a webhook URL the user configures themselves.
 - Push   — Firebase Cloud Messaging (FCM) if an FCM_SERVER_KEY is configured.
+- Push   — Apple Push Notification service (APNS) if APNS credentials configured.
 
 Triggers:
 - Service due within N days (next_due_date) or N km (next_due_km vs odometer).
 - Fuel gap: odometer travelled since last fuel fill exceeds N km.
-Evaluated after service writes, after fuel writes, and by the daily Celery beat.
+- Fuel price alert: watched station price crosses threshold (AUT-1859).
+Evaluated after service writes, after fuel writes, and by the Celery beat.
 Deduplicated via the notification_deliveries table (per vehicle + kind).
 """
 
 import asyncio
+import base64
 import html
 import json
 import logging
 import re
+import time
 from datetime import date, timedelta
+from typing import Optional
 
 import httpx
+import jwt
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ec
 
 from app.core.config import settings
 from app.core.logging import get_logger
@@ -38,6 +46,8 @@ _DISCORD_WEBHOOK_RE = re.compile(
 logger = get_logger(__name__)
 
 _loop: asyncio.AbstractEventLoop | None = None
+_apns_jwt: Optional[str] = None
+_apns_jwt_expiry: float = 0
 
 
 def _run(coro):
@@ -53,7 +63,42 @@ def _run(coro):
         raise
 
 
-# --- Delivery helpers -------------------------------------------------------
+# --- APNS JWT handling --------------------------------------------------------
+
+def _generate_apns_jwt() -> str | None:
+    """Generate a JWT for APNS token-based auth (ES256, valid for 1 hour)."""
+    global _apns_jwt, _apns_jwt_expiry
+    now = time.time()
+    if _apns_jwt and now < _apns_jwt_expiry - 60:
+        return _apns_jwt
+
+    if not (settings.APNS_KEY_ID and settings.APNS_TEAM_ID and settings.APNS_PRIVATE_KEY):
+        return None
+
+    try:
+        private_key = serialization.load_pem_private_key(
+            settings.APNS_PRIVATE_KEY.encode(),
+            password=None,
+        )
+        if not isinstance(private_key, ec.EllipticCurvePrivateKey):
+            logger.warning("apns_key_not_ec", key_type=type(private_key).__name__)
+            return None
+
+        payload = {
+            "iss": settings.APNS_TEAM_ID,
+            "iat": int(now),
+        }
+        headers = {"alg": "ES256", "kid": settings.APNS_KEY_ID}
+        token = jwt.encode(payload, private_key, algorithm="ES256", headers=headers)
+        _apns_jwt = token
+        _apns_jwt_expiry = now + 3600
+        return token
+    except Exception as exc:
+        logger.warning("apns_jwt_generation_failed", error=str(exc))
+        return None
+
+
+# --- Delivery helpers ---------------------------------------------------------
 
 async def _send_email(to_email: str, display_name: str, subject: str, html: str, text: str) -> bool:
     return await mail.send_email(to_email, subject, html, text)
@@ -87,7 +132,12 @@ async def _send_discord(webhook_url: str, title: str, description: str) -> bool:
         return False
 
 
-async def _send_push(fcm_token: str, title: str, body: str) -> bool:
+def _is_apns_token(token: str) -> bool:
+    """Heuristic: APNS tokens are 64 hex chars (32 bytes), FCM tokens are longer."""
+    return len(token) == 64 and all(c in "0123456789abcdefABCDEF" for c in token)
+
+
+async def _send_fcm(fcm_token: str, title: str, body: str, data: dict | None = None) -> bool:
     if not fcm_token or not settings.FCM_SERVER_KEY:
         return False
     payload = {
@@ -96,6 +146,8 @@ async def _send_push(fcm_token: str, title: str, body: str) -> bool:
             "notification": {"title": title, "body": body},
         }
     }
+    if data:
+        payload["message"]["data"] = {k: str(v) for k, v in data.items()}
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.post(
@@ -110,6 +162,47 @@ async def _send_push(fcm_token: str, title: str, body: str) -> bool:
     except Exception as exc:
         logger.warning("fcm_push_error", error=str(exc))
         return False
+
+
+async def _send_apns(apns_token: str, title: str, body: str, data: dict | None = None) -> bool:
+    if not apns_token:
+        return False
+    auth_token = _generate_apns_jwt()
+    if not auth_token:
+        return False
+
+    bundle_id = settings.APNS_BUNDLE_ID or "com.autobrain.autobrain"
+    environment = "development" if settings.APNS_USE_SANDBOX else "production"
+    url = f"https://api.{environment}.push.apple.com/3/device/{apns_token}"
+
+    aps = {"alert": {"title": title, "body": body}, "sound": "default"}
+    if data:
+        aps["data"] = data
+
+    payload = {"aps": aps}
+    headers = {
+        "authorization": f"bearer {auth_token}",
+        "apns-topic": bundle_id,
+        "apns-push-type": "alert",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10, http2=True) as client:
+            resp = await client.post(url, headers=headers, json=payload)
+        ok = resp.status_code == 200
+        if not ok:
+            logger.warning("apns_push_failed", status=resp.status_code, body=resp.text[:200])
+        return ok
+    except Exception as exc:
+        logger.warning("apns_push_error", error=str(exc))
+        return False
+
+
+async def _send_push(token: str, title: str, body: str, data: dict | None = None) -> bool:
+    """Dispatch push to FCM or APNS based on token format."""
+    if _is_apns_token(token):
+        return await _send_apns(token, title, body, data)
+    return await _send_fcm(token, title, body, data)
 
 
 def _due_badge_html(kind: str, value: float | None) -> str:
@@ -206,7 +299,7 @@ async def _check_pref(db, pref: NotificationPreference, vehicle: Vehicle) -> Non
                 ServiceRecord.vehicle_id == vehicle.id,
                 ServiceRecord.next_due_km.is_not(None),
                 ServiceRecord.next_due_km >= odo,
-                ServiceRecord.next_due_km - odo <= pref.service_due_km,
+                ServiceRecord.next_due_km - odo <= pref.service_km,
             ).order_by(ServiceRecord.next_due_km.asc())
         )).all())
         for svc in by_km:
@@ -259,7 +352,7 @@ async def _check_pref(db, pref: NotificationPreference, vehicle: Vehicle) -> Non
             await deliver_rego_expiry(db, pref, vehicle, days_left, [])
 
 
-# --- Rego expiry delivery (AUT-2416) ----------------------------------------
+# --- Rego expiry delivery (AUT-2416) ------------------------------------------
 
 async def deliver_rego_expiry(
     db, pref: NotificationPreference, vehicle: Vehicle,
@@ -309,7 +402,7 @@ async def deliver_rego_expiry(
                     days_left=days_left, channels=channels)
 
 
-# --- Scheduled + ad-hoc entry points (called from Celery / routers) ---------
+# --- Scheduled + ad-hoc entry points (called from Celery / routers) -----------
 
 def run_due_checks() -> None:
     """Called by Celery beat (daily) to re-evaluate all vehicles."""
@@ -321,7 +414,7 @@ def run_due_checks() -> None:
     _run(_coro())
 
 
-# --- Servo-spy fuel price alerts (AUT-1859) ----------------------------------
+# --- Servo-spy fuel price alerts (AUT-1859) -----------------------------------
 
 async def _resolve_user_pref(db, user_id: str) -> NotificationPreference:
     """Find a user's notification preference for channel reuse.
@@ -347,13 +440,18 @@ async def _resolve_user_pref(db, user_id: str) -> NotificationPreference:
 
 
 async def deliver_fuel_price_alert(
-    db, user_id: str, kind: str, title: str, description: str
+    db, user_id: str, kind: str, title: str, description: str,
+    deep_link: str | None = None
 ) -> None:
     """Send a servo-spy price alert on the user's configured channels (once/day).
 
     Deduplicated per (user_id, kind) so a price that stays past threshold only
     fires once per calendar day. Reuses the user's existing notification
     channels (email / Discord / push) and tokens from their preferences.
+
+    Args:
+        deep_link: Optional deep link to the station detail screen
+                   (e.g., "autobrain://servo-spy/station/{station_code}")
     """
     existing = await db.scalar(
         select(NotificationDelivery).where(
@@ -369,6 +467,8 @@ async def deliver_fuel_price_alert(
     channels: list[str] = []
     user = await db.get(User, user_id)
 
+    push_data = {"deep_link": deep_link} if deep_link else None
+
     if pref.email_enabled and user:
         subject = title
         safe_name = html.escape(user.display_name)
@@ -383,7 +483,7 @@ async def deliver_fuel_price_alert(
         if await _send_discord(pref.discord_webhook_url, title, description):
             channels.append("discord")
     if pref.push_enabled and pref.fcm_token:
-        if await _send_push(pref.fcm_token, title, description.replace("**", "")):
+        if await _send_push(pref.fcm_token, title, description.replace("**", ""), push_data):
             channels.append("push")
 
     if channels:

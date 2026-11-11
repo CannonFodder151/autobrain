@@ -73,5 +73,12 @@ celery_app.conf.update(
             "task": "app.workers.tasks.refresh_market_data",
             "schedule": crontab(hour=3, minute=0),
         },
+        # AUT-466b: price-check job every 30 min — evaluates servo-spy watch lists
+        # against latest cached prices and fires push alerts (FCM/APNS) when
+        # threshold crossed. Deep link to station detail included in payload.
+        "check-fuel-prices-every-30-min": {
+            "task": "app.workers.tasks.check_fuel_price_alerts",
+            "schedule": 60 * 30,
+        },
     },
 )

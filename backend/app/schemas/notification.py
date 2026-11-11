@@ -19,6 +19,7 @@ class NotificationPreferenceIn(BaseModel):
     rego_expiry_days: int | None = Field(default=None, ge=0, le=365)
     discord_webhook_url: str | None = Field(default=None, max_length=500)
     fcm_token: str | None = Field(default=None, max_length=500)
+    apns_token: str | None = Field(default=None, max_length=500)
 
     @field_validator("discord_webhook_url")
     @classmethod
@@ -43,6 +44,7 @@ class NotificationPreferenceOut(BaseModel):
     rego_expiry_days: int = 0
     discord_webhook_url: str | None
     fcm_token: str | None
+    apns_token: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

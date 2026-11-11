@@ -221,6 +221,15 @@ class Settings(BaseSettings):
     # skipped when unset; email/discord still work.
     FCM_SERVER_KEY: str = ""
 
+    # Apple Push Notification service (APNS). Token-based auth (.p8 key).
+    # Optional — APNS alerts skipped when unset; FCM/email/discord still work.
+    APNS_KEY_ID: str = ""
+    APNS_TEAM_ID: str = ""
+    APNS_BUNDLE_ID: str = ""
+    APNS_PRIVATE_KEY: str = ""
+    APNS_PRIVATE_KEY_FILE: str = ""
+    APNS_USE_SANDBOX: bool = False
+
     # SMTP (email notifications + self-service password reset)
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587
@@ -421,6 +430,10 @@ class Settings(BaseSettings):
             p = Path(self.IAP_APPLE_PRIVATE_KEY_FILE)
             if p.is_file():
                 self.IAP_APPLE_PRIVATE_KEY = p.read_text(encoding="utf-8").strip()
+        if not self.APNS_PRIVATE_KEY and self.APNS_PRIVATE_KEY_FILE:
+            p = Path(self.APNS_PRIVATE_KEY_FILE)
+            if p.is_file():
+                self.APNS_PRIVATE_KEY = p.read_text(encoding="utf-8").strip()
         return self
 
     @model_validator(mode="after")

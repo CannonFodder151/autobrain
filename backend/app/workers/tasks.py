@@ -261,7 +261,11 @@ def check_fuel_price_alerts() -> None:
                     f"{fp.previous_price} → {fp.price} c/L "
                     f"({'%.1f' % pct}% vs yesterday)"
                 )
-                await deliver_fuel_price_alert(db, w.user_id, kind, title, description)
+                # Deep link to station detail screen (AUT-466b).
+                deep_link = f"autobrain://servo-spy/station/{w.station_code}"
+                await deliver_fuel_price_alert(
+                    db, w.user_id, kind, title, description, deep_link=deep_link
+                )
                 logger.info("fuel_alert_evaluated", watch_id=wid, direction=direction, pct=pct)
 
     _run(_run())

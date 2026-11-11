@@ -70,6 +70,7 @@ class NotificationPreference(Base):
 
     discord_webhook_url: Mapped[str | None] = mapped_column(Text)
     fcm_token: Mapped[str | None] = mapped_column(Text)
+    apns_token: Mapped[str | None] = mapped_column(Text)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
