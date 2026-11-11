@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.318] - 2026-11-11
+
 ### Fixed (AUT-448)
 - fix(frontend): `FlutterSecureStorage` constructor now maps `webOptions: _webOptions` and `wOptions: _winOptions` separately instead of assigning a `WebOptions` value to the `wOptions` (WindowsOptions) parameter, which blocked the frontend Docker image build (PR #1116)
 
