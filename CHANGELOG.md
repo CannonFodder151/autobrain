@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-514)
+- fix(backend): add webauthn dependency + fix attestation enum for passkey tests; resolve test_auth_begin_unknown_user_returns_empty_allow failing due to missing webauthn module and incorrect AttestationConveyancePreference enum value (PR #1124)
+
 ## [0.3.316] - 2026-11-09
 ### Fixed (AUT-380)
 - fix(alembic): merge migration heads `aut5092_dev_veh_type` + `g7h8i9j0k1l3` via `m3rge08`; remove duplicate `m3rge07` revision; `alembic upgrade head` now resolves to single head (PR #1110)
