@@ -3,7 +3,7 @@
 #   builds Docker containers (dockerhub-publish.yml),
 #   builds mobile apps Android+iOS (sync-mobile.yml -> release-mobile.yml / release-ios.yml),
 #   uploads to stores (mobile release workflows),
-#   notifies Discord #deployments.
+#   notifies Discord #deployments with evidence links.
 # Skips if no new commits since the last processed SHA.
 name: Upgrade cycle (2-day)
 
@@ -58,6 +58,27 @@ jobs:
             echo "has_updates=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Build evidence links
+        id: evidence
+        if: steps.last.outputs.has_updates == 'true'
+        run: |
+          set -euo pipefail
+          REPO="${{ github.repository }}"
+          RUN_ID="${{ github.run_id }}"
+          RUN_URL="https://github.com/${REPO}/actions/runs/${RUN_ID}"
+          COMPARE_URL="https://github.com/${REPO}/compare/${{ steps.last.outputs.last }}...${{ steps.last.outputs.head }}"
+          COMMIT_URL="https://github.com/${REPO}/commit/${{ steps.last.outputs.head }}"
+          DOCKER_URL="https://github.com/${REPO}/actions/workflows/dockerhub-publish.yml"
+          MOBILE_URL="https://github.com/${REPO}/actions/workflows/sync-mobile.yml"
+          DEPLOY_URL="https://github.com/${REPO}/actions/workflows/deploy-instances.yml"
+          
+          echo "run_url=$RUN_URL" >> "$GITHUB_OUTPUT"
+          echo "compare_url=$COMPARE_URL" >> "$GITHUB_OUTPUT"
+          echo "commit_url=$COMMIT_URL" >> "$GITHUB_OUTPUT"
+          echo "docker_url=$DOCKER_URL" >> "$GITHUB_OUTPUT"
+          echo "mobile_url=$MOBILE_URL" >> "$GITHUB_OUTPUT"
+          echo "deploy_url=$DEPLOY_URL" >> "$GITHUB_OUTPUT"
+
       - name: Skip if no new commits
         if: steps.last.outputs.has_updates == 'false'
         run: |
@@ -107,8 +128,26 @@ jobs:
 
       - name: Notify Discord #deployments
         if: steps.last.outputs.has_updates == 'true'
+        env:
+          RUN_URL: ${{ steps.evidence.outputs.run_url }}
+          COMPARE_URL: ${{ steps.evidence.outputs.compare_url }}
+          COMMIT_URL: ${{ steps.evidence.outputs.commit_url }}
+          DOCKER_URL: ${{ steps.evidence.outputs.docker_url }}
+          MOBILE_URL: ${{ steps.evidence.outputs.mobile_url }}
+          DEPLOY_URL: ${{ steps.evidence.outputs.deploy_url }}
+          HEAD_SHA: ${{ steps.last.outputs.head }}
         run: |
           set -euo pipefail
+          DESCRIPTION="New commits detected on main. Docker images published, mobile apps (Android+iOS) building + uploading to stores, instances upgrading.
+Last commit: [${HEAD_SHA:0:7}](${COMMIT_URL})
+Compare: [${{ steps.last.outputs.last }}...${HEAD_SHA:0:7}](${COMPARE_URL})
+Workflow run: [#${{ github.run_number }}](${RUN_URL})
+Docker build: [dockerhub-publish.yml](${DOCKER_URL})
+Mobile build: [sync-mobile.yml](${MOBILE_URL})
+Deploy: [deploy-instances.yml](${DEPLOY_URL})
+
+Issue: AUT-373"
           curl -s -X POST -H "Content-Type: application/json" \
-            -d '{"embeds":[{"title":"Upgrade cycle — deployed","description":"New commits detected on main. Docker images published, mobile apps (Android+iOS) building + uploading to stores, instances upgrading. Last commit: ${{ steps.last.outputs.head }}.\n\nIssue: AUT-373","color":10181046,"timestamp":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}]}' \
+            -d "$(jq -n --arg title "Upgrade cycle — deployed" --arg desc "$DESCRIPTION" --arg color "10181046" --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              '{embeds: [{title: $title, description: $desc, color: ($color|tonumber), timestamp: $timestamp, footer: {text: "AutoBrain Paperclip"}}]}')" \
             "${{ secrets.DISCORD_REPORT_WEBHOOK }}" 2>&1 || true
