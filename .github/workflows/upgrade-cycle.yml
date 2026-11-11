@@ -46,6 +46,11 @@ jobs:
           set -euo pipefail
           if [ -f .upgrade-cycle-last-commit ]; then
             LAST="$(tr -d '[:space:]' < .upgrade-cycle-last-commit)"
+            # Validate LAST is a full SHA (40 hex chars) — reject malformed marker
+            if ! [[ "$LAST" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "Invalid marker SHA, treating as empty" >&2
+              LAST=""
+            fi
           else
             LAST=""
           fi
@@ -61,17 +66,24 @@ jobs:
       - name: Build evidence links
         id: evidence
         if: steps.last.outputs.has_updates == 'true'
+        env:
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          LAST_SHA: ${{ steps.last.outputs.last }}
+          HEAD_SHA: ${{ steps.last.outputs.head }}
         run: |
           set -euo pipefail
-          REPO="${{ github.repository }}"
-          RUN_ID="${{ github.run_id }}"
           RUN_URL="https://github.com/${REPO}/actions/runs/${RUN_ID}"
-          COMPARE_URL="https://github.com/${REPO}/compare/${{ steps.last.outputs.last }}...${{ steps.last.outputs.head }}"
-          COMMIT_URL="https://github.com/${REPO}/commit/${{ steps.last.outputs.head }}"
+          COMMIT_URL="https://github.com/${REPO}/commit/${HEAD_SHA}"
+          if [ -n "${LAST_SHA}" ]; then
+            COMPARE_URL="https://github.com/${REPO}/compare/${LAST_SHA}...${HEAD_SHA}"
+          else
+            COMPARE_URL="https://github.com/${REPO}/commits/${HEAD_SHA}"
+          fi
           DOCKER_URL="https://github.com/${REPO}/actions/workflows/dockerhub-publish.yml"
           MOBILE_URL="https://github.com/${REPO}/actions/workflows/sync-mobile.yml"
           DEPLOY_URL="https://github.com/${REPO}/actions/workflows/deploy-instances.yml"
-          
+
           echo "run_url=$RUN_URL" >> "$GITHUB_OUTPUT"
           echo "compare_url=$COMPARE_URL" >> "$GITHUB_OUTPUT"
           echo "commit_url=$COMMIT_URL" >> "$GITHUB_OUTPUT"
@@ -136,17 +148,28 @@ jobs:
           MOBILE_URL: ${{ steps.evidence.outputs.mobile_url }}
           DEPLOY_URL: ${{ steps.evidence.outputs.deploy_url }}
           HEAD_SHA: ${{ steps.last.outputs.head }}
+          LAST_SHA: ${{ steps.last.outputs.last }}
+          RUN_NUMBER: ${{ github.run_number }}
+          ISSUE_ID: AUT-497
         run: |
           set -euo pipefail
-          DESCRIPTION="New commits detected on main. Docker images published, mobile apps (Android+iOS) building + uploading to stores, instances upgrading.
-Last commit: [${HEAD_SHA:0:7}](${COMMIT_URL})
-Compare: [${{ steps.last.outputs.last }}...${HEAD_SHA:0:7}](${COMPARE_URL})
-Workflow run: [#${{ github.run_number }}](${RUN_URL})
-Docker build: [dockerhub-publish.yml](${DOCKER_URL})
-Mobile build: [sync-mobile.yml](${MOBILE_URL})
-Deploy: [deploy-instances.yml](${DEPLOY_URL})
-
-Issue: AUT-373"
+          SHORT_HEAD="${HEAD_SHA:0:7}"
+          if [ -n "${LAST_SHA}" ]; then
+            SHORT_LAST="${LAST_SHA:0:7}"
+            COMPARE_LABEL="${SHORT_LAST}...${SHORT_HEAD}"
+          else
+            COMPARE_LABEL="commits@${SHORT_HEAD}"
+          fi
+          DESCRIPTION=$(printf '%s\n' \
+            "New commits detected on main. Docker images published, mobile apps (Android+iOS) building + uploading to stores, instances upgrading." \
+            "Last commit: [${SHORT_HEAD}](${COMMIT_URL})" \
+            "Compare: [${COMPARE_LABEL}](${COMPARE_URL})" \
+            "Workflow run: [#${RUN_NUMBER}](${RUN_URL})" \
+            "Docker build: [dockerhub-publish.yml](${DOCKER_URL})" \
+            "Mobile build: [sync-mobile.yml](${MOBILE_URL})" \
+            "Deploy: [deploy-instances.yml](${DEPLOY_URL})" \
+            "" \
+            "Issue: ${ISSUE_ID}")
           curl -s -X POST -H "Content-Type: application/json" \
             -d "$(jq -n --arg title "Upgrade cycle — deployed" --arg desc "$DESCRIPTION" --arg color "10181046" --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
               '{embeds: [{title: $title, description: $desc, color: ($color|tonumber), timestamp: $timestamp, footer: {text: "AutoBrain Paperclip"}}]}')" \
