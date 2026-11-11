@@ -199,17 +199,12 @@ async def test_car_check_route_falls_back_when_gateway_down(monkeypatch) -> None
             "/api/v1/advisor/car-check",
             params={"vehicle_id": "v1"},
             json={
-                "listing": {
-                    "title": "Toyota Corolla 2018",
-                    "price": 15_000.0,
-                    "year": 2018,
-                    "odometer_km": 80_000,
-                    "make": "Toyota",
-                    "model": "Corolla",
-                    "listing_url": "https://example.com/corolla",
-                },
-                "reference_price": 16_000.0,
-                "vehicle_year": 2018,
+                "asking_price": 15_000.0,
+                "make": "Toyota",
+                "model": "Corolla",
+                "year": 2018,
+                "odometer_km": 80_000,
+                "listing_url": "https://example.com/corolla",
             },
         )
     app.dependency_overrides.clear()
