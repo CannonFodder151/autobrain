@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-226)
+- fix(alembic): repair dangling `f7e8d9c0b1a2` down_revision (`m3rge07` → `m3rge06`) and unify all alembic heads in `m3rge08` (`a3661engineers`, `aut3447_passkey_credentials`, `aut5092_dev_veh_type`, `g7h8i9j0k1l3`) so `alembic upgrade head` resolves to a single head (PR #1113)
+
 ## [0.3.316] - 2026-11-09
 ### Fixed (AUT-380)
 - fix(alembic): merge migration heads `aut5092_dev_veh_type` + `g7h8i9j0k1l3` via `m3rge08`; remove duplicate `m3rge07` revision; `alembic upgrade head` now resolves to single head (PR #1110)
