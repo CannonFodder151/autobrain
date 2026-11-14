@@ -121,7 +121,7 @@ while IFS= read -r line; do
 
   log "=== tier: $name (EP$ep) ==="
   resolved="$(resolve_stack "$name")" || { fail "stack '$name' not found"; OVERALL=1; continue; }
-  stack_id="${resolved%% }"; ep="${resolved##* }"
+  stack_id="${resolved%% *}"; ep="${resolved##* }"
   log "   stack id=$stack_id endpoint=$ep"
 
   if [ "$DRY_RUN" = "1" ]; then
