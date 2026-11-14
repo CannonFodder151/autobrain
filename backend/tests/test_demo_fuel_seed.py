@@ -23,23 +23,9 @@ os.close(_db_fd)
 os.unlink(_db_path)  # aiosqlite opens it fresh; we only want a unique name
 _db_url = f"sqlite+aiosqlite:///{_db_path}"
 
-os.environ["DATABASE_URL"] = _db_url
-os.environ["SECRET_KEY"] = "test-secret"
-os.environ["DEMO_MODE"] = "true"
-os.environ["DEMO_EMAIL"] = "demo@test.local"
-os.environ["DEMO_PASSWORD"] = "test-demo-password-123"
-os.environ["DEMO_DISPLAY_NAME"] = "Demo Garage"
-os.environ["POSTGRES_USER"] = "autobrain"
-os.environ["POSTGRES_PASSWORD"] = "autobrain"
-os.environ["POSTGRES_DB"] = "autobrain"
-os.environ["MINIO_ACCESS_KEY"] = "autobrain"
-os.environ["MINIO_SECRET_KEY"] = "autobrain"
-os.environ["MINIO_BUCKET"] = "autobrain-assets"
-os.environ["MINIO_ENDPOINT"] = "minio:9000"
-os.environ["AI_GATEWAY_API_KEY"] = "test-ai-key"
-os.environ["ADMIN_API_KEY"] = "test-admin-key-0123456789-0123456789"
-os.environ["MARKET_DATA_URL"] = ""
-os.environ["MARKET_DATA_API_KEY"] = ""
+# Do NOT set os.environ["DATABASE_URL"] here — it pollutes app.db.session
+# engine creation for other test modules during pytest collection. This test
+# creates its own engine/SessionLocal and patches seed_module.SessionLocal.
 
 import pytest  # noqa: E402
 from sqlalchemy import func, select  # noqa: E402
