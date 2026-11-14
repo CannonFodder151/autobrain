@@ -9,6 +9,7 @@ health check is silently promoted through).
 """
 import os
 import re
+import subprocess
 import unittest
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -72,6 +73,19 @@ class TestUpgradeInstanceTiers(unittest.TestCase):
         # TIERS="${UPGRADE_TIERS:-$DEFAULT_TIERS}" — a blank dispatch input must
         # NOT collapse the chain to nothing.
         self.assertIn('TIERS="${UPGRADE_TIERS:-$DEFAULT_TIERS}"', self.script)
+
+    def test_stack_id_split_takes_first_token(self):
+        # AUT-296: resolve_stack returns 'stack_id endpoint' on one line; the
+        # split must take the first token only. A wrong expansion (e.g.
+        # ${resolved%% } which only strips a trailing space) leaves the full
+        # '138 2' string and the Portainer fetch_stack URL is malformed.
+        resolved = "138 2"
+        cmd = f'resolved="{resolved}"; stack_id="${{resolved%% *}}"; echo "$stack_id"'
+        stack_id = subprocess.check_output(["bash", "-c", cmd]).decode().strip()
+        self.assertEqual(stack_id, "138", f"stack_id split wrong: {stack_id!r}")
+        # Guard the actual script line.
+        self.assertIn('stack_id="${resolved%% *}"', self.script)
+        self.assertNotIn('stack_id="${resolved%% }"', self.script)
 
 
 if __name__ == "__main__":
