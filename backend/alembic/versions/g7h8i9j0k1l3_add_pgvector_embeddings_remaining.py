@@ -18,8 +18,15 @@ def upgrade() -> None:
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
 
     # Add embedding columns (dimension from config, matches the embedding model).
+    # Column may already exist as ``Text`` from the create_all fallback on hosted
+    # (AUT-1813 models declare ``embedding: Text``); convert it to vector so the
+    # HNSW index below accepts it.
     for table in ("fuel_price_snapshots", "devices", "market_listing_cache", "vehicles"):
         op.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS embedding vector({_DIM})")
+        op.execute(
+            f"ALTER TABLE {table} ALTER COLUMN embedding TYPE vector({_DIM}) "
+            f"USING embedding::vector({_DIM})"
+        )
 
     # HNSW index (pgvector >= 0.5): no training data or tuning required, and on
     # small per-user tables it beats IVFFlat — which needs lists tuned to row

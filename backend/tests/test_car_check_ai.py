@@ -201,7 +201,7 @@ async def test_car_check_route_falls_back_when_gateway_down(monkeypatch) -> None
             json={
                 "listing": {
                     "title": "Toyota Corolla 2018",
-                    "price": 15_000.0,
+                    "asking_price": 15_000.0,
                     "year": 2018,
                     "odometer_km": 80_000,
                     "make": "Toyota",
@@ -271,7 +271,7 @@ async def test_car_check_route_uses_ai_when_gateway_up(monkeypatch) -> None:
             json={
                 "listing": {
                     "title": "Honda CBR500R",
-                    "price": 8_500.0,
+                    "asking_price": 8_500.0,
                     "year": 2022,
                     "odometer_km": 12_000,
                     "make": "Honda",
