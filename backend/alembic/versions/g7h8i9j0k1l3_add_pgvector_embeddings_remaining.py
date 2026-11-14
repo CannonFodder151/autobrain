@@ -13,27 +13,41 @@ depends_on = None
 _DIM = settings.EMBEDDING_DIMENSION
 
 
+def _column_is_text(conn, table: str) -> bool:
+    """Check if embedding column exists and is TEXT type (create_all fallback)."""
+    row = conn.execute(
+        sa.text(
+            "SELECT data_type FROM information_schema.columns "
+            "WHERE table_name = :t AND column_name = 'embedding'"
+        ),
+        {"t": table},
+    ).fetchone()
+    return row is not None and row[0].lower() == "text"
+
+
 def upgrade() -> None:
     # Install pgvector extension if not already present (idempotent).
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
 
-    # Add embedding columns (dimension from config, matches the embedding model).
-    # Column may already exist as ``Text`` from the create_all fallback on hosted
-    # (AUT-1813 models declare ``embedding: Text``); convert it to vector so the
-    # HNSW index below accepts it.
+    conn = op.get_bind()
     for table in ("fuel_price_snapshots", "devices", "market_listing_cache", "vehicles"):
+        # The table may not exist yet if an earlier revision (e.g. aut3448 for
+        # fuel_price_snapshots) hasn't run on this branch. Skip rather than
+        # raising UndefinedTableError on parallel alembic branches.
+        if not sa.inspect(conn).has_table(table):
+            continue
+        # The create_all fallback on hosted creates embedding as Text; convert
+        # it to vector so the HNSW index below accepts it.
+        if _column_is_text(conn, table):
+            op.execute(f"ALTER TABLE {table} DROP COLUMN IF EXISTS embedding")
         op.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS embedding vector({_DIM})")
-        op.execute(
-            f"ALTER TABLE {table} ALTER COLUMN embedding TYPE vector({_DIM}) "
-            f"USING embedding::vector({_DIM})"
-        )
 
     # HNSW index (pgvector >= 0.5): no training data or tuning required, and on
     # small per-user tables it beats IVFFlat — which needs lists tuned to row
     # count and a training probe pass. Cosine ops matches search's `a <=> b`.
     for table in ("fuel_price_snapshots", "devices", "market_listing_cache", "vehicles"):
         op.execute(
-            f"CREATE INDEX idx_{table}_embedding ON {table} "
+            f"CREATE INDEX IF NOT EXISTS idx_{table}_embedding ON {table} "
             "USING hnsw (embedding vector_cosine_ops)"
         )
 
