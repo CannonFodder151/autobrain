@@ -199,17 +199,12 @@ async def test_car_check_route_falls_back_when_gateway_down(monkeypatch) -> None
             "/api/v1/advisor/car-check",
             params={"vehicle_id": "v1"},
             json={
-                "listing": {
-                    "title": "Toyota Corolla 2018",
-                    "price": 15_000.0,
-                    "year": 2018,
-                    "odometer_km": 80_000,
-                    "make": "Toyota",
-                    "model": "Corolla",
-                    "listing_url": "https://example.com/corolla",
-                },
-                "reference_price": 16_000.0,
-                "vehicle_year": 2018,
+                "listing_url": "https://example.com/corolla",
+                "make": "Toyota",
+                "model": "Corolla",
+                "year": 2018,
+                "asking_price": 15_000.0,
+                "odometer_km": 80_000,
             },
         )
     app.dependency_overrides.clear()
@@ -269,17 +264,12 @@ async def test_car_check_route_uses_ai_when_gateway_up(monkeypatch) -> None:
             "/api/v1/advisor/car-check",
             params={"vehicle_id": "v1"},
             json={
-                "listing": {
-                    "title": "Honda CBR500R",
-                    "price": 8_500.0,
-                    "year": 2022,
-                    "odometer_km": 12_000,
-                    "make": "Honda",
-                    "model": "CBR500R",
-                    "listing_url": "https://example.com/cbr",
-                },
-                "reference_price": 9_000.0,
-                "vehicle_year": 2022,
+                "listing_url": "https://example.com/cbr",
+                "make": "Honda",
+                "model": "CBR500R",
+                "year": 2022,
+                "asking_price": 8_500.0,
+                "odometer_km": 12_000,
             },
         )
     app.dependency_overrides.clear()
@@ -360,7 +350,12 @@ async def test_car_check_route_blocks_free_account(monkeypatch) -> None:
             "/api/v1/advisor/car-check",
             params={"vehicle_id": "v1"},
             json={
-                "listing": {"price": 10_000.0, "make": "Honda", "model": "CBR500R"},
+                "listing_url": "https://example.com/cbr",
+                "make": "Honda",
+                "model": "CBR500R",
+                "year": 2022,
+                "asking_price": 10_000.0,
+                "odometer_km": 0,
             },
         )
     app.dependency_overrides.clear()

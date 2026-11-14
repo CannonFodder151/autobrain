@@ -21,14 +21,21 @@
 # + applies DB migrations on boot (docs/container-architecture.md), so a
 # redeploy is a complete upgrade.
 #
+# Post-deploy smoke gate (AUT-IMP-009): after each tier's /health passes, run
+# `scripts/post-deploy-smoke.sh <BASE_URL>` to verify key flows. A smoke
+# failure blocks promotion to the next tier. This gate is the QA Lead's
+# sign-off before the upgrade chain continues.
+#
 # Usage (Deployment Lead, after an image is published):
 #   PORTAINER_API_KEY=... PORTAINER_URL=... ./scripts/upgrade-instances.sh
 #
 # Environment overrides (sane defaults for the three AutoBrain tiers):
-#   UPGRADE_TIERS        space/tab/newline separated "name|endpoint|health|required_env"
-#                           AUT-4982: default is the full promotion chain again (demo → default → hosted)
-#   UPGRADE_DRY_RUN=1    resolve + health-check only, do not redeploy
-#   HEALTH_TIMEOUT_SEC   per-tier health poll timeout (default 600)
+#   UPGRADE_TIERS           space/tab/newline separated "name|endpoint|health|base_url|required_env"
+#                             AUT-4982: default is the full promotion chain again (demo → default → hosted)
+#   UPGRADE_DRY_RUN=1       resolve + health-check only, do not redeploy
+#   HEALTH_TIMEOUT_SEC      per-tier health poll timeout (default 600)
+#   SMOKE_TIMEOUT_SEC       per-tier smoke poll timeout (default 120)
+#   SKIP_SMOKE=1            skip the post-deploy smoke gate (emergency use only)
 #
 # Requires bash + curl + python3 (matches scripts/prune-images.sh).
 
@@ -38,22 +45,31 @@ PORTAINER_URL="${PORTAINER_URL:-https://portainer.nathanmartina.com}"
 : "${PORTAINER_API_KEY:?set PORTAINER_API_KEY to the Portainer API key}"
 DRY_RUN="${UPGRADE_DRY_RUN:-0}"
 HEALTH_TIMEOUT_SEC="${HEALTH_TIMEOUT_SEC:-600}"
+SMOKE_TIMEOUT_SEC="${SMOKE_TIMEOUT_SEC:-120}"
+SKIP_SMOKE="${SKIP_SMOKE:-0}"
 SCRATCH="${PAPERCLIP_RUN_SCRATCH_DIR:-${TMPDIR:-/tmp}}"
 mkdir -p "$SCRATCH"
 
 AUTH=(-H "X-API-Key: $PORTAINER_API_KEY")
 API="$PORTAINER_URL/api"
 
-# name | endpoint_id | health_url | "k=v,k=v" required env the stack must carry
+# name | endpoint_id | health_url | base_url | "k=v,k=v" required env the stack must carry
 # AUT-4982: restore demo + default to the automatic promotion chain. AUT-2409 had
 # dropped them, which left demo/default frozen on whatever image was last pulled
 # by hand (demo went 502 and stayed there because nothing redeployed it).
 # Hosted keeps its 03:00-04:00 AEST window (AUT-2409); scope a dispatch with
 # UPGRADE_TIERS to honour that window, e.g. the `tiers` dispatch input.
 DEFAULT_TIERS="
-autobrain-demo|2|https://demo.autobrainservice.app/health|
-autobrain-default|2|https://default.autobrainservice.app/health|
-autobrain-hosted|5|https://hosted.autobrainservice.app/health|POSTGRES_USER=autobrain,POSTGRES_DB=autobrain
+autobrain-demo|2|https://demo.autobrainservice.app/health|https://demo.autobrainservice.app|
+# AUT-5611: the Default tier's app services are the `autobrain-default`
+# Portainer stack (docker-compose.default.yml). The stack name is NOT
+# `autobrain`: that compose project already exists on EP2 as the host
+# compose project at /opt/autobrain-default (postgres/redis/minio on
+# network autobrain_default), and naming the app stack `autobrain`
+# would put the Default database in scope of the app stack's
+# delete/prune. The stack joins that network as external instead.
+autobrain-default|2|https://default.autobrainservice.app/health|https://default.autobrainservice.app|
+autobrain-hosted|5|https://hosted.autobrainservice.app/health|https://hosted.autobrainservice.app|POSTGRES_USER=autobrain,POSTGRES_DB=autobrain
 "
 
 TIERS="${UPGRADE_TIERS:-$DEFAULT_TIERS}"
@@ -111,13 +127,43 @@ wait_health() {
   done
 }
 
+# Run the post-deploy smoke script against a tier's base URL.
+# Uses the existing scripts/post-deploy-smoke.sh which checks:
+#   /health, /flutter_bootstrap.js (SHA if provided), POST /api/v1/auth/signup, /ready
+run_smoke() {
+  local base_url="$1"
+  local script="${0%/*}/post-deploy-smoke.sh"
+  [ -x "$script" ] || { fail "smoke script not found or not executable: $script"; return 1; }
+  log "   running smoke gate against $base_url (timeout ${SMOKE_TIMEOUT_SEC}s)"
+
+  # Run with a timeout wrapper
+  local deadline=$(( $(date +%s) + SMOKE_TIMEOUT_SEC ))
+  local out rc=0
+  if out=$(timeout "$SMOKE_TIMEOUT_SEC" "$script" "$base_url" 2>&1); then
+    rc=0
+  else
+    rc=$?
+  fi
+  if [ $rc -eq 0 ]; then
+    log "   smoke PASS ($base_url)"
+    return 0
+  else
+    if [ $rc -eq 124 ]; then
+      fail "   smoke TIMEOUT after ${SMOKE_TIMEOUT_SEC}s ($base_url)"
+    else
+      fail "   smoke FAIL ($base_url)"
+      echo "$out" | sed 's/^/      /' >&2
+    fi
+    return 1
+  fi
+}
+
 OVERALL=0
 while IFS= read -r line; do
   line="$(echo "$line" | tr -d '[:space:]')"
   [ -z "$line" ] && continue
-  # Skip comment lines
   case "$line" in \#*) continue ;; esac
-  IFS='|' read -r name ep health reqenv <<< "$line"
+  IFS='|' read -r name ep health base_url reqenv <<< "$line"
 
   log "=== tier: $name (EP$ep) ==="
   resolved="$(resolve_stack "$name")" || { fail "stack '$name' not found"; OVERALL=1; continue; }
@@ -156,11 +202,23 @@ PY
   log "   redeploy result: $result"
 
   if wait_health "$health"; then
-    log "   healthy ($health) — promote"
+    log "   healthy ($health)"
   else
     fail "   UNHEALTHY ($health) after redeploy — STOPPING promotion"
     OVERALL=1
     break
+  fi
+
+  # Post-deploy smoke gate (AUT-IMP-009): verify key flows before promoting.
+  if [ "$SKIP_SMOKE" != "1" ]; then
+    if ! run_smoke "$base_url"; then
+      fail "   smoke gate FAILED — STOPPING promotion to next tier"
+      OVERALL=1
+      break
+    fi
+    log "   smoke gate PASS — promote to next tier"
+  else
+    log "   SKIP_SMOKE=1 — skipping smoke gate (emergency mode)"
   fi
 done <<< "$TIERS"
 
@@ -171,7 +229,7 @@ if [ "$DRY_RUN" != "1" ] && [ "$OVERALL" = "0" ] && [ -x "${0%/*}/prune-images.s
 fi
 
 if [ "$OVERALL" = "0" ]; then
-  log "DONE: all tiers upgraded via the upgrade path"
+  log "DONE: all tiers upgraded via the upgrade path (smoke-gated)"
 else
   fail "upgrade FAILED — see tiers above"
 fi
