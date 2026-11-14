@@ -151,7 +151,7 @@ jobs:
           echo "::error::mobile sync push failed after 5 attempts (non-fast-forward)"
           exit 1
 
-- name: Mobile sanity gate (AUT-IMP-009)
+      - name: Mobile sanity gate (AUT-IMP-009)
         # Blocks store promotion on red: synced tree must analyze clean (done
         # above) and pass a fast sanity test subset. "Build installs, no crash
         # on launch" is approximated in CI by static analysis + core widget/smoke

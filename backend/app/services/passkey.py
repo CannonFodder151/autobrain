@@ -148,12 +148,16 @@ async def build_registration_options(
             except Exception:
                 continue
 
-    # Map attestation string to enum
+    # Map attestation string to enum. py-webauthn 3.x dropped
+    # AttestationConveyancePreference.USER_PREFERRED; "user preferred" is the
+    # least-restrictive preference, so it maps to NONE (the library's default).
+    # Keeping the old attribute reference broke import + every passkey test
+    # (AUT-IMP-009 CI gate).
     attestation_enum = {
         "none": AttestationConveyancePreference.NONE,
         "indirect": AttestationConveyancePreference.INDIRECT,
         "direct": AttestationConveyancePreference.DIRECT,
-        "user preferred": AttestationConveyancePreference.USER_PREFERRED,
+        "user preferred": AttestationConveyancePreference.NONE,
     }.get(attestation, AttestationConveyancePreference.NONE)
 
     # Parse authenticator selection if provided
