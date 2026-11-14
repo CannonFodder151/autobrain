@@ -99,7 +99,7 @@ def _parse_qld_direct_prices(
             except ValueError:
                 continue
             fuel_name = fuel_id_to_name.get(fuel_id)
-            ft = _normalise_fuel_type(fuel_name) or f"P{fuel_id}" or f"P{fuel_id}"
+            ft = _normalise_fuel_type(fuel_name) or f"P{fuel_id}"
             price_dollars = _to_float(v)
             if price_dollars is not None:
                 # DirectAPI returns integer cents/litre; WA/NSW already in
