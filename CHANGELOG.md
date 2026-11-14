@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-296)
+- fix(ci): pin webauthn dep and drop USER_PREFERRED for passkey registration options (PR #1126)
+
 ## [0.3.318] - 2026-11-11
 
 ### Fixed (AUT-448)
