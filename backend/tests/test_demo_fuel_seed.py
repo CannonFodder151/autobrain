@@ -10,8 +10,20 @@ Run (sqlite, no Postgres/MinIO needed):
 """
 
 import os
+import tempfile
 
-os.environ["DATABASE_URL"] = "sqlite+aiosqlite:////tmp/autobrain-seed-fuel-test.db"
+# AUT-514: this test used a fixed path (/tmp/autobrain-seed-fuel-test.db) that
+# persists across CI runs on the self-hosted runner. A stale file from a prior
+# schema keeps the tables, so drop_all() no-ops and create_all() then hits
+# "table users already exists" (or, on a fresh DB, the schema is missing and
+# seed_demo() sees "no such table: users"). Use a unique temp file per run and
+# clean it up so the test is hermetic regardless of runner state.
+_db_fd, _db_path = tempfile.mkstemp(suffix=".db", prefix="autobrain-seed-fuel-")
+os.close(_db_fd)
+os.unlink(_db_path)  # aiosqlite opens it fresh; we only want a unique name
+_db_url = f"sqlite+aiosqlite:///{_db_path}"
+
+os.environ["DATABASE_URL"] = _db_url
 os.environ["SECRET_KEY"] = "test-secret"
 os.environ["DEMO_MODE"] = "true"
 os.environ["DEMO_EMAIL"] = "demo@test.local"
@@ -44,7 +56,7 @@ settings.DEMO_EMAIL = "demo@test.local"
 settings.DEMO_PASSWORD = "test-demo-password-123"
 settings.DEMO_DISPLAY_NAME = "Demo Garage"
 
-engine = create_async_engine("sqlite+aiosqlite:////tmp/autobrain-seed-fuel-test.db")
+engine = create_async_engine(_db_url)
 SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 import app.db.seed as seed_module  # noqa: E402
@@ -52,6 +64,15 @@ import app.db.seed as seed_module  # noqa: E402
 seed_module.SessionLocal = SessionLocal
 
 EXPECTED_FUEL_TYPES = {"91", "95", "98", "E10", "Diesel", "LPG"}
+
+
+def pytest_unconfigure(config):
+    """Remove the per-run temp DB file so the runner stays clean."""
+    try:
+        if os.path.exists(_db_path):
+            os.unlink(_db_path)
+    except OSError:
+        pass
 
 
 async def _reset_schema() -> None:
