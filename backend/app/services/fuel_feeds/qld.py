@@ -217,10 +217,16 @@ async def _fetch_qld_direct(client: httpx.AsyncClient | None) -> tuple[dict[int,
     country = settings.FUEL_QLD_COUNTRY_ID
     level = settings.FUEL_QLD_REGION_LEVEL
     brands = await _fetch_json(f"{base}/Subscriber/GetCountryBrands", headers=headers, params={"countryId": country}, client=client)
-    fuel_types = await _fetch_json(f"{base}/Subscriber/GetFuelTypes", headers=headers, params={"countryId": country}, client=client)
+    # GetFuelTypes may 404 for some countries (e.g. countryId=21 / Australia);
+    # fuel types surface as P<id> keys per station record instead (AUT-2459).
+    fuel_map: dict[int, str] = {}
+    try:
+        fuel_types = await _fetch_json(f"{base}/Subscriber/GetFuelTypes", headers=headers, params={"countryId": country}, client=client)
+        fuel_map = _parse_qld_fuel_types(fuel_types)
+    except Exception:  # noqa: BLE001 — 404 is expected for some countries
+        pass
     regions = await _fetch_json(f"{base}/Subscriber/GetCountryGeographicRegions", headers=headers, params={"countryId": country}, client=client)
     brand_map = _parse_qld_brands(brands)
-    fuel_map = _parse_qld_fuel_types(fuel_types)
     geo_id = _parse_qld_geo_regions(regions, level)
     if geo_id is None:
         raise ValueError(f"QLD DirectAPI: no GeoRegionId at level {level}")

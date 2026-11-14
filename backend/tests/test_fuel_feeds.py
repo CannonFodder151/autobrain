@@ -207,7 +207,7 @@ def test_ingest_qld_fuel_prices_works_when_getfueltypes_404s() -> None:
                     return None
             return Result()
 
-    with patch.object(feeds, "_fetch_json", _fake_fetch):
+    with patch("app.services.fuel_feeds.qld._fetch_json", _fake_fetch):
         res = asyncio.run(feeds.ingest_qld_fuel_prices(db=FakeDB()))  # type: ignore[arg-type]
 
     assert res["source"] == "qld"
