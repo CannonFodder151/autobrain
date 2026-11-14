@@ -25,15 +25,26 @@ import pytest  # noqa: E402
 import pytest_asyncio  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 
-from app.db.session import SessionLocal, init_db  # noqa: E402
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine  # noqa: E402
+from app.db.session import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.passkey import PasskeyCredential  # noqa: E402
 from app.models.user import User  # noqa: E402
 
+# Own engine/SessionLocal: do not touch the shared app engine (pinned by
+# conftest.py to Postgres at import time) — that collision is the AUT-514 CI
+# failure. Each isolated test module must own its engine and override the
+# ASGI get_db dependency so the app routes through it.
+engine = create_async_engine(os.environ["DATABASE_URL"])
+SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+app.dependency_overrides[get_db] = lambda: SessionLocal()
+
 
 @pytest_asyncio.fixture(scope="module", autouse=True, loop_scope="session")
 async def _reinit_schema() -> None:
-    await init_db()
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
 
 async def _make_user(email: str = "passkey") -> User:

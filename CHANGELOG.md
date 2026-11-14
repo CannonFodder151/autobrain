@@ -11,10 +11,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+
+### Fixed (AUT-514)
+- fix(backend): add webauthn dependency + fix attestation enum for passkey tests; resolve test_auth_begin_unknown_user_returns_empty_allow failing due to missing webauthn module and incorrect AttestationConveyancePreference enum value (PR #1124)
+
 ## [0.3.319] - 2026-11-14
 
 ### Fixed (AUT-296)
 - fix(ci): pin webauthn dep and drop USER_PREFERRED for passkey registration options (PR #1126)
+
 
 ## [0.3.318] - 2026-11-11
 

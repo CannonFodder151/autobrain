@@ -10,24 +10,22 @@ Run (sqlite, no Postgres/MinIO needed):
 """
 
 import os
+import tempfile
 
-os.environ["DATABASE_URL"] = "sqlite+aiosqlite:////tmp/autobrain-seed-fuel-test.db"
-os.environ["SECRET_KEY"] = "test-secret"
-os.environ["DEMO_MODE"] = "true"
-os.environ["DEMO_EMAIL"] = "demo@test.local"
-os.environ["DEMO_PASSWORD"] = "test-demo-password-123"
-os.environ["DEMO_DISPLAY_NAME"] = "Demo Garage"
-os.environ["POSTGRES_USER"] = "autobrain"
-os.environ["POSTGRES_PASSWORD"] = "autobrain"
-os.environ["POSTGRES_DB"] = "autobrain"
-os.environ["MINIO_ACCESS_KEY"] = "autobrain"
-os.environ["MINIO_SECRET_KEY"] = "autobrain"
-os.environ["MINIO_BUCKET"] = "autobrain-assets"
-os.environ["MINIO_ENDPOINT"] = "minio:9000"
-os.environ["AI_GATEWAY_API_KEY"] = "test-ai-key"
-os.environ["ADMIN_API_KEY"] = "test-admin-key-0123456789-0123456789"
-os.environ["MARKET_DATA_URL"] = ""
-os.environ["MARKET_DATA_API_KEY"] = ""
+# AUT-514: this test used a fixed path (/tmp/autobrain-seed-fuel-test.db) that
+# persists across CI runs on the self-hosted runner. A stale file from a prior
+# schema keeps the tables, so drop_all() no-ops and create_all() then hits
+# "table users already exists" (or, on a fresh DB, the schema is missing and
+# seed_demo() sees "no such table: users"). Use a unique temp file per run and
+# clean it up so the test is hermetic regardless of runner state.
+_db_fd, _db_path = tempfile.mkstemp(suffix=".db", prefix="autobrain-seed-fuel-")
+os.close(_db_fd)
+os.unlink(_db_path)  # aiosqlite opens it fresh; we only want a unique name
+_db_url = f"sqlite+aiosqlite:///{_db_path}"
+
+# Do NOT set os.environ["DATABASE_URL"] here — it pollutes app.db.session
+# engine creation for other test modules during pytest collection. This test
+# creates its own engine/SessionLocal and patches seed_module.SessionLocal.
 
 import pytest  # noqa: E402
 from sqlalchemy import func, select  # noqa: E402
@@ -44,14 +42,37 @@ settings.DEMO_EMAIL = "demo@test.local"
 settings.DEMO_PASSWORD = "test-demo-password-123"
 settings.DEMO_DISPLAY_NAME = "Demo Garage"
 
-engine = create_async_engine("sqlite+aiosqlite:////tmp/autobrain-seed-fuel-test.db")
+engine = create_async_engine(_db_url)
 SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 import app.db.seed as seed_module  # noqa: E402
 
+# NOTE: seed_module.SessionLocal must be pinned per-test, not just at import.
+# pytest imports every test module at collection time, so another module that
+# patches seed_module.SessionLocal would clobber this one before its tests run,
+# making seed_demo() query an empty/other DB file (see AUT-514).
 seed_module.SessionLocal = SessionLocal
 
+
+@pytest.fixture(autouse=True)
+def _pin_seed_sessionlocal():
+    """Ensure seed_demo/reset_demo use this test's sqlite sessionmaker for the
+    whole test run, regardless of collection-order clobbering by sibling modules
+    that patch seed_module.SessionLocal at import time."""
+    seed_module.SessionLocal = SessionLocal
+    yield
+
+
 EXPECTED_FUEL_TYPES = {"91", "95", "98", "E10", "Diesel", "LPG"}
+
+
+def pytest_unconfigure(config):
+    """Remove the per-run temp DB file so the runner stays clean."""
+    try:
+        if os.path.exists(_db_path):
+            os.unlink(_db_path)
+    except OSError:
+        pass
 
 
 async def _reset_schema() -> None:
