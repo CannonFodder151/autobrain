@@ -65,6 +65,11 @@ INTERNAL_HEADERS = {"X-Internal-Api-Key": settings.DONGLE_SERVER_API_KEY}
 engine = create_async_engine(_db_url)
 SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
+# Override ASGI dependency so the app uses our isolated engine, not the shared
+# one pinned by conftest.py to Postgres at import time.
+from app.db.session import get_db  # noqa: E402
+app.dependency_overrides[get_db] = lambda: SessionLocal()
+
 
 def pytest_unconfigure(config):
     """Remove the per-run temp DB file so the runner stays clean."""
