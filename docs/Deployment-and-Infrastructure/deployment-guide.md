@@ -279,6 +279,93 @@ Portainer stack updates pull images (`pullImage=true`) and recreate changed
 services (AUT-372). This is intended so CI-published images reach the tier, and
 it is safe for the frontend because the stack pins a static IP.
 
+### Stack 122 (`autobrain-hosted`) is an INLINE, digest-pinned stack (AUT-5132)
+
+`GET /api/stacks/122` returns `GitConfig: null` and `AdditionalFiles: null`:
+the hosted stack was created by **uploading** a compose file, so Portainer stores
+it and re-applies that stored copy **verbatim** on every update. It never reads
+`docker-compose.hosted.yml` from `main`. Two consequences:
+
+1. **`pullImage=true` alone is a no-op.** Every app image is pinned by digest
+   (`ghcr.io/.../autobrain-backend:hosted@sha256:...`). A digest is immutable, so
+   `docker compose pull` re-resolves the *same* image and the redeploy recreates
+   the same container. The call returns 200 and nothing new ships. A reported
+   successful redeploy is **not** evidence of a deploy on this stack.
+2. **The stored compose can be stale.** If `docker-compose.hosted.yml` on `main`
+   gained a hunk (e.g. the `alembic upgrade head` pre-step in PR #870) and the
+   stored copy was never re-uploaded, the stack keeps recreating the *old*
+   container command even on a successful pull.
+
+The pins are not the bug — they are **mandated by the `security-pr-gate.yml`
+"Pin guard"**, and `build-hosted.yml`'s `compose-pin` job runs
+`scripts/update-compose-pins.py` to rewrite them to the digests it just
+published and pushes the result to `main`, so the pin source does advance. What
+makes the running stack track `main` is that same job: it bumps the pins, pushes,
+then PUTs the file into stack 122. It used to be gated on
+`steps.bump.outputs.changed == 'true'`, which meant a compose edit that did not
+move a digest (the PR #870 `alembic upgrade head` pre-step) never reached the
+stack — that gate is gone; the sync now runs on every build to `main`.
+
+**The working deploy is upload + update, not redeploy.** This is what
+`build-hosted.yml`'s "Sync updated compose into Portainer hosted stack" step
+runs; run it by hand for a one-off:
+
+```bash
+# 1. Make sure main has the compose AND the fresh digest pins (bump job ran).
+git fetch origin main && git checkout -B main origin/main
+grep -n '@sha256' docker-compose.hosted.yml    # note the digests you expect
+
+# 2. Upload the compose into the inline stack, pulling the new digests.
+python3 scripts/sync-compose-to-portainer.py \
+  --stack autobrain-hosted --endpoint 5 --file docker-compose.hosted.yml
+
+# 3. Re-assert what is actually running (no PUT — verification only).
+python3 scripts/sync-compose-to-portainer.py --verify-only \
+  --stack autobrain-hosted --endpoint 5 --file docker-compose.hosted.yml
+```
+
+`--verify-only` compares each running container's **image digest**
+(`/images/{id}/json` → `RepoDigests`) and its **command/entrypoint** against
+what the compose declares, and exits **7** on drift. That is the only check that
+distinguishes "deployed" from "recreated the same thing": `/health` and
+`scripts/post-deploy-smoke.sh` both pass on a no-op redeploy. Exit codes: `3`
+stack env empty, `4` PUT rejected, `5` host-port orphan, `6` containers not
+healthy, `7` running stack does not match the compose.
+
+Raw-API equivalent (if you must drive Portainer by hand):
+
+```bash
+# Preserve the stack env — reading it from /api/stacks/122/file sends Env: []
+# and wipes every stack env var (AUT-4778).
+STACK_ENV=$(curl -sS -H "X-API-Key: $PORTAINER_API_KEY" \
+  "$PORTAINER_URL/api/stacks/122" | jq '.Env')
+jq -n --rawfile compose docker-compose.hosted.yml --argjson env "$STACK_ENV" \
+  '{StackFileContent: $compose, Env: $env, Prune: false}' \
+| curl -sS -X PUT \
+    "$PORTAINER_URL/api/stacks/122?endpointId=5&pullImage=true" \
+    -H "X-API-Key: $PORTAINER_API_KEY" -H 'Content-Type: application/json' \
+    --data-binary @-
+```
+
+Never judge a hosted deploy by the Portainer response code. Use step 3.
+
+Quick eyeball of what the containers are actually running (this is the check
+`post-deploy-smoke.sh` cannot make — it is black-box HTTP):
+
+```bash
+curl -s -H "X-API-Key: $PORTAINER_API_KEY" \
+  "$PORTAINER_URL/api/endpoints/5/docker/containers/json?all=true" \
+  | jq -r '.[]
+      | select(.Labels["com.docker.compose.service"] != null)
+      | "    \(.Labels["com.docker.compose.service"]) \(.ImageID)"'
+
+# The assertion is against each image's RepoDigests, so compare the
+# container's Image with the image record:
+curl -s -H "X-API-Key: $PORTAINER_API_KEY" \
+  "$PORTAINER_URL/api/endpoints/5/docker/images/sha256:<container-image>/json" \
+  | jq -r '.RepoDigests[]'
+```
+
 Prerequisites for the Portainer API path to work (verified before relying on the
 upgrade path):
 
@@ -290,10 +377,14 @@ upgrade path):
   Deployment team (agent upgrade to a 2.45-compatible version, or fall back to
   SSH `docker compose up -d` on the Oracle VM) — see AUT-1847.
 - The HostED Portainer stack env must carry the required non-secret vars
-  (`POSTGRES_USER`, `POSTGRES_DB`) and the Paperclip identity
-  (`PAPERCLIP_API_KEY`, `CI_TRIAGE_WEBHOOK_SECRET`). `docker-compose.hosted.yml`
+  (`POSTGRES_USER`, `POSTGRES_DB`). `docker-compose.hosted.yml`
   now defaults the DB vars so a redeploy never fails at interpolation even if
-  the env is incomplete.
+  the env is incomplete. (AUT-5718: the CI triage receiver and its
+  `CI_TRIAGE_*`/`PAPERCLIP_*` stack env wiring were removed — CI triage is
+  woken by the Paperclip routine trigger fired from
+  `ci-triage-webhook.yml` via the GitHub secret `CI_TRIAGE_WEBHOOK_URL`,
+  so the stack no longer needs `PAPERCLIP_API_KEY` or
+  `CI_TRIAGE_WEBHOOK_SECRET`.)
 - Secret path (AUT-1853): `docker-compose.hosted.yml` defaults `SECRETS_DIR` to
   `/data/autobrain/secrets`. The HostED Portainer stack env should set
   `SECRETS_DIR=/data/autobrain/secrets` (or rely on the compose default); never
@@ -521,4 +612,93 @@ docker compose -f docker-compose.prod.yml up -d --build   # pinned images
 On Portainer: redeploy the previous stack definition / image tag. In a
 migration, keep the old host running and flip DNS back to roll back — see
 `server-migration.md`.
+
+## Admin password rotation (AUT-5135)
+
+The hosted super-admin account (`admin@autobrain.io`) is bootstrapped on first
+start via `ADMIN_EMAIL` / `ADMIN_INITIAL_PASSWORD` (or `ADMIN_INITIAL_PASSWORD_FILE`).
+That initial password is only used once — the bootstrap skips creation if the
+account already exists. If the password is lost or must be rotated, use the
+`admin_reset` CLI module inside the backend container. No SSH to the Oracle VM
+is required; the command runs via Portainer's container exec.
+
+### Prerequisites
+
+- The new password must be staged as a secret file at
+  `/data/autobrain/secrets/admin_new_password` on the Oracle VM (or wherever
+  `SECRETS_DIR` points). This follows the existing `*_FILE` pattern
+  (AUT-1533, `docker/lib-load-secrets.sh`).
+- The Portainer stack env for `autobrain-hosted` must already have
+  `ADMIN_EMAIL=admin@autobrain.io` (or the correct admin email) configured.
+
+### Procedure (via Portainer UI)
+
+1. Open Portainer → **Endpoints** → **5 = AutoBrain-Hosted** → **Containers**.
+2. Find the `backend` container for the `autobrain-hosted` stack.
+3. Click **Console** (or **Exec**) → start a shell (`/bin/sh` or `bash`).
+4. Run the reset command:
+
+```bash
+# Inside the backend container
+ADMIN_NEW_PASSWORD_FILE=/run/secrets/admin_new_password \
+python -m app.db.admin_reset
+```
+
+The secret file is bind-mounted at `/run/secrets/admin_new_password` by the
+`x-secrets` volume in `docker-compose.hosted.yml`. The command reads the
+password from that file, hashes it with bcrypt, updates the admin user, and
+increments `token_version` (revoking every existing session). Output is a JSON
+line:
+
+```json
+{"user_id":"...","email":"admin@autobrain.io","status":"reset"}
+```
+
+**The new password is never logged.** Record the outcome in the issue / `#updates`
+channel — do not paste the password anywhere.
+
+### Procedure (via Portainer API)
+
+```bash
+# From a host that can reach Portainer (CI runner, dev box, etc.)
+PORTAINER_URL=https://portainer.nathanmartina.com
+PORTAINER_API_KEY=<secret>
+
+# 1. Get the container ID for the hosted backend
+CONTAINER_ID=$(curl -s -H "X-API-Key: $PORTAINER_API_KEY" \
+  "$PORTAINER_URL/api/endpoints/5/docker/containers/json?filters=%7B%22label%22%3A%7B%22com.docker.compose.service%3Dbackend%22%3Atrue%7D%7D" \
+  | jq -r '.[0].Id')
+
+# 2. Create an exec instance
+EXEC_ID=$(curl -s -X POST -H "X-API-Key: $PORTAINER_API_KEY" \
+  "$PORTAINER_URL/api/endpoints/5/docker/containers/$CONTAINER_ID/exec" \
+  -H "Content-Type: application/json" \
+  -d '{"Cmd":["sh","-c","ADMIN_NEW_PASSWORD_FILE=/run/secrets/admin_new_password python -m app.db.admin_reset"],"AttachStdout":true,"AttachStderr":true}' \
+  | jq -r '.Id')
+
+# 3. Start the exec and capture output
+curl -s -X POST -H "X-API-Key: $PORTAINER_API_KEY" \
+  "$PORTAINER_URL/api/endpoints/5/docker/exec/$EXEC_ID/start" \
+  -H "Content-Type: application/json" \
+  -d '{"Detach":false,"Tty":false}'
+```
+
+### Verification
+
+After reset, verify the new password works by logging in at
+`https://hosted.autobrainservice.app` (or via `POST /api/v1/auth/login`).
+The old password will no longer be accepted; all prior sessions are revoked.
+
+### Security notes
+
+- The new password file should be generated with a CSPRNG:
+  `openssl rand -base64 32 > /data/autobrain/secrets/admin_new_password`
+- After a successful reset, **delete or rotate the secret file** so it cannot
+  be reused:
+  `rm /data/autobrain/secrets/admin_new_password`
+- The credential lives only in Paperclip secrets / the host secret file. It is
+  never written to the database in plaintext, never logged, and never sent over
+  the network.
+- If the reset must be repeated, stage a new secret file with a new password
+  and re-run the command.
 

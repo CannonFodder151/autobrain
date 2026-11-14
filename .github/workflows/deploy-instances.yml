@@ -98,7 +98,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: "Upgrade instance tier chain (AUT-4982: demo -> default -> hosted)"
+      - name: "Upgrade instance tier chain (AUT-4982 - demo -> default -> hosted)"
         env:
           UPGRADE_TIERS: ${{ inputs.tiers }}
         run: ./scripts/upgrade-instances.sh

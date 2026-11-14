@@ -114,6 +114,9 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
     final outcome = await auth.login(_email.text, _password.text);
+    if (outcome == LoginOutcome.ok) {
+      await auth.ackReauth();
+    }
     if (!mounted) return;
     if (outcome == LoginOutcome.mfaSetupRequired) {
       _mfaToken = auth.mfaTokenHint;
@@ -202,6 +205,60 @@ class _LoginScreenState extends State<LoginScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      if (_isDemo) ...[
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 16),
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.25),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.white24),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: Colors.greenAccent.shade700,
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: const Text(
+                                      'Phase 1',
+                                      style: TextStyle(
+                                        color: Colors.black,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Expanded(
+                                    child: Text(
+                                      'Your garage, your data — works even when AI is down',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                'Running the Phase 1 stack — every feature has deterministic fallbacks. AI enriches but never blocks.',
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.75),
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
@@ -225,6 +282,30 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                       const SizedBox(height: 20),
+                      if (auth.needsReauth) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.amber.shade400),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.security, color: Colors.amber),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'Security update — please re-authenticate',
+                                  style: TextStyle(color: Colors.amber.shade900, fontSize: 14),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       const Text(
                     'AutoBrain',
                     style: TextStyle(

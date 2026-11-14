@@ -70,10 +70,20 @@ Rules:
 | `backup-agent` | **Removed** (AUT-3827) | Hourly off-site backup push is a Celery beat task in `backend` (`app.workers.tasks.backup_offsite_hourly`). |
 | `autobrain-backup` | **Renamed → `backup`** (AUT-3944) | One backup container serves the GUI; the cron that used to live in the agent sidecar runs in `backend` beat. GUI still on `127.0.0.1:8080`. |
 
+- **Market-data scraper** runs inside the **backend** image (`docker/backend/Dockerfile`,
+  no separate service) — AUT-4113 / AUT-3843. Playwright + Chromium installed in
+  the backend image; `shm_size: "256m"` declared on the backend service for
+  Chromium sandbox shared memory. Scraper source lives in
+  `backend/app/services/market_scraper/`.
+- MinIO bucket initialization runs inside the `minio` service entrypoint —
+  AUT-1242/C2. There is no separate `minio-init` sidecar in the hosted stack.
+- Celery beat runs inside the backend (`-B`) — AUT-1242/C1 / AUT-3153.
+
 ## Pre-deploy
 
 - [ ] Open a PR with the consolidated `docker-compose.hosted.yml` and this
-      checklist. Get QA + Security sign-off; auto-merge fires per AUT-2230.
+      checklist. Get QA + Security sign-off; then merge with the AUT-2230 gate
+      script (`merge-gated.mjs`, AUT-5561). Do not arm GitHub auto-merge.
 - [ ] Confirm the new `backend` image digest (with Celery + AI gateway) is
       published to GHCR and multi-arch (amd64 + arm64). The hosted backend
       image already contains the Celery app, AI gateway, and dependencies.
@@ -138,8 +148,9 @@ If the merged backend fails health or task execution:
 ## Follow-ups (child issues)
 
 - **Consolidate MinIO init into the `minio` entrypoint for `docker-compose.prod.yml`
-  and `docker-compose.yml`** (they still run the one-shot `/init-minio.sh` from
-  the backend command).
+  and `docker-compose.yml`** — was running the one-shot `/init-minio.sh` from
+  the backend command. **Done (AUT-3196):** both compose files now fold bucket
+  initialization into the minio service entrypoint, matching hosted.
 - **Align the dev `ai` service** to run the full `docker/ai/entrypoint.sh`
   (market-data + AI gateway) instead of the gateway-only command override,
   so dev parity matches prod/hosted.

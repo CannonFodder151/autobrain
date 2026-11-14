@@ -8,6 +8,14 @@
 #
 # Default bumps the PATCH (x.y.z -> x.y.z+1). Cut minor/major manually with
 # ./scripts/bump-version.sh when a release deserves more than a patch.
+#
+# NOTE: The commit message intentionally omits [skip ci] (added 2026-09-17, AUT-2228).
+# The dockerhub-publish.yml and build-hosted.yml workflows already have version_only
+# steps that detect pure-version-cut pushes (CHANGELOG.md + version-only files) and skip
+# image build/publish. So [skip ci] is redundant and over-broad — it would suppress
+# sync-mobile.yml, github-release, and other workflows that should run on the auto-bump
+# push itself. Without [skip ci], those workflows fire on the same push, keeping the
+# stack in lockstep.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -73,22 +81,16 @@ awk -v v="## [$NEXT] - " '
 if [[ "$COMMIT" == "1" ]]; then
   git add -A
   git -c user.name="AutoBrain Release Bot" -c user.email="release@autobrainservice.app" \
-    commit -m "chore: release v$NEXT (auto-bump, AUT-240) [skip ci]" -q
+    commit -m "chore: release v$NEXT (auto-bump, AUT-240)" -q
   echo "==> committed v$NEXT"
   # Tag the release commit so `git tag --list` and the GitHub releases API
   # can see a real v* tag instead of just a CHANGELOG line (AUT-2055).
+  # AUT-5928: the tag is created locally only; the workflow pushes it after
+  # the PR merges (the PR-based flow cannot push tags to main directly).
   if git tag -l "v$NEXT" | grep -q .; then
     echo "==> tag v$NEXT already exists — skipping"
   else
     git tag -a "v$NEXT" -m "Release v$NEXT (auto-bump, AUT-2055)" HEAD
     echo "==> tagged v$NEXT"
-    # Auto-push the tag if we have push access. If the push fails (shallow
-    # clone, no auth), the publish workflow falls back to creating the
-    # release via the GitHub API (see dockerhub-publish.yml).
-    if git push origin "v$NEXT" 2>/dev/null; then
-      echo "==> pushed tag v$NEXT"
-    else
-      echo "==> tag push failed (will be created via API in publish workflow)"
-    fi
   fi
 fi

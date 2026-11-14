@@ -4,6 +4,29 @@
 
 Chronological log of verified test passes and verification runs. Real state only — mirrors repo `docs/qa-run-logs.md`. Newest first.
 
+## 2026-10-04 — Pre-merge QA: AUT-5063 depublish demo credential, PR #881 (Gate 2)
+
+Verified PR https://github.com/CannonFodder151/autobrain/pull/881 (`fix/aut-5063-depublish-demo-creds` @ `2ed1465a8c6763d4f30d688057d42c6991cb023c`, base `main`). Scope: removes the compromised `demo@autobrainservice.app` / `demo` literal from README, `.env.example`, 5 docs files and the Dart login prefill; `DEMO_PASSWORD` default `"demo"` → `""` with fail-closed `seed_demo()` / `reset_demo()` (CWE-798), plus the AUT-5529 whitespace-only hardening.
+
+**Verification (all performed at `2ed1465a` against a full tarball of the head, not taken on trust):**
+- Diff reviewed line-by-line (13 files, +175/-16). `config.py:137` default emptied; `seed.py:98-105` strips then fails closed (`demo_seed_skipped_no_password`); `reset_demo()` fails closed **before** its delete block (`seed.py:142-148`) and re-seeds via `await seed_demo()` at `seed.py:242` — so the re-hash also uses the stripped value and there is no second unguarded `hash_password(settings.DEMO_PASSWORD)` path in the file.
+- Credential-literal sweep on the full 951-file tree: `DEMO_PASSWORD=demo`, `password=demo`, `"password":"demo"`, `/ demo` → **0 hits** outside the CHANGELOG narrative. Every remaining `DEMO_PASSWORD` mention is guidance, the stripped read, or the `<DEMO_PASSWORD>` placeholder.
+- Disclosure vector in `autobrainservice-website` @ `main`: only hit is the pattern string inside its own `scripts/check_seo_pages.py` checker. No literal published there.
+- `login_screen.dart` now prefills the demo **email only**; the password literal is gone from the bundle.
+- Check-runs re-queried at `2ed1465a`: 24 `success`, 4 `skipped` (optional publish chain), **0 failures**.
+- New tests in `backend/tests/test_seed_reset_demo.py` cover empty and whitespace-only for both `seed_demo` and `reset_demo`; the whitespace reset case pins the bcrypt hash to distinguish *skipped* from *wiped-then-re-seeded*.
+- Regression context: the live demo login still returns 200 (verified 19:28Z, AUT-5605) because the demo user lives in the preserved PG volume and `seed_demo()` early-returns on an existing user. This PR does not break the demo account in place.
+
+**Findings:**
+- **Deploy-wiring gap (not release-blocking for this PR; must be fixed before the next demo rebuild).** No compose file in the repo sets `DEMO_PASSWORD` — `docker-compose.demo.yml` (PR #908) sets only `DEMO_MODE: "true"`, and `docker-compose.yml` / `prod` / `hosted` set no demo vars. Once PR #881 merges, the fail-closed guard means any **fresh-volume** demo deploy or `DEMO_RESET=true` will seed no demo account until `DEMO_PASSWORD` is injected from the `demo/demo-account-password` Paperclip secret. Suggested fix: add `DEMO_PASSWORD: ${DEMO_PASSWORD:-}` (populated from the secret) to `docker-compose.demo.yml`.
+- Sign-off request carried a stale diffstat (`+105/-15` vs actual `+175/-16`) — cosmetic.
+- The PR's CHANGELOG text says "the demo stack is down (AUT-5057)"; the demo stack was rebuilt at 18:06Z (AUT-5605) — cosmetic.
+- **Credential not yet rotated.** This PR removes the disclosure vector; the demo account still accepts the old password until the operator rotates it and sets the secret. Deployment action, outside this diff.
+
+**Verdict:** `qa-approved` at `2ed1465a`. QA sign-off recorded on the originating issue AUT-5063 per AUT-2230; PR Gardener owns the merge.
+
+**Run note:** the Paperclip control plane was latency-degraded during this run (issue writes timed out past the 90s proxy ceiling; `/api/health` ~31s), so this log entry is the durable record of the verification and the `qa-approved` comment was delivered as soon as the plane recovered.
+
 ## 2026-09-28 — QA Documentation Refresh: AUT-4395
 
 Refreshed Testing & QA section (test-strategy.md, qa-run-logs.md, user-testing-results.md, index.md) to reflect current stack state:

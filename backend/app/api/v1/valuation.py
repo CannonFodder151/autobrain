@@ -23,6 +23,7 @@ from app.schemas.valuation import (
     ValuationResponse,
 )
 from app.services.ai_client import estimate_value
+from app.services.ai_fallbacks import estimate_value_fallback
 from app.services.market_data import get_market_data, search_market
 from app.services.rate_limit import require_ai_rate_limit
 
@@ -119,7 +120,14 @@ async def valuate(
     }
     result = await estimate_value(data)
     if not result:
-        raise HTTPException(status_code=503, detail="Valuation engine unavailable")
+        fallback = estimate_value_fallback({
+            "make": vehicle.make,
+            "model": vehicle.model,
+            "year": vehicle.year,
+            "odometer_km": payload.odometer_km or vehicle.odometer_km,
+            "condition": payload.condition or vehicle.condition,
+        })
+        result = {**fallback, "factors": {"fallback_reason": "ai_gateway_unreachable"}, "recommendations": []}
     result["market"] = market
     snapshot = ValuationSnapshot(
         vehicle_id=vehicle_id,

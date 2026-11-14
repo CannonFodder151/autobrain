@@ -23,8 +23,9 @@ concurrency:
 
 jobs:
   cancel-orphaned-runs:
-    runs-on: [self-hosted, linux, x64, vm2]
+    runs-on: ubuntu-latest
     timeout-minutes: 10
+    continue-on-error: true
     strategy:
       fail-fast: false
       # The AutoBrain self-hosted runner fleet lives under one owner.

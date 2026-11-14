@@ -162,11 +162,12 @@ OVERALL=0
 while IFS= read -r line; do
   line="$(echo "$line" | tr -d '[:space:]')"
   [ -z "$line" ] && continue
+  case "$line" in \#*) continue ;; esac
   IFS='|' read -r name ep health base_url reqenv <<< "$line"
 
   log "=== tier: $name (EP$ep) ==="
   resolved="$(resolve_stack "$name")" || { fail "stack '$name' not found"; OVERALL=1; continue; }
-  stack_id="${resolved%% *}"; ep="${resolved##* }"
+  stack_id="${resolved%% }"; ep="${resolved##* }"
   log "   stack id=$stack_id endpoint=$ep"
 
   if [ "$DRY_RUN" = "1" ]; then

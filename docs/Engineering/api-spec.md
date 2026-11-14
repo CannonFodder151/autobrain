@@ -254,11 +254,7 @@ via signed URL; the client verifies `sha256` before flashing.
 | GET    | `/dongle/firmware/latest?model=` | Latest firmware manifest for a model |
 | GET    | `/dongle/firmware/installed?serial_number=&model=` | What a given dongle last reported it is running |
 
-## CI webhook (`/ci`) — inbound only
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST   | `/ci/webhook` | Receives GitHub workflow/PR events; signature-verified. Not part of the public client API |
 
 ## Billing (`/billing`) — hosted (Stripe)
 

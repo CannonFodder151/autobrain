@@ -15,8 +15,9 @@ on:
 # main (PR merge or auto-bump) arriving mid-publish would otherwise cancel it
 # and starve the latest commit (AUT-967, AUT-1756). Queue the newer run behind
 # the in-flight one so every push to main still publishes. The auto-bump commit
-# is tagged [skip ci] (scripts/auto-bump.sh) so it never re-triggers this
-# workflow and the in-flight publish is never cancelled by its own version cut.
+# is version-only (CHANGELOG.md + config files); the version_only steps
+# in publish/publish-manifest skip image build, so a newer push to main
+# never cancels the in-flight publish (AUT-967, AUT-1756, AUT-2228).
 concurrency:
   group: dockerhub-publish-${{ github.ref }}
   cancel-in-progress: false
@@ -36,7 +37,7 @@ jobs:
     # downstream job, so guarding here would silently skip changelog-gate and
     # the whole publish chain on PRs and workflow_dispatch. The event check
     # lives in the step body instead.
-    runs-on: [self-hosted, linux, x64, vm2]
+    runs-on: ubuntu-latest
     permissions:
       actions: write
     steps:
@@ -72,7 +73,7 @@ jobs:
     # queued behind the heavy docker publish pipeline on vm2. AUT-1802: arm64
     # reserved for arm images only. The gate needs no docker, so the legacy
     # runner's dockerd-wedge history (AUT-1720) does not apply here.
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -132,7 +133,7 @@ jobs:
     # [self-hosted, linux, x64] so GitHub can use the idle legacy x64 runner
     # instead of queuing behind the heavy docker publish on vm2. AUT-1802: the
     # arm64 runner is reserved for building arm images only.
-    runs-on: [self-hosted, linux, x64]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Install pip-audit
@@ -160,7 +161,7 @@ jobs:
   auto-bump:
     needs: changelog-gate
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, linux, x64, vm2]
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
@@ -171,28 +172,44 @@ jobs:
           persist-credentials: true
           fetch-depth: 0
       - name: Cut a release if [Unreleased] has content (AUT-240)
+        id: bump
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
         run: |
           set -euo pipefail
           git config user.name "AutoBrain Release Bot"
           git config user.email "release@autobrainservice.app"
+          # Record HEAD before auto-bump.sh: the script's changelog-dedupe
+          # block rewrites CHANGELOG.md even when nothing is bumped, so a
+          # working-tree diff against origin/main is not a reliable "did we
+          # bump?" signal (AUT-296). Only a new commit means a release was cut.
+          BEFORE_HEAD=$(git rev-parse HEAD)
           ./scripts/auto-bump.sh
-          # Concurrent workflow runs can race the auto-bump push; rebase onto
-          # the latest main and retry instead of failing the run (AUT-451).
-          for attempt in 1 2 3; do
-            if git push origin main; then
-              echo "==> auto-bump done"
-              exit 0
-            fi
-            echo "push rejected (attempt $attempt/3) — rebasing onto latest main"
-            git pull --rebase origin main
-          done
-          echo "::error::auto-bump push failed after 3 attempts (non-fast-forward)"
-          exit 1
+          if [[ "$(git rev-parse HEAD)" == "$BEFORE_HEAD" ]]; then
+            echo "==> nothing to bump — no push needed"
+            echo "bumped=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # PR-based auto-bump (AUT-296): push to a branch and merge via PR,
+          # because main is protected (GH006 blocks direct pushes).
+          VERSION=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')
+          BRANCH="auto-bump/v${VERSION}-$(date +%s)"
+          git checkout -b "$BRANCH"
+          auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_PAT" | base64 -w0)"
+          git -c "http.extraheader=${auth}" push origin "$BRANCH"
+          PR_JSON=$(curl -s -X POST -H "Authorization: token $GH_PAT" -H "Accept: application/vnd.github+json" https://api.github.com/repos/CannonFodder151/autobrain/pulls -d "{\"title\":\"chore: release v${VERSION} (auto-bump)\",\"head\":\"${BRANCH}\",\"base\":\"main\"}")
+          PR_NUMBER=$(echo "$PR_JSON" | python3 -c "import sys,json; print(json.load(sys.stdin)['number'])")
+          curl -s -X PUT -H "Authorization: token $GH_PAT" -H "Accept: application/vnd.github+json" https://api.github.com/repos/CannonFodder151/autobrain/pulls/$PR_NUMBER/auto-merge -d '{"merge_method":"merge"}' >/dev/null
+          curl -s -X PUT -H "Authorization: token $GH_PAT" -H "Accept: application/vnd.github+json" https://api.github.com/repos/CannonFodder151/autobrain/pulls/$PR_NUMBER/merge -d '{"merge_method":"merge"}' >/dev/null
+          git -c "http.extraheader=${auth}" push origin "v${VERSION}"
+          echo "==> auto-bump done"
+          echo "bumped=true" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
   publish:
     needs: auto-bump
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux, x64, vm2]
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
@@ -298,7 +315,7 @@ jobs:
     # the arm64 runner is available.
     needs: publish
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux, x64, vm2]
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
@@ -357,7 +374,7 @@ jobs:
   sync-changelog:
     needs: publish-manifest
     if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, linux, x64, vm2]
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:

@@ -44,7 +44,7 @@ Dev/Prod already consolidated: backend runs uvicorn (API:8000) + uvicorn (AI gat
 
 ### Child Issues to Create
 
-- `AUT-XXXX` Merge market-data scraper into backend Celery (hosted)
+- `AUT-3843` Merge market-data scraper into backend Celery (hosted) — **implemented on feat/AUT-4113-market-data-celery**
 - `AUT-XXXX` Consolidate autobrain-backup + backup-agent into single backup service
 - `AUT-XXXX` Verify container count reduction end-to-end on EP5 (smoke test)
 
@@ -288,7 +288,7 @@ Flutter frontend (`frontend/`) — 5 modules per AGENTS.md. Need to audit for:
 1. **Immediate (this week):** Create child issues 1-3 (container consolidation) and 8-10 (AI immutable keys) — highest impact, lowest risk.
 2. **Week 2:** Tackle modularisation (issues 11-17) — start with advisor.py removal (already has replacement).
 3. **Week 3:** Vector optimisations (issues 4-7) and documentation (issues 18-25).
-4. **Ongoing:** Verify each change on dev box → PR → auto-merge after QA+Security → deploy to EP5.
+4. **Ongoing:** Verify each change on dev box → PR → merge with the AUT-2230 gate after QA+Security → deploy to EP5.
 
 ---
 

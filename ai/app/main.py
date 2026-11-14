@@ -29,7 +29,7 @@ from pydantic import BaseModel
 
 from .logging import get_logger, setup_logging
 from .modules import MODULES
-from .router_client import ai_telemetry_reset, ai_telemetry_snapshot, router_enabled, router_url
+from .router_client import ai_telemetry_reset, ai_telemetry_snapshot, router_enabled, router_url, _cost_tracking_reset, _cost_tracking_snapshot
 
 logger = get_logger(__name__)
 
@@ -71,7 +71,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="AutoBrain AI Gateway",
-    version=os.environ.get("APP_VERSION", "0.3.311"),  # bump-version.sh keeps this in sync
+    version=os.environ.get("APP_VERSION", "0.3.318"),  # bump-version.sh keeps this in sync
     description="Inference layer. Routes through 9Router via AI_ROUTER_URL.",
     lifespan=lifespan,
 )
@@ -134,7 +134,7 @@ async def health() -> dict:
     return {
         "status": "ok",
         "service": "autobrain-ai",
-        "version": os.environ.get("APP_VERSION", "0.3.311"),
+        "version": os.environ.get("APP_VERSION", "0.3.318"),
     }
 
 
@@ -148,6 +148,19 @@ async def telemetry(_: None = Depends(require_gateway_key)) -> dict:
 async def telemetry_reset(_: None = Depends(require_gateway_key)) -> dict:
     """Reset AI telemetry counters (admin only)."""
     ai_telemetry_reset()
+    return {"status": "reset"}
+
+
+@app.get("/v1/cost")
+async def cost_summary(_: None = Depends(require_gateway_key)) -> dict:
+    """Return estimated AI cost tracking per module (AUT-6646)."""
+    return {"cost_tracking": _cost_tracking_snapshot()}
+
+
+@app.post("/v1/cost/reset")
+async def cost_reset(_: None = Depends(require_gateway_key)) -> dict:
+    """Reset AI cost tracking counters (admin only)."""
+    _cost_tracking_reset()
     return {"status": "reset"}
 
 

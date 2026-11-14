@@ -26,7 +26,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Iterable
 
-
 # Source authority ordering. Lower number = higher authority. NSW FuelCheck
 # and QLD Fuel Prices publish continuously so they are mandatory-realtime;
 # WA FuelWatch publishes a daily 6am snapshot so it is daily-only.
@@ -36,6 +35,7 @@ SOURCE_AUTHORITY: dict[str, int] = {
     "sa": 0,   # GOVERNMENT_MANDATORY_REALTIME (SAFPIS — reserved for
                # forward compatibility; the feed is disabled under
                # AUT-5072, endpoint NXDOMAIN, no token contracted).
+    "vic": 0,  # GOVERNMENT_MANDATORY_REALTIME (VIC Servo Saver).
     "wa": 1,   # GOVERNMENT_DAILY (FuelWatch)
     "other": 2,  # OTHER (e.g. 7-Eleven, Caltex, or community scrapes).
 }
@@ -52,7 +52,6 @@ FRESHNESS_WINDOW_HOURS = 2.0
 # Per Nathan: > 30 cpl disagreement triggers median-based tie-break.
 SPREAD_THRESHOLD_CPL = 30.0
 
-
 @dataclass(frozen=True)
 class RawSourceObservation:
     """One source's reading for a (station, fuel_type, day) bucket.
@@ -66,7 +65,6 @@ class RawSourceObservation:
     authority: int
     updated_at: datetime | None = None
 
-
 @dataclass(frozen=True)
 class ArbitrationResult:
     """Output of :func:`arbitrate`."""
@@ -79,14 +77,12 @@ class ArbitrationResult:
     candidates: tuple[tuple[str, float, float], ...]  # (source, price, score)
     used_median: bool  # True if the spread exceeded the threshold
 
-
 def _authority_score(authority: int) -> float:
     """Higher authority (lower int) -> higher score."""
     # authority 0 (mandatory realtime) -> 100
     # authority 1 (daily) -> 0
     # authority 2 (other) -> -100
     return (1 - authority) * WEIGHT_AUTHORITY
-
 
 def _freshness_bonus(updated_at: datetime | None, *, now: datetime) -> float:
     if updated_at is None:
@@ -99,11 +95,9 @@ def _freshness_bonus(updated_at: datetime | None, *, now: datetime) -> float:
     # Linear decay across the window — fresher = higher bonus.
     return WEIGHT_FRESHNESS * (1.0 - age_hours / FRESHNESS_WINDOW_HOURS)
 
-
 def _spread_penalty(price: float, median: float) -> float:
     """Distance from the daily median in cpl, scaled into a score penalty."""
     return abs(price - median) / SPREAD_THRESHOLD_CPL * WEIGHT_SPREAD
-
 
 def arbitrate(
     observations: Iterable[RawSourceObservation],
@@ -159,7 +153,7 @@ def arbitrate(
         used_median=used_median,
     )
 
-
 def source_authority(source_id: str) -> int:
     """Look up the authority bucket for a given source tag."""
     return SOURCE_AUTHORITY.get(source_id, SOURCE_AUTHORITY["other"])
+

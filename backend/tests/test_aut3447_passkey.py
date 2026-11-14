@@ -19,7 +19,6 @@ import os
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:////tmp/aut3447-passkey.db"
 os.environ["SECRET_KEY"] = "aut3447-test-secret"
 
-import asyncio  # noqa: E402
 import uuid  # noqa: E402
 
 import pytest  # noqa: E402

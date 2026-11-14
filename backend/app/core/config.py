@@ -3,9 +3,11 @@
 All settings are read from environment variables (see .env.example).
 """
 
+import ipaddress
 import secrets
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import urlparse
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -13,6 +15,76 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Known-insecure SECRET_KEY values (AUT-1181): the historic default and the
 # .env.example placeholder — both public in the repo, so forgeable.
 _INSECURE_SECRET_KEYS = ("", "change-me", "change-me-to-a-long-random-string")
+
+# AUT-3977: SSRF guard on BACKUP_OFFSITE_URL. The off-site backup task
+# concatenates this value straight into HTTP request URLs, so an unvalidated
+# env var is a full SSRF primitive out of the backend container (cloud
+# metadata at 169.254.169.254, internal services, external exfil endpoints).
+# Fail closed: only exact hosts listed in BACKUP_OFFSITE_HOST_ALLOWLIST pass.
+# There is deliberately no prefix/suffix heuristic here — anchoring on any part
+# of the name other than the whole label set lets an attacker who controls a
+# domain ("autobrain-backup.attacker.net") satisfy the rule.
+_LOOPBACK_HOSTS = ("localhost", "ip6-localhost", "ip6-loopback")
+
+
+def _validate_offsite_url(url: str, allowlist: list[str]) -> None:
+    """Raise ValueError unless `url` points at an authorised internal host.
+
+    Empty URLs are the caller's business ("disabled") and are not validated.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(
+            f"BACKUP_OFFSITE_URL must be an http:// or https:// URL, "
+            f"got scheme {parsed.scheme!r}"
+        )
+    # rstrip(".") so a trailing-dot FQDN ("autobrain-backup.") cannot dodge an
+    # exact-match rule.
+    host = (parsed.hostname or "").rstrip(".").lower()
+    if not host:
+        raise ValueError("BACKUP_OFFSITE_URL has no host")
+
+    allowed = {h.rstrip(".").lower() for h in allowlist}
+
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        ip = None  # DNS name, not an IP literal
+
+    if ip is not None:
+        # IP literal: reject loopback, link-local (cloud metadata) and public
+        # ranges outright. RFC1918 literals need an explicit allowlist entry
+        # (a hostname prefix match is meaningless for an IP).
+        if ip.is_loopback or ip.is_link_local:
+            raise ValueError(
+                f"BACKUP_OFFSITE_URL host {host} is loopback/link-local "
+                f"(SSRF risk: metadata or local probe)"
+            )
+        if ip.is_global:
+            raise ValueError(
+                f"BACKUP_OFFSITE_URL host {host} is a public IP (SSRF risk); "
+                f"only RFC1918 private addresses are allowed"
+            )
+        if host not in allowed:
+            raise ValueError(
+                f"BACKUP_OFFSITE_URL host {host} is a private IP literal not "
+                f"present in BACKUP_OFFSITE_HOST_ALLOWLIST (SSRF risk)"
+            )
+        return
+
+    # DNS name: reject the loopback aliases, then require an exact allowlist
+    # entry. Exact match only — see the note on the allowlist definition above.
+    if host in _LOOPBACK_HOSTS:
+        raise ValueError(
+            f"BACKUP_OFFSITE_URL host {host} is loopback (SSRF risk)"
+        )
+    if host in allowed:
+        return
+    raise ValueError(
+        f"BACKUP_OFFSITE_URL host {host!r} is not authorised; add it to "
+        f"BACKUP_OFFSITE_HOST_ALLOWLIST if it is a deliberate off-site "
+        f"backup target (SSRF risk)"
+    )
 
 
 class Settings(BaseSettings):
@@ -171,7 +243,7 @@ class Settings(BaseSettings):
     APP_BASE_URL: str = "http://localhost:8000"
 
     # Versioning (local only; the GitHub update check was removed — AUT-461)
-    APP_VERSION: str = "0.3.311"  # mirror frontend/pubspec.yaml version
+    APP_VERSION: str = "0.3.318"  # mirror frontend/pubspec.yaml version
 
     # Scheduled backup (daily). When set, beats stores a full JSON snapshot to MinIO.
     BACKUP_ENABLED: bool = True
@@ -185,9 +257,13 @@ class Settings(BaseSettings):
     BACKUP_OFFSITE_URL: str = ""              # e.g. http://autobrain-backup:8080
     BACKUP_OFFSITE_GUI_KEY: str = ""          # X-Gui-Key (kept for admin/ops calls against the store)
     BACKUP_OFFSITE_GUI_KEY_FILE: str = ""     # secret-file fallback
-    BACKUP_OFFSITE_INGEST_KEY: str = ""       # X-Ingest-Key for /api/backup/ingest
+    BACKUP_OFFSITE_INGEST_KEY: str = ""       # X-Ingest-Key for /ingest
     BACKUP_OFFSITE_INGEST_KEY_FILE: str = ""  # secret-file fallback
     BACKUP_OFFSITE_INSTANCE: str = ""         # instance id appended as ?instance= to all calls
+    # AUT-3977: SSRF allowlist of BACKUP_OFFSITE_URL hosts. JSON list in env
+    # (same convention as CORS_ALLOWED_ORIGINS), e.g.
+    # '["backup.example.internal","10.0.0.5"]'.
+    BACKUP_OFFSITE_HOST_ALLOWLIST: list[str] = []
 
     # Admin API key: enables machine-to-machine user management via X-Admin-API-Key.
     ADMIN_API_KEY: str = ""  # leave empty to disable the /admin-api endpoints
@@ -213,16 +289,11 @@ class Settings(BaseSettings):
             )
         return self
 
-    # CI Triage webhook (AUT-1669): receives GitHub Actions CI pings and relays
-    # to the CI Triage Agent via Paperclip issue creation.
-    CI_TRIAGE_WEBHOOK_SECRET: str = ""  # bearer auth secret for the webhook
-    CI_TRIAGE_PARENT_ISSUE_ID: str = ""  # parent issue for child issue creation
-    CI_TRIAGE_GOAL_ID: str = ""  # goal to link child issues to
-    CI_TRIAGE_AGENT_ID: str = "acae6bf2"  # CI Triage Agent short id
-    # Paperclip API (server-side, for creating child issues from the webhook)
-    PAPERCLIP_API_URL: str = ""  # e.g. https://paperclip.nathanmartina.com
-    PAPERCLIP_API_KEY: str = ""  # long-lived agent key or service token
-    PAPERCLIP_COMPANY_ID: str = ""  # AutoBrain company UUID in Paperclip control plane
+    # NOTE (AUT-5718): the CI_TRIAGE_* settings and the server-side PAPERCLIP_*
+    # settings are gone with the dead POST /api/v1/ci/webhook receiver. CI triage
+    # is woken by the Paperclip routine trigger that
+    # .github/workflows/ci-triage-webhook.yml fires
+    # (secrets.CI_TRIAGE_WEBHOOK_URL), never by this backend.
 
     # AUT-5137: best-effort ops webhook fired when boot aborts because
     # `alembic upgrade head` failed against a non-empty database. Empty = log
@@ -281,10 +352,12 @@ class Settings(BaseSettings):
     # Credentials are secrets — never commit them; set them via the deployment
     # env (docker-compose.hosted.yml passes them through).
     IAP_GOOGLE_SERVICE_ACCOUNT_JSON: str = ""  # Play service-account key JSON (secret)
+    IAP_GOOGLE_SERVICE_ACCOUNT_JSON_FILE: str = ""  # AUT-1533: secret-file fallback
     IAP_GOOGLE_PACKAGE_NAME: str = "com.autobrainservice.app"
     IAP_APPLE_ISSUER_ID: str = ""              # App Store Connect API key issuer id
     IAP_APPLE_KEY_ID: str = ""                 # App Store Connect API key id
     IAP_APPLE_PRIVATE_KEY: str = ""            # App Store Connect API key .p8 PEM (secret)
+    IAP_APPLE_PRIVATE_KEY_FILE: str = ""       # AUT-1533: secret-file fallback
     IAP_APPLE_BUNDLE_ID: str = "com.autobrain.autobrain"
     # Verify-on-refresh (AUT-617): GET /auth/me re-validates the stored store
     # purchase token against the store API when the entitlement is already
@@ -340,6 +413,14 @@ class Settings(BaseSettings):
             p = Path(self.BACKUP_OFFSITE_INGEST_KEY_FILE)
             if p.is_file():
                 self.BACKUP_OFFSITE_INGEST_KEY = p.read_text(encoding="utf-8").strip()
+        if not self.IAP_GOOGLE_SERVICE_ACCOUNT_JSON and self.IAP_GOOGLE_SERVICE_ACCOUNT_JSON_FILE:
+            p = Path(self.IAP_GOOGLE_SERVICE_ACCOUNT_JSON_FILE)
+            if p.is_file():
+                self.IAP_GOOGLE_SERVICE_ACCOUNT_JSON = p.read_text(encoding="utf-8").strip()
+        if not self.IAP_APPLE_PRIVATE_KEY and self.IAP_APPLE_PRIVATE_KEY_FILE:
+            p = Path(self.IAP_APPLE_PRIVATE_KEY_FILE)
+            if p.is_file():
+                self.IAP_APPLE_PRIVATE_KEY = p.read_text(encoding="utf-8").strip()
         return self
 
     @model_validator(mode="after")
@@ -359,6 +440,13 @@ class Settings(BaseSettings):
                     'python -c "import secrets; print(secrets.token_urlsafe(64))"'
                 )
             self.SECRET_KEY = secrets.token_urlsafe(64)
+
+        if self.ENVIRONMENT != "development" and len(self.SECRET_KEY) < 32:
+            raise ValueError(
+                "SECRET_KEY must be at least 32 bytes (characters) for HS256/384/512 "
+                "signing keys — generate one with: "
+                'python -c "import secrets; print(secrets.token_urlsafe(64))"'
+            )
         if self.ADMIN_API_KEY and len(self.ADMIN_API_KEY) < 32:
             raise ValueError(
                 "ADMIN_API_KEY must be at least 32 characters "
@@ -368,6 +456,21 @@ class Settings(BaseSettings):
             raise ValueError(
                 "STRIPE_WEBHOOK_SECRET is required when STRIPE_SECRET_KEY is set "
                 "(whsec_... from the Stripe Dashboard) — unsigned webhooks are refused"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_backup_offsite_url(self) -> "Settings":
+        """AUT-3977: SSRF guard — reject unauthorised BACKUP_OFFSITE_URL hosts.
+
+        Fails closed at startup. An empty URL means "off-site backup disabled"
+        and is left alone; anything non-empty must resolve to an authorised
+        host. This is a model validator rather than a field validator because
+        the check needs BACKUP_OFFSITE_HOST_ALLOWLIST, which is a sibling field.
+        """
+        if self.BACKUP_OFFSITE_URL:
+            _validate_offsite_url(
+                self.BACKUP_OFFSITE_URL, self.BACKUP_OFFSITE_HOST_ALLOWLIST
             )
         return self
 

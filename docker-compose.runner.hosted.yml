@@ -1,0 +1,65 @@
+# AUT-5714: git source of truth for Portainer EP5 stack 123
+# (gh-runner-autobrain-arm64 — the single self-hosted ARM64 runner
+# that build-hosted.yml depends on). The stack previously existed
+# only inside Portainer, so hardening it meant an untracked,
+# unreproducible hand-edit with nothing to review.
+#
+# Broker context (AUT-5462 / AUT-5463): the runner's long-poll
+# connection to the GitHub Actions broker drops ~9x/day, logged as
+# `System.Net.Sockets.SocketException (125): Operation canceled`.
+# Measured 2026-09-27..2026-10-05 from the EP5 container logs:
+# 86 drop events, 76 of them while idle, 88 backoff/reconnect
+# cycles, 62 jobs started, 62 succeeded, 0 cancelled, 0 failed,
+# RestartCount=0. The drop is upstream broker behaviour and
+# self-heals in ~12s, so the hardening here is container-level:
+# make sure no drop (or any operator action) can cost a build.
+version: "3.8"
+
+services:
+  gh-runner-autobrain-arm64:
+    # Digest-pinned (AUT-1533 pattern) to the arm64 manifest EP5
+    # runs (Runner v2.337.0). Was floating :latest, which let the
+    # broker client change silently between recreates. The Oracle VM
+    # is aarch64-only, so the single-arch manifest digest is the
+    # correct pin. Bump deliberately: verify upstream release notes,
+    # then update this digest.
+    image: ghcr.io/actions/actions-runner@sha256:e5496277be5d09bc968b3d64911b74e219ac4a3f2edce956a3ecf9271bea1ef4
+    container_name: gh-runner-autobrain-arm64
+    environment:
+      - REPO_URL=https://github.com/CannonFodder151/autobrain
+      - RUNNER_NAME=gh-runner-autobrain-arm64
+      - RUNNER_TOKEN=${RUNNER_TOKEN}
+      - RUNNER_LABELS=autobrain,arm64,hosted
+      - EPHEMERAL=false
+      # AUT-5714: the runner self-updates in place between jobs,
+      # which drifts the running broker build off the digest pinned
+      # above — a pin that nothing enforces is decoration. Version
+      # bumps are now an explicit, reviewed change to this file.
+      - DISABLE_AUTO_UPDATE=true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - gh-runner-data:/home/runner/_work
+    entrypoint:
+      - bash
+      - -c
+      - >-
+        cd /home/runner &&
+        { [ -f .runner ] || ./config.sh --url "$$REPO_URL" --token "$$RUNNER_TOKEN" --name "$$RUNNER_NAME" --labels "$$RUNNER_LABELS" --unattended --replace; } &&
+        exec ./run.sh
+    restart: unless-stopped
+    # AUT-5714: Docker's default 10s grace SIGKILLs the runner
+    # mid-build on any stop/redeploy. The runner's own signal trap
+    # waits for the in-flight job — but only if it gets the time.
+    # 30m means a stack update now waits for a build to finish
+    # instead of losing it (a drop plus a redeploy can no longer
+    # compound into a lost job).
+    stop_grace_period: 30m
+    networks:
+      - autobrain-hosted_default
+
+volumes:
+  gh-runner-data:
+
+networks:
+  autobrain-hosted_default:
+    external: true

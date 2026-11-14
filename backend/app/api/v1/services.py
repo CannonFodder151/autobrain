@@ -24,6 +24,7 @@ from app.schemas.service import (
     ServiceUpdate,
 )
 from app.services.ai_client import predict_service
+from app.services.ai_fallbacks import predict_service_fallback
 from app.services.export import export_service_history_csv, export_service_history_pdf, export_zip
 from app.services.rate_limit import require_ai_rate_limit
 from app.services.service_records import (
@@ -234,5 +235,5 @@ async def predict(
     ]
     result = await predict_service(data)
     if not result:
-        raise HTTPException(status_code=503, detail="Prediction engine unavailable")
+        result = predict_service_fallback(data)
     return ServicePredictionResponse(**result)

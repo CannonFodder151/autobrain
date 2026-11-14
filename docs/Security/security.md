@@ -111,7 +111,7 @@ secrets exfiltration). It is restricted by source at the host firewall:
 
 - Allowed source for `tcp/9001`: the Portainer server egress IP
   `<DEV_EGRESS_IP>/32` (dev box / Portainer-Host network; currently
-  `122.199.30.128`). Everything else is dropped.
+  `103.232.252.9`). Everything else is dropped.
 - Enforced by the `fw-keeper` container (image `autobrain-fw-keeper:1`,
   `network_mode: host`, `privileged`, `restart: unless-stopped`) **deployed
   directly on the hosted host via Portainer** (not defined in this repo's
@@ -135,7 +135,7 @@ secrets exfiltration). It is restricted by source at the host firewall:
 
 **Classification: source-restricted, NOT internet-accessible.** This port is
 reachable only from the dev egress IP `<DEV_EGRESS_IP>/32` (currently
-`122.199.30.128`) and the internal docker subnet `172.18.0.0/16`. Every other
+`103.232.252.9`) and the internal docker subnet `172.18.0.0/16`. Every other
 source is dropped at the host firewall. Any security scan that reports `:20128`
 as "accessible from the internet" is a **false positive** — it is almost always
 because the scan was launched from `<DEV_EGRESS_IP>` (the allow-listed dev

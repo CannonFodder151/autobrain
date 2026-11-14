@@ -11,15 +11,14 @@ redis==5.2.1
 celery==5.4.0
 minio==7.2.12
 python-multipart==0.0.32
-passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
 PyJWT[crypto]==2.15.1
 httpx==0.28.1
 reportlab==4.2.5
-pypdf==6.19.0
+pypdf==6.21.4
 python-dateutil==2.9.0.post0
 orjson==3.11.9
-pillow==12.3.0
+pillow==13.0.0
 pillow-heif==1.5.0
 cryptography==50.0.0
 email-validator==2.2.0
@@ -38,6 +37,10 @@ stripe==15.4.0
 idna==3.18            # PYSEC-2026-215 / GHSA-65pc-fj4g-8rjx (CVE 3.x<3.15)
 pycryptodome==3.23    # PYSEC-2026-1811 / GHSA-j225-cvw7-qrx7 (CVE 3.x<3.19.1)
 pygments==2.20        # PYSEC-2023-117 + PYSEC-2026-2987 (CVEs 2.x<2.20)
+
+# AUT-4113: Playwright for local market-data scraping (CarsGuide/BikesGuide/SCA)
+playwright==1.62.0
+playwright-stealth==2.0.3
 
 # Test/dev
 pytest==9.1.1

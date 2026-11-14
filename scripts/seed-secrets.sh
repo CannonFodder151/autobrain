@@ -51,6 +51,7 @@ seed() {
             -e 's/^STRIPE_WEBHOOK_SECRET$/stripe_webhook_secret/' \
             -e 's/^IAP_GOOGLE_SERVICE_ACCOUNT_JSON$/iap_google_service_account_json/' \
             -e 's/^IAP_APPLE_PRIVATE_KEY$/iap_apple_private_key/' \
+            -e 's/^APPLE_STORE_API_KEY$/iap_apple_private_key/' \
             -e 's/^SOCIAL_FEDERATION_HOSTED_REGISTRATION_KEY$/hub_hosted_registration_key/' \
             -e 's/^BACKUP_OFFSITE_GUI_KEY$/backup_offsite_gui_key/' \
             -e 's/^BACKUP_OFFSITE_INGEST_KEY$/backup_offsite_ingest_key/')

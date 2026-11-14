@@ -1,0 +1,114 @@
+# AUT-364: 2-day automated upgrade cycle.
+# Runs every 2 days. Checks for new commits on main. If updates exist:
+#   builds Docker containers (dockerhub-publish.yml),
+#   builds mobile apps Android+iOS (sync-mobile.yml -> release-mobile.yml / release-ios.yml),
+#   uploads to stores (mobile release workflows),
+#   notifies Discord #deployments.
+# Skips if no new commits since the last processed SHA.
+name: Upgrade cycle (2-day)
+
+on:
+  schedule:
+    - cron: '0 0 */2 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: upgrade-cycle-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  cycle:
+    runs-on: [self-hosted, linux, x64, vm2]
+    timeout-minutes: 30
+    steps:
+      - name: Checkout main + marker branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: main
+
+      - name: Fetch marker branch
+        run: |
+          set -euo pipefail
+          git fetch origin upgrade-cycle-marker 2>/dev/null || true
+          git branch -r | grep -q "upgrade-cycle-marker" && \
+            git checkout -b upgrade-cycle-marker origin/upgrade-cycle-marker || \
+            git checkout -b upgrade-cycle-marker
+
+      - name: Resolve last processed commit
+        id: last
+        run: |
+          set -euo pipefail
+          if [ -f .upgrade-cycle-last-commit ]; then
+            LAST="$(tr -d '[:space:]' < .upgrade-cycle-last-commit)"
+          else
+            LAST=""
+          fi
+          HEAD="$(git rev-parse HEAD)"
+          echo "last=$LAST" >> "$GITHUB_OUTPUT"
+          echo "head=$HEAD" >> "$GITHUB_OUTPUT"
+          if [ -n "$LAST" ] && [ "$LAST" = "$HEAD" ]; then
+            echo "has_updates=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_updates=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip if no new commits
+        if: steps.last.outputs.has_updates == 'false'
+        run: |
+          set -euo pipefail
+          echo "No new commits on main since ${LAST:-none} — skipping upgrade cycle."
+          curl -s -X POST -H "Content-Type: application/json" \
+            -d '{"embeds":[{"title":"Upgrade cycle — skipped","description":"No new commits on main. Nothing to build or deploy.\n\nIssue: AUT-373","color":3447003,"timestamp":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}]}' \
+            "${{ secrets.DISCORD_REPORT_WEBHOOK }}" 2>&1 || true
+
+      - name: Publish Docker images
+        if: steps.last.outputs.has_updates == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          $(command -v gh) workflow run dockerhub-publish.yml --repo ${{ github.repository }} --ref main
+          echo "dispatched dockerhub-publish.yml"
+
+      - name: Sync mobile + trigger mobile release (Android/iOS)
+        if: steps.last.outputs.has_updates == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.MOBILE_SYNC_TOKEN }}
+        run: |
+          set -euo pipefail
+          $(command -v gh) workflow run sync-mobile.yml --repo ${{ github.repository }} --ref main
+          echo "dispatched sync-mobile.yml (builds Android+iOS, uploads to stores)"
+
+      - name: Deploy instances
+        if: steps.last.outputs.has_updates == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          $(command -v gh) workflow run deploy-instances.yml --repo ${{ github.repository }} --ref main 2>&1 || echo "deploy-instances dispatch skipped (may require manual)"
+          echo "dispatched deploy-instances.yml"
+
+      - name: Record last processed commit
+        if: steps.last.outputs.has_updates == 'true'
+        run: |
+          set -euo pipefail
+          echo "${{ steps.last.outputs.head }}" > .upgrade-cycle-last-commit
+          git config user.name "AutoBrain Upgrade Cycle"
+          git config user.email "upgrade@autobrainservice.app"
+          git add .upgrade-cycle-last-commit
+          git commit -m "chore: record upgrade cycle last commit ${{ steps.last.outputs.head }} [skip ci]" || true
+          git push origin upgrade-cycle-marker --force-with-lease || git push origin HEAD:upgrade-cycle-marker
+
+      - name: Notify Discord #deployments
+        if: steps.last.outputs.has_updates == 'true'
+        run: |
+          set -euo pipefail
+          curl -s -X POST -H "Content-Type: application/json" \
+            -d '{"embeds":[{"title":"Upgrade cycle — deployed","description":"New commits detected on main. Docker images published, mobile apps (Android+iOS) building + uploading to stores, instances upgrading. Last commit: ${{ steps.last.outputs.head }}.\n\nIssue: AUT-373","color":10181046,"timestamp":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}]}' \
+            "${{ secrets.DISCORD_REPORT_WEBHOOK }}" 2>&1 || true

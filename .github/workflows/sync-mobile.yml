@@ -128,23 +128,30 @@ jobs:
           # two syncs bumping from the same version leave unmerged files in
           # pubspec.yaml/CHANGELOG.md) must be aborted before the next attempt
           # or every retry fails instantly (AUT-1099).
-          for attempt in 1 2 3; do
-            if git pull --rebase origin main; then
-              if git push origin main; then
+          # Use --force-with-lease instead of plain push: after a rebase the
+          # push is non-fast-forward by design, and --force-with-lease refuses
+          # to clobber a concurrent sync that pushed between our fetch and
+          # our push (AUT-251). Exponential backoff between attempts reduces
+          # contention so the survivor stops hammering the remote.
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main
+            if git rebase origin/main; then
+              if git push --force-with-lease origin main; then
                 echo "changed=true" >> "$GITHUB_OUTPUT"
                 echo "version=$version" >> "$GITHUB_OUTPUT"
                 exit 0
               fi
             else
-              echo "pull/rebase conflicted (attempt $attempt/3) — aborting and retrying"
+              echo "rebase conflicted (attempt $attempt/5) — aborting and retrying"
               git rebase --abort 2>/dev/null || true
             fi
-            echo "push rejected (attempt $attempt/3) — retrying after rebase"
+            echo "push rejected (attempt $attempt/5) — retrying after backoff"
+            sleep $(( 2 ** attempt ))
           done
-          echo "::error::mobile sync push failed after 3 attempts (non-fast-forward)"
+          echo "::error::mobile sync push failed after 5 attempts (non-fast-forward)"
           exit 1
 
-      - name: Mobile sanity gate (AUT-IMP-009)
+- name: Mobile sanity gate (AUT-IMP-009)
         # Blocks store promotion on red: synced tree must analyze clean (done
         # above) and pass a fast sanity test subset. "Build installs, no crash
         # on launch" is approximated in CI by static analysis + core widget/smoke
@@ -160,6 +167,32 @@ jobs:
             exit 1
           }
           echo "==> mobile sanity PASS"
+
+      - name: Report mobile parity status to Discord
+        if: always()
+        env:
+          DISCORD_REPORT_WEBHOOK: ${{ secrets.DISCORD_REPORT_WEBHOOK }}
+        run: |
+          set -euo pipefail
+          if [ "${{ job.status }}" = "success" ]; then
+            COLOR="0x2ECC71"; STATE="in sync"
+          else
+            COLOR="0xE74C3C"; STATE="${{ job.status }}"
+          fi
+          discord_url="${DISCORD_REPORT_WEBHOOK:-}"
+          case "$discord_url" in
+            https://*|http://*) ;;
+            *)
+              echo "::warning::DISCORD_REPORT_WEBHOOK is not an http(s) URL; skipping Discord report"
+              exit 0
+              ;;
+          esac
+          curl -sS --max-time 30 -X POST "$discord_url" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -nc --arg c updates --arg t "Mobile parity — $STATE" --arg col "$COLOR" \
+              --arg d "Synced frontend lineage + version to autobrain-mobile.\nRun: [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" \
+              '{channel:$c,title:$t,description:$d,color:$col,author:"Sync Mobile",fields:[{name:"Status",value:"${{ job.status }}",inline:true}]}')" \
+            || echo "::warning::Discord report POST failed"
 
       - name: Tag version and trigger mobile release pipeline
         if: steps.commit.outputs.changed == 'true'
@@ -204,11 +237,19 @@ jobs:
                 return 0
               fi
               echo "dispatch $workflow attempt $attempt/12 failed (HTTP $http_code): $out"
-              if echo "$out" | grep -qi 'rate limit'; then
-                echo "::warning::rate limit hit during $workflow dispatch — waiting for reset (attempt $attempt/12)"
+            if echo "$out" | grep -qi 'rate limit'; then
+              reset=$(curl -s -H "Authorization: token $GH_TOKEN" https://api.github.com/rate_limit 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['resources']['core']['reset'])" 2>/dev/null || echo 0)
+              now=$(date +%s)
+              wait=$(( reset - now + 10 ))
+              if [ "$wait" -gt 0 ] && [ "$wait" -lt 300 ]; then
+                echo "::warning::rate limit hit during $workflow dispatch — waiting ${wait}s for reset (attempt $attempt/12)"
+                sleep "$wait"
+              else
+                echo "::warning::rate limit hit during $workflow dispatch — retrying (attempt $attempt/12)"
                 sleep $(( attempt * 5 ))
-                continue
               fi
+              continue
+            fi
               if echo "$out" | grep -qi 'No ref found'; then
                 sleep 5
                 continue

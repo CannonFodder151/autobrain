@@ -25,6 +25,20 @@ jobs:
     name: pytest
     runs-on: [self-hosted, linux, x64, vm2]
     timeout-minutes: 15
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: autobrain
+          POSTGRES_PASSWORD: autobrain
+          POSTGRES_DB: autobrain
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
 
@@ -88,26 +102,31 @@ jobs:
         run: |
           pytest -v --maxfail=1 --tb=short
 
-      - name: Notify Discord on failure
-        if: failure()
-        uses: slackapi/slack-github-action@v1
-        with:
-          # The Discord reporter is the AutoBrain-sanctioned notification path.
-          # We POST an embed summarising which test failed; channel=#updates.
-          payload: |
-            {
-              "channel": "updates",
-              "title": "CI tests FAILED on ${{ github.workflow }}",
-              "description": "Branch: `${{ github.ref_name }}`\nCommit: ${{ github.sha }}\nRun: ${{ github.run_id }}",
-              "color": "0xED4245",
-              "author": "CI",
-              "fields": [
-                {"name": "Workflow", "value": "${{ github.workflow }}", "inline": true},
-                {"name": "Run", "value": "[#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})", "inline": true}
-              ]
-            }
+      - name: Notify Discord on test results
+        if: always()
         env:
-          SLACK_WEBHOOK_URL: https://n8n.nathanmartina.com/webhook/discord-report
+          DISCORD_REPORT_WEBHOOK: ${{ secrets.DISCORD_REPORT_WEBHOOK }}
+        run: |
+          set -euo pipefail
+          if [ "${{ job.status }}" = "success" ]; then
+            COLOR="0x2ECC71"; STATE="passed"
+          else
+            COLOR="0xE74C3C"; STATE="${{ job.status }}"
+          fi
+          discord_url="${DISCORD_REPORT_WEBHOOK:-}"
+          case "$discord_url" in
+            https://*|http://*) ;;
+            *)
+              echo "::warning::DISCORD_REPORT_WEBHOOK is not an http(s) URL; skipping Discord report"
+              exit 0
+              ;;
+          esac
+          curl -sS --max-time 30 -X POST "$discord_url" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -nc --arg c updates --arg t "CI tests — $STATE" --arg col "$COLOR" \
+              --arg d "Branch: ${{ github.ref_name }}\nCommit: ${{ github.sha }}\nRun: [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" \
+              '{channel:$c,title:$t,description:$d,color:$col,author:"CI",fields:[{name:"Workflow",value:"${{ github.workflow }}",inline:true},{name:"Status",value:"${{ job.status }}",inline:true}]}')" \
+            || echo "::warning::Discord report POST failed"
 
   # A workflow with invalid YAML never runs a single job — GitHub records it as a
   # 0-job `failure` on every push and the deploy signal is silently lost (AUT-4911).
@@ -138,6 +157,12 @@ jobs:
               sys.exit(1)
           print("all workflow files parse")
           PY
+
+      # AUT-5690: a DISCORD_REPORT_WEBHOOK that is not an http(s) URL
+      # reaches curl as an option, so every CI Discord alert silently
+      # stops sending. A guard nothing runs is dead code.
+      - name: Discord report webhook must be guarded before curl
+        run: python3 scripts/check-discord-webhook-guard.py
 
   # AUT-4690 made docker/frontend/Dockerfile hard-fail on an empty CARTO_API_KEY,
   # which silently broke every documented/scripted frontend build that omitted the
@@ -198,7 +223,7 @@ jobs:
     timeout-minutes: 15
     services:
       postgres:
-        image: pgvector/pgvector:pg17
+        image: pgvector/pgvector:pg17@sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d
         env:
           POSTGRES_USER: autobrain
           POSTGRES_PASSWORD: autobrain
@@ -255,6 +280,11 @@ jobs:
 
       - name: compose deploy guard regression tests
         run: python3 scripts/test_sync_compose_guards.py
+
+      # AUT-180: the demo -> default -> hosted pipeline stages must keep their
+      # promotion order and per-tier health gates.
+      - name: pipeline stages guard
+        run: python3 scripts/test_pipeline_stages.py -v
 
       # AUT-5396: the nightly sync gate SKIPped two nights because the
       # schedule dispatcher starts cron runs 2.6-4.2h late. The cron now

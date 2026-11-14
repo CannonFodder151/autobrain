@@ -1,6 +1,7 @@
 /// Global auth + navigation state (ChangeNotifier via provider).
 library;
 
+import 'dart:math' show Random;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -19,12 +20,29 @@ class AuthState extends ChangeNotifier {
     _restore();
   }
 
+  /// Gate for the test-only constructor. Throws [UnsupportedError] whenever the
+  /// build is not a debug build, so a stray `AuthState.test()` instantiation
+  /// can never carry a hardcoded token into a release build.
+  static void _requireDebugMode() {
+    if (kDebugMode) return;
+    throw UnsupportedError(
+      'AuthState.test() is for tests only and must not be used in release '
+      'builds. Use a fake AuthState subclass or the real AuthState() instead.',
+    );
+  }
+
+  /// Test-only constructor. Throws [UnsupportedError] in release builds so a
+  /// stray instantiation can never carry a hardcoded token into production.
+  /// The token is randomised per instance (not a constant) so it cannot be
+  /// reused across test runs.
+  @visibleForTesting
   AuthState.test({
     required ApiClient api,
   })  : _client = api,
-        _token = 'test-token',
+        _token = _randomTestToken(),
         _role = 'user',
         _freeAccount = false {
+    _requireDebugMode();
     notifyListeners();
   }
 
@@ -65,20 +83,37 @@ class AuthState extends ChangeNotifier {
   ApiClient? _client;
   ApiClient get api => _client!;
 
-  Future<void> _restore() async {
-    final prefs = await SharedPreferences.getInstance();
-    await AppConfig.load();
-    final (token, refreshToken, role) = await _tokens.read();
+  /// Reads the stored session, migrating the legacy SharedPreferences copy
+  /// (written before this change) into secure storage on first read. Returns
+  /// true when plaintext tokens were found and wiped — the caller must force
+  /// re-authentication (AUT-3105).
+  Future<(String?, String?, String?, bool)> _restoreTokens() async {
+    final (token, refreshToken, role, needsReauth) =
+        await _tokens.readWithMigration();
     _token = token;
     _refreshToken = refreshToken;
     _role = role;
+    _needsReauth = needsReauth;
+    return (token, refreshToken, role, needsReauth);
+  }
+
+  bool get needsReauth => _needsReauth;
+  bool _needsReauth = false;
+
+  Future<void> _restore() async {
+    final prefs = await SharedPreferences.getInstance();
+    await AppConfig.load();
+    final (token, refreshToken, role, needsReauth) =
+        await _restoreTokens();
     _darkMode = prefs.getBool('dark_mode') ?? true;
     _loadConfig();
-    if (_token != null) {
-      _client = ApiClient(_token, onRefresh: _refreshAccess);
-      _refreshProfile();
-      notifyListeners();
+    if (needsReauth || _token == null) {
+      await serverChanged();
+      return;
     }
+    _client = ApiClient(_token, onRefresh: _refreshAccess);
+    _refreshProfile();
+    notifyListeners();
   }
 
   /// Fetches public server config (self-signup enabled, MFA enforced,
@@ -228,6 +263,8 @@ class AuthState extends ChangeNotifier {
     }
   }
 
+  Future<void> ackReauth() => _tokens.ackReauth();
+
   Future<void> logout() async {
     final refreshToken = _refreshToken;
     _token = null;
@@ -245,6 +282,10 @@ class AuthState extends ChangeNotifier {
     }
     notifyListeners();
   }
+
+  /// Random per-instance test token — never a constant that could leak into a
+  /// release build or be reused across test runs.
+  static String _randomTestToken() => 'test-${Random().nextInt(0xffffffff).toRadixString(16).padLeft(8, "0")}';
 
   ApiClient _anonymous() => ApiClient(null);
 
@@ -285,6 +326,7 @@ class AuthState extends ChangeNotifier {
     _userId = ((map['user'] as Map<String, dynamic>?) ?? {})['id'] as String?;
     _client = ApiClient(_token!, onRefresh: _refreshAccess);
     await _tokens.write(token: _token!, refreshToken: _refreshToken, role: _role ?? 'user');
+    await _tokens.ackReauth();
     notifyListeners();
   }
 }
