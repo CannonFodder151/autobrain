@@ -16,10 +16,22 @@ Requires the compose Postgres. Run locally with:
 """
 
 import os
+import tempfile
 import uuid
 
-# Override conftest's Postgres URL with SQLite for local testing.
-os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test_verify.db"
+# AUT-514: app.db.session is a module singleton whose engine is created at import
+# time. The first test module imported in a run pins that engine, so a fixed
+# sqlite path here (e.g. ./test_verify.db) actually resolves to whatever engine a
+# sibling module created first -> cross-file DB collisions. Isolate this module
+# with its own temp DB, engine and SessionLocal, exactly like the other seed tests.
+_db_fd, _db_path = tempfile.mkstemp(suffix=".db", prefix="autobrain-device-verify-")
+os.close(_db_fd)
+os.unlink(_db_path)  # aiosqlite opens it fresh; we only want a unique name
+_db_url = f"sqlite+aiosqlite:///{_db_path}"
+
+# Only fill config values that are not already set; DATABASE_URL is forced to our
+# isolated sqlite file so this module never touches the shared app engine.
+os.environ["DATABASE_URL"] = _db_url
 os.environ.setdefault("SECRET_KEY", "test-secret")
 os.environ.setdefault("DONGLE_SERVER_API_KEY", "test-internal-key")
 os.environ.setdefault("DONGLE_SERVER_URL", "http://dongle-server:8000")
@@ -27,10 +39,11 @@ os.environ.setdefault("DONGLE_SERVER_URL", "http://dongle-server:8000")
 import pytest  # noqa: E402
 import pytest_asyncio  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine  # noqa: E402
 from unittest.mock import AsyncMock, patch  # noqa: E402
 
 from app.core.security import create_access_token, hash_password  # noqa: E402
-from app.db.session import SessionLocal, init_db  # noqa: E402
+from app.db.session import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.device import Device  # noqa: E402
 from app.models.dongle_firmware import DongleInstalledFirmware  # noqa: E402
@@ -39,12 +52,48 @@ from app.models.vehicle import Vehicle  # noqa: E402
 from app.services.device_keys import generate_key, hash_key, key_prefix  # noqa: E402
 
 
-INTERNAL_HEADERS = {"X-Internal-Api-Key": os.environ["DONGLE_SERVER_API_KEY"]}
+# Settings is a process-wide singleton cached on first app import. A sibling test
+# module may have imported it before our env vars above ran, so pin the dongle
+# config directly on the cached instance instead of relying on os.environ.
+from app.core.config import settings  # noqa: E402
+
+settings.DONGLE_SERVER_API_KEY = os.environ["DONGLE_SERVER_API_KEY"]
+settings.DONGLE_SERVER_URL = os.environ["DONGLE_SERVER_URL"]
+
+INTERNAL_HEADERS = {"X-Internal-Api-Key": settings.DONGLE_SERVER_API_KEY}
+
+engine = create_async_engine(_db_url)
+SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
-@pytest_asyncio.fixture(scope="module", autouse=True)
+def pytest_unconfigure(config):
+    """Remove the per-run temp DB file so the runner stays clean."""
+    try:
+        if os.path.exists(_db_path):
+            os.unlink(_db_path)
+    except OSError:
+        pass
+
+
+@pytest_asyncio.fixture(scope="module", autouse=True, loop_scope="session")
 async def _init_schema() -> None:
-    await init_db()
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _override_get_db():
+    """Route every endpoint through this module's own SessionLocal/engine so the
+    HTTP client queries the same database that _setup_user_and_device wrote to
+    (the app's get_db default references the shared app.db.session singleton)."""
+
+    async def _local_db():
+        async with SessionLocal() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = _local_db
+    yield
+    app.dependency_overrides.pop(get_db, None)
 
 
 async def _setup_user_and_device(*, free: bool = False) -> dict:
