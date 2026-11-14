@@ -282,8 +282,12 @@ async def test_car_check_route_uses_ai_when_gateway_up(monkeypatch) -> None:
                     "model": "CBR500R",
                     "listing_url": "https://example.com/cbr",
                 },
-                "reference_price": 9_000.0,
-                "vehicle_year": 2022,
+                "asking_price": 8_500.0,
+                "make": "Honda",
+                "model": "CBR500R",
+                "year": 2022,
+                "odometer_km": 12_000,
+                "listing_url": "https://example.com/cbr",
             },
         )
     app.dependency_overrides.clear()
@@ -364,7 +368,11 @@ async def test_car_check_route_blocks_free_account(monkeypatch) -> None:
             "/api/v1/advisor/car-check",
             params={"vehicle_id": "v1"},
             json={
-                "listing": {"price": 10_000.0, "make": "Honda", "model": "CBR500R"},
+                "asking_price": 10_000.0,
+                "make": "Honda",
+                "model": "CBR500R",
+                "year": 2020,
+                "odometer_km": 50_000,
             },
         )
     app.dependency_overrides.clear()
