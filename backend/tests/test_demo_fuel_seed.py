@@ -61,7 +61,21 @@ SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=
 
 import app.db.seed as seed_module  # noqa: E402
 
+# NOTE: seed_module.SessionLocal must be pinned per-test, not just at import.
+# pytest imports every test module at collection time, so another module that
+# patches seed_module.SessionLocal would clobber this one before its tests run,
+# making seed_demo() query an empty/other DB file (see AUT-514).
 seed_module.SessionLocal = SessionLocal
+
+
+@pytest.fixture(autouse=True)
+def _pin_seed_sessionlocal():
+    """Ensure seed_demo/reset_demo use this test's sqlite sessionmaker for the
+    whole test run, regardless of collection-order clobbering by sibling modules
+    that patch seed_module.SessionLocal at import time."""
+    seed_module.SessionLocal = SessionLocal
+    yield
+
 
 EXPECTED_FUEL_TYPES = {"91", "95", "98", "E10", "Diesel", "LPG"}
 
