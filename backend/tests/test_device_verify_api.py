@@ -68,9 +68,6 @@ SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=
 # Override ASGI dependency so the app uses our isolated engine, not the shared
 # one pinned by conftest.py to Postgres at import time.
 from app.db.session import get_db  # noqa: E402
-app.dependency_overrides[get_db] = lambda: SessionLocal()
-
-
 def pytest_unconfigure(config):
     """Remove the per-run temp DB file so the runner stays clean."""
     try:
@@ -82,6 +79,7 @@ def pytest_unconfigure(config):
 
 @pytest_asyncio.fixture(scope="module", autouse=True, loop_scope="session")
 async def _init_schema() -> None:
+    import app.models  # noqa: F401 — register all model tables on Base
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 

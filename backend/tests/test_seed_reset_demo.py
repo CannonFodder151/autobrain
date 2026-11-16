@@ -78,6 +78,8 @@ def _enforce_fks(dbapi_conn, _):
 
 
 async def _reset_schema() -> None:
+    import app.models  # noqa: F401
+    import app.social.models  # noqa: F401
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
