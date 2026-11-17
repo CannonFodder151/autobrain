@@ -1,4 +1,4 @@
-# AUT-583: 2-day automated upgrade cycle.
+# AUT-584: 2-day automated upgrade cycle.
 # Runs every 2 days. Checks for new commits on main. If updates exist:
 #   builds Docker containers (dockerhub-publish.yml),
 #   builds mobile apps Android+iOS (sync-mobile.yml -> release-mobile.yml / release-ios.yml),
@@ -85,7 +85,7 @@ jobs:
           set -euo pipefail
           echo "No new commits on main since ${LAST:-none} — skipping upgrade cycle."
           curl -s -X POST -H "Content-Type: application/json" \
-            -d '{"embeds":[{"title":"Upgrade cycle — skipped","description":"No new commits on main. Nothing to build or deploy.\n\nIssue: AUT-583","color":3447003,"timestamp":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}]}' \
+            -d '{"embeds":[{"title":"Upgrade cycle — skipped","description":"No new commits on main. Nothing to build or deploy.\n\nIssue: AUT-584","color":3447003,"timestamp":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}]}' \
             "${{ secrets.DISCORD_REPORT_WEBHOOK }}" 2>&1 || true
 
       - name: Publish Docker images
@@ -146,7 +146,7 @@ Docker build: [dockerhub-publish.yml](${DOCKER_URL})
 Mobile build: [sync-mobile.yml](${MOBILE_URL})
 Deploy: [deploy-instances.yml](${DEPLOY_URL})
 
-Issue: AUT-583"
+Issue: AUT-584"
           curl -s -X POST -H "Content-Type: application/json" \
             -d "$(jq -n --arg title "Upgrade cycle — deployed" --arg desc "$DESCRIPTION" --arg color "10181046" --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
               '{embeds: [{title: $title, description: $desc, color: ($color|tonumber), timestamp: $timestamp, footer: {text: "AutoBrain Paperclip"}}]}')" \
