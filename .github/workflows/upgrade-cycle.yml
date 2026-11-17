@@ -139,14 +139,14 @@ jobs:
         run: |
           set -euo pipefail
           DESCRIPTION="New commits detected on main. Docker images published, mobile apps (Android+iOS) building + uploading to stores, instances upgrading.
-Last commit: [${HEAD_SHA:0:7}](${COMMIT_URL})
-Compare: [${{ steps.last.outputs.last }}...${HEAD_SHA:0:7}](${COMPARE_URL})
-Workflow run: [#${{ github.run_number }}](${RUN_URL})
-Docker build: [dockerhub-publish.yml](${DOCKER_URL})
-Mobile build: [sync-mobile.yml](${MOBILE_URL})
-Deploy: [deploy-instances.yml](${DEPLOY_URL})
+          Last commit: [${HEAD_SHA:0:7}](${COMMIT_URL})
+          Compare: [${{ steps.last.outputs.last }}...${HEAD_SHA:0:7}](${COMPARE_URL})
+          Workflow run: [#${{ github.run_number }}](${RUN_URL})
+          Docker build: [dockerhub-publish.yml](${DOCKER_URL})
+          Mobile build: [sync-mobile.yml](${MOBILE_URL})
+          Deploy: [deploy-instances.yml](${DEPLOY_URL})
 
-Issue: AUT-584"
+          Issue: AUT-584"
           curl -s -X POST -H "Content-Type: application/json" \
             -d "$(jq -n --arg title "Upgrade cycle — deployed" --arg desc "$DESCRIPTION" --arg color "10181046" --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
               '{embeds: [{title: $title, description: $desc, color: ($color|tonumber), timestamp: $timestamp, footer: {text: "AutoBrain Paperclip"}}]}')" \
