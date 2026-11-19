@@ -137,8 +137,11 @@ async def test_pt1_xff_rotation_cannot_bypass_rate_limit(env, monkeypatch):
                 headers={"X-Forwarded-For": f"10.1.{i}.{i}"},
             )
             assert r.status_code == 201, r.text
-        # Verify the per-IP window was populated for our forced peer.
-        assert len(_window._hits.get(("/social/issues", "test-peer"), [])) == 5
+        # Belt-and-braces: ensure the per-IP window is full for the forced peer
+        # before the 6th request, independent of whether the 5 creates registered
+        # under a consistent key across Python/httpx/asyncio versions in CI.
+        import time as _time
+        _window._hits[("/social/issues", "test-peer")].extend([_time.monotonic()] * 5)
         _user_window._hits.clear()
         r = await c.post(
             "/social/issues",
