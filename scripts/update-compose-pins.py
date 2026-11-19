@@ -13,6 +13,11 @@ after a newer one already pinned) and must never move the pin backwards.
 The recorded sha also makes "which commit built the running image"
 answerable straight from git.
 
+docker-compose.demo.yml / docker-compose.default.yml are Docker Hub (not
+ghcr.io) repos; backend/ai carry no tag (`repo@sha256:...`) while frontend
+uses tier-specific tags (`:demo` / `:default`). Use --registry dockerhub and
+--tag/--frontend-tag accordingly.
+
 Usage: python3 scripts/update-compose-pins.py \
         backend=sha256:... ai=sha256:... frontend=sha256:... \
         [--file docker-compose.hosted.yml] [--source-sha <commit>]
@@ -23,18 +28,41 @@ import subprocess
 import sys
 from pathlib import Path
 
-# service -> repo prefix as pinned in docker-compose.hosted.yml
+# service -> base repo path (registry prefix added by repo_prefix()).
 PIN_MAP = {
-    "backend":  "ghcr.io/cannonfodder151/autobrain-backend",
-    "ai":       "ghcr.io/cannonfodder151/autobrain-ai",
-    "frontend": "ghcr.io/cannonfodder151/autobrain-frontend",
+    "backend":  "cannonfodder151/autobrain-backend",
+    "ai":       "cannonfodder151/autobrain-ai",
+    "frontend": "cannonfodder151/autobrain-frontend",
 }
+# Registries that do NOT prefix the image name in compose refs
+# (docker.io implicit, vs ghcr.io which must be spelled out).
+PREFIXLESS_REGISTRIES = {"dockerhub", "docker.io"}
 
 # AUT-5669: compose extension key recording the commit whose build produced
 # the pinned digests.
 PROVENANCE_KEY = "x-autobrain-pin-source"
 _PROV_RE = re.compile(rf'^{PROVENANCE_KEY}:\s*"?([0-9a-f]{{40}})"?\s*$', re.M)
 _PROV_LINE_RE = re.compile(rf"^{PROVENANCE_KEY}:.*$", re.M)
+
+
+def repo_prefix(registry, svc):
+    """Return the image prefix as it appears in the compose file.
+
+    For ghcr.io (default): ghcr.io/cannonfodder151/autobrain-<svc>
+    For dockerhub: cannonfodder151/autobrain-<svc> (no registry host prefix)
+    """
+    base = PIN_MAP[svc]
+    if registry.lower() in PREFIXLESS_REGISTRIES:
+        return base
+    return f"{registry}/{base}"
+
+
+def compose_ref(registry, svc, tag, digest):
+    """Return the full image ref as it should appear in the compose file."""
+    prefix = repo_prefix(registry, svc)
+    if tag:
+        return f"{prefix}:{tag}@{digest}"
+    return f"{prefix}@{digest}"
 
 
 def pin_source(text):
@@ -100,6 +128,12 @@ def parse_args():
                     help="compose file to rewrite (default: docker-compose.hosted.yml)")
     ap.add_argument("--source-sha", default=None,
                     help="commit whose build produced the pins (AUT-5669)")
+    ap.add_argument("--registry", default="ghcr.io",
+                    help="image registry host (ghcr.io, dockerhub/docker.io)")
+    ap.add_argument("--tag", default="hosted",
+                    help="image tag for backend/ai (default: hosted; use empty string for no tag)")
+    ap.add_argument("--frontend-tag", default=None,
+                    help="image tag for frontend (default: same as --tag)")
     ap.add_argument("pairs", nargs="*",
                     help="svc=sha256:hexdigest, e.g. backend=sha256:abc123..")
     return ap.parse_args()
@@ -132,16 +166,17 @@ def main():
         return 3
 
     for svc, digest in pins.items():
-        repo_prefix = PIN_MAP.get(svc)
-        if not repo_prefix:
+        if svc not in PIN_MAP:
             print(f"ERROR: unknown service {svc!r}", file=sys.stderr)
             return 2
-        # Match `repo:tag@sha256:...` or `repo@sha256:...` (frontend has no tag).
+        prefix = repo_prefix(args.registry, svc)
+        tag = (args.frontend_tag if svc == "frontend" else args.tag) or ""
+        # Match `repo:tag@sha256:...` or `repo@sha256:...` (no tag when tag == "").
         pattern = re.compile(
-            r"(" + re.escape(repo_prefix) + r"(?::[a-z0-9_.-]+)?)"
+            r"(" + re.escape(prefix) + r"(?::[a-z0-9_.-]+)?)"
             r"@sha256:[a-f0-9]{64}"
         )
-        new_ref = f"{repo_prefix}:hosted@{digest}"
+        new_ref = compose_ref(args.registry, svc, tag, digest)
         text, n = pattern.subn(new_ref, text)
         if n == 0:
             print(f"WARN: no pin matched for {svc} ({new_ref})", file=sys.stderr)

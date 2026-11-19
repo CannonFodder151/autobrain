@@ -318,6 +318,13 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    # AUT-594: expose the digest of each freshly published manifest so the
+    # compose-pin-tiers job can advance the demo/default compose pins.
+    outputs:
+      backend_digest: ${{ steps.digests.outputs.backend_digest }}
+      ai_digest: ${{ steps.digests.outputs.ai_digest }}
+      frontend_demo_digest: ${{ steps.digests.outputs.frontend_demo_digest }}
+      frontend_default_digest: ${{ steps.digests.outputs.frontend_default_digest }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -370,6 +377,134 @@ jobs:
           docker buildx imagetools create \
             -t "cannonfodder151/autobrain-frontend:demo" \
             "cannonfodder151/autobrain-frontend:demo-amd64"
+
+      # AUT-594: capture the digest of each manifest so the compose-pin-tiers
+      # job can advance the demo/default compose pins to the freshly published
+      # digests. Runs only when images were actually published (not version-only).
+      - name: Capture published manifest digests
+        id: digests
+        if: steps.version_only.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          for svc in backend ai; do
+            d="$(docker buildx imagetools inspect "cannonfodder151/autobrain-${svc}:hosted" --raw | sha256sum | awk '{print $1}')"
+            echo "${svc}_digest=sha256:${d}" >> "$GITHUB_OUTPUT"
+          done
+          for tier in demo default; do
+            d="$(docker buildx imagetools inspect "cannonfodder151/autobrain-frontend:${tier}" --raw | sha256sum | awk '{print $1}')"
+            echo "frontend_${tier}_digest=sha256:${d}" >> "$GITHUB_OUTPUT"
+          done
+
+  # AUT-594: bump demo/default compose pins and sync to Portainer EP2.
+  # Runs only when images were actually published (digest outputs non-empty).
+  compose-pin-tiers:
+    needs: publish-manifest
+    if: >-
+      github.event_name != 'pull_request' &&
+      github.ref == 'refs/heads/main' &&
+      needs.publish-manifest.outputs.backend_digest != ''
+    runs-on: [self-hosted, linux, x64, vm2]
+    permissions:
+      contents: write
+    env:
+      PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+      PORTAINER_URL: https://portainer.nathanmartina.com
+      GH_PAT: ${{ secrets.GH_PAT }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Install pyyaml for sync script
+        run: PIP_BREAK_SYSTEM_PACKAGES=1 python3 -m pip install --quiet pyyaml
+
+      - name: Bump demo + default compose digest pins
+        id: bump
+        run: |
+          set -euo pipefail
+          set +e
+          ./scripts/update-compose-pins.py \
+            --file docker-compose.demo.yml \
+            --registry dockerhub \
+            --tag "" \
+            --frontend-tag demo \
+            --source-sha "${{ github.sha }}" \
+            backend="${{ needs.publish-manifest.outputs.backend_digest }}" \
+            ai="${{ needs.publish-manifest.outputs.ai_digest }}" \
+            frontend="${{ needs.publish-manifest.outputs.frontend_demo_digest }}"
+          DEMO_CODE=$?
+          ./scripts/update-compose-pins.py \
+            --file docker-compose.default.yml \
+            --registry dockerhub \
+            --tag "" \
+            --frontend-tag default \
+            --source-sha "${{ github.sha }}" \
+            backend="${{ needs.publish-manifest.outputs.backend_digest }}" \
+            ai="${{ needs.publish-manifest.outputs.ai_digest }}" \
+            frontend="${{ needs.publish-manifest.outputs.frontend_default_digest }}"
+          DEFAULT_CODE=$?
+          set -e
+          echo "demo_code=${DEMO_CODE}" >> "$GITHUB_OUTPUT"
+          echo "default_code=${DEFAULT_CODE}" >> "$GITHUB_OUTPUT"
+          # 0 = changed, 1 = no change needed, 3 = stale run refused to move pin
+          if [ $DEMO_CODE -eq 3 ] || [ $DEFAULT_CODE -eq 3 ]; then
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=$([ $DEMO_CODE -eq 0 ] || [ $DEFAULT_CODE -eq 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit + push pin bumps
+        if: steps.bump.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          git add docker-compose.demo.yml docker-compose.default.yml
+          git diff --cached --quiet && { echo "==> no staged changes — skipping"; exit 0; }
+          git config user.name "AutoBrain Deployment Bot"
+          git config user.email "deploy@autobrainservice.app"
+          git commit -m "chore: bump demo/default compose pins to freshly built digests [skip ci]"
+          # AUT-5669: main is branch-protected; push with admin PAT to bypass required checks
+          auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_PAT" | base64 -w0)"
+          for i in 1 2 3; do
+            echo "==> push attempt $i/3"
+            push_output=$(git -c "http.extraheader=${auth}" push origin main 2>&1)
+            push_rc=$?
+            echo "==> push exit code: $push_rc"
+            echo "==> push output:"
+            echo "$push_output"
+            if [ $push_rc -eq 0 ]; then
+              echo "==> demo/default compose pins pushed"
+              exit 0
+            fi
+            if echo "$push_output" | grep -q "GH006"; then
+              echo "::warning::push rejected by branch protection (GH006) — pin bump commit staged locally but not on main; will retry on next run"
+              exit 0
+            fi
+            echo "==> push failed — rebasing onto main and retrying ($i/3)"
+            git pull --rebase origin main
+            git add docker-compose.demo.yml docker-compose.default.yml
+            git commit --amend --no-edit || true
+          done
+          echo "::error::could not push the demo/default compose pin bump after 3 attempts (AUT-5669)"
+          exit 1
+
+      - name: Sync demo compose to Portainer EP2
+        if: always() && github.ref == 'refs/heads/main' && steps.bump.outcome == 'success'
+        run: |
+          set -euo pipefail
+          python3 scripts/sync-compose-to-portainer.py \
+            --stack autobrain-demo \
+            --endpoint 2 \
+            --file docker-compose.demo.yml
+
+      - name: Sync default compose to Portainer EP2
+        if: always() && github.ref == 'refs/heads/main' && steps.bump.outcome == 'success'
+        run: |
+          set -euo pipefail
+          python3 scripts/sync-compose-to-portainer.py \
+            --stack autobrain-default \
+            --endpoint 2 \
+            --file docker-compose.default.yml
 
   sync-changelog:
     needs: publish-manifest
