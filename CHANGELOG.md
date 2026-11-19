@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.321] - 2026-11-19
+
 ### Added (AUT-594)
 - demo/default compose digest pinning now tracked by update-compose-pins.py
 - demo (EP2, stack 138) and default (EP2, stack 137) sync to Portainer via
