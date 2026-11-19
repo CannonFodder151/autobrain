@@ -106,29 +106,20 @@ async def _new_comment(maker, post_id, author_user_id="u1"):
         return c.id
 
 @pytest.mark.asyncio
-async def test_pt1_xff_rotation_cannot_bypass_rate_limit(env, monkeypatch):
+async def test_pt1_xff_rotation_cannot_bypass_rate_limit(env):
     """F1: rotating X-Forwarded-For must NOT reset the per-IP window.
 
     Before the fix client_ip() took `X-Forwarded-For.split(",")[0]` straight
     from the client header, so every request got a fresh key and the 6th
-    create succeeded. Now XFF is ignored; the 6th create 429s even with a
-    brand-new forged header (per-user window cleared to isolate the IP cap).
-
-    This test monkeypatches rate_limit.client_ip to a fixed peer identity so
-    that all requests deterministically hit the same per-IP window, eliminating
-    any flakiness from ASGITransport client variance across Python/httpx versions.
+    create succeeded. Now XFF is ignored: all requests resolve to the single
+    trusted peer, so the per-IP window accumulates under ONE key and the 6th
+    create 429s. We assert the key-count invariant directly rather than the
+    absolute peer identity, so the test is env-independent (Python/httpx/asyncio
+    versions differ between local and CI).
     """
-    from app.social import rate_limit as social_rl
-
     app, _ = env
-    # The rate-limit windows are process-global singletons; earlier test
-    # modules in the full suite exercise the same create route and fill them.
-    # Reset both here so the per-IP cap starts clean regardless of test order.
     _window._hits.clear()
     _user_window._hits.clear()
-    # Force all requests to the same IP key for deterministic behavior.
-    # Use explicit module reference to avoid string-path resolution issues.
-    monkeypatch.setattr(social_rl, "client_ip", lambda req: "test-peer")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         for i in range(5):
             r = await c.post(
@@ -137,11 +128,11 @@ async def test_pt1_xff_rotation_cannot_bypass_rate_limit(env, monkeypatch):
                 headers={"X-Forwarded-For": f"10.1.{i}.{i}"},
             )
             assert r.status_code == 201, r.text
-        # Belt-and-braces: ensure the per-IP window is full for the forced peer
-        # before the 6th request, independent of whether the 5 creates registered
-        # under a consistent key across Python/httpx/asyncio versions in CI.
-        import time as _time
-        _window._hits[("/social/issues", "test-peer")].extend([_time.monotonic()] * 5)
+        # The 5 forged-XFF requests must all land on ONE per-IP key. If XFF
+        # rotation worked (the bug), we'd see 5 distinct IP keys here.
+        ip_keys = {k: v for k, v in _window._hits.items() if k[0] == "/social/issues"}
+        assert len(ip_keys) == 1, f"XFF rotation created multiple per-IP keys: {list(ip_keys)}"
+        assert len(list(ip_keys.values())[0]) >= 5
         _user_window._hits.clear()
         r = await c.post(
             "/social/issues",
@@ -156,10 +147,14 @@ async def test_f1_per_user_cap_independent_of_ip(env):
     """F1: per-user create cap holds even after the per-IP window resets, and
     is per-user (a different account on the same peer is not capped)."""
     app, _ = env
+    _window._hits.clear()
+    _user_window._hits.clear()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         for i in range(5):
             r = await c.post("/social/issues", json=_issue(f"Cap test issue {i}"))
             assert r.status_code == 201, r.text
+        # the per-user window must now be full for u1
+        assert any(len(v) >= 5 for v in _user_window._hits.values()), _user_window._hits
         assert (await c.post("/social/issues", json=_issue("Cap exceeded"))).status_code == 429
         # per-IP window alone cannot explain the block: clear it, the per-user
         # cap still holds for u1.
@@ -214,3 +209,34 @@ async def test_f3_oversized_cursor_rejected(env):
         # short-but-invalid cursor still yields a clean 400, not 500
         r = await c.get("/social/issues", params={"cursor": "!!!not-base64!!!"})
         assert r.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_f1_client_ip_ignores_x_forwarded_for():
+    """F1: client_ip() must never trust the client-controlled X-Forwarded-For
+    header — only the proxy-set X-Real-IP / socket peer. Deterministic unit
+    assertion, env-independent."""
+    from starlette.requests import Request
+    from app.services.auth import client_ip
+
+    def _req(headers, client_host="198.51.100.7"):
+        scope = {
+            "type": "http",
+            "method": "POST",
+            "headers": [
+                (k.lower().encode(), v.encode()) for k, v in headers.items()
+            ],
+        }
+        if client_host is not None:
+            scope["client"] = (client_host, 12345)
+        return Request(scope)
+
+    # No X-Real-IP: socket peer is used; XFF is ignored.
+    req = _req({"X-Forwarded-For": "10.0.0.1, 10.0.0.2"})
+    assert client_ip(req) == "198.51.100.7"
+    # X-Real-IP set by the proxy wins; XFF still ignored.
+    req = _req({"X-Real-IP": "203.0.113.9", "X-Forwarded-For": "10.0.0.1"})
+    assert client_ip(req) == "203.0.113.9"
+    # No client at all: "unknown".
+    req = _req({"X-Forwarded-For": "10.0.0.1"}, client_host=None)
+    assert client_ip(req) == "unknown"
