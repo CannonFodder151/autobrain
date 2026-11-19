@@ -39,6 +39,7 @@ assert ports == {"frontend": {8086}, "backup": {8080}, "api": {9000}}, ports
 class FakeArgs:
     endpoint = 5
     portainer_url = "https://example.invalid"
+    api_key = "test-key"
 
 
 def cont(name, service, state, published):
@@ -91,6 +92,42 @@ assert sync.unpinned_image_refs(
 ) == {"backend": "ghcr.io/cannonfodder151/autobrain-backend:hosted"}
 assert sync.compose_pin_source(PINNED % ("a" * 40, "b" * 64)) == "a" * 40
 assert sync.compose_pin_source("services:\n  backend:\n    image: x\n") is None
+
+# AUT-590: the renamed backup container must be reaped before the collision
+# check, so a sync that would otherwise exit 5 can proceed. The real EP5
+# container carries NO compose label (service '<no label>') and is named
+# `autobrain-backup` — the plus an optional `-N` suffix.
+import contextlib
+
+deleted = []
+
+def fake_endpoint(args):
+    return [
+        cont("autobrain-backup", None, "running", [8080]),
+        cont("backup-1", "backup", "running", [8080]),
+        cont("frontend-1", "frontend", "running", [8086]),
+    ]
+
+@contextlib.contextmanager
+def fake_urlopen(req, timeout=30):
+    deleted.append(req.full_url)
+    yield type("R", (), {"read": lambda self: b""})()
+
+sync.endpoint_containers = fake_endpoint
+orig_urlopen = sync.urllib.request.urlopen
+sync.urllib.request.urlopen = fake_urlopen
+sync.cleanup_legacy_containers(FakeArgs(), services, {"backup": {8080}})
+sync.urllib.request.urlopen = orig_urlopen
+assert any("autobrain-backup?force=true" in u for u in deleted), deleted
+assert not any("/backup-1?" in u for u in deleted), deleted
+
+# A container whose replacement service is not in the new compose is left alone.
+deleted.clear()
+sync.endpoint_containers = lambda args: [cont("autobrain-backup", None, "running", [8080])]
+sync.urllib.request.urlopen = fake_urlopen
+sync.cleanup_legacy_containers(FakeArgs(), {"frontend"}, {"frontend": {8086}})
+sync.urllib.request.urlopen = orig_urlopen
+assert deleted == [], deleted
 
 print("OK: sync-compose guards")
 sys.exit(0)
