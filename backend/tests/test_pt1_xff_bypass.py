@@ -36,7 +36,6 @@ from app.social.rate_limit import _user_window, _window
 STUB_USER = types.SimpleNamespace(id="u1", display_name="Alice", free_account=False, role="user")
 OTHER_USER = types.SimpleNamespace(id="u2", display_name="Bob", free_account=False, role="user")
 
-
 @pytest_asyncio.fixture(scope="module")
 async def db_env():
     engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool)
@@ -50,7 +49,6 @@ async def db_env():
         await s.commit()
     yield maker
     await engine.dispose()
-
 
 @pytest_asyncio.fixture
 async def env(db_env):
@@ -78,10 +76,8 @@ async def env(db_env):
         await s.commit()
     yield app, maker
 
-
 def _issue(title, body="Cold start problem on a winter morning"):
     return {"title": title, "body": body}
-
 
 async def _new_issue(maker, **kwargs):
     async with maker() as s:
@@ -99,7 +95,6 @@ async def _new_issue(maker, **kwargs):
         await s.commit()
         return post.id
 
-
 async def _new_comment(maker, post_id, author_user_id="u1"):
     async with maker() as s:
         c = sm.SocialIssueComment(
@@ -109,7 +104,6 @@ async def _new_comment(maker, post_id, author_user_id="u1"):
         s.add(c)
         await s.commit()
         return c.id
-
 
 @pytest.mark.asyncio
 async def test_pt1_xff_rotation_cannot_bypass_rate_limit(env):
@@ -121,6 +115,11 @@ async def test_pt1_xff_rotation_cannot_bypass_rate_limit(env):
     brand-new forged header (per-user window cleared to isolate the IP cap).
     """
     app, _ = env
+    # The rate-limit windows are process-global singletons; earlier test
+    # modules in the full suite exercise the same create route and fill them.
+    # Reset both here so the per-IP cap starts clean regardless of test order.
+    _window._hits.clear()
+    _user_window._hits.clear()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         for i in range(5):
             r = await c.post(
@@ -137,7 +136,6 @@ async def test_pt1_xff_rotation_cannot_bypass_rate_limit(env):
         )
         assert r.status_code == 429
         assert "Retry-After" in r.headers
-
 
 @pytest.mark.asyncio
 async def test_f1_per_user_cap_independent_of_ip(env):
@@ -157,7 +155,6 @@ async def test_f1_per_user_cap_independent_of_ip(env):
         app.dependency_overrides[deps.require_premium_write] = lambda: OTHER_USER
         assert (await c.post("/social/issues", json=_issue("u2 is unaffected"))).status_code == 201
 
-
 @pytest.mark.asyncio
 async def test_f2_non_author_commenter_cannot_pin_answer(env):
     """F2: the comment's own author cannot pin it and force the post resolved
@@ -169,7 +166,6 @@ async def test_f2_non_author_commenter_cannot_pin_answer(env):
         r = await c.post(f"/social/issues/{pid}/comments/{cid}/answer")
         assert r.status_code == 404
         assert (await c.get(f"/social/issues/{pid}")).json()["status"] == "open"
-
 
 @pytest.mark.asyncio
 async def test_f2_post_author_can_pin_answer(env):
@@ -183,7 +179,6 @@ async def test_f2_post_author_can_pin_answer(env):
         assert r.status_code == 200, r.text
         assert r.json()["status"] == "resolved"
         assert (await c.get(f"/social/issues/{pid}")).json()["resolved_comment_id"] == cid
-
 
 @pytest.mark.asyncio
 async def test_f3_oversized_cursor_rejected(env):
