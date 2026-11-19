@@ -57,6 +57,9 @@ autobrain-hosted|5|https://hosted.autobrainservice.app/health|POSTGRES_USER=auto
 "
 
 TIERS="${UPGRADE_TIERS:-$DEFAULT_TIERS}"
+# Accept newline- or comma-separated tier lists (deploy-instances.yml passes
+# `inputs.tiers` comma-joined). Robust against either.
+TIERS="$(printf '%s\n' "$TIERS" | tr ',' '\n')"
 
 log() { echo "$(date -u +%FT%TZ) [upgrade] $*"; }
 fail() { echo "$(date -u +%FT%TZ) [upgrade] ERROR: $*" >&2; }
