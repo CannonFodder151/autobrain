@@ -77,9 +77,20 @@ print(hits[0]['Id'], hits[0]['EndpointId'])" "$name"
 }
 
 # Fetch {StackFileContent, Env} of a stack.
+# /stacks/{id}/file returns StackFileContent but may redact secrets in Env.
+# /stacks/{id} returns full stack including Env with secret values.
 fetch_stack() {
   local id="$1"
-  curl -sk "${AUTH[@]}" "$API/stacks/$id/file"
+  local file_json stack_json
+  file_json="$(curl -sk "${AUTH[@]}" "$API/stacks/$id/file")"
+  stack_json="$(curl -sk "${AUTH[@]}" "$API/stacks/$id")"
+  # Merge: prefer Env from full stack (has secrets), StackFileContent from file
+  python3 -c "import sys,json
+file_doc=json.loads(sys.argv[1])
+stack_doc=json.loads(sys.argv[2])
+env = stack_doc.get('Env') or file_doc.get('Env') or []
+print(json.dumps({'StackFileContent': file_doc.get('StackFileContent', ''), 'Env': env}, ensure_ascii=False))
+" "$file_json" "$stack_json"
 }
 
 # Re-apply a stack, pulling the freshly published image and recreating changed
