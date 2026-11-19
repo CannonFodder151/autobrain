@@ -106,13 +106,17 @@ async def _new_comment(maker, post_id, author_user_id="u1"):
         return c.id
 
 @pytest.mark.asyncio
-async def test_pt1_xff_rotation_cannot_bypass_rate_limit(env):
+async def test_pt1_xff_rotation_cannot_bypass_rate_limit(env, monkeypatch):
     """F1: rotating X-Forwarded-For must NOT reset the per-IP window.
 
     Before the fix client_ip() took `X-Forwarded-For.split(",")[0]` straight
     from the client header, so every request got a fresh key and the 6th
     create succeeded. Now XFF is ignored; the 6th create 429s even with a
     brand-new forged header (per-user window cleared to isolate the IP cap).
+
+    This test monkeypatches rate_limit.client_ip to a fixed peer identity so
+    that all requests deterministically hit the same per-IP window, eliminating
+    any flakiness from ASGITransport client variance across Python/httpx versions.
     """
     app, _ = env
     # The rate-limit windows are process-global singletons; earlier test
@@ -120,6 +124,9 @@ async def test_pt1_xff_rotation_cannot_bypass_rate_limit(env):
     # Reset both here so the per-IP cap starts clean regardless of test order.
     _window._hits.clear()
     _user_window._hits.clear()
+    # Force all requests to the same IP key for deterministic behavior.
+    # Patch the symbol used by social_rate_limit (imported at module load time).
+    monkeypatch.setattr("app.social.rate_limit.client_ip", lambda req: "test-peer")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         for i in range(5):
             r = await c.post(
