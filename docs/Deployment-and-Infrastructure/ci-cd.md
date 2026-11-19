@@ -11,6 +11,7 @@ How code gets from a branch to running production services.
 | `arm64-runner-keepalive.yml` | every 30 min (`schedule`) | no artifacts — keeps the EP5 ARM64 runner's broker session exercised and canaries the runner |
 | `sync-mobile.yml` | push to `main` touching `frontend/`, `CHANGELOG.md`, `bump-version.sh`, `sync-mobile.sh` (or manual) | `autobrain-mobile` lineage + version sync, dispatches the mobile release pipeline |
 | `release-mobile.yml` *(in `autobrain-mobile`)* | manual dispatch with a `version` input | Signed `.aab` + draft GitHub Release + Discord `#changelog`/`#updates` |
+| `release-ios.yml` *(in `autobrain-mobile`)* | manual dispatch with `version` + `lane` inputs | Signed `.ipa` + GitHub Release + TestFlight/App Store Connect upload |
 
 All workflows run on `ubuntu-latest`. Builds are multi-arch (`linux/amd64`,
 `linux/arm64`). Since AUT-987 each platform is built **natively** on its own
@@ -133,6 +134,58 @@ it is not a retry mechanism (nothing to retry — no drop has hit a running job)
 The job also re-asserts `uname -m == aarch64`, the AUT-2097 canary, so a runner
 replaced by a qemu-shimmed x86 host fails loudly instead of shipping
 mis-labelled manifests.
+
+### macOS runner for iOS releases (AUT-592)
+
+`release-ios.yml` (in `autobrain-mobile`) requires a **self-hosted macOS runner**
+with labels `[self-hosted, macOS, X64]`. GitHub-hosted macOS runners are not
+available on the GitHub Free plan (spending limit blocks all macos-latest jobs).
+
+**Current runner:** `Nathans-iMac-Pro` (physical Mac Pro) — offline as of
+AUT-592 creation.
+
+**Planned runner:** AUT-2725 provisions a dedicated macOS VM. When available,
+narrow the label set to `[self-hosted, macOS, vm-macos]` for isolation.
+
+**Provisioning requirements:**
+
+- macOS 14+ (Sonoma) or 15 (Sequoia)
+- Xcode 16+ (full, not just Command Line Tools)
+- Flutter SDK (stable channel), `flutter doctor` clean for iOS toolchain
+- CocoaPods (`sudo gem install cocoapods`)
+- Apple Distribution certificate + private key in keychain (`security import`)
+- App Store Connect API key (`.p8`) staged at `~/.appstoreconnect/private_keys/`
+- GitHub Actions runner v2.338.2+ (matching existing runner versions)
+
+**Registration:**
+```bash
+REPO=CannonFodder151/autobrain-mobile RUNNER_NAME="Nathans-iMac-Pro" \
+  ./scripts/provision-macos-runner.sh
+```
+See `scripts/provision-macos-runner.sh` for full automation (downloads, configures,
+installs launchd service, starts runner).
+
+**Code signing secrets required in `autobrain-mobile` repo:**
+- `IOS_CERT_P12_BASE64` — Apple Distribution certificate (p12, base64)
+- `IOS_CERT_PASSWORD` — p12 password
+- `IOS_TEAM_ID` — Apple Developer Team ID
+- `APPLE_STORE_API_KEY` — App Store Connect API key (JSON or bare .p8)
+- `APPLE_STORE_KEY_ID` / `APPLE_STORE_ISSUER_ID` — if using bare .p8
+- `IOS_PROVISIONING_PROFILE_BASE64` — optional (AUT-4355: xcodebuild -allowProvisioningUpdates can create it)
+- `CARTO_API_KEY` — CARTO basemap key (required at build time, AUT-5084)
+
+**Verification:**
+```bash
+gh api repos/CannonFodder151/autobrain-mobile/actions/runners \
+  --jq '.runners[] | select(.name=="Nathans-iMac-Pro") | {name, os, status, labels: [.labels[].name]}'
+```
+Expected: `os: macOS`, `status: online`, `labels: ["self-hosted", "macOS", "X64", ...]`
+
+**Troubleshooting:**
+- Runner offline → check `~/actions-runner/_diag/Runner_*.log`
+- Xcode license not accepted → run `sudo xcodebuild -license accept`
+- Keychain not unlocked → runner config uses empty keychain password; certs import to temp keychain at build time
+- `flutter doctor` failures → run `flutter doctor -v` and resolve iOS toolchain items
 
 ## 3. Mobile sync (`sync-mobile.yml`)
 
