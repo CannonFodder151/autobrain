@@ -11,6 +11,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-594)
+- demo/default compose digest pinning now tracked by update-compose-pins.py
+- demo (EP2, stack 138) and default (EP2, stack 137) sync to Portainer via
+  sync-compose-to-portainer.py in dockerhub-publish.yml merge-triggered workflow
+- demo frontend registry drift resolved: switched from ghcr.io to Docker Hub
+  cannonfodder151/autobrain-frontend:demo@sha256:db91b2b7...
+
+### Fixed (AUT-594)
+- demo/frontend registry drift (ghcr.io :hosted was never published, only
+  Docker Hub :demo exists)
+- update-compose-pins.py now supports Docker Hub (prefixless) registry and
+  tier-specific frontend tags (:demo/:default)
+
 ## [0.3.320] - 2026-11-19
 
 ### Fixed (AUT-587)

@@ -94,5 +94,49 @@ assert run(f"backend=sha256:{'4' * 64}", "--source-sha", "zzz") == 2
 # a malformed digest likewise
 assert run("backend=nope", "--source-sha", NEW) == 2
 
-print("OK: update-compose-pins (monotonic guard + provenance)")
+# --- AUT-594: Docker Hub registry + tier-specific frontend tags -------------
+# ghcr.io is the default and keeps the registry host in the prefix.
+assert ucp.repo_prefix("ghcr.io", "backend") == REPO
+assert ucp.compose_ref("ghcr.io", "backend", "hosted",
+                       "sha256:" + "a" * 64) == f"{REPO}:hosted@sha256:{'a' * 64}"
+# Docker Hub refs omit the registry host (cannonfodder151/...).
+assert ucp.repo_prefix("dockerhub", "backend") == "cannonfodder151/autobrain-backend"
+assert ucp.repo_prefix("docker.io", "ai") == "cannonfodder151/autobrain-ai"
+# An empty tag means `repo@sha256:...` (backend/ai on the demo/default tiers).
+assert ucp.compose_ref("dockerhub", "backend", "", "sha256:" + "b" * 64) == \
+    f"cannonfodder151/autobrain-backend@sha256:{'b' * 64}"
+# Frontend keeps its tier tag.
+assert ucp.compose_ref("dockerhub", "frontend", "demo",
+                       "sha256:" + "c" * 64) == \
+    f"cannonfodder151/autobrain-frontend:demo@sha256:{'c' * 64}"
+
+
+def run_demo(*args):
+    """Run main() against a demo-shaped Docker Hub compose file."""
+    demo = pathlib.Path(D, "docker-compose.demo.yml")
+    demo.write_text(
+        "services:\n"
+        "  ai:\n"
+        "    image: cannonfodder151/autobrain-ai@sha256:%s\n"
+        "  backend:\n"
+        "    image: cannonfodder151/autobrain-backend@sha256:%s\n"
+        "  frontend:\n"
+        "    image: cannonfodder151/autobrain-frontend:demo@sha256:%s\n"
+        % ("0" * 64, "0" * 64, "0" * 64))
+    sys.argv = ["update-compose-pins.py", "--file", str(demo),
+                "--registry", "dockerhub", "--tag", "", "--frontend-tag", "demo",
+                *args]
+    return ucp.main(), demo
+
+
+code, demo = run_demo(
+    f"backend=sha256:{'d' * 64}", f"ai=sha256:{'e' * 64}",
+    f"frontend=sha256:{'f' * 64}")
+text = demo.read_text()
+assert code == 0, code
+assert f"cannonfodder151/autobrain-backend@sha256:{'d' * 64}" in text, text
+assert f"cannonfodder151/autobrain-ai@sha256:{'e' * 64}" in text, text
+assert f"cannonfodder151/autobrain-frontend:demo@sha256:{'f' * 64}" in text, text
+
+print("OK: update-compose-pins (monotonic guard + provenance + Docker Hub)")
 sys.exit(0)
