@@ -118,6 +118,8 @@ async def test_pt1_xff_rotation_cannot_bypass_rate_limit(env, monkeypatch):
     that all requests deterministically hit the same per-IP window, eliminating
     any flakiness from ASGITransport client variance across Python/httpx versions.
     """
+    from app.social import rate_limit as social_rl
+
     app, _ = env
     # The rate-limit windows are process-global singletons; earlier test
     # modules in the full suite exercise the same create route and fill them.
@@ -125,8 +127,8 @@ async def test_pt1_xff_rotation_cannot_bypass_rate_limit(env, monkeypatch):
     _window._hits.clear()
     _user_window._hits.clear()
     # Force all requests to the same IP key for deterministic behavior.
-    # Patch the symbol used by social_rate_limit (imported at module load time).
-    monkeypatch.setattr("app.social.rate_limit.client_ip", lambda req: "test-peer")
+    # Use explicit module reference to avoid string-path resolution issues.
+    monkeypatch.setattr(social_rl, "client_ip", lambda req: "test-peer")
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         for i in range(5):
             r = await c.post(
@@ -135,6 +137,8 @@ async def test_pt1_xff_rotation_cannot_bypass_rate_limit(env, monkeypatch):
                 headers={"X-Forwarded-For": f"10.1.{i}.{i}"},
             )
             assert r.status_code == 201, r.text
+        # Verify the per-IP window was populated for our forced peer.
+        assert len(_window._hits.get(("/social/issues", "test-peer"), [])) == 5
         _user_window._hits.clear()
         r = await c.post(
             "/social/issues",
