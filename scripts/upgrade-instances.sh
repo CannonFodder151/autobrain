@@ -169,6 +169,12 @@ PY
   result="$(redeploy "$stack_id" "$ep" "$put")"
   log "   redeploy result: $result"
 
+  if [[ "$result" == ERR* ]]; then
+    fail "   redeploy FAILED: $result — STOPPING promotion"
+    OVERALL=1
+    break
+  fi
+
   if wait_health "$health"; then
     log "   healthy ($health) — promote"
   else
