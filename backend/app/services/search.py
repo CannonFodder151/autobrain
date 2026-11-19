@@ -1,6 +1,6 @@
 """Semantic search service — hybrid vector + keyword search across AutoBrain data."""
 
-from sqlalchemy import TextClause, and_, or_, select, text
+from sqlalchemy import String, Text, TextClause, and_, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
@@ -115,7 +115,9 @@ async def semantic_search(
                 base_filters.append(col.in_(vehicle_ids))
         if cfg.get("community"):
             # Hidden/modded posts must never surface in search.
-            base_filters.append(model.status_hidden.is_(False))
+            status_col = getattr(model, "status_hidden", None)
+            if status_col is not None:
+                base_filters.append(status_col.is_(False))
 
         # Keyword search (ILIKE on text columns) — always runs. Columns are
         # OR-ed (match any column); vehicle scope stays AND-ed. `%`/`_` in the
@@ -124,7 +126,7 @@ async def semantic_search(
         keyword_conditions = []
         for col_name in cfg["columns"]:
             col = getattr(model, col_name, None)
-            if col is not None:
+            if col is not None and isinstance(col.type, (String, Text)):
                 keyword_conditions.append(col.ilike(f"%{escaped}%", escape="\\"))
 
         filters = base_filters

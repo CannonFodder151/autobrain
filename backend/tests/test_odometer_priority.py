@@ -15,6 +15,7 @@ os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test-user:test-passw
 os.environ.setdefault("SECRET_KEY", "test-secret")
 
 import asyncio  # noqa: E402
+from datetime import date  # noqa: E402
 import uuid  # noqa: E402
 
 import pytest  # noqa: E402
@@ -55,7 +56,7 @@ async def _setup() -> dict:
         vehicle_id = vehicle.id
         # An upcoming service due at 20,000 km.
         db.add(ServiceRecord(
-            vehicle_id=vehicle_id, service_date="2026-09-01", odometer_km=18000,
+            vehicle_id=vehicle_id, service_date=date(2026, 9, 1), odometer_km=18000,
             service_type="scheduled", status="scheduled", next_due_km=20000,
         ))
         await db.commit()
@@ -68,12 +69,33 @@ async def _odo(db, vehicle_id: str) -> int:
 
 
 @pytest.mark.asyncio
-async def test_fuel_past_entry_cannot_roll_back_odo_and_suggests_service() -> None:
+async def test_fuel_past_entry_cannot_roll_back_odo_and_suggests_service(monkeypatch) -> None:
     world = await _setup()
     headers = {"Authorization": f"Bearer {world['token']}"}
     client: AsyncClient = world["client"]
     vid = world["vehicle_id"]
     base = f"/api/v1/vehicles/{vid}"
+
+    # Stub AI prediction to avoid RabbitMQ dependency in tests.
+    async def _fake_predict(payload: dict) -> dict:
+        return {
+            "service_type": "scheduled",
+            "interval_km": 10000,
+            "interval_months": 6,
+            "due_in_km": 0,
+            "due_in_days": 0,
+            "next_due_km": payload.get("last_service_km", 0) + 10000,
+            "next_due_date": "2027-01-01",
+            "confidence": 0.9,
+            "reason": "test stub",
+            "model": "rule-based-fallback",
+        }
+    import app.services.ai_client as ai_client
+    monkeypatch.setattr(ai_client, "predict_service", _fake_predict)
+    # Avoid broker dependency: fire_and_forget/queue_embedding do .delay().
+    import app.workers.tasks as tasks_mod
+    monkeypatch.setattr(tasks_mod, "fire_and_forget", lambda *a, **k: None)
+    monkeypatch.setattr(tasks_mod, "queue_embedding", lambda *a, **k: None)
 
     # A newer fuel fill pushes the odo past the 20,000 km due threshold.
     resp = await client.post(
@@ -162,8 +184,8 @@ async def test_aut5318_suggestion_created_without_history_or_gateway(monkeypatch
     unreachable — deterministic interval, never a silent skip."""
     async def _gateway_down(payload: dict) -> None:
         return None
-    import app.services.ai_client
-    monkeypatch.setattr(app.services.ai_client, "predict_service", _gateway_down)
+    import app.services.ai_client as ai_client
+    monkeypatch.setattr(ai_client, "predict_service", _gateway_down)
 
     suffix = uuid.uuid4().hex[:8]
     async with SessionLocal() as db:
@@ -184,7 +206,7 @@ async def test_aut5318_suggestion_created_without_history_or_gateway(monkeypatch
         token = create_access_token(user.id)
         vid = vehicle.id
         db.add(ServiceRecord(
-            vehicle_id=vid, service_date="2025-01-10", odometer_km=10_000,
+            vehicle_id=vid, service_date=date(2025, 1, 10), odometer_km=10_000,
             service_type="repair", status="completed",
         ))
         await db.commit()
@@ -248,7 +270,7 @@ async def test_auto_suggest_off_creates_no_suggestion() -> None:
         token = create_access_token(user.id)
         vid = vehicle.id
         db.add(ServiceRecord(
-            vehicle_id=vid, service_date="2026-09-01", odometer_km=18000,
+            vehicle_id=vid, service_date=date(2026, 9, 1), odometer_km=18000,
             service_type="scheduled", status="scheduled", next_due_km=20000,
         ))
         await db.commit()
@@ -290,8 +312,8 @@ async def test_no_scheduled_service_creates_next_from_history(monkeypatch) -> No
             "reason": "from test history",
             "model": "rule-based-fallback",
         }
-    import app.services.ai_client
-    monkeypatch.setattr(app.services.ai_client, "predict_service", _fake_predict)
+    import app.services.ai_client as ai_client
+    monkeypatch.setattr(ai_client, "predict_service", _fake_predict)
 
     suffix = uuid.uuid4().hex[:8]
     async with SessionLocal() as db:
@@ -307,11 +329,11 @@ async def test_no_scheduled_service_creates_next_from_history(monkeypatch) -> No
         await db.commit()
         # Past completed services — no scheduled service at all.
         db.add(ServiceRecord(
-            vehicle_id=vehicle.id, service_date="2024-01-10", odometer_km=30000,
+            vehicle_id=vehicle.id, service_date=date(2024, 1, 10), odometer_km=30000,
             service_type="scheduled", status="completed",
         ))
         db.add(ServiceRecord(
-            vehicle_id=vehicle.id, service_date="2025-06-15", odometer_km=40000,
+            vehicle_id=vehicle.id, service_date=date(2025, 6, 15), odometer_km=40000,
             service_type="scheduled", status="completed",
         ))
         await db.commit()
