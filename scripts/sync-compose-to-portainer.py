@@ -543,6 +543,62 @@ def cleanup_orphaned_created(args, services):
         print(f"Cleaned up {len(deleted)} orphaned created container(s): {', '.join(deleted)}", file=sys.stderr)
 
 
+# AUT-590: containers renamed between stack versions leave behind an unlabeled
+# predecessor that holds a host port the new service needs. `autobrain-backup`
+# was renamed to `backup` (AUT-2367/AUT-3944); the pre-rename container has no
+# com.docker.compose.service label, so check_port_collisions sees it as an
+# orphan and refuses every sync with exit 5. These are safe to reap: the
+# replacement service binds the same port + the same /data volumes.
+LEGACY_CONTAINER_NAMES = {"autobrain-backup": "backup"}
+
+def _legacy_service_of(name):
+    """Name of a legacy (pre-rename) container, or None.
+
+    Portainer appends a `-N` suffix to compose service names, so match by
+    prefix rather than exact equality.
+    """
+    for legacy, replacement in LEGACY_CONTAINER_NAMES.items():
+        if name == legacy or name.startswith(f"{legacy}-"):
+            return replacement
+    return None
+
+def cleanup_legacy_containers(args, services, wanted_ports):
+    """Remove unlabeled pre-rename containers whose name maps to a service in
+    the new compose AND whose published ports collide with what it needs."""
+    try:
+        containers = endpoint_containers(args)
+    except urllib.error.HTTPError as e:
+        print(f"WARNING: could not read containers for legacy cleanup -> "
+              f"HTTP {e.code}", file=sys.stderr)
+        return
+    wanted = {p for ps in wanted_ports.values() for p in ps}
+    for c in containers:
+        name = c["Names"][0].lstrip("/")
+        if _service_of(c):  # compose-managed: not a legacy orphan
+            continue
+        replacement = _legacy_service_of(name)
+        if replacement is None or replacement not in services:
+            continue
+        if not (_published_ports(c) & wanted):
+            continue
+        print(f"Removing legacy container {name} (renamed to service "
+              f"{replacement!r}) holding port(s) "
+              f"{sorted(_published_ports(c) & wanted)}", file=sys.stderr)
+        cid = c.get("Id") or name
+        try:
+            req = urllib.request.Request(
+                f"{args.portainer_url}/api/endpoints/{args.endpoint}/docker/"
+                f"containers/{cid}?force=true&v=true",
+                method="DELETE",
+                headers={"X-API-Key": args.api_key,
+                         "Accept": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=30) as r:
+                r.read()
+        except urllib.error.HTTPError as e:
+            print(f"WARNING: failed to remove legacy container {name}: "
+                  f"HTTP {e.code}", file=sys.stderr)
+
 def verify_running(args, services, attempts=20, delay=5):
     """Wait for every service to have a running container. Returns list of
     problems; empty means healthy.
@@ -672,6 +728,11 @@ def main():
     # forever and the site 502s (AUT-4911).
     services, wanted_ports = compose_services_and_ports(content)
     flat_wanted = {p for ps in wanted_ports.values() for p in ps}
+    try:
+        cleanup_legacy_containers(args, services, wanted_ports)
+    except urllib.error.HTTPError as e:
+        print(f"WARNING: could not run legacy container cleanup -> "
+              f"HTTP {e.code}; proceeding to collision check", file=sys.stderr)
     try:
         clashes = check_port_collisions(args, services, flat_wanted)
     except urllib.error.HTTPError as e:
