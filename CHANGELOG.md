@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.320] - 2026-11-19
+
 ### Fixed (AUT-587)
 - fix(frontend): add `formatDollarsPerLitre` helper to Servo Spy history screen so chart labels and tooltip share the cents-per-litre conversion; this helper was a mobile-only delta that `sync-mobile.sh` overwrote, breaking `sync-mobile.yml` (PR #1132)
 
