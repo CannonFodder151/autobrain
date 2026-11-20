@@ -78,7 +78,7 @@ async def create_token(
     db.add(integration)
     await db.commit()
     await db.refresh(integration)
-    return HaTokenCreated.model_validate(integration.__dict__ | {"api_key": raw})
+    return HaTokenCreated.model_validate({**integration.__dict__, "api_key": raw, "token_prefix": integration.api_key_prefix})
 
 
 @router.delete("/tokens/{token_id}", status_code=204)

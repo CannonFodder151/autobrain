@@ -57,6 +57,9 @@ autobrain-hosted|5|https://hosted.autobrainservice.app/health|POSTGRES_USER=auto
 "
 
 TIERS="${UPGRADE_TIERS:-$DEFAULT_TIERS}"
+# Accept newline- or comma-separated tier lists (deploy-instances.yml passes
+# `inputs.tiers` comma-joined). Robust against either.
+TIERS="$(printf '%s\n' "$TIERS" | tr ',' '\n')"
 
 log() { echo "$(date -u +%FT%TZ) [upgrade] $*"; }
 fail() { echo "$(date -u +%FT%TZ) [upgrade] ERROR: $*" >&2; }
@@ -74,9 +77,20 @@ print(hits[0]['Id'], hits[0]['EndpointId'])" "$name"
 }
 
 # Fetch {StackFileContent, Env} of a stack.
+# /stacks/{id}/file returns StackFileContent but may redact secrets in Env.
+# /stacks/{id} returns full stack including Env with secret values.
 fetch_stack() {
   local id="$1"
-  curl -sk "${AUTH[@]}" "$API/stacks/$id/file"
+  local file_json stack_json
+  file_json="$(curl -sk "${AUTH[@]}" "$API/stacks/$id/file")"
+  stack_json="$(curl -sk "${AUTH[@]}" "$API/stacks/$id")"
+  # Merge: prefer Env from full stack (has secrets), StackFileContent from file
+  python3 -c "import sys,json
+file_doc=json.loads(sys.argv[1])
+stack_doc=json.loads(sys.argv[2])
+env = stack_doc.get('Env') or file_doc.get('Env') or []
+print(json.dumps({'StackFileContent': file_doc.get('StackFileContent', ''), 'Env': env}, ensure_ascii=False))
+" "$file_json" "$stack_json"
 }
 
 # Re-apply a stack, pulling the freshly published image and recreating changed
@@ -121,7 +135,7 @@ while IFS= read -r line; do
 
   log "=== tier: $name (EP$ep) ==="
   resolved="$(resolve_stack "$name")" || { fail "stack '$name' not found"; OVERALL=1; continue; }
-  stack_id="${resolved%% }"; ep="${resolved##* }"
+  stack_id="${resolved%% *}"; ep="${resolved##* }"
   log "   stack id=$stack_id endpoint=$ep"
 
   if [ "$DRY_RUN" = "1" ]; then
@@ -154,6 +168,12 @@ PY
   log "   redeploying (pullImage)"
   result="$(redeploy "$stack_id" "$ep" "$put")"
   log "   redeploy result: $result"
+
+  if [[ "$result" == ERR* ]]; then
+    fail "   redeploy FAILED: $result — STOPPING promotion"
+    OVERALL=1
+    break
+  fi
 
   if wait_health "$health"; then
     log "   healthy ($health) — promote"

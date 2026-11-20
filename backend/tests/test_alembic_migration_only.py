@@ -148,12 +148,12 @@ def test_downgrade_keeps_a_pre_existing_vehicle_type_column(fresh_db):
     This revision exists to repair the hosted ``create_all`` drift, where
     ``devices.vehicle_type`` is *already there* and ``upgrade()`` is a no-op. The
     old ``downgrade()`` dropped it anyway — data loss on exactly the database the
-    migration targets. Roll the head revision back and the column must survive.
+    migration targets. Roll ``aut5092_dev_veh_type`` back and the column must survive.
     """
     _create_all(fresh_db)
     _alembic(fresh_db, "stamp", "aut4925_missing_tables")
-    _alembic(fresh_db, "upgrade", "head")
-    _alembic(fresh_db, "downgrade", "-1")
+    _alembic(fresh_db, "upgrade", "aut5092_dev_veh_type")
+    _alembic(fresh_db, "downgrade", "aut3448_fuel_price_snapshots")
     assert asyncio.run(
         _sql(
             fresh_db,
@@ -173,7 +173,7 @@ def test_downgrade_drops_the_column_this_revision_created(fresh_db):
     _create_all(fresh_db)
     _alembic(fresh_db, "stamp", "aut4925_missing_tables")
     asyncio.run(_exec(fresh_db, "ALTER TABLE devices DROP COLUMN IF EXISTS vehicle_type"))
-    _alembic(fresh_db, "upgrade", "head")
+    _alembic(fresh_db, "upgrade", "aut5092_dev_veh_type")
     assert asyncio.run(
         _sql(
             fresh_db,
@@ -181,7 +181,7 @@ def test_downgrade_drops_the_column_this_revision_created(fresh_db):
             "where attrelid='devices'::regclass and attname='vehicle_type'",
         )
     ), "upgrade() did not stamp the provenance marker on the column it created"
-    _alembic(fresh_db, "downgrade", "-1")
+    _alembic(fresh_db, "downgrade", "aut3448_fuel_price_snapshots")
     assert not asyncio.run(
         _sql(
             fresh_db,

@@ -11,7 +11,7 @@ that exports a psycopg2-style DATABASE_URL for other services).
 
 import os
 
-os.environ["DATABASE_URL"] = "postgresql+asyncpg://autobrain:autobrain@localhost:5432/autobrain"
+os.environ["DATABASE_URL"] = "postgresql+asyncpg://autobrain:autobrain@172.22.0.1:5433/autobrain"
 os.environ["SECRET_KEY"] = "test-secret"
 os.environ["MARKET_DATA_URL"] = ""
 os.environ["MARKET_DATA_API_KEY"] = ""
@@ -23,3 +23,4 @@ os.environ.setdefault("POSTGRES_DB", "test-postgres-db")
 os.environ.setdefault("MINIO_ACCESS_KEY", "test-minio-access-key")
 os.environ.setdefault("MINIO_SECRET_KEY", "test-minio-secret-key")
 os.environ.setdefault("MINIO_BUCKET", "test-minio-bucket")
+os.environ.setdefault("CELERY_TASK_ALWAYS_EAGER", "true")

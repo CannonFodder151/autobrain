@@ -22,6 +22,7 @@ pillow==13.0.0
 pillow-heif==1.5.0
 cryptography==50.0.0
 email-validator==2.2.0
+webauthn==3.0.1     # duo-labs py_webauthn: import name `webauthn`; passkey service registration options
 websockets==14.1
 structlog==24.4.0
 pyotp==2.9.0
@@ -47,3 +48,6 @@ pytest==9.1.1
 pytest-asyncio==1.3.0
 aiosqlite==0.21.0     # async sqlite driver for tests/* modules that build a sqlite+aiosqlite engine at import (AUT-5356 collect-only gate)
 ruff==0.8.6
+
+# WebAuthn passkey support (AUT-3447)
+webauthn==3.0.1

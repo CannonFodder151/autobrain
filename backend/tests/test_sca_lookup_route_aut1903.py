@@ -34,6 +34,10 @@ class _FakeVehicle:
 def app(monkeypatch: pytest.MonkeyPatch) -> FastAPI:
     import app.core.config as config_mod
 
+    # CI env may export CORS_ALLOWED_ORIGINS='*' which Settings rejects (never
+    # pair '*' with allow_credentials=True). Override to a safe allow-list so the
+    # fixture builds regardless of ambient env.
+    monkeypatch.setenv("CORS_ALLOWED_ORIGINS", "[]")
     monkeypatch.setattr(config_mod, "settings", config_mod.Settings(_env_file=None))
 
     fake_user = type("U", (), {"id": "u1"})()

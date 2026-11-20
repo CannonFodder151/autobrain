@@ -25,15 +25,38 @@ import pytest  # noqa: E402
 import pytest_asyncio  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 
-from app.db.session import SessionLocal, init_db  # noqa: E402
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine  # noqa: E402
+from app.db.session import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.passkey import PasskeyCredential  # noqa: E402
 from app.models.user import User  # noqa: E402
 
+# Own engine/SessionLocal: do not touch the shared app engine (pinned by
+# conftest.py to Postgres at import time) — that collision is the AUT-514 CI
+# failure. Each isolated test module must own its engine and override the
+# ASGI get_db dependency so the app routes through it.
+engine = create_async_engine(os.environ["DATABASE_URL"])
+SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+# Override set in _override_get_db fixture (not module level) to avoid
+# collection-time contamination across test modules (AUT-514).
+
+
+@pytest_asyncio.fixture(scope="module", autouse=True, loop_scope="session")
+async def _override_get_db():
+    async def _local_db():
+        async with SessionLocal() as session:
+            yield session
+    app.dependency_overrides[get_db] = _local_db
+    yield
+    app.dependency_overrides.pop(get_db, None)
+
 
 @pytest_asyncio.fixture(scope="module", autouse=True, loop_scope="session")
 async def _reinit_schema() -> None:
-    await init_db()
+    import app.models  # noqa: F401 — register all model tables on Base
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
 
 async def _make_user(email: str = "passkey") -> User:

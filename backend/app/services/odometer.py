@@ -81,11 +81,19 @@ async def sync_odometer(
     prev = vehicle.odometer_km or 0
     candidate = source_odo
     newest = await _newest_logbook_entry(db, vehicle.id)
+    newest_ended = newest.ended_at if newest else None
+    if newest_ended and ref_time:
+        if newest_ended.tzinfo and not ref_time.tzinfo:
+            from datetime import timezone
+            ref_time = ref_time.replace(tzinfo=timezone.utc)
+        elif not newest_ended.tzinfo and ref_time.tzinfo:
+            from datetime import timezone
+            newest_ended = newest_ended.replace(tzinfo=timezone.utc)
     if (
         newest
         and newest.end_odometer_km
-        and newest.ended_at
-        and (ref_time is None or newest.ended_at > ref_time)
+        and newest_ended
+        and (ref_time is None or newest_ended > ref_time)
     ):
         candidate = max(candidate, newest.end_odometer_km)
     target = max(prev, candidate)

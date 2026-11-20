@@ -35,3 +35,7 @@ class HaIntegration(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+    @property
+    def token_prefix(self) -> str:
+        return self.api_key_prefix

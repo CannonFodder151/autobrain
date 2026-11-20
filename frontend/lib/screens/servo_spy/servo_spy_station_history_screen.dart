@@ -27,6 +27,15 @@ const _fuelColors = <String, Color>{
   'LPG': Color(0xFFCC5DE8),
 };
 
+/// Render a backend fuel price as $/L.
+///
+/// The `/fuel/stations/{id}/history` contract (backend
+/// `app/schemas/fuel_servo.py`: `FuelHistoryPoint.price`) is CENTS per litre,
+/// so every chart label has to divide by 100. Kept as one shared helper so the
+/// axis and the tooltip can never drift apart (AUT-4772).
+String formatDollarsPerLitre(double cents) =>
+    '\$${(cents / 100).toStringAsFixed(2)}';
+
 class ServoSpyStationHistoryScreen extends StatefulWidget {
   const ServoSpyStationHistoryScreen({
     super.key,
@@ -250,7 +259,7 @@ class _ChartView extends StatelessWidget {
                           showTitles: true,
                           reservedSize: 48,
                           getTitlesWidget: (v, _) => Text(
-                            '\$${(v / 100).toStringAsFixed(2)}',
+                            formatDollarsPerLitre(v),
                             style: const TextStyle(fontSize: 10),
                           ),
                         ),
@@ -292,7 +301,7 @@ class _ChartView extends StatelessWidget {
                               orElse: () => seriesWithPoints.first,
                             );
                             return LineTooltipItem(
-                              '${series.fuelType}  \$${(sp.y / 100).toStringAsFixed(2)}',
+                              '${series.fuelType}  ${formatDollarsPerLitre(sp.y)}',
                               TextStyle(
                                 color: _fuelColors[series.fuelType] ??
                                     scheme.primary,

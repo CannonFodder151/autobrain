@@ -26,6 +26,12 @@
 #
 # All images are pinned by digest — a redeploy must never silently pull a
 # different base image into the tier that gates every other promotion.
+# AUT-594: the Demo frontend lives on Docker Hub (cannonfodder151/autobrain-frontend:demo),
+# not ghcr.io. The compose file previously pinned a ghcr.io ref that the
+# build-hosted pipeline never published — only :hosted is pushed there — so
+# the pin was unresolvable on EP2 and the running container was whatever
+# :demo-tagged image Docker Hub last served. The digest below is the Docker
+# Hub :demo manifest (db91b2b7...), read back from EP2's running container.
 #
 # Architecture note: Demo still runs the PRE-AUT-2000 topology (a separate
 # `ai` container beside `backend`), unlike docker-compose.prod.yml /
@@ -210,7 +216,7 @@ services:
       start_period: 30s
 
   frontend:
-    image: ghcr.io/cannonfodder151/autobrain-frontend@sha256:40cb83b04885abd1eea7cc16ec581a7cbc559a9c3cb711fdaaa5af581c7df1b7
+    image: cannonfodder151/autobrain-frontend:demo@sha256:db91b2b7b147b73b06a93ad13ac3d6d3c562469f79c54d49983b7f33390303ce
     restart: unless-stopped
     user: nginx
     environment:
