@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/auth_state.dart';
 import '../../core/models.dart';
 import 'add_electricity_screen.dart';
+import 'electric_favourite_stations_screen.dart';
 
 class ElectricityScreen extends StatefulWidget {
   const ElectricityScreen({super.key, required this.vehicleId});
@@ -74,7 +75,20 @@ class _ElectricityScreenState extends State<ElectricityScreen> {
   Widget build(BuildContext context) {
     final spots = _efficiencySpots();
     return Scaffold(
-      appBar: AppBar(title: const Text('Electricity tracker')),
+      appBar: AppBar(
+        title: const Text('Electricity tracker'),
+        actions: [
+          IconButton(
+            tooltip: 'Watch price',
+            icon: const Icon(Icons.ev_station_outlined),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const ElectricFavouriteStationsScreen(),
+              ),
+            ),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openAdd(),
         icon: const Icon(Icons.add),
