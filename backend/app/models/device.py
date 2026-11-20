@@ -25,7 +25,7 @@ def _uuid() -> str:
 
 class Device(Base):
     __tablename__ = "devices"
-
+    __table_args__ = {"extend_existing": True}
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), index=True)
     name: Mapped[str] = mapped_column(String(80), nullable=False)

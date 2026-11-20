@@ -10,6 +10,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-208)
+- fix(backend): allow extending existing devices table definition to prevent SQLAlchemy 'Table devices already defined' error
+
 ## [0.3.321] - 2026-11-19
 
 ### Added (AUT-594)
