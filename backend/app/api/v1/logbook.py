@@ -70,7 +70,7 @@ async def start_trip(
     user: User = Depends(require_write),
 ) -> LogEntry:
     vehicle = await get_accessible_vehicle(db, vehicle_id, user)
-    _require_logbook(vehicle)
+    await _require_logbook(vehicle)
     entry = LogEntry(vehicle_id=vehicle_id, status="in_progress", **payload.model_dump())
     db.add(entry)
     await db.commit()
@@ -86,7 +86,7 @@ async def list_entries(
     user: User = Depends(get_current_user),
 ) -> list[LogEntry]:
     vehicle = await get_accessible_vehicle(db, vehicle_id, user)
-    _require_logbook(vehicle)
+    await _require_logbook(vehicle)
     stmt = select(LogEntry).where(LogEntry.vehicle_id == vehicle_id)
     if fy:
         start, end = _fy_bounds(fy)
@@ -103,7 +103,7 @@ async def logbook_stats(
     user: User = Depends(get_current_user),
 ) -> LogbookStats:
     vehicle = await get_accessible_vehicle(db, vehicle_id, user)
-    _require_logbook(vehicle)
+    await _require_logbook(vehicle)
     stmt = select(LogEntry).where(LogEntry.vehicle_id == vehicle_id)
     if fy:
         start, end = _fy_bounds(fy)
@@ -131,7 +131,7 @@ async def update_entry(
     user: User = Depends(require_write),
 ) -> LogEntry:
     vehicle = await get_accessible_vehicle(db, vehicle_id, user)
-    _require_logbook(vehicle)
+    await _require_logbook(vehicle)
     entry = await db.get(LogEntry, entry_id)
     if not entry or entry.vehicle_id != vehicle_id:
         raise HTTPException(status_code=404, detail="Log entry not found")
@@ -179,7 +179,7 @@ async def export_logbook(
     from app.services.export import export_logbook_csv
 
     vehicle = await get_accessible_vehicle(db, vehicle_id, user)
-    _require_logbook(vehicle)
+    await _require_logbook(vehicle)
     fy = fy or _current_fy()
     rows = list((await db.scalars(
         select(LogEntry)
@@ -204,7 +204,7 @@ async def read_odometer_photo(
 ) -> OdometerPhotoResult:
     """OCR a dashboard photo to read the odometer (start/end of a trip)."""
     vehicle = await get_accessible_vehicle(db, vehicle_id, user)
-    _require_logbook(vehicle)
+    await _require_logbook(vehicle)
     await require_ai_vehicle(db, vehicle, user)
     data = await file.read()
     if len(data) > 15 * 1024 * 1024:
@@ -230,7 +230,7 @@ async def get_entry(
     """One trip incl. its GPS route. The samples stay out of the list response
     so a year of trips with routes doesn't blow up the payload."""
     vehicle = await get_accessible_vehicle(db, vehicle_id, user)
-    _require_logbook(vehicle)
+    await _require_logbook(vehicle)
     entry = await db.get(LogEntry, entry_id)
     if not entry or entry.vehicle_id != vehicle_id:
         raise HTTPException(status_code=404, detail="Log entry not found")

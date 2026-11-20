@@ -67,6 +67,7 @@ def test_unconfigured_hub_raises_federation_unavailable(
     """Empty SOCIAL_FEDERATION_HUB_URL -> 'hub not configured' -> the 502 users saw."""
     monkeypatch.delenv("SOCIAL_FEDERATION_HUB_URL", raising=False)
     monkeypatch.delenv("SOCIAL_FEDERATION_HOSTED", raising=False)
+    monkeypatch.setenv("CORS_ALLOWED_ORIGINS", "[]")  # CI env may set '*', which Settings rejects
     config_module.get_settings.cache_clear()
     monkeypatch.setattr(federation, "settings", config_module.get_settings())
     assert federation.settings.SOCIAL_FEDERATION_HUB_URL == ""

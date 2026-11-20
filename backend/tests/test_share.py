@@ -9,6 +9,9 @@ os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test-user:test-passw
 os.environ.setdefault("SECRET_KEY", "test-secret")
 os.environ.setdefault("ADMIN_API_KEY", "test-admin-key-0123456789-0123456789")
 
+# Ensure settings.ADMIN_API_KEY is set for require_admin_api_key (Pydantic settings caches)
+# monkeypatch fixture will be used in tests
+
 import uuid  # noqa: E402
 
 import pytest  # noqa: E402
@@ -141,7 +144,10 @@ async def test_delete_vehicle_with_shares() -> None:
 
 
 @pytest.mark.asyncio
-async def test_delete_user_with_shares() -> None:
+@pytest.mark.asyncio
+async def test_delete_user_with_shares(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.api.deps import settings
+    monkeypatch.setattr(settings, "ADMIN_API_KEY", "test-admin-key-0123456789-0123456789")
     suffix = uuid.uuid4().hex[:8]
     owner_email = f"owner-del-user-{suffix}@example.com"
     invitee_email = f"invitee-del-user-{suffix}@example.com"
@@ -181,7 +187,10 @@ async def test_delete_user_with_shares() -> None:
 
 
 @pytest.mark.asyncio
-async def test_delete_owner_user_with_shares() -> None:
+@pytest.mark.asyncio
+async def test_delete_owner_user_with_shares(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.api.deps import settings
+    monkeypatch.setattr(settings, "ADMIN_API_KEY", "test-admin-key-0123456789-0123456789")
     suffix = uuid.uuid4().hex[:8]
     owner_email = f"owner-del-user-{suffix}@example.com"
     invitee_email = f"invitee-del-user-{suffix}@example.com"

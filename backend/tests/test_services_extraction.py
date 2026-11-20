@@ -195,6 +195,7 @@ async def test_recompute_efficiency_and_stats_end_to_end() -> None:
     async with SessionLocal() as db:
         user = _make_user(db, f"fuel-{uuid.uuid4().hex[:8]}@x.com")
         vehicle = _make_vehicle(db, user)
+        await db.flush()
         db.add_all([
             FuelLog(vehicle_id=vehicle.id, fill_date=__import__("datetime").date(2026, 1, 1),
                     odometer_km=10000, litres=50.0, price_per_litre=1.6, total_cost=80.0),
@@ -224,6 +225,7 @@ async def test_vehicle_timeline_filters_uncompleted_services() -> None:
     async with SessionLocal() as db:
         user = _make_user(db, f"tl-{uuid.uuid4().hex[:8]}@x.com")
         vehicle = _make_vehicle(db, user)
+        await db.flush()
         svc = ServiceRecord(
             id=str(uuid.uuid4()), vehicle_id=vehicle.id, service_date=__import__("datetime").date(2026, 1, 1),
             odometer_km=10000, service_type="repair", status="scheduled",
