@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Guard: scripts/post-deploy-smoke.sh signup payload matches the API contract.
+"""Guard: scripts/post-deploy-smoke.sh signup payload/behavior matches the API contract.
 
 AUT-4687 — the hosted smoke test posted {email, password}, the contract requires
 {email, display_name}, so every deploy was reported as failed on healthy auth.
+AUT-IMP-009 — smoke must be tier-aware: demo/hosted disable self-signup (403 expected).
 """
 import os
 import re
@@ -37,6 +38,10 @@ class TestPostDeploySmokeSignupPayload(unittest.TestCase):
     def test_script_checks_the_signup_status_code(self):
         self.assertIn('if [ "$signup_code" = "201" ]', self.script)
 
+    def test_script_is_tier_aware_for_disabled_signup(self):
+        self.assertIn('/api/v1/auth/config', self.script)
+        self.assertIn('signup_enabled', self.script)
+        self.assertIn('403', self.script)
 
 if __name__ == "__main__":
     unittest.main()
