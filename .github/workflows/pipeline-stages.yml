@@ -101,3 +101,40 @@ jobs:
           done
           echo "hosted health gate FAILED"
           exit 1
+
+  notify:
+    name: Discord notification
+    needs: [stage-demo, stage-default, stage-hosted]
+    if: always()
+    runs-on: ubuntu-latest
+    env:
+      DISCORD_REPORT_WEBHOOK: ${{ secrets.DISCORD_REPORT_WEBHOOK }}
+    steps:
+      - name: Report pipeline stages result
+        run: |
+          set -euo pipefail
+          demo="${{ needs.stage-demo.result }}"
+          default="${{ needs.stage-default.result }}"
+          hosted="${{ needs.stage-hosted.result }}"
+          # Overall status: success only if all stages succeeded
+          if [ "$demo" = "success" ] && [ "$default" = "success" ] && [ "$hosted" = "success" ]; then
+            COLOR="0x2ECC71"
+            STATE="success"
+          else
+            COLOR="0xE74C3C"
+            STATE="failure"
+          fi
+          discord_url="${DISCORD_REPORT_WEBHOOK:-}"
+          case "$discord_url" in
+            https://*|http://*) ;;
+            *)
+              echo "::warning::DISCORD_REPORT_WEBHOOK is not an http(s) URL; skipping Discord report"
+              exit 0
+              ;;
+          esac
+          DESC="Pipeline stages completed.\nDemo: $demo\nDefault: $default\nHosted: $hosted\nWorkflow: ${{ github.workflow }}\nRun: ${{ github.run_id }}"
+          curl -sS --max-time 30 -X POST "$discord_url" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -nc --arg c deployments --arg t "Pipeline stages — $STATE" --arg col "$COLOR" --arg d "$DESC" \
+              '{channel:$c,title:$t,description:$d,color:$col,author:"Pipeline Stages",fields:[{name:"Demo",value:$demo,inline:true},{name:"Default",value:$default,inline:true},{name:"Hosted",value:$hosted,inline:true}]}')" \
+            || echo "::warning::Discord report POST failed"
