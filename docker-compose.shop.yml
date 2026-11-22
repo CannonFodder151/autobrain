@@ -94,7 +94,7 @@ services:
 
   # ── Object Storage ──
   minio:
-    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    image: minio/minio:RELEASE.2025-10-15T17-29-55Z
     restart: unless-stopped
     entrypoint: >
       /bin/sh -c "
