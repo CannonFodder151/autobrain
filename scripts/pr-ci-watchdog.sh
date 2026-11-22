@@ -238,12 +238,12 @@ PAPERDESC
 # Auth: use a service account PAT if available, otherwise skip gracefully.
 PAPERCLIP_ISSUE_URL=""
 if [ -n "${PAPERCLIP_SERVICE_TOKEN:-}" ]; then
-  # Build jq args conditionally for assignee_agent_id
+  # Build jq args conditionally for assigneeAgentId
   jq_args=(--arg title "$PAPERCLIP_ISSUE_TITLE" --arg desc "$PAPERCLIP_ISSUE_DESC" --arg status "todo" --arg companyId "$PAPERCLIP_COMPANY_ID")
   jq_filter='{title:$title,description:$desc,status:$status,company_id:$companyId}'
   if [ -n "$PAPERCLIP_OWNER_AGENT_ID" ]; then
     jq_args+=(--arg assigneeAgentId "$PAPERCLIP_OWNER_AGENT_ID")
-    jq_filter='{title:$title,description:$desc,status:$status,company_id:$companyId,assignee_agent_id:$assigneeAgentId}'
+    jq_filter='{title:$title,description:$desc,status:$status,company_id:$companyId,assigneeAgentId:$assigneeAgentId}'
   fi
 
   paperclip_resp=$(curl -sS --max-time 30 \

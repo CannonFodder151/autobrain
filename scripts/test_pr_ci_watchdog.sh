@@ -69,7 +69,7 @@ if [[ "\$1" == "-nc" ]]; then
     fi
   done
   if [[ \$has_assignee -eq 1 ]]; then
-    echo '{"title":"Test","description":"Test","status":"todo","company_id":"test","assignee_agent_id":"d98f790f-a1f8-4cd6-b69c-f174f1df6df0"}' > "$W/jq_output"
+    echo '{"title":"Test","description":"Test","status":"todo","company_id":"test","assigneeAgentId":"d98f790f-a1f8-4cd6-b69c-f174f1df6df0"}' > "$W/jq_output"
     cat "$W/jq_output"
   else
     echo '{"title":"Test","description":"Test","status":"todo","company_id":"test"}'
@@ -225,11 +225,11 @@ else
   fail "GITHUB_OUTPUT file not created"
 fi
 
-# Verify assignee_agent_id was passed to Paperclip API (via jq output)
-if [[ -f "$W/jq_output" ]] && grep -q "assignee_agent_id" "$W/jq_output"; then
-  pass "assignee_agent_id passed to Paperclip API"
+# Verify assigneeAgentId was passed to Paperclip API (via jq output)
+if [[ -f "$W/jq_output" ]] && grep -q "assigneeAgentId" "$W/jq_output"; then
+  pass "assigneeAgentId passed to Paperclip API"
 else
-  fail "assignee_agent_id not passed to Paperclip API. jq_output: $(cat "$W/jq_output" 2>/dev/null || echo '(none)')"
+  fail "assigneeAgentId not passed to Paperclip API. jq_output: $(cat "$W/jq_output" 2>/dev/null || echo '(none)')"
 fi
 
 # --- Test 3: Notify script ---
