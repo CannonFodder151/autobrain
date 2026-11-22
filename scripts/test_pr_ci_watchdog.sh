@@ -58,13 +58,25 @@ EOF
 chmod +x bin/curl
 
 # --- Mock jq ---
-cat > bin/jq <<'EOF'
+cat > bin/jq <<EOF
 #!/usr/bin/env bash
-if [[ "$1" == "-nc" ]]; then
-  echo '{"channel":"incidents","title":"Test","description":"Test","color":"0x2ECC71"}'
+if [[ "\$1" == "-nc" ]]; then
+  # Capture jq output for verification
+  has_assignee=0
+  for arg in "\$@"; do
+    if [[ "\$arg" == *"assigneeAgentId"* ]]; then
+      has_assignee=1
+    fi
+  done
+  if [[ \$has_assignee -eq 1 ]]; then
+    echo '{"title":"Test","description":"Test","status":"todo","company_id":"test","assignee_agent_id":"d98f790f-a1f8-4cd6-b69c-f174f1df6df0"}' > "$W/jq_output"
+    cat "$W/jq_output"
+  else
+    echo '{"title":"Test","description":"Test","status":"todo","company_id":"test"}'
+  fi
   exit 0
 fi
-exec /usr/bin/jq "$@"
+exec /usr/bin/jq "\$@"
 EOF
 chmod +x bin/jq
 
@@ -146,6 +158,31 @@ check_map "Sync mobile app" "Mobile Release Engineer"
 check_map "Visual regression (desktop 1280/1440/1920)" "Frontend Engineer"
 check_map "Unknown workflow" "DevOps Engineer"
 
+# --- Test 1b: agent_id_for_agent maps agent names to Paperclip IDs ---
+echo "==> Test: agent_id_for_agent maps agent names to Paperclip agent IDs"
+sed -n '/^agent_id_for_agent()/,/^}/p' "$WATCHDOG" > "$W/agent_id_fn.sh"
+source "$W/agent_id_fn.sh"
+
+check_agent_id() {
+  local agent="$1" expected="$2"
+  local actual
+  actual="$(agent_id_for_agent "$agent")"
+  if [[ "$actual" == "$expected" ]]; then
+    pass "$agent -> $expected"
+  else
+    fail "$agent -> expected $expected, got $actual"
+  fi
+}
+
+check_agent_id "DevOps Engineer" "6764b91c-3ed1-4a04-89b1-0395f72dd31a"
+check_agent_id "Backend Engineer" "d98f790f-a1f8-4cd6-b69c-f174f1df6df0"
+check_agent_id "Frontend Engineer" "cb213090-e7da-42b8-8e6c-98b1cc958296"
+check_agent_id "Security Officer" "8724e44a-dbe4-4c8b-88a0-cc869ec5d245"
+check_agent_id "Platform Engineer" "ed65484d-9f28-44f7-93e9-564d52d8536a"
+check_agent_id "Mobile Release Engineer" "94fa93b9-0f26-44a2-bd87-4595acbed593"
+check_agent_id "QA Lead" "0b3e4293-cfc2-44dd-8864-037a0c155802"
+check_agent_id "Unknown agent" ""
+
 # --- Test 2: Full watchdog execution ---
 echo "==> Test: Full watchdog execution creates GitHub issue"
 export FAILED_RUN_ID="12345"
@@ -179,8 +216,20 @@ if [[ -f "$GITHUB_OUTPUT" ]]; then
   else
     fail "Owner agent not in output"
   fi
+  if grep -q "owner_agent_id=d98f790f-a1f8-4cd6-b69c-f174f1df6df0" "$GITHUB_OUTPUT"; then
+    pass "Owner agent ID output set"
+  else
+    fail "Owner agent ID not in output"
+  fi
 else
   fail "GITHUB_OUTPUT file not created"
+fi
+
+# Verify assignee_agent_id was passed to Paperclip API (via jq output)
+if [[ -f "$W/jq_output" ]] && grep -q "assignee_agent_id" "$W/jq_output"; then
+  pass "assignee_agent_id passed to Paperclip API"
+else
+  fail "assignee_agent_id not passed to Paperclip API. jq_output: $(cat "$W/jq_output" 2>/dev/null || echo '(none)')"
 fi
 
 # --- Test 3: Notify script ---
