@@ -307,20 +307,27 @@ async def test_advisor_upgrade_route_envelope(monkeypatch) -> None:
     if app is None:
         return
     from httpx import ASGITransport, AsyncClient
+    from unittest.mock import AsyncMock
     from app.api import deps as deps_mod
     from app.api.v1 import advisor as advisor_mod
+    from app.db.session import get_db
 
     fake_vehicle = _vehicle()
     fake_user = SimpleNamespace(id="u1", free_account=False, role="user")
 
-    async def _override_user():
+    async def _override_get_db():
+        s = AsyncMock()
+        yield s
+
+    def _override_user():
         return fake_user
 
+    app.dependency_overrides[get_db] = _override_get_db
     app.dependency_overrides[deps_mod.get_current_user] = _override_user
 
     async def _fake_compute_upgrade(db, vehicle, odometer_km=None,
-                                    finance_term_months=None,
-                                    rate_pct=None, deposit_pct=None):
+                                     finance_term_months=None,
+                                     rate_pct=None, deposit_pct=None):
         return {
             "currency": "AUD",
             "current_value": 20_000.0,
@@ -389,13 +396,20 @@ async def test_advisor_upgrade_route_blocks_free_account(monkeypatch) -> None:
     if app is None:
         return
     from httpx import ASGITransport, AsyncClient
+    from unittest.mock import AsyncMock
     from app.api import deps as deps_mod
+    from app.db.session import get_db
 
     fake_user = SimpleNamespace(id="u1", free_account=True, role="user")
 
-    async def _override_user():
+    async def _override_get_db():
+        s = AsyncMock()
+        yield s
+
+    def _override_user():
         return fake_user
 
+    app.dependency_overrides[get_db] = _override_get_db
     app.dependency_overrides[deps_mod.get_current_user] = _override_user
 
     transport = ASGITransport(app=app)
