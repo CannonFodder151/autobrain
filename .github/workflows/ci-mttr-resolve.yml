@@ -1,0 +1,123 @@
+name: CI MTTR Resolve
+
+on:
+  issues:
+    types: [closed]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  mttr-resolve:
+    name: Calculate MTTR for closed CI failure issue
+    if: |
+      contains(github.event.issue.labels.*.name, 'ci-failure') &&
+      contains(github.event.issue.labels.*.name, 'mttr:open')
+    runs-on: [self-hosted, linux, x64, vm2]
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python for MTTR calculation
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --quiet pyyaml requests
+
+      - name: Calculate MTTR and update issue
+        id: mttr
+        env:
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          REPO: ${{ github.repository }}
+        run: |
+          python3 <<'PYEOF'
+          import re
+          import os
+          from datetime import datetime, timezone
+
+          issue_body = os.environ.get('ISSUE_BODY', '')
+          issue_number = os.environ.get('ISSUE_NUMBER')
+          repo = os.environ.get('REPO')
+
+          # Extract detection time from issue body
+          # Pattern: **Detection time:** 2026-11-22T12:00:00Z UTC
+          match = re.search(r'\*\*Detection time:\*\*\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)', issue_body)
+          if not match:
+              print(f"::warning::Could not find detection time in issue #{issue_number}")
+              exit(0)
+
+          detection_str = match.group(1)
+          detection_time = datetime.fromisoformat(detection_str.replace('Z', '+00:00'))
+          resolution_time = datetime.now(timezone.utc)
+
+          mttr_seconds = (resolution_time - detection_time).total_seconds()
+          mttr_minutes = mttr_seconds / 60
+          mttr_hours = mttr_minutes / 60
+
+          # Format MTTR nicely
+          if mttr_hours >= 1:
+              mttr_str = f"{mttr_hours:.1f} hours"
+          elif mttr_minutes >= 1:
+              mttr_str = f"{mttr_minutes:.1f} minutes"
+          else:
+              mttr_str = f"{mttr_seconds:.0f} seconds"
+
+          resolution_str = resolution_time.strftime('%Y-%m-%dT%H:%M:%SZ')
+
+          # Prepare comment with MTTR info
+          comment_body = f"""## MTTR Resolution
+
+          **Resolution time:** {resolution_str} UTC
+          **MTTR:** {mttr_str}
+
+          This issue was resolved. MTTR calculated from detection time by PR/CI Watchdog automation.
+          """
+
+          # Write outputs for next steps
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"mttr_str={mttr_str}\n")
+              f.write(f"resolution_str={resolution_str}\n")
+              f.write(f"comment_body={comment_body}\n")
+
+          print(f"MTTR for issue #{issue_number}: {mttr_str}")
+
+      - name: Post MTTR comment
+        if: steps.mttr.outputs.comment_body != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: parseInt(process.env.ISSUE_NUMBER),
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: process.env.COMMENT_BODY
+            })
+
+      - name: Update MTTR labels (open -> resolved)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const labels = context.payload.issue.labels.map(l => l.name);
+            const updated = labels.filter(l => l !== 'mttr:open');
+            if (!updated.includes('mttr:resolved')) {
+              updated.push('mttr:resolved');
+            }
+            github.rest.issues.update({
+              issue_number: parseInt(process.env.ISSUE_NUMBER),
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: updated
+            });
+
+      - name: Log MTTR resolution
+        run: |
+          echo "Issue #${ISSUE_NUMBER} resolved with MTTR: ${{ steps.mttr.outputs.mttr_str }}"
+          echo "Resolution time: ${{ steps.mttr.outputs.resolution_str }}"
