@@ -45,6 +45,7 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       PR_CI_WATCHDOG_WEBHOOK_SECRET: ${{ secrets.PR_CI_WATCHDOG_WEBHOOK_SECRET }}
       DISCORD_REPORT_WEBHOOK: ${{ secrets.DISCORD_REPORT_WEBHOOK }}
+      PAPERCLIP_SERVICE_TOKEN: ${{ secrets.PAPERCLIP_SERVICE_TOKEN }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -75,26 +76,14 @@ jobs:
         env:
           DISCORD_REPORT_WEBHOOK: ${{ secrets.DISCORD_REPORT_WEBHOOK }}
         run: |
-          set -euo pipefail
           if [ "${{ job.status }}" = "success" ]; then
-            COLOR="0x2ECC71"
             STATE="completed"
           else
-            COLOR="0xE74C3C"
             STATE="${{ job.status }}"
           fi
-          discord_url="${DISCORD_REPORT_WEBHOOK:-}"
-          case "$discord_url" in
-            https://*|http://*) ;;
-            *)
-              echo "::warning::DISCORD_REPORT_WEBHOOK is not an http(s) URL; skipping Discord report"
-              exit 0
-              ;;
-          esac
-          ISSUE_URL="${{ steps.watchdog.outputs.github_issue_url }}"
-          curl -sS --max-time 30 -X POST "$discord_url" \
-            -H "Content-Type: application/json" \
-            -d "$(jq -nc --arg c "incidents" --arg t "PR/CI Watchdog — $STATE" --arg col "$COLOR" \
-              --arg d "Failed Workflow: ${{ github.event.workflow_run.name }}\nBranch: ${{ github.event.workflow_run.head_branch }}\nRun: [#${{ github.event.workflow_run.run_number }}](${{ github.event.workflow_run.html_url }})\nGitHub Issue: ${ISSUE_URL:-none}\nPaperclip Issue: ${{ steps.watchdog.outputs.paperclip_issue_url }}" \
-              '{channel:$c,title:$t,description:$d,color:$col,author:"PR/CI Watchdog",fields:[{name:"Workflow",value:"${{ github.event.workflow_run.name }}",inline:true},{name:"Status",value:"${{ job.status }}",inline:true}]}')" \
-            || echo "::warning::Discord report POST failed"
+          SUMMARY="Failed Workflow: ${{ github.event.workflow_run.name }}
+Branch: ${{ github.event.workflow_run.head_branch }}
+Run: [#${{ github.event.workflow_run.run_number }}](${{ github.event.workflow_run.html_url }})
+GitHub Issue: ${{ steps.watchdog.outputs.github_issue_url }}
+Paperclip Issue: ${{ steps.watchdog.outputs.paperclip_issue_url }}"
+          ./scripts/pr-ci-watchdog-notify.sh "$STATE" "$SUMMARY" "${{ steps.watchdog.outputs.github_issue_url }}" || echo "::warning::Discord notify step failed"
