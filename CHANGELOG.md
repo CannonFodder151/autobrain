@@ -13,6 +13,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Added (AUT-6415)
 - feat(docker): merge dongle-server + backup GUI into backend container (AUT-6415)
 
+### Fixed (AUT-4821)
+- fix(backup): `run_backup_offsite` now raises `RuntimeError` when `_push_offsite` returns `False`, so Celery reports FAIL instead of SUCCESS on a silent no-op; regression test added in `test_backup_offsite.py::test_push_failure_raises` (AUT-4821)
+
 ### Added (AUT-322)
 - chore(mobile): mobile release v0.3.311+253 — `release-mobile.yml` `promote_to_production` flag now promotes the closed-testing release to Google Play production (staged rollout 10% → 50% → 100%); shared changelog entry for mobile GitHub Release (AUT-322)
 
