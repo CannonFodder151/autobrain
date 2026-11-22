@@ -51,6 +51,30 @@ owner_agent_for_workflow() {
   esac
 }
 
+# Map agent name to Paperclip agent ID for issue assignment (wake agent).
+agent_id_for_agent() {
+  case "$1" in
+    "DevOps Engineer") echo "6764b91c-3ed1-4a04-89b1-0395f72dd31a" ;;
+    "Backend Engineer") echo "d98f790f-a1f8-4cd6-b69c-f174f1df6df0" ;;
+    "Frontend Engineer") echo "cb213090-e7da-42b8-8e6c-98b1cc958296" ;;
+    "Security Officer") echo "8724e44a-dbe4-4c8b-88a0-cc869ec5d245" ;;
+    "Platform Engineer") echo "ed65484d-9f28-44f7-93e9-564d52d8536a" ;;
+    "Mobile Release Engineer") echo "94fa93b9-0f26-44a2-bd87-4595acbed593" ;;
+    "QA Lead") echo "0b3e4293-cfc2-44dd-8864-037a0c155802" ;;
+    "Code Reviewer") echo "96ffe367-8c47-47ac-9283-f12d36a7a2ba" ;;
+    "Documentation Manager") echo "a1f18cce-8e16-46b2-a427-d7f374a97488" ;;
+    "CTO") echo "96ee06bb-8a7f-4d71-99bf-7173a9c11dff" ;;
+    "CEO") echo "327762e1-6833-4ccc-8582-8e5635499b5e" ;;
+    "Founding Engineer") echo "991b8240-4f16-4aca-9d9e-1f2cc74afd8d" ;;
+    "SEO Designer") echo "964e9131-3341-4a5f-b599-ad7499a5a012" ;;
+    "Discord Integration Engineer") echo "cc38e088-7a39-4629-a9b1-50fb9a34830b" ;;
+    "CFO") echo "cdb579f8-7a32-4cd0-8f27-df58962cd4ba" ;;
+    "Critical Reviewer") echo "79bffa06-a7ad-419c-88e9-071604918e60" ;;
+    "Strategic Director") echo "5aae4f23-1778-4a3e-bde9-cbbf79636f84" ;;
+    *) echo "" ;;
+  esac
+}
+
 # --- step 1: gather failure details ----------------------------------------
 
 log "Gathering failure details for run $FAILED_RUN_ID ($FAILED_WORKFLOW)"
@@ -187,8 +211,12 @@ log "GitHub issue created: $GITHUB_ISSUE_URL"
 
 log "Creating Paperclip execution issue to wake $OWNER_AGENT agent"
 
-# Map agent name to agent ID. The DevOps Engineer agent ID is hardcoded;
-# others need lookup. For now, route to DevOps Engineer who will re-assign.
+# Look up Paperclip agent ID for the owner agent (wake agent via assignment).
+PAPERCLIP_OWNER_AGENT_ID="$(agent_id_for_agent "$OWNER_AGENT")"
+if [ -z "$PAPERCLIP_OWNER_AGENT_ID" ]; then
+  log "WARNING: No Paperclip agent ID for owner agent '$OWNER_AGENT'; issue will be unassigned"
+fi
+
 PAPERCLIP_ISSUE_TITLE="CI Failure: $FAILED_WORKFLOW on $FAILED_BRANCH"
 PAPERCLIP_ISSUE_DESC=$(cat <<PAPERDESC
 **GitHub Issue:** $GITHUB_ISSUE_URL
@@ -210,20 +238,24 @@ PAPERDESC
 # Auth: use a service account PAT if available, otherwise skip gracefully.
 PAPERCLIP_ISSUE_URL=""
 if [ -n "${PAPERCLIP_SERVICE_TOKEN:-}" ]; then
+  # Build jq args conditionally for assigneeAgentId
+  jq_args=(--arg title "$PAPERCLIP_ISSUE_TITLE" --arg desc "$PAPERCLIP_ISSUE_DESC" --arg status "todo" --arg companyId "$PAPERCLIP_COMPANY_ID")
+  jq_filter='{title:$title,description:$desc,status:$status,company_id:$companyId}'
+  if [ -n "$PAPERCLIP_OWNER_AGENT_ID" ]; then
+    jq_args+=(--arg assigneeAgentId "$PAPERCLIP_OWNER_AGENT_ID")
+    jq_filter='{title:$title,description:$desc,status:$status,company_id:$companyId,assigneeAgentId:$assigneeAgentId}'
+  fi
+
   paperclip_resp=$(curl -sS --max-time 30 \
     -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/issues" \
     -H "Authorization: Bearer $PAPERCLIP_SERVICE_TOKEN" \
     -H "Content-Type: application/json" \
-    -d "$(jq -nc \
-      --arg title "$PAPERCLIP_ISSUE_TITLE" \
-      --arg desc "$PAPERCLIP_ISSUE_DESC" \
-      --arg status "todo" \
-      --arg companyId "$PAPERCLIP_COMPANY_ID" \
-      '{title:$title,description:$desc,status:$status,company_id:$companyId}')" 2>/dev/null) || echo "{}"
+    -d "$(jq -nc "${jq_args[@]}" "$jq_filter")" 2>/dev/null) || echo "{}"
 
   PAPERCLIP_ISSUE_URL=$(echo "$paperclip_resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('url',''))" 2>/dev/null || echo "")
   if [ -n "$PAPERCLIP_ISSUE_URL" ]; then
     log "Paperclip issue created: $PAPERCLIP_ISSUE_URL"
+    [ -n "$PAPERCLIP_OWNER_AGENT_ID" ] && log "Assigned to agent ID: $PAPERCLIP_OWNER_AGENT_ID"
   else
     log "WARNING: Paperclip issue creation returned no URL: $paperclip_resp"
   fi
@@ -237,5 +269,6 @@ echo "github_issue_url=$GITHUB_ISSUE_URL" >> "$GITHUB_OUTPUT"
 echo "github_issue_number=$GITHUB_ISSUE_NUMBER" >> "$GITHUB_OUTPUT"
 echo "paperclip_issue_url=$PAPERCLIP_ISSUE_URL" >> "$GITHUB_OUTPUT"
 echo "owner_agent=$OWNER_AGENT" >> "$GITHUB_OUTPUT"
+[ -n "$PAPERCLIP_OWNER_AGENT_ID" ] && echo "owner_agent_id=$PAPERCLIP_OWNER_AGENT_ID" >> "$GITHUB_OUTPUT"
 
 log "Watchdog complete. GitHub issue: $GITHUB_ISSUE_URL"
