@@ -46,6 +46,9 @@
 #   AI_GATEWAY_API_KEY AI_ROUTER_API_KEY MARKET_DATA_API_KEY REGO_LOOKUP_API_KEY
 # Demo runs Redis WITHOUT auth, so the redis URLs carry no password.
 
+# AUT-5669: commit whose build produced the digests pinned below.
+x-autobrain-pin-source: "750b9d0634604b2eaf4dac4c4e55e95ba62e142c"
+
 name: autobrain-demo
 
 x-router-env: &router-env
@@ -110,7 +113,7 @@ services:
   # PRE-AUT-2000 topology (see header): the AI gateway as its own
   # container; the backend reaches it over the compose network.
   ai:
-    image: cannonfodder151/autobrain-ai@sha256:03656882722b9fb140c48a2536e97ddd5b054e4660c284bcd3abddfd30d2a527
+    image: cannonfodder151/autobrain-ai@sha256:59b622592468cd60cdf64ba8e5362e4c1e58be87b729c5f5aaeb1ff82
     restart: unless-stopped
     user: autobrain
     working_dir: /app
@@ -131,7 +134,7 @@ services:
       start_period: 30s
 
   backend:
-    image: cannonfodder151/autobrain-backend@sha256:63ff74f9a66f7ec449d2c2fc7e71a125e48a6430079f06310aed0dfc3087f93a
+    image: cannonfodder151/autobrain-backend@sha256:1f1748bfbb6ae6208283545f7a9f89df6e28c83d2cc
     restart: unless-stopped
     user: autobrain
     working_dir: /app
@@ -216,7 +219,7 @@ services:
       start_period: 30s
 
   frontend:
-    image: cannonfodder151/autobrain-frontend:demo@sha256:db91b2b7b147b73b06a93ad13ac3d6d3c562469f79c54d49983b7f33390303ce
+    image: cannonfodder151/autobrain-frontend:demo@sha256:8db89e5645b7960a15413ac27749ee972568f055f7105aa3f915c3656
     restart: unless-stopped
     user: nginx
     environment:
