@@ -31,6 +31,7 @@ import '../vehicles/vehicle_timeline_screen.dart';
 import '../servo_spy/servo_spy_screen.dart';
 import '../advisor/overview_screen.dart';
 import '../advisor/car_check_screen.dart';
+import '../fuel/petrol_price_map_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -434,6 +435,8 @@ class _FeatureGrid extends StatelessWidget {
           _AdvisorEntry(vehicle: vehicle)),
       const _Feature('Servo Spy', Icons.local_gas_station, Color(0xFFF59E0B),
           ServoSpyScreen()),
+      const _Feature('Petrol Prices', Icons.local_gas_station, Color(0xFF059669),
+          PetrolPriceMapScreen(state: 'WA')),
       const _Feature('Community Garage', Icons.groups, Color(0xFF0D9488),
           CommunityGarageScreen()),
     ];
