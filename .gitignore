@@ -30,6 +30,9 @@ frontend/.flutter-plugins-dependencies
 # Node (frontend web tooling, if any)
 node_modules/
 
+# Shop website build output
+shop-website/dist/
+
 # MinIO / data volumes
 data/
 minio-data/
