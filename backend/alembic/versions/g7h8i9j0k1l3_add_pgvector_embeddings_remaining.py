@@ -1,7 +1,7 @@
 """Alembic migration: add pgvector embedding columns to remaining entity tables."""
 
 import sqlalchemy as sa
-from alembic import context, op
+from alembic import op
 
 from app.core.config import settings  # noqa: E402
 
@@ -13,12 +13,6 @@ depends_on = None
 _DIM = settings.EMBEDDING_DIMENSION
 
 
-<<<<<<< ours
-def _has_table(name: str) -> bool:
-    if context.is_offline_mode():
-        return False
-    return name in sa.inspect(op.get_bind()).get_table_names()
-=======
 def _column_is_text(conn, table: str) -> bool:
     """Check if embedding column exists and is TEXT type (create_all fallback)."""
     row = conn.execute(
@@ -29,22 +23,12 @@ def _column_is_text(conn, table: str) -> bool:
         {"t": table},
     ).fetchone()
     return row is not None and row[0].lower() == "text"
->>>>>>> theirs
 
 
 def upgrade() -> None:
     # Install pgvector extension if not already present (idempotent).
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
 
-<<<<<<< ours
-    # Add/align embedding columns (dimension from config, matches embedding model).
-    # create_all/bootstrap-shaped DBs may already have a TEXT embedding column;
-    # pgvector HNSW ops require vector type, so coerce before indexing.
-    # A table may also be absent (e.g. test drops it mid-upgrade) — skip those.
-    for table in ("fuel_price_snapshots", "devices", "market_listing_cache", "vehicles"):
-        if not _has_table(table):
-            continue
-=======
     conn = op.get_bind()
     for table in ("fuel_price_snapshots", "devices", "market_listing_cache", "vehicles"):
         # The table may not exist yet if an earlier revision (e.g. aut3448 for
@@ -56,7 +40,6 @@ def upgrade() -> None:
         # it to vector so the HNSW index below accepts it.
         if _column_is_text(conn, table):
             op.execute(f"ALTER TABLE {table} DROP COLUMN IF EXISTS embedding")
->>>>>>> theirs
         op.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS embedding vector({_DIM})")
         op.execute(
             f"ALTER TABLE {table} ALTER COLUMN embedding TYPE vector({_DIM}) "
@@ -67,7 +50,7 @@ def upgrade() -> None:
     # small per-user tables it beats IVFFlat — which needs lists tuned to row
     # count and a training probe pass. Cosine ops matches search's `a <=> b`.
     for table in ("fuel_price_snapshots", "devices", "market_listing_cache", "vehicles"):
-        if not _has_table(table):
+        if not sa.inspect(conn).has_table(table):
             continue
         op.execute(
             f"CREATE INDEX IF NOT EXISTS idx_{table}_embedding ON {table} "
