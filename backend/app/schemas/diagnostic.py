@@ -31,6 +31,11 @@ class DiagnosticResponse(BaseModel):
     parts_needed: list[str] = []
     recommended_actions: list[str] = []
     model: str  # which AI path produced it
+    # --- AUT-397: Trustworthy AI Diagnostics ---
+    evidence: dict | None = None  # raw DTC/freeze-frame/PID context
+    confidence_rationale: str | None = None  # why this confidence level
+    known_vs_inferred: dict | None = None  # "what we know" vs "what we infer"
+    limitations: str | None = None  # safe disclaimer / limitation text
 
 
 class DiagnosticOut(BaseModel):
@@ -47,6 +52,14 @@ class DiagnosticOut(BaseModel):
     status: str
     resolved_at: datetime | None
     created_at: datetime
+    # --- AUT-397: Trustworthy AI Diagnostics ---
+    evidence: str | None = None
+    confidence_rationale: str | None = None
+    known_vs_inferred: str | None = None
+    limitations: str | None = None
+    feedback_helpful: bool | None = None
+    feedback_comment: str | None = None
+    feedback_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
@@ -54,3 +67,16 @@ class DiagnosticOut(BaseModel):
 class AddToServiceRequest(BaseModel):
     service_date: datetime | None = None
     notes: str | None = None
+
+
+class DiagnosticFeedbackRequest(BaseModel):
+    helpful: bool
+    comment: str | None = None
+
+
+class DiagnosticFeedbackResponse(BaseModel):
+    id: str
+    feedback_helpful: bool | None
+    feedback_comment: str | None
+    feedback_at: datetime | None
+    updated_at: datetime

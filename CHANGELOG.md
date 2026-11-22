@@ -10,6 +10,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-397)
+- Trustworthy AI Diagnostics: evidence (raw OBD codes + symptom matches), confidence rationale, known vs inferred breakdown, and mandatory limitations disclaimer now returned in diagnostic responses and persisted on the record
+- Diagnostic feedback endpoint: `POST /vehicles/{id}/diagnostics/{diag_id}/feedback` lets users mark a diagnostic helpful/not-helpful with an optional comment
+- Alembic migration `aut397` adds `evidence`, `confidence_rationale`, `known_vs_inferred`, `limitations`, `feedback_helpful`, `feedback_comment`, and `feedback_at` columns to the diagnostics table (idempotent, guarded)
+
 ### Changed (AUT-217)
 - refactor(phase1d): split social.py + issues.py into subpackages, remove legacy advisor.py (PR #992)
 

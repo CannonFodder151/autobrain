@@ -29,3 +29,11 @@ class Diagnostic(Base):
     status: Mapped[str] = mapped_column(String(20), default="open")  # open/resolved
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # --- AUT-397: Trustworthy AI Diagnostics ---
+    evidence: Mapped[dict | None] = mapped_column(Text)  # raw DTC/freeze-frame/PID context
+    confidence_rationale: Mapped[str | None] = mapped_column(Text)  # why this confidence level
+    known_vs_inferred: Mapped[dict | None] = mapped_column(Text)  # "what we know" vs "what we infer"
+    limitations: Mapped[str | None] = mapped_column(Text)  # safe disclaimer / limitation text
+    feedback_helpful: Mapped[bool | None] = mapped_column()  # user feedback: helpful/not
+    feedback_comment: Mapped[str | None] = mapped_column(Text)  # optional user comment
+    feedback_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # when feedback was given

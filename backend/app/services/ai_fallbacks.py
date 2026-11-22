@@ -190,10 +190,47 @@ def diagnose_fallback(symptoms: str, vehicle: dict | None = None, obd_codes: lis
 
     parts_needed = sorted({p for it in items for p in it["parts_needed"]})
     est = sum(it["estimated_cost"] or 0.0 for it in items)
+
+    # --- AUT-397: Trustworthy AI Diagnostics ---
+    evidence = {
+        "obd_codes": list(obd_codes),
+        "symptom_matches": [
+            {"pattern": pat.pattern, "severity": sev, "note": note}
+            for pat, sev, note in SEVERITY_RULES
+            if pat.search(low)
+        ],
+        "vehicle_context": vehicle or None,
+    }
+
+    confidence = max(it["confidence"] for it in items)
+    if obd_codes:
+        rationale = f"Confidence {confidence:.0%} based on {len(obd_codes)} OBD code(s) matched against known fault patterns."
+    elif items and items[0]["cause"] != "General condition check":
+        rationale = f"Confidence {confidence:.0%} based on symptom keyword matching against {len(matched)} rule(s)."
+    else:
+        rationale = "Confidence 50% — no specific fault pattern matched. A full systems scan is recommended."
+
+    known = {
+        "symptoms_reported": symptoms,
+        "obd_codes_detected": list(obd_codes),
+        "matched_rules": [it["cause"] for it in items],
+    }
+    inferred = {
+        "likely_parts": parts_needed,
+        "estimated_cost": est if est else None,
+        "cost_range": [round(est * 0.8, 0), round(est * 1.4, 0)] if est else None,
+    }
+
+    limitations = (
+        "This diagnostic is based on rule-based pattern matching, not a physical inspection. "
+        "Cost estimates are approximate and include a standard labour rate. "
+        "Always confirm with a qualified technician before purchasing parts or proceeding with repairs."
+    )
+
     return {
         "summary": items[0]["cause"] if items else "No fault pattern identified.",
         "severity": max((it["severity"] for it in items), key=lambda s: _sev_rank(s)),
-        "confidence": max(it["confidence"] for it in items),
+        "confidence": confidence,
         "estimated_cost": est if est else None,
         "cost_range": [round(est * 0.8, 0), round(est * 1.4, 0)] if est else None,
         "items": items,
@@ -204,6 +241,11 @@ def diagnose_fallback(symptoms: str, vehicle: dict | None = None, obd_codes: lis
             "Review the proposed parts list before purchasing",
         ],
         "model": "rule-based-fallback",
+        # --- AUT-397 ---
+        "evidence": evidence,
+        "confidence_rationale": rationale,
+        "known_vs_inferred": {"known": known, "inferred": inferred},
+        "limitations": limitations,
     }
 
 

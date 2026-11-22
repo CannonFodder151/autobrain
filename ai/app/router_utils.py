@@ -38,9 +38,17 @@ _SYSTEM_PROMPTS: dict[str, str] = {
          '"repair_notes": string, '
          '"estimated_cost": number|null}], '
          '"parts_needed": [string], "recommended_actions": [string], '
-         '"confidence": number (0-1)}'
+         '"confidence": number (0-1), '
+         '"evidence": {"obd_codes": [string], "symptom_matches": [{"pattern": string, "severity": string, "note": string}], "vehicle_context": object|null}, '
+         '"confidence_rationale": string, '
+         '"known_vs_inferred": {"known": object, "inferred": object}, '
+         '"limitations": string}'
          "For each part include a real-world part number when you can identify one "
-        "(e.g. NGK BKR6EIX, RYCO Z89A); otherwise null."
+        "(e.g. NGK BKR6EIX, RYCO Z89A); otherwise null. "
+        "evidence: raw OBD codes and symptom pattern matches that triggered the diagnosis. "
+        "confidence_rationale: human-readable explanation of the confidence score. "
+        "known_vs_inferred: separate observed facts (known) from deduced estimates (inferred). "
+        "limitations: mandatory disclaimer that this is rule-based, not a physical inspection, and costs are estimates."
     ),
     "service-prediction": (
         "You are an automotive maintenance scheduler. Use the manufacturer "
@@ -199,6 +207,11 @@ _SCHEMAS: dict[str, dict[str, tuple]] = {
         "parts_needed": (list,),
         "recommended_actions": (list,),
         "confidence": (int, float),
+        # --- AUT-397 ---
+        "evidence": (dict, type(None)),
+        "confidence_rationale": (str, type(None)),
+        "known_vs_inferred": (dict, type(None)),
+        "limitations": (str, type(None)),
     },
     "service-prediction": {
         "service_type": (str,),

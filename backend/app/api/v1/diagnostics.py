@@ -17,6 +17,8 @@ from app.models.service import ServiceItem, ServiceRecord
 from app.models.user import User
 from app.schemas.diagnostic import (
     AddToServiceRequest,
+    DiagnosticFeedbackRequest,
+    DiagnosticFeedbackResponse,
     DiagnosticOut,
     DiagnosticRequest,
     DiagnosticResponse,
@@ -68,6 +70,11 @@ async def diagnose(
         severity=result.get("severity"),
         estimated_cost=result.get("estimated_cost"),
         parts_needed=json.dumps(result.get("parts_needed", [])),
+        # --- AUT-397: Trustworthy AI Diagnostics ---
+        evidence=json.dumps(result.get("evidence")) if result.get("evidence") else None,
+        confidence_rationale=result.get("confidence_rationale"),
+        known_vs_inferred=json.dumps(result.get("known_vs_inferred")) if result.get("known_vs_inferred") else None,
+        limitations=result.get("limitations"),
     )
     db.add(record)
     await db.commit()
@@ -166,6 +173,33 @@ async def resolve_diagnostic(
     await db.commit()
     await db.refresh(diag)
     return diag
+
+
+@router.post("/{diagnostic_id}/feedback", response_model=DiagnosticFeedbackResponse)
+async def submit_feedback(
+    vehicle_id: str,
+    diagnostic_id: str,
+    payload: DiagnosticFeedbackRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_write),
+) -> DiagnosticFeedbackResponse:
+    """Record user feedback on a diagnostic (helpful/not helpful + optional comment)."""
+    await get_accessible_vehicle(db, vehicle_id, user)
+    diag = await db.get(Diagnostic, diagnostic_id)
+    if not diag or diag.vehicle_id != vehicle_id:
+        raise HTTPException(status_code=404, detail="Diagnostic not found")
+    diag.feedback_helpful = payload.helpful
+    diag.feedback_comment = payload.comment
+    diag.feedback_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(diag)
+    return DiagnosticFeedbackResponse(
+        id=diag.id,
+        feedback_helpful=diag.feedback_helpful,
+        feedback_comment=diag.feedback_comment,
+        feedback_at=diag.feedback_at,
+        updated_at=diag.feedback_at,
+    )
 
 
 @router.delete("/{diagnostic_id}", status_code=204)
