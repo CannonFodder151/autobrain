@@ -151,6 +151,23 @@ jobs:
           echo "::error::mobile sync push failed after 5 attempts (non-fast-forward)"
           exit 1
 
+      - name: Mobile sanity gate (AUT-IMP-009)
+        # Blocks store promotion on red: synced tree must analyze clean (done
+        # above) and pass a fast sanity test subset. "Build installs, no crash
+        # on launch" is approximated in CI by static analysis + core widget/smoke
+        # tests before dispatching release-mobile.yml / release-ios.yml.
+        if: steps.commit.outputs.changed == 'true'
+        working-directory: autobrain-mobile
+        run: |
+          set -euo pipefail
+          echo "==> mobile sanity: flutter test (smoke)"
+          # Run fast, stable sanity tests; full suite runs in mobile repo CI.
+          flutter test test/widget_test.dart -r expanded 2>&1 || {
+            echo "::error::mobile sanity gate FAILED (widget_test) — blocking store promotion dispatch"
+            exit 1
+          }
+          echo "==> mobile sanity PASS"
+
       - name: Report mobile parity status to Discord
         if: always()
         env:
