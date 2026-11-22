@@ -1,0 +1,91 @@
+name: PR/CI Watchdog
+
+# AUT-649: On GitHub Actions failure, create issue with logs, assign owner,
+# wake agent, add postmortem template. Track MTTR.
+#
+# Uses workflow_run trigger to react to failures in watched workflows.
+# The watchdog script handles: log collection, GitHub issue creation,
+# Paperclip issue creation (agent wake), postmortem template, MTTR labels.
+
+on:
+  workflow_run:
+    workflows:
+      - "Backend tests"
+      - "PR Checks"
+      - "Security — PR gate (secrets, IaC, deps, flutter)"
+      - "Security — full-resolution dependency scan"
+      - "Publish images to Docker Hub"
+      - "Build hosted images (multi-arch)"
+      - "Build Shop images (private registry)"
+      - "Compose structural checks"
+      - "Upgrade instance chain (AUT-4982)"
+      - "Security — rego-lookup-api PR dependency gate"
+      - "Sync mobile app"
+      - "Visual regression (desktop 1280/1440/1920)"
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+concurrency:
+  group: pr-ci-watchdog-${{ github.workflow }}-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  watchdog:
+    name: PR/CI Watchdog - ${{ github.event.workflow_run.name }}
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: [self-hosted, linux, x64, vm2]
+    timeout-minutes: 15
+    env:
+      PAPERCLIP_API_URL: https://paperclip2.nathanmartina.com
+      PAPERCLIP_COMPANY_ID: df33b840-b692-45ba-9a95-62d2341c95e6
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PR_CI_WATCHDOG_WEBHOOK_SECRET: ${{ secrets.PR_CI_WATCHDOG_WEBHOOK_SECRET }}
+      DISCORD_REPORT_WEBHOOK: ${{ secrets.DISCORD_REPORT_WEBHOOK }}
+      PAPERCLIP_SERVICE_TOKEN: ${{ secrets.PAPERCLIP_SERVICE_TOKEN }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python for log processing
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --quiet pyyaml requests
+
+      - name: Run PR/CI Watchdog
+        id: watchdog
+        env:
+          FAILED_RUN_ID: ${{ github.event.workflow_run.id }}
+          FAILED_RUN_URL: ${{ github.event.workflow_run.html_url }}
+          FAILED_WORKFLOW: ${{ github.event.workflow_run.name }}
+          FAILED_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          FAILED_SHA: ${{ github.event.workflow_run.head_sha }}
+          FAILED_REPO: ${{ github.repository }}
+        run: |
+          ./scripts/pr-ci-watchdog.sh
+
+      - name: Post Discord notification on watchdog completion
+        if: always()
+        env:
+          DISCORD_REPORT_WEBHOOK: ${{ secrets.DISCORD_REPORT_WEBHOOK }}
+          STATE: ${{ job.status }}
+          WORKFLOW: ${{ github.event.workflow_run.name }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RUN_NUMBER: ${{ github.event.workflow_run.run_number }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          GITHUB_ISSUE_URL: ${{ steps.watchdog.outputs.github_issue_url }}
+          PAPERCLIP_ISSUE_URL: ${{ steps.watchdog.outputs.paperclip_issue_url }}
+        run: |
+          if [ "$STATE" = "success" ]; then
+            STATE="completed"
+          fi
+          DESC=$(jq -nc --arg w "$WORKFLOW" --arg b "$BRANCH" --arg r "$RUN_NUMBER" --arg u "$RUN_URL" --arg gi "$GITHUB_ISSUE_URL" --arg pi "$PAPERCLIP_ISSUE_URL" \
+            '"Failed Workflow: \($w)\nBranch: \($b)\nRun: [#\($r)](\($u))\nGitHub Issue: \($gi)\nPaperclip Issue: \($pi)"')
+          ./scripts/pr-ci-watchdog-notify.sh "$STATE" "$DESC" "${GITHUB_ISSUE_URL}" || echo "::warning::Discord notify step failed"
