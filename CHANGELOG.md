@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-738)
+- test: override `get_db` dependency and make `_override_user` sync so `test_advisor_upgrade_route_envelope` runs self-contained without a real database connection in CI
+
 ## [0.3.323] - 2026-11-22
 
 ### Added (AUT-670)
