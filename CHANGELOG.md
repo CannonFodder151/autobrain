@@ -11,6 +11,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-734)
+- PHEV dual-source tracking API for plug-in hybrid vehicles
+- `GET /api/v1/vehicles/{id}/phev-dashboard` — combined ICE+EV metrics (MPGe, cost/km, efficiency)
+- `GET /api/v1/vehicles/{id}/phev-timeline` — unified fuel + EV trip timeline
+- `POST /api/v1/vehicles/{id}/phev-export` — CSV export for reports
+- AI insights with deterministic fallback for ICE vs EV usage recommendations
+
 ## [0.3.323] - 2026-11-22
 
 ### Added (AUT-670)
