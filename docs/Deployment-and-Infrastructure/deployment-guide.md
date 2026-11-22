@@ -115,7 +115,7 @@ Oracle VM; the stack frontend nginx exposes `:8086`.
 |---------|-------|-------|
 | postgres | `pgvector/pgvector:pg17` (pinned by digest) | healthcheck `pg_isready`; volume `postgres-data` |
 | redis | `redis:7-alpine` | healthcheck `redis-cli ping`; volume `redis-data` |
-| minio | `minio/minio:RELEASE.2025-09-07T16-13-09Z` | pinned (AUT-322); healthcheck `mc ready local`; volume `minio-data`; bucket auto-created + forced private via entrypoint (AUT-1242-C2, was the one-shot `minio-init` container) |
+| minio | `minio/minio:RELEASE.2025-10-15T17-29-55Z` | pinned (AUT-322); healthcheck `mc ready local`; volume `minio-data`; bucket auto-created + forced private via entrypoint (AUT-1242-C2, was the one-shot `minio-init` container) |
 | backend | `autobrain-backend:<tag>` | API on `:8000` (internal); **Celery worker+beat merged in** (AUT-3153); `/health` |
 | ai | `autobrain-ai:<tag>` | AI gateway on `:8001` (internal); `/health` |
 | frontend | `autobrain-frontend:<tag>` | nginx serves Flutter web + proxies `/api/*`, `/ws/*`, `/ai/*` |
