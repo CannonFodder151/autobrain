@@ -8,7 +8,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > user-facing change ships with an entry here under `[Unreleased]` — see
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
+
 ## [Unreleased]
+
+## [0.3.322] - 2026-11-22
 
 ### Fixed (AUT-504)
 - fix(frontend): add "Petrol Prices" tile to the home screen feature grid so the petrol price map (AUT-1813) is discoverable, matching the marketing claim (PR #1145)
