@@ -394,3 +394,56 @@ async def deliver_fuel_price_alert(
         )
         await db.commit()
         logger.info("fuel_price_alert_sent", user_id=user_id, kind=kind, channels=channels)
+
+
+# --- Electric Spy charging price alerts (AUT-731) ---------------------------
+
+async def deliver_charging_price_alert(
+    db, user_id: str, kind: str, title: str, description: str
+) -> None:
+    """Send a charging price watch alert on the user's configured channels (once/day).
+
+    Deduplicated per (user_id, kind) so a price that stays under target only
+    fires once per calendar day. Reuses the user's existing notification
+    channels (email / Discord / push) and tokens from their preferences.
+    Mirrors ``deliver_fuel_price_alert`` (AUT-1859) for EV charging stations.
+    """
+    existing = await db.scalar(
+        select(NotificationDelivery).where(
+            NotificationDelivery.user_id == user_id,
+            NotificationDelivery.kind == kind,
+            NotificationDelivery.vehicle_id.is_(None),
+        )
+    )
+    if existing:
+        return
+
+    pref = await _resolve_user_pref(db, user_id)
+    channels: list[str] = []
+    user = await db.get(User, user_id)
+
+    if pref.email_enabled and user:
+        subject = title
+        safe_name = html.escape(user.display_name)
+        text = f"Hi {user.display_name},\n\n{description}"
+        html_body = mail._branding(
+            f'<p style="color:#F5F7FA">Hi <b>{safe_name}</b>,</p>'
+            f'<p style="color:#E5ECF5">{description.replace("**", "")}</p>'
+        )
+        if await _send_email(user.email, user.display_name, subject, html_body, text):
+            channels.append("email")
+    if pref.discord_enabled and pref.discord_webhook_url:
+        if await _send_discord(pref.discord_webhook_url, title, description):
+            channels.append("discord")
+    if pref.push_enabled and pref.fcm_token:
+        if await _send_push(pref.fcm_token, title, description.replace("**", "")):
+            channels.append("push")
+
+    if channels:
+        db.add(
+            NotificationDelivery(
+                user_id=user_id, vehicle_id=None, kind=kind, channels=",".join(channels)
+            )
+        )
+        await db.commit()
+        logger.info("charging_price_alert_sent", user_id=user_id, kind=kind, channels=channels)

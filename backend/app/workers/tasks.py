@@ -268,7 +268,58 @@ def check_fuel_price_alerts() -> None:
 
 
 @shared_task
-def purge_stale_pending_accounts() -> None:
+def check_charging_price_alerts() -> None:
+    """AUT-731: evaluate EV charging watchlist against the latest prices.
+
+    Deterministic-first: a pure price comparison (no AI) decides whether
+    each watched station+connector crossed the user's target price threshold.
+    Alerts reuse the user's existing notification channels.
+
+    Runs after the daily charging ingest so it evaluates fresh data; it also
+    runs standalone (beat) so cached-only instances still alert.
+    """
+    from datetime import date, timezone
+    from datetime import datetime as dt
+
+    from sqlalchemy import select
+
+    from app.models.charging_station import ChargingPriceWatchlist
+    from app.services.charging_servo import should_alert_charging_price, _latest_price_arbitrated
+    from app.services.notify import deliver_charging_price_alert
+
+    async def _run():
+        async with SessionLocal() as db:
+            watch_ids = list((await db.scalars(select(ChargingPriceWatchlist.id))).all())
+            for wid in watch_ids:
+                w = await db.get(ChargingPriceWatchlist, wid)
+                if not w:
+                    continue
+                today = dt.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+                price = await _latest_price_arbitrated(db, w.station_id, w.connector_type, today=today)
+                if not price:
+                    logger.info("charging_alert_no_price", watch_id=wid, station=w.station_id)
+                    continue
+                current = price.price_per_kwh
+                if w.target_price_per_kwh is None:
+                    continue
+                should_alert, reason = should_alert_charging_price(current, w.target_price_per_kwh)
+                if not should_alert:
+                    continue
+                # One alert per (user, station, connector, day).
+                day_str = date.today().isoformat()
+                kind = f"charging_price:{w.station_id}:{w.connector_type}:{day_str}"
+                from app.models.charging_station import ChargingStation
+                station = await db.get(ChargingStation, w.station_id)
+                label = station.name if station else w.station_id
+                title = f"{label} EV price alert"
+                description = (
+                    f"{label} ({w.connector_type}) is now {current:.1f}¢/kWh — "
+                    f"at or below your target of {w.target_price_per_kwh:.1f}¢/kWh."
+                )
+                await deliver_charging_price_alert(db, w.user_id, kind, title, description)
+                logger.info("charging_alert_evaluated", watch_id=wid, station=w.station_id, price=current)
+
+    _run(_run())
     """Delete invited/self-signed-up accounts that never completed registration."""
     from datetime import datetime, timedelta, timezone
 

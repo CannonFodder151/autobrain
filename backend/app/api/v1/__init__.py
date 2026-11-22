@@ -9,6 +9,7 @@ from app.api.v1 import (
     analytics,
     auth,
     billing,
+    charging,
     devices,
     diagnostics,
     dongle_firmware,
@@ -50,6 +51,7 @@ api_router.include_router(services.router)
 api_router.include_router(fuel.router)
 api_router.include_router(fuel_servo.router)
 api_router.include_router(fuel_prices.router)
+api_router.include_router(charging.router)
 api_router.include_router(diagnostics.router)
 api_router.include_router(logbook.router)
 api_router.include_router(obd.router)

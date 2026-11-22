@@ -61,6 +61,13 @@ celery_app.conf.update(
             "task": "app.workers.tasks.poll_nsw_fuel_prices",
             "schedule": 60 * 60 * 24,
         },
+        # AUT-731: check EV charging price watchlist every 30 minutes for
+        # threshold-crossing prices (push + email alerts). Mirrors the
+        # on-demand /charging/watchlist/notify endpoint.
+        "check-charging-price-alerts": {
+            "task": "app.workers.tasks.check_charging_price_alerts",
+            "schedule": 60 * 30,
+        },
         "refresh-sca-parts-cache": {
             "task": "app.workers.tasks.refresh_sca_parts_cache",
             "schedule": crontab(hour=0, minute=0),
