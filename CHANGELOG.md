@@ -10,6 +10,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-670)
+- PR/CI Watchdog: failed GitHub Actions workflows now auto-create GitHub issues with failure logs, postmortem template, MTTR labels, and Paperclip execution issues to wake the assigned agent (.github/workflows/pr-ci-watchdog.yml, scripts/pr-ci-watchdog.sh, scripts/pr-ci-watchdog-notify.sh)
+
 ## [0.3.321] - 2026-11-19
 
 ### Added (AUT-594)
