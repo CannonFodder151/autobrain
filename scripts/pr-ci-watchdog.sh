@@ -43,10 +43,28 @@ owner_agent_for_workflow() {
     "Backend tests"|"Backend — pytest smoke (model metadata + alembic heads)"|"Backend image build check") echo "Backend Engineer" ;;
     "PR Checks"|"Code Review"|"Visual regression (desktop 1280/1440/1920)") echo "Frontend Engineer" ;;
     "Security — PR gate (secrets, IaC, deps, flutter)"|"Security — full-resolution dependency scan"|"Security — rego-lookup-api PR dependency gate"|"Security — base image CVE scan (trivy)") echo "Security Officer" ;;
-    "Publish images to Docker Hub"|"Build hosted images (multi-arch)"|"Build Shop images (private registry)"|"Upgrade instance chain (AUT-4982)"|"Pipeline stages (demo -> default -> hosted)"|"CD") echo "DevOps Engineer" ;;
+    "Publish images to Docker Hub"|"Build hosted images (multi-arch)"|"Build Shop images (private registry)"|"Upgrade instance chain (AUT-4982)"|"Pipeline stages (demo -> default -> hosted)"|"CD"|"ARM64 runner keepalive"|"Runner Watchdog (arm64)"|"Upgrade cycle (2-day)") echo "DevOps Engineer" ;;
     "Compose structural checks"|"CI Queue Guard") echo "Platform Engineer" ;;
     "Sync mobile app") echo "Mobile Release Engineer" ;;
+    "Build rego-lookup-api arm64 (native)"|"Build rego-lookup image (multi-arch) + auto-deploy hosted") echo "Platform Engineer" ;;
+    "Auto-triage Pipeline") echo "DevOps Engineer" ;;
     *) echo "DevOps Engineer" ;;
+  esac
+}
+
+# Map a failed workflow name to GitHub username(s) for issue assignment.
+# Configure via GH_ASSIGNEE_* env vars or extend this function.
+github_assignee_for_workflow() {
+  local agent
+  agent=$(owner_agent_for_workflow "$1")
+  case "$agent" in
+    "DevOps Engineer") echo "${GH_ASSIGNEE_DEVOPS:-}" ;;
+    "Backend Engineer") echo "${GH_ASSIGNEE_BACKEND:-}" ;;
+    "Frontend Engineer") echo "${GH_ASSIGNEE_FRONTEND:-}" ;;
+    "Security Officer") echo "${GH_ASSIGNEE_SECURITY:-}" ;;
+    "Platform Engineer") echo "${GH_ASSIGNEE_PLATFORM:-}" ;;
+    "Mobile Release Engineer") echo "${GH_ASSIGNEE_MOBILE:-}" ;;
+    *) echo "" ;;
   esac
 }
 
@@ -183,13 +201,19 @@ cc: @$OWNER_AGENT
 ISSUEBODY
 )
 
+# Determine GitHub assignee(s) for the issue.
+GITHUB_ASSIGNEE=$(github_assignee_for_workflow "$FAILED_WORKFLOW")
+
 # Use gh to create the issue.
-issue_create_out=$(gh issue create \
-  --repo "$FAILED_REPO" \
-  --title "$ISSUE_TITLE" \
-  --body "$ISSUE_BODY" \
-  --label "ci-failure,mttr:open,watchdog:auto-created" \
-  2>&1) || {
+gh_issue_args=(issue create --repo "$FAILED_REPO" --title "$ISSUE_TITLE" --body "$ISSUE_BODY" --label "ci-failure,mttr:open,watchdog:auto-created")
+if [ -n "$GITHUB_ASSIGNEE" ]; then
+  gh_issue_args+=(--assignee "$GITHUB_ASSIGNEE")
+  log "Assigning GitHub issue to: $GITHUB_ASSIGNEE"
+else
+  log "No GitHub assignee configured for workflow '$FAILED_WORKFLOW' (owner agent: $OWNER_AGENT)"
+fi
+
+issue_create_out=$(gh "${gh_issue_args[@]}" 2>&1) || {
   log "ERROR: gh issue create failed: $issue_create_out"
   exit 1
 }

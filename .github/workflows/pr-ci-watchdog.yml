@@ -29,6 +29,12 @@ on:
       - "CD"
       - "Sync mobile app"
       - "Visual regression (desktop 1280/1440/1920)"
+      - "ARM64 runner keepalive"
+      - "Runner Watchdog (arm64)"
+      - "Build rego-lookup-api arm64 (native)"
+      - "Build rego-lookup image (multi-arch) + auto-deploy hosted"
+      - "Upgrade cycle (2-day)"
+      - "Auto-triage Pipeline"
     types: [completed]
 
 permissions:
