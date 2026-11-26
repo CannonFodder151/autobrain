@@ -4,6 +4,18 @@
 
 ---
 
+## The Five Principles
+
+| # | Principle | What It Means | How It's Enforced |
+|---|-----------|---------------|-------------------|
+| 1 | **Deterministic rules run first** | Every module starts with a rule-based engine that produces a complete, valid result. The AI never runs before the rules. | `enhance(module, payload, baseline)` — `baseline` is computed first, then passed in |
+| 2 | **AI fallback only when rules are insufficient** | The LLM only fills gaps — narrative, context, secondary estimates. It never replaces deterministic output. | Immutable keys in `_AI_IMMUTABLE` are hard-skipped during merge; schema whitelist drops unknown keys |
+| 3 | **Confidence scoring for AI outputs** | Every AI response must include a `confidence` field (0–1). Responses below a module-specific floor are rejected entirely. | `_MODULE_CONFIDENCE_FLOORS` in `router_client.py`; per-module env overrides via `MIN_AI_CONFIDENCE_<MODULE>` |
+| 4 | **Error handling for AI failures** | Any router failure (down, timeout, bad JSON, oversized response, wrong types) returns the baseline silently — no user-visible errors. | `route()` returns `None` on any failure; `enhance()` checks `isinstance(result, dict)` before merging |
+| 5 | **Evidence trail for all AI decisions** | Every inference path is logged with module name, path chosen (`deterministic`/`hybrid`/`router_error`), confidence, and timestamp. | `_AI_TELEMETRY` counters + `logger.info("ai_path", ...)` structlog events; cost tracking in `_COST_TRACKING` |
+
+---
+
 ## Architecture Overview
 
 ```
@@ -18,9 +30,9 @@
 │    │                                                        │
 │    ├─► router disabled / unreachable ──► return baseline    │
 │    │                                                        │
-│    ├─► router responds, confidence < 0.75 ──► return baseline│
+│    ├─► router responds, confidence < floor ──► return baseline│
 │    │                                                        │
-│    └─► router responds, confidence ≥ 0.75 ──► merge + return│
+│    └─► router responds, confidence ≥ floor ──► merge + return│
 │         (only schema-allowed, non-immutable keys)           │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -37,7 +49,8 @@
 | File | Role |
 |------|------|
 | `ai/app/router_utils.py` | Configuration + validation (system prompts, schemas, immutable sets, payload caps, JSON cleaners) |
-| `ai/app/router_client.py` | HTTP transport (`route`), deterministic-first merge (`enhance`), telemetry |
+| `ai/app/router_client.py` | HTTP transport (`route`), deterministic-first merge (`enhance`), telemetry, cost tracking |
+| `ai/app/fallbacks/*.py` | Deterministic rule engines (one per module) |
 
 ---
 
@@ -123,10 +136,10 @@ This is a *shallow* skip — nested structures inside immutable keys are also pr
 Whitelist of keys the router may contribute, with accepted Python types. Anything not listed or type-mismatched is dropped.
 
 ```python
-_SCHEMAS = {
+.schemas = {
     "diagnostics": {"summary": (str,), "severity": (str,), "estimated_cost": (int, float, type(None)), ...},
     "resale": {"rrp": (int, float, type(None)), "used_price": (int, float, type(None)), ...},
-    # ... all 11 modules
+    # ... all 12 modules
 }
 ```
 
@@ -162,7 +175,7 @@ Setting `AI_ENABLED=false` forces **deterministic-only mode** (cost control, inc
 
 ```python
 async def enhance(module: str, payload: dict, baseline: dict) -> dict:
-    min_confidence = float(os.getenv("MIN_AI_CONFIDENCE", "0.75"))
+    min_confidence = _get_module_confidence_floor(module)
     result = await route(module, payload)
     
     if not isinstance(result, dict):
@@ -186,23 +199,157 @@ async def enhance(module: str, payload: dict, baseline: dict) -> dict:
     return merged
 ```
 
-- `MIN_AI_CONFIDENCE` (default `0.75`) — confidence threshold for enrichment
+- `MIN_AI_CONFIDENCE` (default `0.75`) — global fallback; per-module floors in `_MODULE_CONFIDENCE_FLOORS`
 - Returns `baseline` untouched if router unavailable, low confidence, or no enrichable fields
 - On success: `model` = `"rule-based+ai"`; otherwise `model` = whatever baseline set (typically `"rule-based"`)
 
----
+### Confidence Floors (`_MODULE_CONFIDENCE_FLOORS`)
 
-## Telemetry
-
-In-process counters logged on every inference path decision:
+Per-module minimum confidence thresholds, higher for safety-critical modules:
 
 ```python
-_AI_TELEMETRY[module][path]  # path ∈ {"deterministic", "hybrid", "router_error"}
+_MODULE_CONFIDENCE_FLOORS = {
+    "diagnostics": 0.85,           # safety-critical
+    "service-prediction": 0.85,    # safety-critical
+    "ocr": 0.80,                   # extraction accuracy matters
+    "fuel-ocr": 0.80,
+    "odometer": 0.90,              # odometer reading must be exact
+    "resale": 0.80,
+    "mod-impact": 0.80,
+    "condition": 0.75,
+    "parts-guide": 0.75,
+    "advisor": 0.85,               # financial advice
+    "car-check": 0.85,             # safety assessment
+    "social-image": 0.70,          # lowest — image is always optional
+}
 ```
 
-Logged via `logger.info("ai_path", module=module, path=path, ...)`. Access via:
-- `ai_telemetry_snapshot()` — returns copy of counters
-- `ai_telemetry_reset()` — clears counters (admin endpoint)
+Overrides via env: `MIN_AI_CONFIDENCE_DIAGNOSTICS=0.9` etc.
+
+---
+
+## Telemetry & Evidence Trail
+
+Every inference path decision is logged as a structured event and tracked in in-process counters:
+
+```python
+_ai_telemetry[module][path]  # path ∈ {"deterministic", "hybrid", "router_error"}
+```
+
+**What gets logged** (via `logger.info("ai_path", ...)`):
+- `module` — which AI module ran (e.g. `"diagnostics"`)
+- `path` — which path was taken (`deterministic`, `hybrid`, `router_error`)
+- `reason` — why that path was taken (`router_unavailable`, `low_confidence`, `no_enrichable_fields`, etc.)
+- `confidence` — the AI's reported confidence score (if applicable)
+- `threshold` — the confidence floor that was checked
+
+**Cost tracking** (separate from telemetry, in `_COST_TRACKING`):
+- `calls` — total inference calls per module
+- `ai_calls` — calls where the AI was actually invoked (`hybrid` path)
+- `estimated_cost_usd` — running estimate based on `_MODULE_COST_ESTIMATES`
+
+**Access methods:**
+- `ai_telemetry_snapshot()` — returns copy of telemetry counters
+- `ai_telemetry_reset()` — clears telemetry (admin endpoint)
+- `_cost_tracking_snapshot()` — returns cost tracking data
+- `_cost_tracking_reset()` — clears cost tracking (admin endpoint)
+
+**Evidence trail guarantee**: Because every inference call logs the path taken and the confidence of any AI response, operators can always answer: *"Was this output deterministic or AI-enhanced, and why?"* The `model` field in the response (`"rule-based"` vs `"rule-based+ai"`) provides a per-response indicator, and the telemetry logs provide aggregate audit trails.
+
+---
+
+## Worked Example: Vehicle Health Score Engine
+
+The Vehicle Health Score engine demonstrates all five principles in a single module.
+
+### 1. Deterministic Rules Run First
+
+The deterministic engine (`ai/app/fallbacks/health_score.py`) computes a 0–100 score from vehicle inputs using transparent, auditable rules:
+
+```python
+@dataclass
+class VehicleInputs:
+    mileage: int
+    age_years: int
+    accident_count: int
+    service_records: int
+    tire_tread_mm: float
+    brake_pad_mm: float
+    battery_health_pct: int
+    fluid_levels_ok: bool
+    check_engine_light: bool
+    recall_count: int
+
+def compute_health_score(inputs: VehicleInputs) -> int:
+    """Compute deterministic vehicle health score (0-100)."""
+    score = 100
+
+    # Mileage penalty: -1 per 10k miles over 50k
+    if inputs.mileage > 50000:
+        score -= (inputs.mileage - 50000) // 10000
+
+    # Age penalty: -2 per year over 5 years
+    if inputs.age_years > 5:
+        score -= (inputs.age_years - 5) * 2
+
+    # Accident penalty: -15 per accident
+    score -= inputs.accident_count * 15
+
+    # Service bonus: +2 per service record (max +20)
+    service_bonus = min(inputs.service_records * 2, 20)
+    score += service_bonus
+
+    # Component penalties
+    if inputs.tire_tread_mm < 3:   score -= 10
+    elif inputs.tire_tread_mm < 5: score -= 5
+
+    if inputs.brake_pad_mm < 3:    score -= 10
+    elif inputs.brake_pad_mm < 5:  score -= 5
+
+    if inputs.battery_health_pct < 50:  score -= 15
+    elif inputs.battery_health_pct < 70: score -= 5
+
+    if not inputs.fluid_levels_ok:    score -= 10
+    if inputs.check_engine_light:     score -= 20
+    score -= inputs.recall_count * 5
+
+    return max(0, min(100, score))
+```
+
+**Key properties:**
+- **Complete**: always returns a valid 0–100 score
+- **Transparent**: every point is traceable to a specific input and rule
+- **Reproducible**: same inputs → same score, every time
+- **Self-testing**: includes built-in test cases that verify ordering (healthy car > worn car > pristine car)
+
+### 2. AI Fallback Only When Rules Are Insufficient
+
+The Health Score engine could optionally call the AI router to add a narrative summary or highlight non-obvious concerns that the rule engine doesn't capture (e.g., *"Battery health at 45% suggests the vehicle may struggle in cold weather despite acceptable overall score"*). The AI would:
+
+- Receive the deterministic score + breakdown as the baseline
+- Return only narrative/qualitative fields (e.g., `summary`, `recommendations`)
+- Have its score and breakdown fields in `_AI_IMMUTABLE` — they could never be changed by the LLM
+
+### 3. Confidence Scoring for AI Outputs
+
+If the Health Score module calls `enhance()`, the AI response must include a `confidence` field. For a safety-adjacent module like this, the confidence floor would be set to `0.85` (similar to `diagnostics` and `advisor`). A response with `confidence: 0.6` would be rejected entirely — the baseline deterministic result would be returned.
+
+### 4. Error Handling for AI Failures
+
+If the 9Router is down when a health score is requested:
+- `route()` catches the connection error, logs it, returns `None`
+- `enhance()` sees `not isinstance(result, dict)` → returns `baseline` immediately
+- The caller gets a valid 0–100 score with `model: "rule-based"` — no error, no degradation
+
+### 5. Evidence Trail for AI Decisions
+
+Every health score inference logs:
+- Which path was taken (`deterministic` vs `hybrid`)
+- If hybrid: the AI's confidence score
+- The module name (`health_score` or whatever it's registered as)
+- Timestamp via structlog
+
+This means operators can query: *"How often did the health score endpoint use AI enrichment vs pure rules?"* and *"What was the average confidence of AI responses?"*
 
 ---
 
@@ -214,8 +361,9 @@ Logged via `logger.info("ai_path", module=module, path=path, ...)`. Access via:
    - `_AI_IMMUTABLE[module]` — frozenset of keys the LLM may not touch
    - `_SCHEMAS[module]` — whitelist of keys + allowed types
    - Add field caps to `_FIELD_MAX_LEN` if new narrative fields exist
-3. In your service, call `await router_client.enhance(module, payload, baseline)`
-4. The `baseline` you pass *is* the result returned to the caller; the router only enriches.
+3. Add a confidence floor to `_MODULE_CONFIDENCE_FLOORS` in `router_client.py` (default 0.75 if not specified)
+4. In your service, call `await router_client.enhance(module, payload, baseline)`
+5. The `baseline` you pass *is* the result returned to the caller; the router only enriches.
 
 ---
 
@@ -228,7 +376,8 @@ Logged via `logger.info("ai_path", module=module, path=path, ...)`. Access via:
 | `AI_ROUTER_MODEL` | `General-Use` | Model ID served by 9Router |
 | `AI_ROUTER_TIMEOUT_SECONDS` | `120` | Per-request timeout |
 | `AI_ENABLED` | `true` | Set `false` to disable router globally |
-| `MIN_AI_CONFIDENCE` | `0.75` | Enrichment confidence threshold |
+| `MIN_AI_CONFIDENCE` | `0.75` | Global enrichment confidence threshold |
+| `MIN_AI_CONFIDENCE_<MODULE>` | (module floor) | Per-module override (e.g. `MIN_AI_CONFIDENCE_DIAGNOSTICS=0.9`) |
 
 ---
 
@@ -238,7 +387,7 @@ Logged via `logger.info("ai_path", module=module, path=path, ...)`. Access via:
 |----------|----------|
 | 9Router down / timeout / 5xx | `route` returns `None` → `enhance` returns `baseline` |
 | 9Router returns invalid JSON / no `confidence` | `route` returns `None` → deterministic |
-| 9Router `confidence < 0.75` | `enhance` returns `baseline` |
+| 9Router `confidence < floor` | `enhance` returns `baseline` |
 | 9Router hallucinates unknown keys | Dropped by schema validation |
 | 9Router tries to overwrite immutable keys | Skipped |
 | Payload too large | Truncated by `_cap_payload`; if still over budget → dropped (safe) |
@@ -254,6 +403,7 @@ Logged via `logger.info("ai_path", module=module, path=path, ...)`. Access via:
 - [ ] `_SYSTEM_PROMPTS[module]` declares strict JSON with `confidence` field
 - [ ] `_AI_IMMUTABLE[module]` lists all ground-truth keys from the rule engine
 - [ ] `_SCHEMAS[module]` whitelists only enrichable keys (no immutable keys)
+- [ ] `_MODULE_CONFIDENCE_FLOORS[module]` set (default 0.75 if not specified)
 - [ ] Payload caps cover all user-supplied strings in the module
 - [ ] Caller uses `await enhance(module, payload, baseline)` — never calls `route` directly
 - [ ] Baseline dict includes `model` key (e.g. `"rule-based"`) for traceability
@@ -265,5 +415,6 @@ Logged via `logger.info("ai_path", module=module, path=path, ...)`. Access via:
 - `ai/app/router_utils.py` — source of truth for config + validation
 - `ai/app/router_client.py` — transport + `enhance()` implementation
 - `ai/app/modules/*.py` — module implementations (call `enhance`)
+- `ai/app/fallbacks/health_score.py` — Vehicle Health Score deterministic engine (worked example)
 - AUT-3813 — Workstream C: Make AI functions deterministic-first with AI fallback
 - AUT-3913 — Added `_AI_IMMUTABLE` entries for diagnostics and service-prediction
