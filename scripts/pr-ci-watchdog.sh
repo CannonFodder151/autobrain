@@ -40,13 +40,14 @@ now_iso() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 # Map a failed workflow name to the agent that should own its fix.
 owner_agent_for_workflow() {
   case "$1" in
-    "Backend tests"|"Backend — pytest smoke (model metadata + alembic heads)"|"Backend image build check") echo "Backend Engineer" ;;
+    "Backend tests"|"Backend — pytest smoke (model metadata + alembic heads)"|"Backend image build check"|"build-backend-arm64-only") echo "Backend Engineer" ;;
     "PR Checks"|"Code Review"|"Visual regression (desktop 1280/1440/1920)") echo "Frontend Engineer" ;;
-    "Security — PR gate (secrets, IaC, deps, flutter)"|"Security — full-resolution dependency scan"|"Security — rego-lookup-api PR dependency gate"|"Security — base image CVE scan (trivy)") echo "Security Officer" ;;
-    "Publish images to Docker Hub"|"Build hosted images (multi-arch)"|"Build Shop images (private registry)"|"Upgrade instance chain (AUT-4982)"|"Pipeline stages (demo -> default -> hosted)"|"CD"|"ARM64 runner keepalive"|"Runner Watchdog (arm64)"|"Upgrade cycle (2-day)") echo "DevOps Engineer" ;;
+    "Security — PR gate (secrets, IaC, deps, flutter)"|"Security — full-resolution dependency scan"|"Security — rego-lookup-api PR dependency gate"|"Security — base image CVE scan (trivy)"|"Fix Secret File Permissions on EP5") echo "Security Officer" ;;
+    "Publish images to Docker Hub"|"Build hosted images (multi-arch)"|"Build Shop images (private registry)"|"Upgrade instance chain (AUT-4982)"|"Pipeline stages (demo -> default -> hosted)"|"CD"|"ARM64 runner keepalive"|"Runner Watchdog (arm64)"|"Upgrade cycle (2-day)"|"CI Billing Monitor"|"CI Triage Webhook"|"Fix Portainer Agent on Oracle VM"|"Graft Freshness Check"|"libexpat fix-detect (nginx frontend, AUT-2126)") echo "DevOps Engineer" ;;
     "Compose structural checks"|"CI Queue Guard") echo "Platform Engineer" ;;
     "Sync mobile app") echo "Mobile Release Engineer" ;;
-    "Build rego-lookup-api arm64 (native)"|"Build rego-lookup image (multi-arch) + auto-deploy hosted") echo "Platform Engineer" ;;
+    "Build rego-lookup-api arm64 (native)") echo "Platform Engineer" ;;
+    "Sync docs to Outline wiki"|"Docs Sync Gate"|"Docs page-map guard") echo "Documentation Manager" ;;
     "Auto-triage Pipeline") echo "DevOps Engineer" ;;
     *) echo "DevOps Engineer" ;;
   esac
