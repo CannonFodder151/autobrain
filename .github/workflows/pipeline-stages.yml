@@ -1,0 +1,179 @@
+name: Pipeline Stages (AUT-882)
+
+# Pipeline stages workflow for demo -> default -> hosted with Discord notifications
+# Notifies #deployments channel on deploy success/failure using n8n webhook
+
+on:
+  workflow_run:
+    workflows:
+      - Publish images to Docker Hub
+      - Build hosted images (multi-arch)
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: Why (e.g. manual pipeline run)
+        required: false
+        default: manual dispatch
+      tiers:
+        description: 'Override the promotion chain, pipe-separated "name|endpoint|health|req_env"'
+        required: false
+        default: ''
+
+concurrency:
+  group: pipeline-stages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # Notify on image publish - n8n bridge raises AUT-1907 + AUT-1908
+  notify:
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: [self-hosted, linux, x64, vm2]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: ver
+        run: |
+          V="$(grep -E 'APP_VERSION: str' backend/app/core/config.py | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/')"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      - name: Emit deploy signal to n8n (wakes AUT-1907 + AUT-1908)
+        id: signal
+        continue-on-error: true
+        env:
+          DEPLOY_VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          printf -v payload '{"event":"image-published","version":"%s","repo":"%s","run_id":"%s"}' "$DEPLOY_VERSION" "${{ github.repository }}" "${{ github.run_id }}"
+          code="$(curl -s -o /tmp/signal_resp -w "%{http_code}" -X POST https://n8n.nathanmartina.com/webhook/autobrain-deploy-trigger \
+            -H "Content-Type: application/json" -d "$payload")"
+          echo "http_code=$code" >> "$GITHUB_OUTPUT"
+          [ -s /tmp/signal_resp ] && cat /tmp/signal_resp >&2 || true
+
+      - name: Report signal result to #deployments
+        if: always()
+        run: |
+          if [ "${{ steps.signal.outcome }}" = "success" ] && [ "${{ steps.signal.outputs.http_code }}" = "200" ]; then
+            COLOR=0x57F287; STATE=signaled
+          else
+            COLOR=0xED4245; STATE=failed
+          fi
+          curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
+            -H "Content-Type: application/json" \
+            -d "{\"channel\":\"deployments\",\"title\":\"AutoBrain v${{ steps.ver.outputs.version }} deploy signal\",\"description\":\"Image published; n8n bridge raised AUT-1907 (Mobile Release Engineer) + AUT-1908 (Deployment Engineer).\",\"color\":\"$COLOR\",\"author\":\"Deployment Lead\",\"fields\":[{\"name\":\"Version\",\"value\":\"${{ steps.ver.outputs.version }}\",\"inline\":true},{\"name\":\"Signal\",\"value\":\"$STATE\",\"inline\":true},{\"name\":\"Issues\",\"value\":\"AUT-1907, AUT-1908\",\"inline\":true}]}"
+
+  # Pipeline stages: demo -> default -> hosted
+  demo:
+    needs: notify
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, linux, x64, vm2]
+    timeout-minutes: 30
+    env:
+      PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+      PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy demo tier
+        id: demo
+        env:
+          UPGRADE_TIERS: "autobrain-demo|2|https://demo.autobrainservice.app/health|"
+        run: ./scripts/upgrade-instances.sh
+
+      - name: Report demo stage to #deployments
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            COLOR=0x57F287; STATE=SUCCESS
+          else
+            COLOR=0xED4245; STATE=FAILED
+          fi
+          curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
+            -H "Content-Type: application/json" \
+            -d "{\"channel\":\"deployments\",\"title\":\"Pipeline Stage: Demo - $STATE\",\"description\":\"Demo tier deployment ${STATE,,}.\",\"color\":\"$COLOR\",\"author\":\"Deployment Lead\",\"fields\":[{\"name\":\"Stage\",\"value\":\"demo\",\"inline\":true},{\"name\":\"Status\",\"value\":\"$STATE\",\"inline\":true},{\"name\":\"Run\",\"value\":\"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\",\"inline\":false}]}"
+
+  default:
+    needs: demo
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, linux, x64, vm2]
+    timeout-minutes: 30
+    env:
+      PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+      PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy default tier
+        id: default
+        env:
+          UPGRADE_TIERS: "autobrain-default|2|https://default.autobrainservice.app/health|"
+        run: ./scripts/upgrade-instances.sh
+
+      - name: Report default stage to #deployments
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            COLOR=0x57F287; STATE=SUCCESS
+          else
+            COLOR=0xED4245; STATE=FAILED
+          fi
+          curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
+            -H "Content-Type: application/json" \
+            -d "{\"channel\":\"deployments\",\"title\":\"Pipeline Stage: Default - $STATE\",\"description\":\"Default tier deployment ${STATE,,}.\",\"color\":\"$COLOR\",\"author\":\"Deployment Lead\",\"fields\":[{\"name\":\"Stage\",\"value\":\"default\",\"inline\":true},{\"name\":\"Status\",\"value\":\"$STATE\",\"inline\":true},{\"name\":\"Run\",\"value\":\"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\",\"inline\":false}]}"
+
+  hosted:
+    needs: default
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, linux, x64, vm2]
+    timeout-minutes: 30
+    env:
+      PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+      PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy hosted tier
+        id: hosted
+        env:
+          UPGRADE_TIERS: "autobrain-hosted|5|https://hosted.autobrainservice.app/health|POSTGRES_USER=autobrain,POSTGRES_DB=autobrain"
+        run: ./scripts/upgrade-instances.sh
+
+      - name: Report hosted stage to #deployments
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            COLOR=0x57F287; STATE=SUCCESS
+          else
+            COLOR=0xED4245; STATE=FAILED
+          fi
+          curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
+            -H "Content-Type: application/json" \
+            -d "{\"channel\":\"deployments\",\"title\":\"Pipeline Stage: Hosted - $STATE\",\"description\":\"Hosted tier deployment ${STATE,,}.\",\"color\":\"$COLOR\",\"author\":\"Deployment Lead\",\"fields\":[{\"name\":\"Stage\",\"value\":\"hosted\",\"inline\":true},{\"name\":\"Status\",\"value\":\"$STATE\",\"inline\":true},{\"name\":\"Run\",\"value\":\"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\",\"inline\":false}]}"
+
+  # Final pipeline summary
+  summary:
+    needs: [demo, default, hosted]
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, linux, x64, vm2]
+    steps:
+      - name: Report pipeline summary to #deployments
+        if: always()
+        run: |
+          DEMO_RESULT="${{ needs.demo.result }}"
+          DEFAULT_RESULT="${{ needs.default.result }}"
+          HOSTED_RESULT="${{ needs.hosted.result }}"
+          
+          if [ "$DEMO_RESULT" = "success" ] && [ "$DEFAULT_RESULT" = "success" ] && [ "$HOSTED_RESULT" = "success" ]; then
+            COLOR=0x57F287; STATE=COMPLETE
+          else
+            COLOR=0xED4245; STATE=PARTIAL
+          fi
+          
+          curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
+            -H "Content-Type: application/json" \
+            -d "{\"channel\":\"deployments\",\"title\":\"Pipeline Complete - $STATE\",\"description\":\"Demo: $DEMO_RESULT, Default: $DEFAULT_RESULT, Hosted: $HOSTED_RESULT\",\"color\":\"$COLOR\",\"author\":\"Deployment Lead\",\"fields\":[{\"name\":\"Demo\",\"value\":\"$DEMO_RESULT\",\"inline\":true},{\"name\":\"Default\",\"value\":\"$DEFAULT_RESULT\",\"inline\":true},{\"name\":\"Hosted\",\"value\":\"$HOSTED_RESULT\",\"inline\":true},{\"name\":\"Run\",\"value\":\"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\",\"inline\":false}]}"
