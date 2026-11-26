@@ -102,26 +102,47 @@ jobs:
         run: |
           pytest -v --maxfail=1 --tb=short
 
+      - name: Notify Discord on success
+        if: success()
+        env:
+          DISCORD_REPORT_WEBHOOK: ${{ secrets.DISCORD_REPORT_WEBHOOK }}
+        run: |
+          set -euo pipefail
+          discord_url="${DISCORD_REPORT_WEBHOOK:-}"
+          case "$discord_url" in
+            https://*|http://*) ;;
+            *)
+              echo "::warning::DISCORD_REPORT_WEBHOOK is not an http(s) URL (len=${#discord_url}); skipping Discord report"
+              exit 0
+              ;;
+          esac
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          curl -sS --max-time 30 -X POST "$discord_url" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -nc --arg c updates --arg t "CI tests PASSED on ${{ github.workflow }}" --arg col "0x57F287" --arg u "$RUN_URL" --arg d "Branch: \`${{ github.ref_name }}\`\nCommit: ${{ github.sha }}\nRun: ${{ github.run_id }}" \
+              '{channel:$c,title:$t,description:$d,color:$col,author:"CI",fields:[{name:"Workflow",value:"${{ github.workflow }}",inline:true},{name:"Run",value:$u,inline:true}]}')" \
+            || echo "::warning::Discord report POST failed"
+
       - name: Notify Discord on failure
         if: failure()
-        uses: slackapi/slack-github-action@v1
-        with:
-          # The Discord reporter is the AutoBrain-sanctioned notification path.
-          # We POST an embed summarising which test failed; channel=#updates.
-          payload: |
-            {
-              "channel": "updates",
-              "title": "CI tests FAILED on ${{ github.workflow }}",
-              "description": "Branch: `${{ github.ref_name }}`\nCommit: ${{ github.sha }}\nRun: ${{ github.run_id }}",
-              "color": "0xED4245",
-              "author": "CI",
-              "fields": [
-                {"name": "Workflow", "value": "${{ github.workflow }}", "inline": true},
-                {"name": "Run", "value": "[#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})", "inline": true}
-              ]
-            }
         env:
-          SLACK_WEBHOOK_URL: https://n8n.nathanmartina.com/webhook/discord-report
+          DISCORD_REPORT_WEBHOOK: ${{ secrets.DISCORD_REPORT_WEBHOOK }}
+        run: |
+          set -euo pipefail
+          discord_url="${DISCORD_REPORT_WEBHOOK:-}"
+          case "$discord_url" in
+            https://*|http://*) ;;
+            *)
+              echo "::warning::DISCORD_REPORT_WEBHOOK is not an http(s) URL (len=${#discord_url}); skipping Discord report"
+              exit 0
+              ;;
+          esac
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          curl -sS --max-time 30 -X POST "$discord_url" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -nc --arg c updates --arg t "CI tests FAILED on ${{ github.workflow }}" --arg col "0xED4245" --arg u "$RUN_URL" --arg d "Branch: \`${{ github.ref_name }}\`\nCommit: ${{ github.sha }}\nRun: ${{ github.run_id }}" \
+              '{channel:$c,title:$t,description:$d,color:$col,author:"CI",fields:[{name:"Workflow",value:"${{ github.workflow }}",inline:true},{name:"Run",value:$u,inline:true}]}')" \
+            || echo "::warning::Discord report POST failed"
 
   # A workflow with invalid YAML never runs a single job — GitHub records it as a
   # 0-job `failure` on every push and the deploy signal is silently lost (AUT-4911).
