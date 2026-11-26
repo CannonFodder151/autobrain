@@ -157,15 +157,7 @@ async def build_registration_options(
         "none": AttestationConveyancePreference.NONE,
         "indirect": AttestationConveyancePreference.INDIRECT,
         "direct": AttestationConveyancePreference.DIRECT,
-<<<<<<< ours
-
-        "enterprise": AttestationConveyancePreference.ENTERPRISE,
-
         "user preferred": AttestationConveyancePreference.NONE,
-
-=======
-        "user preferred": AttestationConveyancePreference.NONE,
->>>>>>> theirs
     }.get(attestation, AttestationConveyancePreference.NONE)
 
     # Parse authenticator selection if provided
