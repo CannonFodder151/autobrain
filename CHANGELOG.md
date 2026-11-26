@@ -8,7 +8,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > user-facing change ships with an entry here under `[Unreleased]` — see
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
+
 ## [Unreleased]
+
+## [0.3.324] - 2026-11-26
 
 ### Added (AUT-6415)
 - feat(docker): merge dongle-server + backup GUI into backend container (AUT-6415)
