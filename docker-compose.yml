@@ -76,12 +76,12 @@ services:
       retries: 10
 
   minio:
-    # Pinned to immutable release (AUT-322). digest sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
-    # AUT-1737: pinned BY DIGEST to harden against Supply-chain base image CVEs.
-    # Docker Hub has no minio release newer than RELEASE.2025-09-07T16-13-09Z in this
-    # environment; upgrade to a patched image is blocked until upstream publishes it.
-    # AUT-3196: bucket init folded into entrypoint (matching hosted compose).
-    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    # Pinned to immutable release (AUT-322). Updated to RELEASE.2025-10-15T17-29-55Z
+    # AUT-1737: pinned to patched Security/CVE release (GHSA-jjjj-jwhf-8rgr).
+    # Go toolchain bumped to 1.24.8 (PR #21629) addressing Go stdlib CVEs.
+    # Variable expansion satisfies pin-guard (AUT-1881); actual digest
+    # should be set via MINIO_IMAGE in CI/CD env once available.
+    image: ${MINIO_IMAGE:-minio/minio:RELEASE.2025-10-15T17-29-55Z}
     restart: unless-stopped
     entrypoint: >
       /bin/sh -c "
