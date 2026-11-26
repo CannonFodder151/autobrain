@@ -11,10 +11,15 @@ that exports a psycopg2-style DATABASE_URL for other services).
 
 import os
 
-os.environ["DATABASE_URL"] = "postgresql+asyncpg://autobrain:autobrain@localhost:5432/autobrain"
-os.environ["SECRET_KEY"] = "test-secret"
-os.environ["MARKET_DATA_URL"] = ""
-os.environ["MARKET_DATA_API_KEY"] = ""
+# Force asyncpg dialect for tests; override any existing postgres:// URL
+if "DATABASE_URL" in os.environ and os.environ["DATABASE_URL"].startswith("postgres://"):
+    os.environ["DATABASE_URL"] = os.environ["DATABASE_URL"].replace("postgres://", "postgresql+asyncpg://", 1)
+elif "DATABASE_URL" not in os.environ:
+    os.environ["DATABASE_URL"] = "postgresql+asyncpg://autobrain:autobrain@localhost:5432/autobrain"
+
+os.environ.setdefault("SECRET_KEY", "test-secret")
+os.environ.setdefault("MARKET_DATA_URL", "")
+os.environ.setdefault("MARKET_DATA_API_KEY", "")
 
 os.environ.setdefault("ENVIRONMENT", "development")
 os.environ.setdefault("POSTGRES_USER", "test-postgres-user")
