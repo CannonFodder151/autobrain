@@ -40,13 +40,12 @@ now_iso() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 # Map a failed workflow name to the agent that should own its fix.
 owner_agent_for_workflow() {
   case "$1" in
-    "Backend tests") echo "Backend Engineer" ;;
-    "PR Checks") echo "Frontend Engineer" ;;
-    "Security — PR gate (secrets, IaC, deps, flutter)"|"Security — full-resolution dependency scan"|"Security — rego-lookup-api PR dependency gate") echo "Security Officer" ;;
-    "Publish images to Docker Hub"|"Build hosted images (multi-arch)"|"Build Shop images (private registry)"|"Upgrade instance chain (AUT-4982)") echo "DevOps Engineer" ;;
-    "Compose structural checks") echo "Platform Engineer" ;;
+    "Backend tests"|"Backend — pytest smoke (model metadata + alembic heads)"|"Backend image build check") echo "Backend Engineer" ;;
+    "PR Checks"|"Code Review"|"Visual regression (desktop 1280/1440/1920)") echo "Frontend Engineer" ;;
+    "Security — PR gate (secrets, IaC, deps, flutter)"|"Security — full-resolution dependency scan"|"Security — rego-lookup-api PR dependency gate"|"Security — base image CVE scan (trivy)") echo "Security Officer" ;;
+    "Publish images to Docker Hub"|"Build hosted images (multi-arch)"|"Build Shop images (private registry)"|"Upgrade instance chain (AUT-4982)"|"Pipeline stages (demo -> default -> hosted)"|"CD") echo "DevOps Engineer" ;;
+    "Compose structural checks"|"CI Queue Guard") echo "Platform Engineer" ;;
     "Sync mobile app") echo "Mobile Release Engineer" ;;
-    "Visual regression (desktop 1280/1440/1920)") echo "Frontend Engineer" ;;
     *) echo "DevOps Engineer" ;;
   esac
 }
@@ -140,11 +139,20 @@ log "Creating GitHub issue"
 OWNER_AGENT=$(owner_agent_for_workflow "$FAILED_WORKFLOW")
 ISSUE_TITLE="[CI Failure] $FAILED_WORKFLOW failed on $FAILED_BRANCH @ $(echo "$FAILED_SHA" | cut -c1-7)"
 
+# Load postmortem template from docs/Engineering/postmortem-template.md
+POSTMORTEM_TEMPLATE_PATH="${GITHUB_WORKSPACE:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}/docs/Engineering/postmortem-template.md"
+if [ -f "$POSTMORTEM_TEMPLATE_PATH" ]; then
+  POSTMORTEM_TEMPLATE=$(cat "$POSTMORTEM_TEMPLATE_PATH")
+else
+  POSTMORTEM_TEMPLATE="## Incident Summary\n- **What happened**: \n- **Impact**: \n- **Duration**: \n- **Severity**: \n\n## Timeline\n- **Detected**: $(now_iso) UTC\n- **Investigated**: \n- **Mitigated**: \n- **Resolved**: \n\n## Root Cause\n- **Primary cause**: \n- **Contributing factors**: \n\n## Resolution\n- **What was done**: \n- **Why it worked**: \n\n## Action Items\n- [ ] Prevent recurrence\n- [ ] Improve detection\n- [ ] Update runbooks\n\n## Lessons Learned"
+fi
+
 # Build the issue body with postmortem template.
+DETECTION_TIME=$(now_iso)
 ISSUE_BODY=$(cat <<ISSUEBODY
 ## CI Failure: $FAILED_WORKFLOW
 
-**Detected:** $(now_iso) UTC
+**Detected:** $DETECTION_TIME UTC
 **Workflow:** $FAILED_WORKFLOW
 **Branch:** $FAILED_BRANCH
 **Commit:** [$FAILED_SHA]($FAILED_RUN_URL/commit/$FAILED_SHA)
@@ -157,35 +165,19 @@ $log_section
 
 ### Postmortem Template
 
-\`\`\`
-## Incident Summary
-- **What failed:** $FAILED_WORKFLOW on branch $FAILED_BRANCH
-- **When:** $(now_iso) UTC
-- **Detected by:** PR/CI Watchdog (automated)
-- **Severity:** TBD
-- **Impact:** TBD
-
-## Root Cause
-TBD — owner agent to complete.
-
-## Immediate Fix
-TBD
-
-## Prevention
-TBD
-
-## MTTR
-- **Detection time:** $(now_iso) UTC
-- **Resolution time:** TBD
-- **MTTR:** TBD
-\`\`\`
+$POSTMORTEM_TEMPLATE
 
 ---
 
+### MTTR Tracking
+- **Detection time:** $DETECTION_TIME UTC
+- **Resolution time:** TBD
+- **MTTR:** TBD
+
 ### Labels for MTTR tracking
-- `ci-failure` — this issue tracks a CI failure
-- `mttr:open` — MTTR clock is running (resolved when closed)
-- `watchdog:auto-created` — created by PR/CI Watchdog automation
+- \`ci-failure\` — this issue tracks a CI failure
+- \`mttr:open\` — MTTR clock is running (resolved when closed)
+- \`watchdog:auto-created\` — created by PR/CI Watchdog automation
 
 cc: @$OWNER_AGENT
 ISSUEBODY

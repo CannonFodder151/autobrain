@@ -123,6 +123,7 @@ export GH_TOKEN="mock-token"
 export PAPERCLIP_SERVICE_TOKEN="mock-paperclip-token"
 export DISCORD_REPORT_WEBHOOK="https://n8n.nathanmartina.com/webhook/discord-report"
 export PR_CI_WATCHDOG_WEBHOOK_SECRET="mock-webhook-secret"
+export GITHUB_WORKSPACE="$ROOT"
 
 FAILURES=0
 pass() { echo "  PASS: $*"; }
@@ -145,15 +146,22 @@ check_map() {
 }
 
 check_map "Backend tests" "Backend Engineer"
+check_map "Backend — pytest smoke (model metadata + alembic heads)" "Backend Engineer"
+check_map "Backend image build check" "Backend Engineer"
 check_map "PR Checks" "Frontend Engineer"
+check_map "Code Review" "Frontend Engineer"
 check_map "Security — PR gate (secrets, IaC, deps, flutter)" "Security Officer"
 check_map "Security — full-resolution dependency scan" "Security Officer"
 check_map "Security — rego-lookup-api PR dependency gate" "Security Officer"
+check_map "Security — base image CVE scan (trivy)" "Security Officer"
 check_map "Publish images to Docker Hub" "DevOps Engineer"
 check_map "Build hosted images (multi-arch)" "DevOps Engineer"
 check_map "Build Shop images (private registry)" "DevOps Engineer"
 check_map "Upgrade instance chain (AUT-4982)" "DevOps Engineer"
+check_map "Pipeline stages (demo -> default -> hosted)" "DevOps Engineer"
+check_map "CD" "DevOps Engineer"
 check_map "Compose structural checks" "Platform Engineer"
+check_map "CI Queue Guard" "Platform Engineer"
 check_map "Sync mobile app" "Mobile Release Engineer"
 check_map "Visual regression (desktop 1280/1440/1920)" "Frontend Engineer"
 check_map "Unknown workflow" "DevOps Engineer"

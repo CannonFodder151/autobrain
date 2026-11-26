@@ -11,15 +11,22 @@ on:
   workflow_run:
     workflows:
       - "Backend tests"
+      - "Backend — pytest smoke (model metadata + alembic heads)"
+      - "Backend image build check"
       - "PR Checks"
+      - "Code Review"
       - "Security — PR gate (secrets, IaC, deps, flutter)"
       - "Security — full-resolution dependency scan"
+      - "Security — rego-lookup-api PR dependency gate"
+      - "Security — base image CVE scan (trivy)"
       - "Publish images to Docker Hub"
       - "Build hosted images (multi-arch)"
       - "Build Shop images (private registry)"
       - "Compose structural checks"
+      - "CI Queue Guard"
+      - "Pipeline stages (demo -> default -> hosted)"
       - "Upgrade instance chain (AUT-4982)"
-      - "Security — rego-lookup-api PR dependency gate"
+      - "CD"
       - "Sync mobile app"
       - "Visual regression (desktop 1280/1440/1920)"
     types: [completed]
