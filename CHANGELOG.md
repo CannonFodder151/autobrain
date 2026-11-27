@@ -11,6 +11,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Security (AUT-895)
+- Pin floating base image tags to immutable digests to fix trivy scan findings (GH #1050):
+  - `docker/runner/Dockerfile`: pin `ghcr.io/actions/actions-runner:latest` to `sha256:6d0b2d80d80f143f77dcb676e50920100bbb547e39e883454d57f45ab8c31300`
+  - `docker/frontend/Dockerfile`: pin `ghcr.io/cirruslabs/flutter:3.38.2` to `sha256:f207a06162d1335cf44e4cc8ed997d605ab41dbd88fdc70e528fb32f2c663ef0`
+
 ## [0.3.324] - 2026-11-26
 
 ### Added (AUT-6415)
