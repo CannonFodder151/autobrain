@@ -11,6 +11,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-1014)
+- fix(ci): Docker Hub publish pipeline now handles corrupted SHA256 digests in compose files; update-compose-pins.py regex accepts any hex length to replace invalid pins (41-63 chars → 64 chars)
+- fix(ci): docker-compose.demo.yml and docker-compose.default.yml pins corrected to valid 64-char SHA256 digests from latest publish-manifest output
+
 ## [0.3.324] - 2026-11-26
 
 ### Added (AUT-6415)
