@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.325] - 2026-11-27
+
 ### Security (AUT-895)
 - Pin floating base image tags to immutable digests to fix trivy scan findings (GH #1050):
   - `docker/runner/Dockerfile`: pin `ghcr.io/actions/actions-runner:latest` to `sha256:6d0b2d80d80f143f77dcb676e50920100bbb547e39e883454d57f45ab8c31300`
