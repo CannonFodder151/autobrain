@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (AUT-918)
+- PR/CI Watchdog: expanded workflow coverage to all critical CI/CD pipelines (backend tests, security gates, deployments, monitoring, docs, platform); added comprehensive postmortem template from docs/Engineering/postmortem-template.md; added GitHub assignee mapping via GH_ASSIGNEE_* env vars; enhanced MTTR tracking with detection/resolution timestamps (.github/workflows/pr-ci-watchdog.yml, scripts/pr-ci-watchdog.sh, docs/Engineering/postmortem-template.md)
+
 ## [0.3.323] - 2026-11-22
 
 ### Added (AUT-670)
