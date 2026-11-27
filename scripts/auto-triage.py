@@ -10,7 +10,7 @@ import json
 import time
 import subprocess
 import argparse
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 import requests
@@ -253,10 +253,10 @@ def process_failure(repo: str, run: dict, detected_at: datetime) -> Optional[str
 
 def poll_mode(hours_back: int = 24):
     """Poll for failures in the last N hours across both repos."""
-    since = datetime.utcnow() - timedelta(hours=hours_back)
+    since = datetime.now(timezone.utc) - timedelta(hours=hours_back)
     print(f"Polling for failures since {since.isoformat()}...")
     
-    detected_at = datetime.utcnow()
+    detected_at = datetime.now(timezone.utc)
     
     for repo in [REPO, MOBILE_REPO]:
         runs = get_failed_workflow_runs(repo, since)
@@ -284,7 +284,7 @@ def webhook_mode(payload: dict):
         run = payload["workflow_run"]
         if run.get("conclusion") == "failure":
             repo = payload.get("repository", {}).get("full_name", REPO)
-            detected_at = datetime.utcnow()
+            detected_at = datetime.now(timezone.utc)
             process_failure(repo, run, detected_at)
     else:
         print("Unknown webhook payload format")
