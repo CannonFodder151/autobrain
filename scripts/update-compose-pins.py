@@ -172,9 +172,10 @@ def main():
         prefix = repo_prefix(args.registry, svc)
         tag = (args.frontend_tag if svc == "frontend" else args.tag) or ""
         # Match `repo:tag@sha256:...` or `repo@sha256:...` (no tag when tag == "").
+        # Accept any length of hex chars to handle corrupted pins (AUT-1014).
         pattern = re.compile(
             r"(" + re.escape(prefix) + r"(?::[a-z0-9_.-]+)?)"
-            r"@sha256:[a-f0-9]{64}"
+            r"@sha256:[a-f0-9]+"
         )
         new_ref = compose_ref(args.registry, svc, tag, digest)
         text, n = pattern.subn(new_ref, text)
