@@ -27,7 +27,6 @@ import pytest  # noqa: E402
 
 # --- pure-helper tests -----------------------------------------------------
 
-
 class TestComputeDealScore:
     def test_price_below_reference_scores_high(self) -> None:
         from app.services.car_check import compute_deal_score
@@ -72,9 +71,7 @@ class TestComputeDealScore:
         score_bad = compute_deal_score(bad_km, reference_price=20_000.0, vehicle_year=2020)
         assert score_good > score_bad
 
-
 # --- fallback tests ---------------------------------------------------------
-
 
 class TestCarCheckFallback:
     def test_fallback_returns_contract(self) -> None:
@@ -110,9 +107,7 @@ class TestCarCheckFallback:
         result = car_check_fallback({})
         assert result["model"] == "rule-based-fallback"
 
-
 # --- validate helper tests --------------------------------------------------
-
 
 class TestValidateCarCheckResponse:
     def test_clamps_summary_length(self) -> None:
@@ -154,9 +149,7 @@ class TestValidateCarCheckResponse:
         assert out["red_flags"] == ["real"]
         assert out["green_flags"] == ["good"]
 
-
 # --- HTTP route via FastAPI TestClient -------------------------------------
-
 
 def _try_import_app():
     try:
@@ -164,7 +157,6 @@ def _try_import_app():
         return _app
     except SyntaxError as exc:
         pytest.skip(f"app boot blocked by unrelated pre-existing syntax error: {exc}")
-
 
 @pytest.mark.asyncio
 async def test_car_check_route_falls_back_when_gateway_down(monkeypatch) -> None:
@@ -199,30 +191,12 @@ async def test_car_check_route_falls_back_when_gateway_down(monkeypatch) -> None
             "/api/v1/advisor/car-check",
             params={"vehicle_id": "v1"},
             json={
-<<<<<<< ours
-                "listing": {
-                    "title": "Toyota Corolla 2018",
-                    "price": 15_000.0,
-                    "year": 2018,
-                    "odometer_km": 80_000,
-                    "make": "Toyota",
-                    "model": "Corolla",
-                    "listing_url": "https://example.com/corolla",
-                },
-                "asking_price": 15_000.0,
-                "make": "Toyota",
-                "model": "Corolla",
-                "year": 2018,
-                "odometer_km": 80_000,
-                "listing_url": "https://example.com/corolla",
-=======
                 "listing_url": "https://example.com/corolla",
                 "make": "Toyota",
                 "model": "Corolla",
                 "year": 2018,
                 "asking_price": 15_000.0,
                 "odometer_km": 80_000,
->>>>>>> theirs
             },
         )
     app.dependency_overrides.clear()
@@ -239,7 +213,6 @@ async def test_car_check_route_falls_back_when_gateway_down(monkeypatch) -> None
     assert 0 <= body["data"]["deal_score"] <= 100
     assert body["factors"]["fallback_reason"] == "ai_gateway_unreachable"
     assert body["factors"]["router_provenance"] is None
-
 
 @pytest.mark.asyncio
 async def test_car_check_route_uses_ai_when_gateway_up(monkeypatch) -> None:
@@ -282,30 +255,12 @@ async def test_car_check_route_uses_ai_when_gateway_up(monkeypatch) -> None:
             "/api/v1/advisor/car-check",
             params={"vehicle_id": "v1"},
             json={
-<<<<<<< ours
-                "listing": {
-                    "title": "Honda CBR500R",
-                    "price": 8_500.0,
-                    "year": 2022,
-                    "odometer_km": 12_000,
-                    "make": "Honda",
-                    "model": "CBR500R",
-                    "listing_url": "https://example.com/cbr",
-                },
-                "asking_price": 8_500.0,
-                "make": "Honda",
-                "model": "CBR500R",
-                "year": 2022,
-                "odometer_km": 12_000,
-                "listing_url": "https://example.com/cbr",
-=======
                 "listing_url": "https://example.com/cbr",
                 "make": "Honda",
                 "model": "CBR500R",
                 "year": 2022,
                 "asking_price": 8_500.0,
                 "odometer_km": 12_000,
->>>>>>> theirs
             },
         )
     app.dependency_overrides.clear()
@@ -320,7 +275,6 @@ async def test_car_check_route_uses_ai_when_gateway_up(monkeypatch) -> None:
     assert body["data"]["deal_score"] == 72.0
     assert body["factors"]["router_provenance"] == "9router/<combo>"
     assert "fallback_reason" not in body["factors"]
-
 
 @pytest.mark.asyncio
 async def test_car_check_cache_dedupes_repeat_calls(monkeypatch) -> None:
@@ -363,7 +317,6 @@ async def test_car_check_cache_dedupes_repeat_calls(monkeypatch) -> None:
     assert calls["n"] == 2
     assert r3 is not None
 
-
 @pytest.mark.asyncio
 async def test_car_check_route_blocks_free_account(monkeypatch) -> None:
     """Free accounts get 403 on Car Check (same as every advisor module)."""
@@ -386,20 +339,12 @@ async def test_car_check_route_blocks_free_account(monkeypatch) -> None:
             "/api/v1/advisor/car-check",
             params={"vehicle_id": "v1"},
             json={
-<<<<<<< ours
-                "asking_price": 10_000.0,
-                "make": "Honda",
-                "model": "CBR500R",
-                "year": 2020,
-                "odometer_km": 50_000,
-=======
                 "listing_url": "https://example.com/cbr",
                 "make": "Honda",
                 "model": "CBR500R",
                 "year": 2022,
                 "asking_price": 10_000.0,
                 "odometer_km": 0,
->>>>>>> theirs
             },
         )
     app.dependency_overrides.clear()

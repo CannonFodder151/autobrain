@@ -121,13 +121,18 @@ sync.urllib.request.urlopen = orig_urlopen
 assert any("autobrain-backup?force=true" in u for u in deleted), deleted
 assert not any("/backup-1?" in u for u in deleted), deleted
 
-# A container whose replacement service is not in the new compose is left alone.
-deleted.clear()
-sync.endpoint_containers = lambda args: [cont("autobrain-backup", None, "running", [8080])]
-sync.urllib.request.urlopen = fake_urlopen
-sync.cleanup_legacy_containers(FakeArgs(), {"frontend"}, {"frontend": {8086}})
-sync.urllib.request.urlopen = orig_urlopen
-assert deleted == [], deleted
+def main():
+    # A container whose replacement service is not in the new compose is left alone.
+    deleted.clear()
+    sync.endpoint_containers = lambda args: [cont("autobrain-backup", None, "running", [8080])]
+    sync.urllib.request.urlopen = fake_urlopen
+    sync.cleanup_legacy_containers(FakeArgs(), {"frontend"}, {"frontend": {8086}})
+    sync.urllib.request.urlopen = orig_urlopen
+    assert deleted == [], deleted
 
-print("OK: sync-compose guards")
-sys.exit(0)
+    print("OK: sync-compose guards")
+
+
+if __name__ == "__main__":
+    main()
+    sys.exit(0)

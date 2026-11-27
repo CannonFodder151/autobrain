@@ -9,6 +9,7 @@ WATCHDOG="$ROOT/scripts/pr-ci-watchdog.sh"
 NOTIFY="$ROOT/scripts/pr-ci-watchdog-notify.sh"
 
 W="$(mktemp -d)"
+export W
 trap 'rm -rf "$W"' EXIT
 cd "$W"
 mkdir -p bin
@@ -36,6 +37,12 @@ case "$1" in
     ;;
   issue)
     if [[ "$2" == "create" ]]; then
+      # Check for --assignee flag
+      for arg in "$@"; do
+        if [[ "$arg" == "--assignee" ]]; then
+          echo "ASSIGNEE_DETECTED" > "$W/assignee_detected"
+        fi
+      done
       echo "https://github.com/test/repo/issues/42"
     fi
     ;;
@@ -123,6 +130,14 @@ export GH_TOKEN="mock-token"
 export PAPERCLIP_SERVICE_TOKEN="mock-paperclip-token"
 export DISCORD_REPORT_WEBHOOK="https://n8n.nathanmartina.com/webhook/discord-report"
 export PR_CI_WATCHDOG_WEBHOOK_SECRET="mock-webhook-secret"
+export GITHUB_WORKSPACE="$ROOT"
+# GitHub assignee mappings for testing
+export GH_ASSIGNEE_DEVOPS="devops-user"
+export GH_ASSIGNEE_BACKEND="backend-user"
+export GH_ASSIGNEE_FRONTEND="frontend-user"
+export GH_ASSIGNEE_SECURITY="security-user"
+export GH_ASSIGNEE_PLATFORM="platform-user"
+export GH_ASSIGNEE_MOBILE="mobile-user"
 
 FAILURES=0
 pass() { echo "  PASS: $*"; }
@@ -145,17 +160,39 @@ check_map() {
 }
 
 check_map "Backend tests" "Backend Engineer"
+check_map "Backend — pytest smoke (model metadata + alembic heads)" "Backend Engineer"
+check_map "Backend image build check" "Backend Engineer"
+check_map "build-backend-arm64-only" "Backend Engineer"
 check_map "PR Checks" "Frontend Engineer"
+check_map "Code Review" "Frontend Engineer"
 check_map "Security — PR gate (secrets, IaC, deps, flutter)" "Security Officer"
 check_map "Security — full-resolution dependency scan" "Security Officer"
 check_map "Security — rego-lookup-api PR dependency gate" "Security Officer"
+check_map "Security — base image CVE scan (trivy)" "Security Officer"
+check_map "Fix Secret File Permissions on EP5" "Security Officer"
 check_map "Publish images to Docker Hub" "DevOps Engineer"
 check_map "Build hosted images (multi-arch)" "DevOps Engineer"
 check_map "Build Shop images (private registry)" "DevOps Engineer"
 check_map "Upgrade instance chain (AUT-4982)" "DevOps Engineer"
+check_map "Pipeline stages (demo -> default -> hosted)" "DevOps Engineer"
+check_map "CD" "DevOps Engineer"
+check_map "ARM64 runner keepalive" "DevOps Engineer"
+check_map "Runner Watchdog (arm64)" "DevOps Engineer"
+check_map "Upgrade cycle (2-day)" "DevOps Engineer"
+check_map "CI Billing Monitor" "DevOps Engineer"
+check_map "CI Triage Webhook" "DevOps Engineer"
+check_map "Fix Portainer Agent on Oracle VM" "DevOps Engineer"
+check_map "Graft Freshness Check" "DevOps Engineer"
+check_map "libexpat fix-detect (nginx frontend, AUT-2126)" "DevOps Engineer"
 check_map "Compose structural checks" "Platform Engineer"
+check_map "CI Queue Guard" "Platform Engineer"
 check_map "Sync mobile app" "Mobile Release Engineer"
 check_map "Visual regression (desktop 1280/1440/1920)" "Frontend Engineer"
+check_map "Build rego-lookup-api arm64 (native)" "Platform Engineer"
+check_map "Sync docs to Outline wiki" "Documentation Manager"
+check_map "Docs Sync Gate" "Documentation Manager"
+check_map "Docs page-map guard" "Documentation Manager"
+check_map "Auto-triage Pipeline" "DevOps Engineer"
 check_map "Unknown workflow" "DevOps Engineer"
 
 # --- Test 1b: agent_id_for_agent maps agent names to Paperclip IDs ---
@@ -182,6 +219,34 @@ check_agent_id "Platform Engineer" "ed65484d-9f28-44f7-93e9-564d52d8536a"
 check_agent_id "Mobile Release Engineer" "94fa93b9-0f26-44a2-bd87-4595acbed593"
 check_agent_id "QA Lead" "0b3e4293-cfc2-44dd-8864-037a0c155802"
 check_agent_id "Unknown agent" ""
+
+# --- Test 1c: github_assignee_for_workflow function ---
+echo "==> Test: github_assignee_for_workflow maps workflows to GitHub assignees"
+sed -n '/^github_assignee_for_workflow()/,/^}/p' "$WATCHDOG" > "$W/assignee_fn.sh"
+source "$W/assignee_fn.sh"
+
+check_assignee() {
+  local workflow="$1" expected="$2"
+  local actual
+  actual="$(github_assignee_for_workflow "$workflow")"
+  if [[ "$actual" == "$expected" ]]; then
+    pass "$workflow -> $expected"
+  else
+    fail "$workflow -> expected $expected, got $actual"
+  fi
+}
+
+check_assignee "Backend tests" "backend-user"
+check_assignee "PR Checks" "frontend-user"
+check_assignee "Security — PR gate (secrets, IaC, deps, flutter)" "security-user"
+check_assignee "Publish images to Docker Hub" "devops-user"
+check_assignee "Compose structural checks" "platform-user"
+check_assignee "Sync mobile app" "mobile-user"
+check_assignee "ARM64 runner keepalive" "devops-user"
+check_assignee "Build rego-lookup-api arm64 (native)" "platform-user"
+check_assignee "CI Billing Monitor" "devops-user"
+check_assignee "Sync docs to Outline wiki" ""
+check_assignee "Unknown workflow" "devops-user"
 
 # --- Test 2: Full watchdog execution ---
 echo "==> Test: Full watchdog execution creates GitHub issue"
@@ -230,6 +295,13 @@ if [[ -f "$W/jq_output" ]] && grep -q "assigneeAgentId" "$W/jq_output"; then
   pass "assigneeAgentId passed to Paperclip API"
 else
   fail "assigneeAgentId not passed to Paperclip API. jq_output: $(cat "$W/jq_output" 2>/dev/null || echo '(none)')"
+fi
+
+# Verify GitHub assignee was passed to gh issue create
+if [[ -f "$W/assignee_detected" ]]; then
+  pass "GitHub assignee passed to gh issue create"
+else
+  fail "GitHub assignee not passed to gh issue create"
 fi
 
 # --- Test 3: Notify script ---
