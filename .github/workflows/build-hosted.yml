@@ -9,13 +9,14 @@ on:
   #
   # AUT-5396: the cron fires well BEFORE the window opens to absorb
   # GitHub's schedule dispatcher variance (observed 2.6–4.2h, but
-  # 2026-10-05 saw ~8h delay causing AUT-5792). Firing at 08:00Z keeps
-  # the start inside the window even at 10h delay (08:00+10h=18:00Z),
-  # and the wait step below holds early starts at the 17:00Z boundary.
+  # 2026-10-05 saw ~8h delay causing AUT-5792; 2026-11-23/24/25 saw
+  # 11–12h delays causing AUT-1013). Firing at 00:00Z keeps the start
+  # inside the window even at 17h delay (00:00+17h=17:00Z), and the
+  # wait step below holds early starts at the 17:00Z boundary.
   # Deploys still happen ONLY inside 03:00–04:00 AEST — the gate in
   # scripts/sync-compose-to-portainer.py remains the enforcement.
   schedule:
-    - cron: "0 8 * * *"
+    - cron: "0 0 * * *"
   workflow_dispatch:
     inputs:
       tag:

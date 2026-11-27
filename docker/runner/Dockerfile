@@ -6,7 +6,7 @@
 #
 # RUNNER_BASE_IMAGE defaults to the upstream multi-arch :latest. Pin it by
 # @sha256 digest in production (AUT-1533) via the Portainer stack env.
-ARG RUNNER_BASE_IMAGE=ghcr.io/actions/actions-runner:latest
+ARG RUNNER_BASE_IMAGE=ghcr.io/actions/actions-runner@sha256:6d0b2d80d80f143f77dcb676e50920100bbb547e39e883454d57f45ab8c31300
 FROM ${RUNNER_BASE_IMAGE}
 
 USER root
