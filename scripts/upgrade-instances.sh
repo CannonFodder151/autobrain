@@ -59,7 +59,7 @@ API="$PORTAINER_URL/api"
 # by hand (demo went 502 and stayed there because nothing redeployed it).
 # Hosted keeps its 03:00-04:00 AEST window (AUT-2409); scope a dispatch with
 # UPGRADE_TIERS to honour that window, e.g. the `tiers` dispatch input.
-DEFAULT_TIERS="
+DEFAULT_TIERS=$(cat <<'EOF'
 autobrain-demo|2|https://demo.autobrainservice.app/health|https://demo.autobrainservice.app|
 # AUT-5611: the Default tier's app services are the `autobrain-default`
 # Portainer stack (docker-compose.default.yml). The stack name is NOT
@@ -70,7 +70,8 @@ autobrain-demo|2|https://demo.autobrainservice.app/health|https://demo.autobrain
 # delete/prune. The stack joins that network as external instead.
 autobrain-default|2|https://default.autobrainservice.app/health|https://default.autobrainservice.app|
 autobrain-hosted|5|https://hosted.autobrainservice.app/health|https://hosted.autobrainservice.app|POSTGRES_USER=autobrain,POSTGRES_DB=autobrain
-"
+EOF
+)
 
 TIERS="${UPGRADE_TIERS:-$DEFAULT_TIERS}"
 # Accept newline- or comma-separated tier lists (deploy-instances.yml passes
@@ -177,6 +178,7 @@ while IFS= read -r line; do
   line="$(echo "$line" | tr -d '[:space:]')"
   [ -z "$line" ] && continue
   case "$line" in \#*) continue ;; esac
+  case "$line" in *\|*\|*\|*) ;; *) continue ;; esac
   IFS='|' read -r name ep health base_url reqenv <<< "$line"
 
   log "=== tier: $name (EP$ep) ==="
