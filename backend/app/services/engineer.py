@@ -131,17 +131,17 @@ async def search_engineers(
             # Check if any availability entry matches the day (1=Mon..7=Sun -> 0=Mon..6=Sun)
             day_idx = filters.available_day - 1
             avail_filters.append(
-                text(f"EXISTS (SELECT 1 FROM jsonb_array_elements(availability) AS a WHERE (a->>'day')::int = {day_idx})")
+                text("EXISTS (SELECT 1 FROM jsonb_array_elements(availability) AS a WHERE (a->>'day')::int = :day_idx)").bindparams(day_idx=day_idx)
             )
         if filters.available_from is not None:
             time_str = filters.available_from.strftime("%H:%M:%S")
             avail_filters.append(
-                text(f"EXISTS (SELECT 1 FROM jsonb_array_elements(availability) AS a WHERE (a->>'start')::time >= '{time_str}')")
+                text("EXISTS (SELECT 1 FROM jsonb_array_elements(availability) AS a WHERE (a->>'start')::time >= :time_str)").bindparams(time_str=time_str)
             )
         if filters.available_to is not None:
             time_str = filters.available_to.strftime("%H:%M:%S")
             avail_filters.append(
-                text(f"EXISTS (SELECT 1 FROM jsonb_array_elements(availability) AS a WHERE (a->>'end')::time <= '{time_str}')")
+                text("EXISTS (SELECT 1 FROM jsonb_array_elements(availability) AS a WHERE (a->>'end')::time <= :time_str)").bindparams(time_str=time_str)
             )
         if avail_filters:
             stmt = stmt.where(and_(*avail_filters))
@@ -152,14 +152,14 @@ async def search_engineers(
 
     # Apply sorting
     if sort == "distance" and center_lat is not None and center_lon is not None:
-        # Order by haversine distance computed in SQL
+        # Order by haversine distance computed in SQL (parameterized to prevent SQL injection)
         distance_expr = text(
-            f"6371 * 2 * asin(sqrt("
-            f"  pow(sin(radians(lat - {center_lat}) / 2), 2) + "
-            f"  cos(radians(lat)) * cos(radians({center_lat})) * "
-            f"  pow(sin(radians(lon - {center_lon}) / 2), 2)"
-            f"))"
-        )
+            "6371 * 2 * asin(sqrt("
+            "  pow(sin(radians(lat - :center_lat) / 2), 2) + "
+            "  cos(radians(lat)) * cos(radians(:center_lat)) * "
+            "  pow(sin(radians(lon - :center_lon) / 2), 2)"
+            "))"
+        ).bindparams(center_lat=center_lat, center_lon=center_lon)
         if order == "asc":
             stmt = stmt.order_by(distance_expr.asc())
         else:
