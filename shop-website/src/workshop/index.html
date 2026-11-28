@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="AutoBrain Shop Workshop Dashboard - Manage appointments, work orders, and customers">
+  <meta name="theme-color" content="#0f172a">
+  <title>Workshop Dashboard — AutoBrain Shop</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/styles/main.css">
+</head>
+<body>
+  <div id="nav-placeholder"></div>
+
+  <div class="container workshop-shell">
+    <header class="text-center mb-4">
+      <div class="brand" style="font-size: 1.5rem;">Workshop Dashboard</div>
+      <nav class="app-nav">
+        <a href="#overview" class="active">Overview</a>
+        <a href="#appointments">Appointments</a>
+        <a href="#workorders">Work Orders</a>
+        <a href="#customers">Customers</a>
+      </nav>
+    </header>
+
+    <section id="overview">
+      <h2 class="section-title">Overview</h2>
+      <p style="color: var(--color-muted); margin-bottom: 1.5rem;">Today: Sunday, November 22 — 8 appointments scheduled, 3 work orders in progress.</p>
+
+      <div class="kpi-grid">
+        <div class="kpi"><div class="v">8</div><div class="l">Today's Appointments</div></div>
+        <div class="kpi"><div class="v">3</div><div class="l">In Progress</div></div>
+        <div class="kpi"><div class="v">12</div><div class="l">Open Work Orders</div></div>
+        <div class="kpi"><div class="v" style="color: var(--color-success);">$2,840</div><div class="l">Today's Revenue</div></div>
+      </div>
+
+      <div class="grid-3">
+        <div class="workshop-card">
+          <h3 style="margin-bottom: 1rem; font-size: 1rem; font-weight: 800;">Next Up</h3>
+          <ul style="list-style: none; color: var(--color-muted);">
+            <li style="margin-bottom: 0.75rem;">09:00 AM — <strong>John Smith</strong><br><span style="font-size: 0.85rem;">Subaru Outback • Brake Service</span></li>
+            <li style="margin-bottom: 0.75rem;">10:30 AM — <strong>Sarah Lee</strong><br><span style="font-size: 0.85rem;">Toyota Camry • Oil Change</span></li>
+            <li>11:15 AM — <strong>Mike Johnson</strong><br><span style="font-size: 0.85rem;">Honda CR-V • Diagnostics</span></li>
+          </ul>
+        </div>
+        <div class="workshop-card">
+          <h3 style="margin-bottom: 1rem; font-size: 1rem; font-weight: 800;">Work Order Status</h3>
+          <ul style="list-style: none; color: var(--color-muted);">
+            <li style="margin-bottom: 0.75rem;">• 5 — Pending Approval</li>
+            <li style="margin-bottom: 0.75rem;">• 3 — In Progress</li>
+            <li style="margin-bottom: 0.75rem;">• 2 — Ready for Pickup</li>
+          </ul>
+        </div>
+        <div class="workshop-card">
+          <h3 style="margin-bottom: 1rem; font-size: 1rem; font-weight: 800;">Staff Today</h3>
+          <ul style="list-style: none; color: var(--color-muted);">
+            <li style="margin-bottom: 0.75rem;">• 3 Technicians on shift</li>
+            <li style="margin-bottom: 0.75rem;">• 2 Service Advisors</li>
+            <li>1 Admin</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="appointments" class="page">
+      <h2 class="section-title">Appointments</h2>
+      <div class="workshop-card">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Time</th><th>Customer</th><th>Vehicle</th><th>Service</th><th>Status</th><th>Action</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>09:00 AM</td><td>John Smith</td><td>2018 Subaru Outback</td><td>Brake Service</td><td><span class="badge badge-ok">Confirmed</span></td><td><a href="#" style="color: var(--color-accent-dark); font-weight: 600;">View →</a></td>
+              </tr>
+              <tr>
+                <td>10:30 AM</td><td>Sarah Lee</td><td>2021 Toyota Camry</td><td>Oil Change</td><td><span class="badge badge-new">Checked In</span></td><td><a href="#" style="color: var(--color-accent-dark); font-weight: 600;">Start →</a></td>
+              </tr>
+              <tr>
+                <td>11:15 AM</td><td>Mike Johnson</td><td>2019 Honda CR-V</td><td>Diagnostics</td><td><span class="badge badge-warn">Awaiting Parts</span></td><td><a href="#" style="color: var(--color-accent-dark); font-weight: 600;">View →</a></td>
+              </tr>
+              <tr>
+                <td>01:00 PM</td><td>Emily Davis</td><td>2022 Tesla Model 3</td><td>Tire Rotation</td><td><span class="badge badge-ok">Confirmed</span></td><td><a href="#" style="color: var(--color-accent-dark); font-weight: 600;">View →</a></td>
+              </tr>
+              <tr>
+                <td>02:30 PM</td><td>Robert Brown</td><td>2017 Ford F-150</td><td>Brake Service</td><td><span class="badge badge-new">Pending Approval</span></td><td><a href="#" style="color: var(--color-accent-dark); font-weight: 600;">Review →</a></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="workorders" class="page">
+      <h2 class="section-title">Work Orders</h2>
+      <div class="workshop-card">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>WO #</th><th>Customer</th><th>Vehicle</th><th>Description</th><th>Technician</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>#WO-1024</td><td>John Smith</td><td>Subaru Outback</td><td>Replace front brake pads</td><td>Tom H.</td><td><span class="badge badge-warn">In Progress</span></td>
+              </tr>
+              <tr>
+                <td>#WO-1023</td><td>Mike Johnson</td><td>Honda CR-V</td><td>Engine diagnostics</td><td>Tom H.</td><td><span class="badge badge-warn">Awaiting Parts</span></td>
+              </tr>
+              <tr>
+                <td>#WO-1022</td><td>Emily Davis</td><td>Tesla Model 3</td><td>Tire rotation & alignment</td><td>Sarah K.</td><td><span class="badge badge-ok">Ready for Pickup</span></td>
+              </tr>
+              <tr>
+                <td>#WO-1021</td><td>Robert Brown</td><td>Ford F-150</td><td>Brake inspection</td><td>Tom H.</td><td><span class="badge badge-new">Pending Approval</span></td>
+              </tr>
+              <tr>
+                <td>#WO-1020</td><td>David Wilson</td><td>Chevrolet Malibu</td><td>Oil change, air filter</td><td>Sarah K.</td><td><span class="badge badge-ok">Ready for Pickup</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="customers">
+      <h2 class="section-title">Customers</h2>
+      <div class="workshop-card">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Name</th><th>Phone</th><th>Email</th><th>Last Visit</th><th>Services</th><th>LTV</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>John Smith</td><td>(555) 123-4567</td><td>john.smith@email.com</td><td>Nov 15, 2025</td><td>8</td><td>$3,240.00</td>
+              </tr>
+              <tr>
+                <td>Sarah Lee</td><td>(555) 234-5678</td><td>sarah.lee@email.com</td><td>Oct 2, 2025</td><td>5</td><td>$1,850.00</td>
+              </tr>
+              <tr>
+                <td>Mike Johnson</td><td>(555) 345-6789</td><td>mike.j@email.com</td><td>Sep 18, 2025</td><td>12</td><td>$6,420.00</td>
+              </tr>
+              <tr>
+                <td>Emily Davis</td><td>(555) 456-7890</td><td>emily.d@email.com</td><td>Nov 10, 2025</td><td>4</td><td>$1,280.00</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script type="module" src="/workshop/main.ts"></script>
+</body>
+</html>

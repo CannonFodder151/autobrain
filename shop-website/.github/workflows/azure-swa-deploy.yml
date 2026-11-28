@@ -1,0 +1,48 @@
+name: Deploy AutoBrain Shop Website to Azure SWA
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'shop-website/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'shop-website/package-lock.json'
+
+      - name: Install dependencies
+        working-directory: ./shop-website
+        run: npm ci
+
+      - name: Build
+        working-directory: ./shop-website
+        env:
+          NODE_ENV: production
+        run: npm run build
+
+      - name: Deploy to Azure Static Web Apps
+        id: deploy
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: 'upload'
+          app_location: './shop-website/dist'
+          api_location: ''
+          output_location: ''
+          skip_app_build: true
+          verbose: true
