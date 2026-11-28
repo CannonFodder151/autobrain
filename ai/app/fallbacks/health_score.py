@@ -92,8 +92,8 @@ def compute_health_score_from_dict(data: dict) -> int:
     return compute_health_score(inputs)
 
 
-if __name__ == "__main__":
-    # Self-test
+def run_self_test() -> None:
+    """Run self-test assertions (called from __main__ and pytest for coverage)."""
     test_cases = [
         VehicleInputs(30000, 3, 0, 5, 6.0, 6.0, 90, True, False, 0),
         VehicleInputs(120000, 10, 2, 2, 2.0, 2.0, 40, False, True, 3),
@@ -107,3 +107,7 @@ if __name__ == "__main__":
     assert compute_health_score(test_cases[0]) > compute_health_score(test_cases[1])
     assert compute_health_score(test_cases[2]) == 100
     print("All tests passed")
+
+
+if __name__ == "__main__":
+    run_self_test()
