@@ -61,13 +61,6 @@ API="$PORTAINER_URL/api"
 # UPGRADE_TIERS to honour that window, e.g. the `tiers` dispatch input.
 DEFAULT_TIERS=$(cat <<'EOF'
 autobrain-demo|2|https://demo.autobrainservice.app/health|https://demo.autobrainservice.app|
-# AUT-5611: the Default tier's app services are the `autobrain-default`
-# Portainer stack (docker-compose.default.yml). The stack name is NOT
-# `autobrain`: that compose project already exists on EP2 as the host
-# compose project at /opt/autobrain-default (postgres/redis/minio on
-# network autobrain_default), and naming the app stack `autobrain`
-# would put the Default database in scope of the app stack's
-# delete/prune. The stack joins that network as external instead.
 autobrain-default|2|https://default.autobrainservice.app/health|https://default.autobrainservice.app|
 autobrain-hosted|5|https://hosted.autobrainservice.app/health|https://hosted.autobrainservice.app|POSTGRES_USER=autobrain,POSTGRES_DB=autobrain
 EOF
@@ -118,8 +111,13 @@ print(json.dumps({'StackFileContent': file_doc.get('StackFileContent', ''), 'Env
 redeploy() {
   local id="$1" ep="$2" body="$3"
   local resp
-  resp="$(curl -sk -X PUT "${AUTH[@]}" -H "Content-Type: application/json" --data-binary "@$body" "$API/stacks/$id?endpointId=$ep&pullImage=true")"
-  printf '%s' "$resp" | python3 -c "import sys,json
+  local attempt=1
+  local max_attempts=3
+  while [ $attempt -le $max_attempts ]; do
+    resp="$(curl -sk -X PUT "${AUTH[@]}" -H "Content-Type: application/json" --data-binary "@$body" "$API/stacks/$id?endpointId=$ep&pullImage=true" 2>&1)"
+    local curl_rc=$?
+    if [ $curl_rc -eq 0 ]; then
+      printf '%s' "$resp" | python3 -c "import sys,json
 raw=sys.stdin.read().strip()
 try:
   d=json.loads(raw)
@@ -131,6 +129,13 @@ else:
     print('ok (status=%s)' % s)
   else:
     print('ERR '+str(d)[:200])"
+      return
+    fi
+    log "   redeploy attempt $attempt/$max_attempts failed (curl exit code: $curl_rc), retrying in 10s..."
+    sleep 10
+    attempt=$((attempt + 1))
+  done
+  echo "ERR redeploy failed after $max_attempts attempts"
 }
 
 wait_health() {
