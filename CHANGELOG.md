@@ -8,8 +8,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 > user-facing change ships with an entry here under `[Unreleased]` — see
 > `CONTRIBUTING.md` for the frontend-parity + changelog rules.
 
-
 ## [Unreleased]
+
+### Added (AUT-1030)
+- PR/CI Watchdog: failed GitHub Actions workflows now auto-create GitHub issues with failure logs, postmortem template, MTTR labels, and Paperclip execution issues to wake the assigned agent (.github/workflows/pr-ci-watchdog.yml, scripts/pr-ci-watchdog.sh, scripts/pr-ci-watchdog-notify.sh)
+
+### Added (AUT-1030)
+- Extended PR/CI Watchdog to cover 9 critical workflows: Backend pytest smoke, Backend image build check, Security base image CVE scan, Pipeline stages, Code Review, Graft Freshness Check, etc.
+
+### Fixed (AUT-1030)
+- Fixed CI MTTR resolution workflow detection time regex to match `**Detected:**`
+- Resolved merge conflict in passkey.py that broke backend import
 
 ## [0.3.325] - 2026-11-27
 
