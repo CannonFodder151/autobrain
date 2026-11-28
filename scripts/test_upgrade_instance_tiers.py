@@ -30,7 +30,11 @@ EXPECTED_CHAIN = [
 
 def _default_tiers(script: str):
     """Parse DEFAULT_TIERS out of the shell script into (name, endpoint, health)."""
-    block = re.search(r"^DEFAULT_TIERS=\"$(.*?)^\"$", script, re.S | re.M)
+    # Try heredoc format first (current)
+    block = re.search(r"DEFAULT_TIERS=.*?<<'EOF'\n(.*?)\nEOF", script, re.S)
+    if not block:
+        # Fallback to old double-quoted format
+        block = re.search(r'^DEFAULT_TIERS="\\$(.*?)^"$', script, re.S | re.M)
     assert block, "DEFAULT_TIERS assignment not found in upgrade-instances.sh"
     tiers = []
     for line in block.group(1).splitlines():
