@@ -37,16 +37,84 @@ log() { echo "[pr-ci-watchdog] $*"; }
 
 now_iso() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
+# Record incident in mttr-tracking.json for unified MTTR tracking.
+record_mttr_incident() {
+  local github_issue_url="$1"
+  local github_issue_number="$2"
+  local paperclip_issue_url="$3"
+  local owner_agent="$4"
+  local owner_agent_id="$5"
+  local detection_time="$6"
+
+  MTTR_FILE="${GITHUB_WORKSPACE:-$(pwd)}/.github/mttr-tracking.json"
+  
+  # Create a temporary Python script to update the JSON file atomically
+  python3 <<PYEOF
+import json
+import os
+from datetime import datetime, timezone
+
+mttr_file = os.environ.get('MTTR_FILE', '.github/mttr-tracking.json')
+github_issue_url = os.environ.get('GITHUB_ISSUE_URL', '')
+github_issue_number = os.environ.get('GITHUB_ISSUE_NUMBER', '')
+paperclip_issue_url = os.environ.get('PAPERCLIP_ISSUE_URL', '')
+owner_agent = os.environ.get('OWNER_AGENT', '')
+owner_agent_id = os.environ.get('OWNER_AGENT_ID', '')
+detection_time = os.environ.get('DETECTION_TIME', '')
+
+# Load existing data
+if os.path.exists(mttr_file):
+    with open(mttr_file, 'r') as f:
+        data = json.load(f)
+else:
+    data = {"incidents": [], "summary": {}}
+
+# Check if already recorded (by GitHub issue number)
+existing = next((i for i in data["incidents"] if str(i.get("github_issue_number")) == github_issue_number), None)
+if existing:
+    print(f"Incident for GitHub issue #{github_issue_number} already recorded")
+else:
+    incident = {
+        "repo": os.environ.get('FAILED_REPO', ''),
+        "run_id": os.environ.get('FAILED_RUN_ID', ''),
+        "workflow": os.environ.get('FAILED_WORKFLOW', ''),
+        "conclusion": "failure",
+        "created_at": os.environ.get('FAILED_RUN_CREATED_AT', detection_time),
+        "detected_at": detection_time,
+        "github_issue_url": github_issue_url,
+        "github_issue_number": github_issue_number,
+        "paperclip_issue_url": paperclip_issue_url,
+        "owner_agent": owner_agent,
+        "owner_agent_id": owner_agent_id,
+        "resolved_at": None,
+        "mttr_minutes": None,
+        "lead_time_minutes": None,
+    }
+    data["incidents"].append(incident)
+    
+    # Update summary
+    data["summary"]["total_incidents"] = len(data["incidents"])
+    data["summary"]["open_incidents"] = sum(1 for i in data["incidents"] if i["resolved_at"] is None)
+    data["summary"]["last_updated"] = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+    
+    # Write back atomically
+    with open(mttr_file + '.tmp', 'w') as f:
+        json.dump(data, f, indent=2)
+    os.rename(mttr_file + '.tmp', mttr_file)
+    print(f"Recorded incident for GitHub issue #{github_issue_number} in {mttr_file}")
+PYEOF
+}
+
 # Map a failed workflow name to the agent that should own its fix.
 owner_agent_for_workflow() {
   case "$1" in
-    "Backend tests") echo "Backend Engineer" ;;
-    "PR Checks") echo "Frontend Engineer" ;;
-    "Security — PR gate (secrets, IaC, deps, flutter)"|"Security — full-resolution dependency scan"|"Security — rego-lookup-api PR dependency gate") echo "Security Officer" ;;
-    "Publish images to Docker Hub"|"Build hosted images (multi-arch)"|"Build Shop images (private registry)"|"Upgrade instance chain (AUT-4982)") echo "DevOps Engineer" ;;
+    "Backend tests"|"Backend — pytest smoke (model metadata + alembic heads)"|"Backend image build check") echo "Backend Engineer" ;;
+    "PR Checks"|"Visual regression (desktop 1280/1440/1920)"|"Graft Freshness Check") echo "Frontend Engineer" ;;
+    "Security — PR gate (secrets, IaC, deps, flutter)"|"Security — full-resolution dependency scan"|"Security — rego-lookup-api PR dependency gate"|"Security — base image CVE scan (trivy)") echo "Security Officer" ;;
+    "Publish images to Docker Hub"|"Build hosted images (multi-arch)"|"Build Shop images (private registry)"|"Upgrade instance chain (AUT-4982)"|"Pipeline stages (demo -> default -> hosted)") echo "DevOps Engineer" ;;
     "Compose structural checks") echo "Platform Engineer" ;;
     "Sync mobile app") echo "Mobile Release Engineer" ;;
-    "Visual regression (desktop 1280/1440/1920)") echo "Frontend Engineer" ;;
+    "Code Review") echo "Code Reviewer" ;;
     *) echo "DevOps Engineer" ;;
   esac
 }
@@ -140,11 +208,47 @@ log "Creating GitHub issue"
 OWNER_AGENT=$(owner_agent_for_workflow "$FAILED_WORKFLOW")
 ISSUE_TITLE="[CI Failure] $FAILED_WORKFLOW failed on $FAILED_BRANCH @ $(echo "$FAILED_SHA" | cut -c1-7)"
 
+# Load postmortem template from docs
+POSTMORTEM_TEMPLATE_FILE="${GITHUB_WORKSPACE:-$(pwd)}/docs/Engineering/postmortem-template.md"
+if [ -f "$POSTMORTEM_TEMPLATE_FILE" ]; then
+    POSTMORTEM_TEMPLATE=$(cat "$POSTMORTEM_TEMPLATE_FILE")
+else
+    POSTMORTEM_TEMPLATE="# Postmortem Template
+
+## Incident Summary
+- **What happened**: 
+- **Impact**: 
+- **Duration**: 
+- **Severity**: 
+
+## Timeline
+- **Detected**: 
+- **Investigated**: 
+- **Mitigated**: 
+- **Resolved**: 
+
+## Root Cause
+- **Primary cause**: 
+- **Contributing factors**: 
+
+## Resolution
+- **What was done**: 
+- **Why it worked**: 
+
+## Action Items
+- [ ] Prevent recurrence
+- [ ] Improve detection
+- [ ] Update runbooks
+
+## Lessons Learned"
+fi
+
+DETECTION_TIME=$(now_iso)
 # Build the issue body with postmortem template.
 ISSUE_BODY=$(cat <<ISSUEBODY
 ## CI Failure: $FAILED_WORKFLOW
 
-**Detected:** $(now_iso) UTC
+**Detected:** $DETECTION_TIME UTC
 **Workflow:** $FAILED_WORKFLOW
 **Branch:** $FAILED_BRANCH
 **Commit:** [$FAILED_SHA]($FAILED_RUN_URL/commit/$FAILED_SHA)
@@ -157,35 +261,14 @@ $log_section
 
 ### Postmortem Template
 
-\`\`\`
-## Incident Summary
-- **What failed:** $FAILED_WORKFLOW on branch $FAILED_BRANCH
-- **When:** $(now_iso) UTC
-- **Detected by:** PR/CI Watchdog (automated)
-- **Severity:** TBD
-- **Impact:** TBD
-
-## Root Cause
-TBD — owner agent to complete.
-
-## Immediate Fix
-TBD
-
-## Prevention
-TBD
-
-## MTTR
-- **Detection time:** $(now_iso) UTC
-- **Resolution time:** TBD
-- **MTTR:** TBD
-\`\`\`
+$POSTMORTEM_TEMPLATE
 
 ---
 
 ### Labels for MTTR tracking
-- `ci-failure` — this issue tracks a CI failure
-- `mttr:open` — MTTR clock is running (resolved when closed)
-- `watchdog:auto-created` — created by PR/CI Watchdog automation
+- \`ci-failure\` — this issue tracks a CI failure
+- \`mttr:open\` — MTTR clock is running (resolved when closed)
+- \`watchdog:auto-created\` — created by PR/CI Watchdog automation
 
 cc: @$OWNER_AGENT
 ISSUEBODY
@@ -263,7 +346,14 @@ else
   log "PAPERCLIP_SERVICE_TOKEN not set — skipping Paperclip issue creation"
 fi
 
-# --- step 5: set GitHub Action outputs -------------------------------------
+# --- step 5: record MTTR incident --------------------------------------------
+
+DETECTION_TIME=$(now_iso)
+export FAILED_RUN_CREATED_AT="${FAILED_RUN_CREATED_AT:-$DETECTION_TIME}"
+export GITHUB_ISSUE_URL GITHUB_ISSUE_NUMBER PAPERCLIP_ISSUE_URL OWNER_AGENT PAPERCLIP_OWNER_AGENT_ID DETECTION_TIME FAILED_REPO FAILED_RUN_ID FAILED_WORKFLOW FAILED_RUN_CREATED_AT
+record_mttr_incident "$GITHUB_ISSUE_URL" "$GITHUB_ISSUE_NUMBER" "$PAPERCLIP_ISSUE_URL" "$OWNER_AGENT" "$PAPERCLIP_OWNER_AGENT_ID" "$DETECTION_TIME"
+
+# --- step 6: set GitHub Action outputs -------------------------------------
 
 echo "github_issue_url=$GITHUB_ISSUE_URL" >> "$GITHUB_OUTPUT"
 echo "github_issue_number=$GITHUB_ISSUE_NUMBER" >> "$GITHUB_OUTPUT"
