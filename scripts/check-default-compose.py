@@ -38,9 +38,9 @@ SERVICES = ("ai", "backend", "frontend")
 # container's ImageID. A pin that drifts here is a silent version change into
 # the tier, which is the bug this file exists to prevent.
 EXPECTED_DIGESTS = {
-    "ai": "cannonfodder151/autobrain-ai@sha256:03656882722b9fb140c48a2536e97ddd5b054e4660c284bcd3abddfd30d2a527",
-    "backend": "cannonfodder151/autobrain-backend@sha256:63ff74f9a66f7ec449d2c2fc7e71a125e48a6430079f06310aed0dfc3087f93a",
-    "frontend": "cannonfodder151/autobrain-frontend@sha256:c4aee40082273f63d287cd2398fc650f58c11c96fa14ebae3c82851fab6003a4",
+    "ai": "cannonfodder151/autobrain-ai@sha256:3d28cae3cf2d22a547bc09971deef4c8a46fcee8e451528f343d50e9434d4845",
+    "backend": "cannonfodder151/autobrain-backend@sha256:8ce8853d8aa3e371990a7c177050b10c09c0c7eb446822dfddd4ec2001e6191f",
+    "frontend": "cannonfodder151/autobrain-frontend:default@sha256:61b6ec31a1f7f3cbd6e566cb6e9bbdccd8eebc5b78b44dba515850e1100de1ff",
 }
 # The DNS names the tier resolves on the shared network. backend had none.
 EXTERNAL_NETWORK = "autobrain_default"
