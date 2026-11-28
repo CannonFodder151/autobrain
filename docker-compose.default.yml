@@ -40,7 +40,7 @@
 # Default runs Redis WITHOUT auth, so the redis URLs carry no password.
 
 # AUT-5669: commit whose build produced the digests pinned below.
-x-autobrain-pin-source: "750b9d0634604b2eaf4dac4c4e55e95ba62e142c"
+x-autobrain-pin-source: "308ebd5782da8c7c7abe9a249bfeacb7034a117f"
 
 name: autobrain-default
 
@@ -56,7 +56,7 @@ services:
   # its own container and backend reaches it over the network. Reproduced as-is
   # on purpose — a topology change is a migration, not a compose landing.
   ai:
-    image: cannonfodder151/autobrain-ai@sha256:59b622592468cd60cdf64ba8e5362e4c1e58be87b729c5f5aaeb1ff82
+    image: cannonfodder151/autobrain-ai@sha256:3d28cae3cf2d22a547bc09971deef4c8a46fcee8e451528f343d50e9434d4845
     restart: unless-stopped
     user: autobrain
     working_dir: /app
@@ -80,7 +80,7 @@ services:
       start_period: 30s
 
   backend:
-    image: cannonfodder151/autobrain-backend@sha256:1f1748bfbb6ae6208283545f7a9f89df6e28c83d2cc
+    image: cannonfodder151/autobrain-backend@sha256:8ce8853d8aa3e371990a7c177050b10c09c0c7eb446822dfddd4ec2001e6191f
     restart: unless-stopped
     user: autobrain
     working_dir: /app
@@ -159,7 +159,7 @@ services:
       start_period: 30s
 
   frontend:
-    image: cannonfodder151/autobrain-frontend:default@sha256:f55af72ea7600cc3b5378a746741c1e64a8e167f347d555c094aa98c5
+    image: cannonfodder151/autobrain-frontend:default@sha256:61b6ec31a1f7f3cbd6e566cb6e9bbdccd8eebc5b78b44dba515850e1100de1ff
     restart: unless-stopped
     user: nginx
     environment:

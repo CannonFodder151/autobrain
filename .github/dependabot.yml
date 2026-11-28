@@ -1,18 +1,14 @@
-# AUT-2175: keep k8s + compose image pins current
-# Dependabot can only update version tags, not SHA digests.
-# This config watches for newer :hosted tags so the next build-hosted.yml run
-# captures fresh digests. The k8s-pin job will then commit new digests.
+# AUT-1031: Automated dependency updates for AutoBrain
+# Covers Docker, Python (pip), Node.js (npm), and Dart/Flutter (pub)
 version: 2
 updates:
+  # Docker: watch for newer :hosted tags in compose files and k8s manifests
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "daily"
       time: "01:00"
       timezone: "Australia/Sydney"
-    # Watch compose files and k8s manifests that reference :hosted tag
-    # Note: Dependabot updates the tag (e.g. :hosted), not @sha256: digests.
-    # The build-hosted.yml pipeline re-pins to the new digest on next run.
     include:
       - "docker-compose*.yml"
       - "infra/k8s/*.yaml"
@@ -22,3 +18,168 @@ updates:
     commit-message:
       prefix: "chore(deps): "
     rebase-strategy: "auto"
+    groups:
+      docker-images:
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+          - "minor"
+
+  # Python (pip): backend - monthly for minor/patch, security updates run daily automatically
+  - package-ecosystem: "pip"
+    directory: "/backend"
+    schedule:
+      interval: "monthly"
+      day: 1
+      time: "01:00"
+      timezone: "Australia/Sydney"
+    labels:
+      - "dependencies"
+      - "python"
+      - "backend"
+    commit-message:
+      prefix: "chore(deps): "
+    rebase-strategy: "auto"
+    groups:
+      python-backend:
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+          - "minor"
+    allow:
+      - dependency-type: "direct"
+      - dependency-type: "indirect"
+    # Security updates: Dependabot creates security PRs daily automatically
+    # This monthly schedule handles minor/patch version updates
+
+  - package-ecosystem: "pip"
+    directory: "/ai"
+    schedule:
+      interval: "monthly"
+      day: 1
+      time: "01:30"
+      timezone: "Australia/Sydney"
+    labels:
+      - "dependencies"
+      - "python"
+      - "ai"
+    commit-message:
+      prefix: "chore(deps): "
+    rebase-strategy: "auto"
+    groups:
+      python-ai:
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+          - "minor"
+    # Security updates: Dependabot creates security PRs daily automatically
+
+  - package-ecosystem: "pip"
+    directory: "/market-data"
+    schedule:
+      interval: "monthly"
+      day: 1
+      time: "02:00"
+      timezone: "Australia/Sydney"
+    labels:
+      - "dependencies"
+      - "python"
+      - "market-data"
+    commit-message:
+      prefix: "chore(deps): "
+    rebase-strategy: "auto"
+    groups:
+      python-market-data:
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+          - "minor"
+    # Security updates: Dependabot creates security PRs daily automatically
+
+  # Node.js (npm): frontend/playwright - monthly for minor/patch
+  - package-ecosystem: "npm"
+    directory: "/frontend/playwright"
+    schedule:
+      interval: "monthly"
+      day: 1
+      time: "02:30"
+      timezone: "Australia/Sydney"
+    labels:
+      - "dependencies"
+      - "npm"
+      - "frontend"
+    commit-message:
+      prefix: "chore(deps): "
+    rebase-strategy: "auto"
+    groups:
+      npm-playwright:
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+          - "minor"
+    # Security updates: Dependabot creates security PRs daily automatically
+
+  # Dart/Flutter (pub): frontend - monthly for minor/patch
+  - package-ecosystem: "pub"
+    directory: "/frontend"
+    schedule:
+      interval: "monthly"
+      day: 1
+      time: "03:00"
+      timezone: "Australia/Sydney"
+    labels:
+      - "dependencies"
+      - "dart"
+      - "frontend"
+    commit-message:
+      prefix: "chore(deps): "
+    rebase-strategy: "auto"
+    groups:
+      dart-frontend:
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+          - "minor"
+    # Security updates: Dependabot creates security PRs daily automatically
+
+  # GitHub Actions: keep workflow actions updated - monthly
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+      day: 1
+      time: "03:30"
+      timezone: "Australia/Sydney"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "chore(deps): "
+    rebase-strategy: "auto"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+          - "minor"
+    # Security updates: Dependabot creates security PRs daily automatically
+
+# Auto-merge configuration for patch updates with passing CI
+# Note: This requires branch protection rules and auto-merge to be enabled in repo settings
+# The following comments document the required settings:
+#
+# Branch protection rules needed on main:
+# - Require status checks to pass before merging
+# - Require branches to be up to date before merging
+# - Allow auto-merge
+#
+# Auto-merge will be enabled on PRs with these labels:
+# - "dependencies" + "patch" (added by Dependabot for patch updates)
+# - The auto-merge workflow (if configured) will handle the actual merge
