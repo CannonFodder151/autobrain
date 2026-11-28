@@ -7,16 +7,21 @@ on:
   workflow_run:
     workflows: 
       - "Backend tests"
+      - "Backend — pytest smoke (model metadata + alembic heads)"
+      - "Backend image build check"
       - "Build hosted images (multi-arch)"
-      - "Build shop"
+      - "Build Shop images (private registry)"
       - "Upgrade instance chain (AUT-4982)"
       - "Publish images to Docker Hub"
-      - "Security PR gate"
-      - "Code review"
-      - "Visual regression"
-      - "Compose checks"
-      - "Security scan"
+      - "Security — PR gate (secrets, IaC, deps, flutter)"
+      - "Security — full-resolution dependency scan"
+      - "Security — base image CVE scan (trivy)"
+      - "Security — rego-lookup-api PR dependency gate"
+      - "Code Review"
+      - "Visual regression (desktop 1280/1440/1920)"
+      - "Compose structural checks"
       - "Sync mobile app"
+      - "Pipeline stages (demo -> default -> hosted)"
     types: [completed]
   schedule:
     - cron: "*/30 * * * *"  # Every 30 min polling fallback

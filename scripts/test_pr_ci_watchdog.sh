@@ -145,17 +145,23 @@ check_map() {
 }
 
 check_map "Backend tests" "Backend Engineer"
+check_map "Backend — pytest smoke (model metadata + alembic heads)" "Backend Engineer"
+check_map "Backend image build check" "Backend Engineer"
 check_map "PR Checks" "Frontend Engineer"
+check_map "Visual regression (desktop 1280/1440/1920)" "Frontend Engineer"
+check_map "Graft Freshness Check" "Frontend Engineer"
 check_map "Security — PR gate (secrets, IaC, deps, flutter)" "Security Officer"
 check_map "Security — full-resolution dependency scan" "Security Officer"
 check_map "Security — rego-lookup-api PR dependency gate" "Security Officer"
+check_map "Security — base image CVE scan (trivy)" "Security Officer"
 check_map "Publish images to Docker Hub" "DevOps Engineer"
 check_map "Build hosted images (multi-arch)" "DevOps Engineer"
 check_map "Build Shop images (private registry)" "DevOps Engineer"
 check_map "Upgrade instance chain (AUT-4982)" "DevOps Engineer"
+check_map "Pipeline stages (demo -> default -> hosted)" "DevOps Engineer"
 check_map "Compose structural checks" "Platform Engineer"
 check_map "Sync mobile app" "Mobile Release Engineer"
-check_map "Visual regression (desktop 1280/1440/1920)" "Frontend Engineer"
+check_map "Code Review" "Code Reviewer"
 check_map "Unknown workflow" "DevOps Engineer"
 
 # --- Test 1b: agent_id_for_agent maps agent names to Paperclip IDs ---
@@ -191,7 +197,10 @@ export FAILED_WORKFLOW="Backend tests"
 export FAILED_BRANCH="feature/test-branch"
 export FAILED_SHA="abc123def456"
 export FAILED_REPO="test/repo"
+export FAILED_RUN_CREATED_AT="2026-11-22T12:00:00Z"
 export GITHUB_OUTPUT="$W/github_output"
+mkdir -p "$W/.github"
+echo '{"incidents": [], "summary": {}}' > "$W/.github/mttr-tracking.json"
 
 output="$(bash "$WATCHDOG" 2>&1)" || true
 if echo "$output" | grep -q "GitHub issue created: https://github.com/test/repo/issues/42"; then
@@ -232,6 +241,27 @@ else
   fail "assigneeAgentId not passed to Paperclip API. jq_output: $(cat "$W/jq_output" 2>/dev/null || echo '(none)')"
 fi
 
+# Verify MTTR incident recorded
+if [[ -f "$W/.github/mttr-tracking.json" ]]; then
+  if python3 -c "
+import json
+with open('$W/.github/mttr-tracking.json') as f:
+    data = json.load(f)
+incidents = data.get('incidents', [])
+if len(incidents) == 1 and incidents[0].get('github_issue_number') == '42':
+    print('OK')
+else:
+    print('FAIL: incidents=', incidents)
+    exit(1)
+"; then
+    pass "MTTR incident recorded in mttr-tracking.json"
+  else
+    fail "MTTR incident not recorded correctly. Content: $(cat "$W/.github/mttr-tracking.json")"
+  fi
+else
+  fail "mttr-tracking.json not created"
+fi
+
 # --- Test 3: Notify script ---
 echo "==> Test: pr-ci-watchdog-notify.sh runs without error"
 # Just test it runs and validates args
@@ -264,6 +294,8 @@ fi
 echo "==> Test: Watchdog handles missing PAPERCLIP_SERVICE_TOKEN gracefully"
 export PAPERCLIP_SERVICE_TOKEN=""
 export GITHUB_OUTPUT="$W/github_output2"
+mkdir -p "$W/.github"
+echo '{"incidents": [], "summary": {}}' > "$W/.github/mttr-tracking.json"
 
 output="$(bash "$WATCHDOG" 2>&1)" || true
 if echo "$output" | grep -q "PAPERCLIP_SERVICE_TOKEN not set"; then

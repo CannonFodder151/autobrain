@@ -11,17 +11,23 @@ on:
   workflow_run:
     workflows:
       - "Backend tests"
+      - "Backend — pytest smoke (model metadata + alembic heads)"
+      - "Backend image build check"
       - "PR Checks"
       - "Security — PR gate (secrets, IaC, deps, flutter)"
       - "Security — full-resolution dependency scan"
+      - "Security — base image CVE scan (trivy)"
+      - "Security — rego-lookup-api PR dependency gate"
       - "Publish images to Docker Hub"
       - "Build hosted images (multi-arch)"
       - "Build Shop images (private registry)"
       - "Compose structural checks"
       - "Upgrade instance chain (AUT-4982)"
-      - "Security — rego-lookup-api PR dependency gate"
+      - "Pipeline stages (demo -> default -> hosted)"
       - "Sync mobile app"
       - "Visual regression (desktop 1280/1440/1920)"
+      - "Code Review"
+      - "Graft Freshness Check"
     types: [completed]
 
 permissions:
@@ -68,6 +74,7 @@ jobs:
           FAILED_BRANCH: ${{ github.event.workflow_run.head_branch }}
           FAILED_SHA: ${{ github.event.workflow_run.head_sha }}
           FAILED_REPO: ${{ github.repository }}
+          FAILED_RUN_CREATED_AT: ${{ github.event.workflow_run.created_at }}
         run: |
           ./scripts/pr-ci-watchdog.sh
 
