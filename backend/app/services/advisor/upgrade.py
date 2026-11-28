@@ -8,6 +8,7 @@ same numbers (no per-call drift). No AI, no 9Router.
 
 from __future__ import annotations
 
+import json
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,9 +27,13 @@ from app.services.advisor.replace import (
     age_years,
     _clamp_horizon,
 )
+from app.services.cache import cache_get, cache_set, _cache_key
 from app.services.market_data import get_market_data
 
 logger = get_logger(__name__)
+
+_ADVISOR_CACHE_TTL = 3600  # 1 hour
+_ADVISOR_CACHE_PREFIX = "advisor"
 
 # Tier weights used to rank upgrade options.
 _UPGRADE_TIER_WEIGHT: dict[int, float] = {
@@ -354,6 +359,19 @@ async def compute_upgrade(
     the Value module uses, so consecutive Upgrade runs return the same
     numbers (no per-call drift).
     """
+    # Check cache first
+    cache_key = _cache_key(
+        _ADVISOR_CACHE_PREFIX, "upgrade", vehicle.id,
+        str(odometer_km or 0), str(finance_term_months or 0),
+        str(rate_pct or 0), str(deposit_pct or 0)
+    )
+    cached = await cache_get(cache_key)
+    if cached:
+        try:
+            return json.loads(cached)
+        except Exception:
+            pass
+    
     term = _clamp_finance_term(finance_term_months)
     rate = _clamp_rate_pct(rate_pct)
     deposit = _clamp_deposit_pct(deposit_pct)
@@ -367,7 +385,7 @@ async def compute_upgrade(
     trade_in_mid = trade_in.get("mid")
 
     if current_value is None:
-        return {
+        result = {
             "currency": CURRENCY,
             "current_value": None,
             "upgrade_options": [],
@@ -378,42 +396,50 @@ async def compute_upgrade(
             "deposit_pct": deposit,
             "note": value.get("note") or "no market listings available for this vehicle",
         }
+    else:
+        options = await find_upgrade_options(db, vehicle, odometer_km=odometer_km)
+        similar = await find_similar_vehicles(db, vehicle)
 
-    options = await find_upgrade_options(db, vehicle, odometer_km=odometer_km)
-    similar = await find_similar_vehicles(db, vehicle)
-
-    # Build one trade-up row per option with a usable price_mid so the
-    # UI can show a per-tier table. Options whose price is missing are
-    # surfaced with an explanatory note inside the delta row.
-    trade_up: list[dict] = []
-    for opt in options:
-        if opt.get("price_mid") is None:
+        # Build one trade-up row per option with a usable price_mid so the
+        # UI can show a per-tier table. Options whose price is missing are
+        # surfaced with an explanatory note inside the delta row.
+        trade_up: list[dict] = []
+        for opt in options:
+            if opt.get("price_mid") is None:
+                trade_up.append(build_trade_up(
+                    current_value=current_value,
+                    upgrade_value=None,
+                    trade_in_mid=trade_in_mid,
+                    finance_term_months=term,
+                    rate_pct=rate,
+                    deposit_pct=deposit,
+                ) | {"upgrade_year": opt["year"], "tier_label": opt["tier_label"]})
+                continue
             trade_up.append(build_trade_up(
                 current_value=current_value,
-                upgrade_value=None,
+                upgrade_value=opt["price_mid"],
                 trade_in_mid=trade_in_mid,
                 finance_term_months=term,
                 rate_pct=rate,
                 deposit_pct=deposit,
             ) | {"upgrade_year": opt["year"], "tier_label": opt["tier_label"]})
-            continue
-        trade_up.append(build_trade_up(
-            current_value=current_value,
-            upgrade_value=opt["price_mid"],
-            trade_in_mid=trade_in_mid,
-            finance_term_months=term,
-            rate_pct=rate,
-            deposit_pct=deposit,
-        ) | {"upgrade_year": opt["year"], "tier_label": opt["tier_label"]})
 
-    return {
-        "currency": CURRENCY,
-        "current_value": current_value,
-        "upgrade_options": options,
-        "similar_vehicles": similar,
-        "trade_up": trade_up,
-        "finance_term_months": term,
-        "rate_pct": rate,
-        "deposit_pct": deposit,
-        "note": None,
-    }
+        result = {
+            "currency": CURRENCY,
+            "current_value": current_value,
+            "upgrade_options": options,
+            "similar_vehicles": similar,
+            "trade_up": trade_up,
+            "finance_term_months": term,
+            "rate_pct": rate,
+            "deposit_pct": deposit,
+            "note": None,
+        }
+    
+    # Cache result
+    try:
+        await cache_set(cache_key, json.dumps(result), _ADVISOR_CACHE_TTL)
+    except Exception:
+        pass
+    
+    return result

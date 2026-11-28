@@ -1,6 +1,10 @@
 """Vehicle routes: CRUD, rego lookup, timeline."""
 
-from fastapi import APIRouter, Depends, HTTPException
+import asyncio
+import json
+from datetime import date, timedelta
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,10 +33,6 @@ from app.schemas.vehicle import (
     VehicleUpdate,
 )
 from app.schemas.valuation import ValuationRequest, ValuationResponse
-from app.models.user import User
-from app.db.session import get_db
-from app.api.deps import get_current_user
-from app.services.ownership import get_accessible_vehicle
 from app.services.rate_limit import require_ai_rate_limit
 from app.services.ai_client import estimate_value
 from app.services.market_data import get_market_data
@@ -41,9 +41,6 @@ from app.models.fuel import FuelLog
 from app.models.mod import Modification
 from app.models.service import ServiceRecord
 from app.models.valuation import ValuationSnapshot
-from sqlalchemy import select
-import json
-from datetime import date, timedelta
 from app.services.rego import lookup_rego
 from app.services.vehicle import (
     enforce_vehicle_limit,
@@ -52,6 +49,8 @@ from app.services.vehicle import (
     list_user_vehicles,
     list_vehicle_shares,
 )
+from app.services.cache import cache_get, cache_set, _cache_key, invalidate_vehicle_cache
+from app.services.valuation import build_valuation_data, get_cached_valuation, cache_valuation
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/vehicles", tags=["vehicles"])
@@ -103,52 +102,20 @@ async def resale_valuation(
             model="demo-sample",
         )
 
-    # For non-demo users, delegate to the full valuation logic
-    services = list((await db.scalars(
-        select(ServiceRecord).where(
-            ServiceRecord.vehicle_id == vehicle_id,
-            ServiceRecord.status == "completed",
-        )
-    )).all())
-    mods = list((await db.scalars(
-        select(Modification).where(Modification.vehicle_id == vehicle_id)
-    )).all())
-    fuel = list((await db.scalars(
-        select(FuelLog).where(FuelLog.vehicle_id == vehicle_id).order_by(FuelLog.fill_date)
-    )).all())
-    diagnostics = list((await db.scalars(
-        select(Diagnostic).where(Diagnostic.vehicle_id == vehicle_id)
-    )).all())
-    market = await get_market_data(db, vehicle.make, vehicle.model, vehicle.year, vehicle.vehicle_type)
-    last_service_days = None
-    if services:
-        last_service = max(s.service_date for s in services)
-        last_service_days = (date.today() - last_service).days
-    data = {
-        "vehicle": {
-            "make": vehicle.make, "model": vehicle.model, "year": vehicle.year,
-            "engine": vehicle.engine, "odometer_km": vehicle.odometer_km,
-            "condition": vehicle.condition,
-            "vehicle_type": vehicle.vehicle_type,
-        },
-        "service_count": len(services),
-        "total_service_cost": sum(s.cost for s in services),
-        "last_service_days_ago": last_service_days,
-        "diagnostics": [
-            {"severity": d.severity, "status": d.status, "estimated_cost": d.estimated_cost}
-            for d in diagnostics
-        ],
-        "mods": [{"name": m.name, "category": m.category, "cost": m.cost} for m in mods],
-        "fuel_avg_l_per_100km": (
-            round(sum(f.l_per_100km for f in fuel if f.l_per_100km) / sum(1 for f in fuel if f.l_per_100km), 2)
-            if any(f.l_per_100km for f in fuel) else None
-        ),
-        "market": market,
-    }
+    # Check cache first
+    cached = await get_cached_valuation(vehicle_id)
+    if cached:
+        return ValuationResponse(**cached)
+
+    # Build valuation data using concurrent queries
+    data = await build_valuation_data(db, vehicle)
     result = await estimate_value(data)
     if not result:
         raise HTTPException(status_code=503, detail="Valuation engine unavailable")
+    
+    market = data["market"]
     result["market"] = market
+    
     snapshot = ValuationSnapshot(
         vehicle_id=vehicle_id,
         estimated_value=result["estimated_value"],
@@ -160,6 +127,7 @@ async def resale_valuation(
     )
     db.add(snapshot)
     await db.commit()
+    
     history = list((await db.scalars(
         select(ValuationSnapshot).where(ValuationSnapshot.vehicle_id == vehicle_id)
     )).all())
@@ -167,6 +135,10 @@ async def resale_valuation(
         {"date": str(s.created_at.date()), "value": s.estimated_value}
         for s in history
     ]
+    
+    # Cache the result
+    await cache_valuation(vehicle_id, result)
+    
     return ValuationResponse(**result)
 
 
@@ -188,9 +160,13 @@ async def resale_valuations_history(
 
 @router.get("", response_model=list[VehicleOut])
 async def list_vehicles(
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
 ) -> list[Vehicle]:
-    return await list_user_vehicles(db, user)
+    vehicles = await list_user_vehicles(db, user)
+    offset = (page - 1) * page_size
+    return vehicles[offset:offset + page_size]
 
 
 @router.post("", response_model=VehicleOut, status_code=201)
@@ -238,6 +214,7 @@ async def update_vehicle(
         await sync_odometer(db, vehicle, odo_set)
     await db.commit()
     await db.refresh(vehicle)
+    await invalidate_vehicle_cache(vehicle_id)
     return vehicle
 
 
@@ -253,6 +230,7 @@ async def delete_vehicle(
     )
     await db.delete(vehicle)
     await db.commit()
+    await invalidate_vehicle_cache(vehicle_id)
 
 
 @router.post("/rego-lookup", response_model=RegoLookupResponse)

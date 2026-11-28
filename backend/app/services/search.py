@@ -1,5 +1,8 @@
 """Semantic search service — hybrid vector + keyword search across AutoBrain data."""
 
+import hashlib
+import json
+
 from sqlalchemy import String, Text, TextClause, and_, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,9 +16,13 @@ from app.models.device import Device
 from app.models.market_listing import MarketListingCache
 from app.models.vehicle import Vehicle
 from app.services.vector_search import generate_embedding
+from app.services.cache import cache_get, cache_set, _cache_key
 from app.social.models import SocialIssuePost
 
 logger = get_logger(__name__)
+
+_SEARCH_CACHE_TTL = 300  # 5 minutes
+_SEARCH_CACHE_PREFIX = "search"
 
 # Entity tables with their searchable columns and vector column mapping.
 # `community: True` marks entities that are visible to every user (NOT scoped
@@ -98,6 +105,20 @@ async def semantic_search(
     unavailable.
     """
     types = list(entity_types) if entity_types is not None else list(_ENTITY_MAP.keys())
+    
+    # Create cache key
+    vehicle_ids_key = ",".join(sorted(vehicle_ids)) if vehicle_ids else "all"
+    types_key = ",".join(sorted(types))
+    cache_key = _cache_key(_SEARCH_CACHE_PREFIX, vehicle_ids_key, types_key, query, str(limit))
+    
+    # Try cache first
+    cached = await cache_get(cache_key)
+    if cached:
+        try:
+            return json.loads(cached)
+        except Exception:
+            pass
+    
     results: list[dict] = []
 
     # Try vector search first (needs embedding for the query text).
@@ -169,7 +190,15 @@ async def semantic_search(
 
     # Sort by score descending.
     results.sort(key=lambda r: r["score"], reverse=True)
-    return results[:limit]
+    final_results = results[:limit]
+    
+    # Cache results
+    try:
+        await cache_set(cache_key, json.dumps(final_results), _SEARCH_CACHE_TTL)
+    except Exception:
+        pass
+    
+    return final_results
 
 
 def _embedding_literal(embedding: list[float]) -> str:

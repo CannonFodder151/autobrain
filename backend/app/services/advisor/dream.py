@@ -7,12 +7,14 @@ All arithmetic is pure and deterministic — no AI, no 9Router.
 
 from __future__ import annotations
 
+import json
 from datetime import date
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.advisor._common import CURRENCY, _safe
+from app.services.cache import cache_get, cache_set, _cache_key
 
 # ── constants ─────────────────────────────────────────────────────────────
 DREAM_DSR_CEILING = 0.30  # 30% of monthly disposable income (AU bank ceiling)
@@ -27,6 +29,9 @@ DREAM_DEPOSIT_PCT_MAX = 100.0
 DREAM_DEFAULT_FINANCE_TERM_MONTHS = 60
 DREAM_DEFAULT_RATE_PCT = 7.5
 DREAM_DEFAULT_DEPOSIT_PCT = 20.0
+
+_ADVISOR_CACHE_TTL = 3600  # 1 hour
+_ADVISOR_CACHE_PREFIX = "advisor"
 
 
 # ── clamp helpers ─────────────────────────────────────────────────────────
@@ -84,6 +89,20 @@ async def compute_dream(
     the request-body finance profile), and repayments (reuses
     ``_loan_monthly_payment``).
     """
+    # Check cache first
+    cache_key = _cache_key(
+        _ADVISOR_CACHE_PREFIX, "dream",
+        make.lower(), model.lower(), str(year), vehicle_type,
+        str(finance_term_months or 0), str(rate_pct or 0), str(deposit_pct or 0),
+        str(annual_income or 0), str(monthly_expenses or 0), str(cash_on_hand or 0)
+    )
+    cached = await cache_get(cache_key)
+    if cached:
+        try:
+            return json.loads(cached)
+        except Exception:
+            pass
+    
     term = _dream_clamp_term(finance_term_months)
     rate = _dream_clamp_rate(rate_pct)
     deposit = _dream_clamp_deposit(deposit_pct)
@@ -188,10 +207,18 @@ async def compute_dream(
     if median is None:
         plan_note = target.get("note")
 
-    return {
+    result = {
         "currency": CURRENCY,
         "target": target,
         "affordability": affordability,
         "repayments": repayments,
         "note": plan_note,
     }
+    
+    # Cache result
+    try:
+        await cache_set(cache_key, json.dumps(result), _ADVISOR_CACHE_TTL)
+    except Exception:
+        pass
+    
+    return result

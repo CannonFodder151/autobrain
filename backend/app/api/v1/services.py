@@ -35,6 +35,7 @@ from app.services.service_records import (
     reconcile_part_stock,
     service_or_404,
 )
+from app.services.cache import invalidate_vehicle_cache
 from app.workers.tasks import queue_embedding
 
 logger = get_logger(__name__)
@@ -44,15 +45,20 @@ router = APIRouter(prefix="/vehicles/{vehicle_id}/services", tags=["services"])
 @router.get("", response_model=list[ServiceOut])
 async def list_services(
     vehicle_id: str,
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[ServiceRecord]:
     await get_accessible_vehicle(db, vehicle_id, user)
+    offset = (page - 1) * page_size
     rows = await db.scalars(
         select(ServiceRecord)
         .options(load_options())
         .where(ServiceRecord.vehicle_id == vehicle_id)
         .order_by(ServiceRecord.service_date.desc())
+        .offset(offset)
+        .limit(page_size)
     )
     return list(rows)
 
@@ -82,6 +88,7 @@ async def create_service(
     await db.refresh(record)
     await queue_due_notification(db, vehicle_id, record)
     queue_embedding("service", str(record.id))
+    await invalidate_vehicle_cache(vehicle_id)
     return record
 
 
@@ -176,6 +183,7 @@ async def update_service(
     await db.refresh(record)
     await queue_due_notification(db, vehicle_id, record)
     queue_embedding("service", str(record.id))
+    await invalidate_vehicle_cache(vehicle_id)
     return record
 
 
@@ -198,6 +206,7 @@ async def delete_service(
     if had_due:
         from app.workers.tasks import fire_and_forget, check_due_notifications
         fire_and_forget(check_due_notifications, vehicle_id)
+    await invalidate_vehicle_cache(vehicle_id)
 
 
 @router.post("/predict", response_model=ServicePredictionResponse)

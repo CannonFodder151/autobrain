@@ -22,9 +22,13 @@ from app.services.advisor._common import (
     _MAX_VALUE,
     _safe,
 )
+from app.services.cache import cache_get, cache_set, _cache_key
 from app.services.market_data import get_market_data
 
 logger = get_logger(__name__)
+
+_ADVISOR_CACHE_TTL = 3600  # 1 hour
+_ADVISOR_CACHE_PREFIX = "advisor"
 
 # Realistic trade-in band as a fraction of the private-sale mid. Dealers
 # typically pay 75-90% of private value; we surface three points across that
@@ -118,6 +122,15 @@ async def compute_market_value(
     with ``median_price=None`` and a ``note`` explaining the gap, so the UI
     can render a graceful "no market data" state instead of crashing.
     """
+    # Check cache first
+    cache_key = _cache_key(_ADVISOR_CACHE_PREFIX, "value", vehicle.id, str(odometer_km or 0))
+    cached = await cache_get(cache_key)
+    if cached:
+        try:
+            return json.loads(cached)
+        except Exception:
+            pass
+    
     market = await get_market_data(
         db,
         vehicle.make or "",
@@ -132,7 +145,7 @@ async def compute_market_value(
     stale = bool(market.get("stale"))
 
     if median is None:
-        return {
+        result = {
             "currency": CURRENCY,
             "low": None,
             "mid": None,
@@ -147,24 +160,32 @@ async def compute_market_value(
             "comparable_window_years": COMPARABLES_YEAR_WINDOW,
             "note": market.get("note") or "no market listings available for this vehicle",
         }
-
-    mid = round(median * cond_mult * km_mult, 2)
-    low, high = _band(mid)
-    return {
-        "currency": CURRENCY,
-        "low": low,
-        "mid": mid,
-        "high": high,
-        "source": market.get("source", "fallback"),
-        "as_of": freshness,
-        "stale": stale,
-        "sample_size": int(market.get("sample_size") or 0),
-        "condition_multiplier": round(cond_mult, 4),
-        "km_multiplier": round(km_mult, 4),
-        "comparable_count": 0,
-        "comparable_window_years": COMPARABLES_YEAR_WINDOW,
-        "note": None,
-    }
+    else:
+        mid = round(median * cond_mult * km_mult, 2)
+        low, high = _band(mid)
+        result = {
+            "currency": CURRENCY,
+            "low": low,
+            "mid": mid,
+            "high": high,
+            "source": market.get("source", "fallback"),
+            "as_of": freshness,
+            "stale": stale,
+            "sample_size": int(market.get("sample_size") or 0),
+            "condition_multiplier": round(cond_mult, 4),
+            "km_multiplier": round(km_mult, 4),
+            "comparable_count": 0,
+            "comparable_window_years": COMPARABLES_YEAR_WINDOW,
+            "note": None,
+        }
+    
+    # Cache result
+    try:
+        await cache_set(cache_key, json.dumps(result), _ADVISOR_CACHE_TTL)
+    except Exception:
+        pass
+    
+    return result
 
 
 def _load_listings(row: MarketListingCache) -> list[dict]:
@@ -194,6 +215,15 @@ async def find_comparables(
     comparison set. Individual listings are year-checked as well as the
     cache rows they live in.
     """
+    # Check cache first
+    cache_key = _cache_key(_ADVISOR_CACHE_PREFIX, "comparables", vehicle.id, str(max_results))
+    cached = await cache_get(cache_key)
+    if cached:
+        try:
+            return json.loads(cached)
+        except Exception:
+            pass
+    
     make_l = (vehicle.make or "").strip().lower()
     model_l = (vehicle.model or "").strip().lower()
     year = vehicle.year
@@ -239,7 +269,15 @@ async def find_comparables(
     # Closest year first, then cheapest, so the comparison set the
     # UI shows is the one a human would pick for this car.
     out.sort(key=lambda x: (abs((x.get("year") or 0) - (year or 0)), x["price"]))
-    return out[:max_results]
+    result = out[:max_results]
+    
+    # Cache result
+    try:
+        await cache_set(cache_key, json.dumps(result), _ADVISOR_CACHE_TTL)
+    except Exception:
+        pass
+    
+    return result
 
 
 def trade_in_band(mid_value: float | None) -> dict:

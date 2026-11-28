@@ -9,6 +9,7 @@ future AI fallback has to invent them.
 
 from __future__ import annotations
 
+import json
 from datetime import date
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +20,10 @@ from app.services.advisor.value import (
     compute_market_value,
     trade_in_band,
 )
+from app.services.cache import cache_get, cache_set, _cache_key
+
+_ADVISOR_CACHE_TTL = 3600  # 1 hour
+_ADVISOR_CACHE_PREFIX = "advisor"
 
 
 # Replace premium breakpoints (vehicle age -> premium factor).
@@ -119,6 +124,15 @@ async def compute_replace(
     so the UI can render the same "no market data" state the Value
     module already uses.
     """
+    # Check cache first
+    cache_key = _cache_key(_ADVISOR_CACHE_PREFIX, "replace", vehicle.id, str(odometer_km or 0), str(horizon_months or 0))
+    cached = await cache_get(cache_key)
+    if cached:
+        try:
+            return json.loads(cached)
+        except Exception:
+            pass
+    
     value = await compute_market_value(db, vehicle, odometer_km=odometer_km)
     current_value = value.get("mid")
     trade_in = trade_in_band(current_value)
@@ -129,7 +143,7 @@ async def compute_replace(
     premium = new_used_premium(age)
 
     if current_value is None:
-        return {
+        result = {
             "currency": CURRENCY,
             "current_value": None,
             "trade_in": trade_in,
@@ -148,50 +162,58 @@ async def compute_replace(
             },
             "note": value.get("note") or "no market listings available for this vehicle",
         }
+    else:
+        used_cost = current_value
+        new_cost = round(current_value * premium, 2)
 
-    used_cost = current_value
-    new_cost = round(current_value * premium, 2)
-
-    def _gap(replace_cost: float) -> dict:
-        if trade_in_mid is None:
+        def _gap(replace_cost: float) -> dict:
+            if trade_in_mid is None:
+                return {
+                    "currency": CURRENCY,
+                    "horizon_months": horizon,
+                    "gap": None,
+                    "monthly_target": None,
+                    "surplus": False,
+                    "note": "trade-in band unavailable",
+                }
+            raw_gap = replace_cost - current_value - trade_in_mid
+            if raw_gap <= 0:
+                return {
+                    "currency": CURRENCY,
+                    "horizon_months": horizon,
+                    "gap": round(raw_gap, 2),
+                    "monthly_target": 0.0,
+                    "surplus": True,
+                    "note": "replacement cost is below current value + trade-in — no saving target needed",
+                }
+            gap = round(raw_gap, 2)
+            monthly = round(gap / horizon, 2)
             return {
                 "currency": CURRENCY,
                 "horizon_months": horizon,
-                "gap": None,
-                "monthly_target": None,
+                "gap": gap,
+                "monthly_target": monthly,
                 "surplus": False,
-                "note": "trade-in band unavailable",
+                "note": None,
             }
-        raw_gap = replace_cost - current_value - trade_in_mid
-        if raw_gap <= 0:
-            return {
-                "currency": CURRENCY,
-                "horizon_months": horizon,
-                "gap": round(raw_gap, 2),
-                "monthly_target": 0.0,
-                "surplus": True,
-                "note": "replacement cost is below current value + trade-in — no saving target needed",
-            }
-        gap = round(raw_gap, 2)
-        monthly = round(gap / horizon, 2)
-        return {
+
+        result = {
             "currency": CURRENCY,
+            "current_value": current_value,
+            "trade_in": trade_in,
+            "used_replacement_cost": used_cost,
+            "new_replacement_cost": new_cost,
+            "age_years": age,
+            "new_used_premium": premium,
             "horizon_months": horizon,
-            "gap": gap,
-            "monthly_target": monthly,
-            "surplus": False,
+            "funding_gap": _gap(new_cost),
             "note": None,
         }
-
-    return {
-        "currency": CURRENCY,
-        "current_value": current_value,
-        "trade_in": trade_in,
-        "used_replacement_cost": used_cost,
-        "new_replacement_cost": new_cost,
-        "age_years": age,
-        "new_used_premium": premium,
-        "horizon_months": horizon,
-        "funding_gap": _gap(new_cost),
-        "note": None,
-    }
+    
+    # Cache result
+    try:
+        await cache_set(cache_key, json.dumps(result), _ADVISOR_CACHE_TTL)
+    except Exception:
+        pass
+    
+    return result

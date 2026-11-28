@@ -3,7 +3,7 @@
 import json
 from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -86,14 +86,19 @@ async def diagnose(
 @router.get("", response_model=list[DiagnosticOut])
 async def list_diagnostics(
     vehicle_id: str,
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[Diagnostic]:
     await get_accessible_vehicle(db, vehicle_id, user)
+    offset = (page - 1) * page_size
     rows = await db.scalars(
         select(Diagnostic)
         .where(Diagnostic.vehicle_id == vehicle_id)
         .order_by(Diagnostic.created_at.desc())
+        .offset(offset)
+        .limit(page_size)
     )
     return list(rows)
 
