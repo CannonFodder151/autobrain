@@ -11,6 +11,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.326] - 2026-11-28
+
 ### Added (AUT-1031)
 - feat(deps): Configure Dependabot for automated dependency updates across all ecosystems (Docker, Python, npm, pub, GitHub Actions)
 - feat(deps): Add auto-merge workflow for Dependabot patch/minor PRs with passing CI
