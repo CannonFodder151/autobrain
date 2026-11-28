@@ -118,8 +118,13 @@ print(json.dumps({'StackFileContent': file_doc.get('StackFileContent', ''), 'Env
 redeploy() {
   local id="$1" ep="$2" body="$3"
   local resp
-  resp="$(curl -sk -X PUT "${AUTH[@]}" -H "Content-Type: application/json" --data-binary "@$body" "$API/stacks/$id?endpointId=$ep&pullImage=true")"
-  printf '%s' "$resp" | python3 -c "import sys,json
+  local attempt=1
+  local max_attempts=3
+  while [ $attempt -le $max_attempts ]; do
+    resp="$(curl -sk -X PUT "${AUTH[@]}" -H "Content-Type: application/json" --data-binary "@$body" "$API/stacks/$id?endpointId=$ep&pullImage=true" 2>&1)"
+    local curl_rc=$?
+    if [ $curl_rc -eq 0 ]; then
+      printf '%s' "$resp" | python3 -c "import sys,json
 raw=sys.stdin.read().strip()
 try:
   d=json.loads(raw)
@@ -131,6 +136,13 @@ else:
     print('ok (status=%s)' % s)
   else:
     print('ERR '+str(d)[:200])"
+      return
+    fi
+    log "   redeploy attempt $attempt/$max_attempts failed (curl exit code: $curl_rc), retrying in 10s..."
+    sleep 10
+    attempt=$((attempt + 1))
+  done
+  echo "ERR redeploy failed after $max_attempts attempts"
 }
 
 wait_health() {

@@ -34,18 +34,22 @@ jobs:
       - name: Redeploy demo tier (pullImage)
         run: |
           set -euo pipefail
+          echo "=== Starting demo tier redeploy ==="
           UPGRADE_TIERS="autobrain-demo|2|https://demo.autobrainservice.app/health|" ./scripts/upgrade-instances.sh
+          echo "=== Demo tier redeploy completed ==="
       - name: Test gate — demo health
         run: |
           set -euo pipefail
+          echo "=== Starting demo health gate ==="
           for i in $(seq 1 30); do
             if curl -fsS --max-time 10 https://demo.autobrainservice.app/health >/dev/null 2>&1; then
               echo "demo healthy"
               exit 0
             fi
+            echo "demo health check attempt $i/30 failed, retrying in 10s..."
             sleep 10
           done
-          echo "demo health gate FAILED"
+          echo "demo health gate FAILED after 30 attempts"
           exit 1
 
   stage-default:
@@ -61,18 +65,22 @@ jobs:
       - name: Redeploy default tier (pullImage)
         run: |
           set -euo pipefail
+          echo "=== Starting default tier redeploy ==="
           UPGRADE_TIERS="autobrain-default|2|https://default.autobrainservice.app/health|" ./scripts/upgrade-instances.sh
+          echo "=== Default tier redeploy completed ==="
       - name: Test gate — default health
         run: |
           set -euo pipefail
+          echo "=== Starting default health gate ==="
           for i in $(seq 1 30); do
             if curl -fsS --max-time 10 https://default.autobrainservice.app/health >/dev/null 2>&1; then
               echo "default healthy"
               exit 0
             fi
+            echo "default health check attempt $i/30 failed, retrying in 10s..."
             sleep 10
           done
-          echo "default health gate FAILED"
+          echo "default health gate FAILED after 30 attempts"
           exit 1
 
   stage-hosted:
@@ -88,16 +96,20 @@ jobs:
       - name: Redeploy hosted tier (pullImage)
         run: |
           set -euo pipefail
+          echo "=== Starting hosted tier redeploy ==="
           UPGRADE_TIERS="autobrain-hosted|5|https://hosted.autobrainservice.app/health|POSTGRES_USER=autobrain,POSTGRES_DB=autobrain" ./scripts/upgrade-instances.sh
+          echo "=== Hosted tier redeploy completed ==="
       - name: Test gate — hosted health
         run: |
           set -euo pipefail
+          echo "=== Starting hosted health gate ==="
           for i in $(seq 1 30); do
             if curl -fsS --max-time 10 https://hosted.autobrainservice.app/health >/dev/null 2>&1; then
               echo "hosted healthy"
               exit 0
             fi
+            echo "hosted health check attempt $i/30 failed, retrying in 10s..."
             sleep 10
           done
-          echo "hosted health gate FAILED"
+          echo "hosted health gate FAILED after 30 attempts"
           exit 1
