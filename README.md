@@ -3,7 +3,7 @@
 AI-powered car enthusiast companion. Manage vehicles, track maintenance & fuel, run AI diagnostics, log modifications, scan receipts, manage parts inventory, estimate resale value, and get analytics — with every AI feature routed through your **9Router** instance.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.3.270-green)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.3.326-green)](CHANGELOG.md)
 
 - **Website / hosted service** — https://autobrainservice.app
 - **Live demo** — https://demo.autobrainservice.app (login: `demo@autobrainservice.app`; password distributed via the Paperclip secret `demo/demo-account-password`, set on the demo stack as `DEMO_PASSWORD`)
@@ -24,17 +24,48 @@ docker compose -f docker-compose.prod.yml up -d
 
 First boot applies DB migrations and creates the admin account automatically.
 
+### Development (from source)
+
+```bash
+cp .env.example .env
+# Edit .env with your values (at minimum SECRET_KEY, AI_ROUTER_URL, AI_ROUTER_API_KEY, ADMIN_EMAIL, ADMIN_INITIAL_PASSWORD)
+docker compose up -d --build
+```
+
+Services:
+- API docs: http://localhost:8000/docs (Swagger UI)
+- AI gateway docs: http://localhost:8001/docs
+- MinIO console: http://localhost:9001
+- Frontend: http://localhost:8080
+
+### Production (prebuilt images)
+
+```bash
+cp .env.example .env
+# Fill in all required values from .env.example
+docker compose -f docker-compose.prod.yml up -d
+```
+
+Prod runs behind nginx on port 80:
+- `/api/*` → backend
+- `/ws/*`  → backend WebSocket
+- `/ai/*`  → AI gateway
+- `/`      → Flutter web build
+
 ## Environment variables
 
 Copy `.env.example` to `.env` and set at minimum:
 
 | Variable | Purpose |
 |----------|---------|
-| `SECRET_KEY` | JWT signing key — use a long random string |
+| `SECRET_KEY` | JWT signing key — generate: `python -c "import secrets; print(secrets.token_urlsafe(64))"` |
 | `ADMIN_EMAIL` / `ADMIN_INITIAL_PASSWORD` | Bootstrap admin account (created on first boot) |
 | `AI_ROUTER_URL` / `AI_ROUTER_API_KEY` / `AI_ROUTER_MODEL` | Point AI at any OpenAI-compatible router (see `.env.example`) |
-| `SMTP_HOST` / `SMTP_PORT` / `SMTP_FROM_EMAIL` | Email notifications + password reset (uses the system SMTP) |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_FROM_EMAIL` | Email notifications + password reset |
 | `APP_BASE_URL` | Public URL used to build password-reset links |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | PostgreSQL credentials |
+| `REDIS_PASSWORD` | Redis password (required) |
+| `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | MinIO/S3 credentials |
 
 Optional highlights:
 - `DEMO_MODE=true` — seeds a read-only demo account with sample data.
@@ -46,6 +77,8 @@ Optional highlights:
 - `BACKUP_ENABLED=true` / `BACKUP_RETENTION_DAYS=14` — daily DB JSON snapshots to MinIO.
 - `ADMIN_API_KEY` — machine-to-machine user management via `/api/v1/admin-api/*`.
 - `DEMO_MODE`, `DEMO_EMAIL`, `DEMO_PASSWORD` — demo account credentials.
+- `CARTO_API_KEY` — required for frontend map tiles (AUT-4690).
+- `FUEL_NSW_API_KEY` / `FUEL_VIC_API_KEY` / `FUEL_QLD_API_KEY` — fuel price map data sources (premium).
 
 See `.env.example` for the full list with comments.
 
@@ -56,26 +89,64 @@ curl http://localhost:8000/health        # backend
 curl http://localhost:8001/health        # AI gateway
 ```
 
+## API Documentation
+
+- **OpenAPI/Swagger**: http://localhost:8000/docs (backend), http://localhost:8001/docs (AI gateway)
+- **OpenAPI JSON**: http://localhost:8000/openapi.json
+- **ReDoc**: http://localhost:8000/redoc
+
+See [`openapi.json`](openapi.json) in the repo root for the full specification.
+
 ## Services
 
 `docker-compose.prod.yml` runs: **postgres, redis, minio, backend (API + AI gateway + Celery worker+beat in-container), frontend** — 5 containers. The frontend nginx container serves the Flutter web app at `/` and proxies `/api/*`, `/ws/*`, `/ai/*` to backend/AI — same-origin, no CORS needed. The AI gateway runs as a subprocess on `:8001` inside the backend container.
 
-`docker-compose.hosted.yml` runs the same stack plus Stripe billing and self-service signup, with prebuilt Docker Hub images (`cannonfodder151/autobrain-*:hosted`). Hosted uses 8 containers: postgres, redis, minio, backend, ai, frontend, hub, 9router — with a separate `ai` container (AI gateway + market-data) and dedicated `9router` instance.
+`docker-compose.hosted.yml` runs the same stack plus Stripe billing and self-service signup, with prebuilt images. Hosted uses 8 containers: postgres, redis, minio, backend, ai, frontend, hub, 9router — with a separate `ai` container (AI gateway + market-data) and dedicated `9router` instance.
+
+| Service | Image | Notes |
+|---------|-------|-------|
+| postgres | `pgvector/pgvector:pg17` (pinned by digest) | healthcheck `pg_isready`; volume `postgres-data` |
+| redis | `redis:7-alpine` | healthcheck `redis-cli ping`; volume `redis-data` |
+| minio | `minio/minio:RELEASE.2025-09-07T16-13-09Z` | pinned (AUT-322); healthcheck `mc ready local`; volume `minio-data` |
+| backend | `autobrain-backend:<tag>` | API on `:8000` (internal); **Celery worker+beat merged in** (AUT-3153); `/health` |
+| ai | `autobrain-ai:<tag>` | AI gateway on `:8001` (internal); `/health` |
+| frontend | `autobrain-frontend:<tag>` | nginx serves Flutter web + proxies `/api/*`, `/ws/*`, `/ai/*` |
+| hub | `ghcr.io/cannonfodder151/autobrain-federation-hub:<tag>` | federation hub (Community Garage); built from private repo |
+| 9router | `ghcr.io/cannonfodder151/9router:<tag>` | AI router (OpenAI-compatible) |
 
 ## Documentation
 
 Full docs are maintained in the Outline wiki (AutoBrain collection) and mirrored in [`docs/`](docs/index.md).
 
+### Key documentation files
+
+| File | Description |
+|------|-------------|
+| [Deployment Guide](docs/Deployment-and-Infrastructure/deployment-guide.md) | Complete deployment procedures for all tiers |
+| [Deploy Runbook](docs/runbooks/deploy.md) | Step-by-step deployment runbook |
+| [Backup & Restore Runbook](docs/runbooks/backup-restore.md) | Admin backup, off-site backup, disaster recovery |
+| [Database Migration Runbook](docs/runbooks/database-migration.md) | Alembic migration procedures and troubleshooting |
+| [Secret Rotation Runbook](docs/runbooks/secret-rotation.md) | Rotate secrets across environments |
+| [Health Check Runbook](docs/runbooks/health-check.md) | Service health verification and troubleshooting |
+| [Incident Response Runbook](docs/runbooks/incident-response.md) | Incident classification, escalation, and resolution |
+| [Shop Deployment](docs/shop-deployment.md) | AutoBrain Shop deployment on Oracle VM |
+| [Developer Onboarding](docs/Engineering/developer-onboarding.md) | Getting started for developers |
+| [Architecture](docs/Engineering/architecture.md) | System architecture overview |
+| [Database Schema](docs/Engineering/database-schema.md) | Database schema documentation |
+| [Security](docs/Security/security.md) | Security policies and procedures |
+| [OBD2 Dongle Build](docs/Engineering/obd2-dongle/README.md) | Hardware build documentation |
+
 ## Repository layout
 
 ```
-/backend    FastAPI + SQLAlchemy + Celery + MinIO
-/ai         AI inference gateway (12 modules) + rule-based fallbacks
-/frontend   Flutter web frontend
-/infra      Kubernetes manifests, systemd units, nginx config
-/docker     Build contexts: backend (unified API+AI+worker), ai, frontend
-/scripts    deploy, backup, setup-server, publish-images, bump-version
-/docs       Markdown mirrors of the Outline wiki
+ backend/    FastAPI + SQLAlchemy + Celery + MinIO
+ ai/         AI inference gateway (12 modules) + rule-based fallbacks
+ frontend/   Flutter web frontend
+ infra/      Kubernetes manifests, systemd units, nginx config
+ docker/     Build contexts: backend (unified API+AI+worker), ai, frontend
+ scripts/    deploy, backup, setup-server, publish-images, bump-version
+ docs/       Markdown mirrors of the Outline wiki
+ firmware/   OBD2 dongle firmware (ESP32 + CAN + GPS)
 ```
 
 ## Mobile app split
@@ -112,6 +183,7 @@ All AI features route through 9Router (OpenAI-compatible). If the router is unre
 | Condition | `/v1/condition` | Vehicle condition scoring from photos |
 | Parts guide | `/v1/parts-guide` | Parts compatibility + sourcing |
 | Social image | `/v1/social-image` | Community post image generation |
+| Health score | `/vehicles/{id}/health-score` | Vehicle health score (deterministic-first + 9Router) |
 
 ## Key features
 
@@ -130,7 +202,20 @@ All AI features route through 9Router (OpenAI-compatible). If the router is unre
 - **Profile export/import** — download/import your whole account as JSON
 - **Admin backup & restore** — full JSON snapshot, wipe-and-restore, scheduled backups
 - **Community Garage** — social features, issues blog, federation hub
-- **Petrol price map** — NSW/QLD/VIC/SA fuel prices with map view
+- **Petrol price map (Servo Spy)** — NSW/QLD/VIC/WA/SA fuel prices with map view (premium)
+- **OBD2 dongle** — phone-free trip logging hardware (ESP32 + CAN + GPS)
+
+## Deployment
+
+### Promotion order (MANDATORY)
+
+1. **Demo** — `demo.autobrainservice.app` (public, low-risk, demo account)
+2. **Default** — `default.autobrainservice.app` (internal dev/default instance)
+3. **Hosted** — `hosted.autobrainservice.app` (Oracle Cloud, production)
+
+> **Never skip or reorder tiers.** A change never goes to Hosted without first passing Demo and Default.
+
+See [Deployment Guide](docs/Deployment-and-Infrastructure/deployment-guide.md) and [Deploy Runbook](docs/runbooks/deploy.md) for complete procedures.
 
 ## Contributing
 
