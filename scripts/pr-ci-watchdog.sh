@@ -40,14 +40,32 @@ now_iso() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 # Map a failed workflow name to the agent that should own its fix.
 owner_agent_for_workflow() {
   case "$1" in
-    "Backend tests") echo "Backend Engineer" ;;
-    "PR Checks") echo "Frontend Engineer" ;;
-    "Security — PR gate (secrets, IaC, deps, flutter)"|"Security — full-resolution dependency scan"|"Security — rego-lookup-api PR dependency gate") echo "Security Officer" ;;
-    "Publish images to Docker Hub"|"Build hosted images (multi-arch)"|"Build Shop images (private registry)"|"Upgrade instance chain (AUT-4982)") echo "DevOps Engineer" ;;
-    "Compose structural checks") echo "Platform Engineer" ;;
+    "Backend tests"|"Backend — pytest smoke (model metadata + alembic heads)"|"Backend image build check"|"build-backend-arm64-only") echo "Backend Engineer" ;;
+    "PR Checks"|"Code Review"|"Visual regression (desktop 1280/1440/1920)") echo "Frontend Engineer" ;;
+    "Security — PR gate (secrets, IaC, deps, flutter)"|"Security — full-resolution dependency scan"|"Security — rego-lookup-api PR dependency gate"|"Security — base image CVE scan (trivy)"|"Fix Secret File Permissions on EP5") echo "Security Officer" ;;
+    "Publish images to Docker Hub"|"Build hosted images (multi-arch)"|"Build Shop images (private registry)"|"Upgrade instance chain (AUT-4982)"|"Pipeline stages (demo -> default -> hosted)"|"CD"|"ARM64 runner keepalive"|"Runner Watchdog (arm64)"|"Upgrade cycle (2-day)"|"CI Billing Monitor"|"CI Triage Webhook"|"Fix Portainer Agent on Oracle VM"|"Graft Freshness Check"|"libexpat fix-detect (nginx frontend, AUT-2126)") echo "DevOps Engineer" ;;
+    "Compose structural checks"|"CI Queue Guard") echo "Platform Engineer" ;;
     "Sync mobile app") echo "Mobile Release Engineer" ;;
-    "Visual regression (desktop 1280/1440/1920)") echo "Frontend Engineer" ;;
+    "Build rego-lookup-api arm64 (native)") echo "Platform Engineer" ;;
+    "Sync docs to Outline wiki"|"Docs Sync Gate"|"Docs page-map guard") echo "Documentation Manager" ;;
+    "Auto-triage Pipeline") echo "DevOps Engineer" ;;
     *) echo "DevOps Engineer" ;;
+  esac
+}
+
+# Map a failed workflow name to GitHub username(s) for issue assignment.
+# Configure via GH_ASSIGNEE_* env vars or extend this function.
+github_assignee_for_workflow() {
+  local agent
+  agent=$(owner_agent_for_workflow "$1")
+  case "$agent" in
+    "DevOps Engineer") echo "${GH_ASSIGNEE_DEVOPS:-}" ;;
+    "Backend Engineer") echo "${GH_ASSIGNEE_BACKEND:-}" ;;
+    "Frontend Engineer") echo "${GH_ASSIGNEE_FRONTEND:-}" ;;
+    "Security Officer") echo "${GH_ASSIGNEE_SECURITY:-}" ;;
+    "Platform Engineer") echo "${GH_ASSIGNEE_PLATFORM:-}" ;;
+    "Mobile Release Engineer") echo "${GH_ASSIGNEE_MOBILE:-}" ;;
+    *) echo "" ;;
   esac
 }
 
@@ -140,11 +158,20 @@ log "Creating GitHub issue"
 OWNER_AGENT=$(owner_agent_for_workflow "$FAILED_WORKFLOW")
 ISSUE_TITLE="[CI Failure] $FAILED_WORKFLOW failed on $FAILED_BRANCH @ $(echo "$FAILED_SHA" | cut -c1-7)"
 
+# Load postmortem template from docs/Engineering/postmortem-template.md
+POSTMORTEM_TEMPLATE_PATH="${GITHUB_WORKSPACE:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}/docs/Engineering/postmortem-template.md"
+if [ -f "$POSTMORTEM_TEMPLATE_PATH" ]; then
+  POSTMORTEM_TEMPLATE=$(cat "$POSTMORTEM_TEMPLATE_PATH")
+else
+  POSTMORTEM_TEMPLATE="## Incident Summary\n- **What happened**: \n- **Impact**: \n- **Duration**: \n- **Severity**: \n\n## Timeline\n- **Detected**: $(now_iso) UTC\n- **Investigated**: \n- **Mitigated**: \n- **Resolved**: \n\n## Root Cause\n- **Primary cause**: \n- **Contributing factors**: \n\n## Resolution\n- **What was done**: \n- **Why it worked**: \n\n## Action Items\n- [ ] Prevent recurrence\n- [ ] Improve detection\n- [ ] Update runbooks\n\n## Lessons Learned"
+fi
+
 # Build the issue body with postmortem template.
+DETECTION_TIME=$(now_iso)
 ISSUE_BODY=$(cat <<ISSUEBODY
 ## CI Failure: $FAILED_WORKFLOW
 
-**Detected:** $(now_iso) UTC
+**Detected:** $DETECTION_TIME UTC
 **Workflow:** $FAILED_WORKFLOW
 **Branch:** $FAILED_BRANCH
 **Commit:** [$FAILED_SHA]($FAILED_RUN_URL/commit/$FAILED_SHA)
@@ -157,47 +184,37 @@ $log_section
 
 ### Postmortem Template
 
-\`\`\`
-## Incident Summary
-- **What failed:** $FAILED_WORKFLOW on branch $FAILED_BRANCH
-- **When:** $(now_iso) UTC
-- **Detected by:** PR/CI Watchdog (automated)
-- **Severity:** TBD
-- **Impact:** TBD
-
-## Root Cause
-TBD — owner agent to complete.
-
-## Immediate Fix
-TBD
-
-## Prevention
-TBD
-
-## MTTR
-- **Detection time:** $(now_iso) UTC
-- **Resolution time:** TBD
-- **MTTR:** TBD
-\`\`\`
+$POSTMORTEM_TEMPLATE
 
 ---
 
+### MTTR Tracking
+- **Detection time:** $DETECTION_TIME UTC
+- **Resolution time:** TBD
+- **MTTR:** TBD
+
 ### Labels for MTTR tracking
-- `ci-failure` — this issue tracks a CI failure
-- `mttr:open` — MTTR clock is running (resolved when closed)
-- `watchdog:auto-created` — created by PR/CI Watchdog automation
+- \`ci-failure\` — this issue tracks a CI failure
+- \`mttr:open\` — MTTR clock is running (resolved when closed)
+- \`watchdog:auto-created\` — created by PR/CI Watchdog automation
 
 cc: @$OWNER_AGENT
 ISSUEBODY
 )
 
+# Determine GitHub assignee(s) for the issue.
+GITHUB_ASSIGNEE=$(github_assignee_for_workflow "$FAILED_WORKFLOW")
+
 # Use gh to create the issue.
-issue_create_out=$(gh issue create \
-  --repo "$FAILED_REPO" \
-  --title "$ISSUE_TITLE" \
-  --body "$ISSUE_BODY" \
-  --label "ci-failure,mttr:open,watchdog:auto-created" \
-  2>&1) || {
+gh_issue_args=(issue create --repo "$FAILED_REPO" --title "$ISSUE_TITLE" --body "$ISSUE_BODY" --label "ci-failure,mttr:open,watchdog:auto-created")
+if [ -n "$GITHUB_ASSIGNEE" ]; then
+  gh_issue_args+=(--assignee "$GITHUB_ASSIGNEE")
+  log "Assigning GitHub issue to: $GITHUB_ASSIGNEE"
+else
+  log "No GitHub assignee configured for workflow '$FAILED_WORKFLOW' (owner agent: $OWNER_AGENT)"
+fi
+
+issue_create_out=$(gh "${gh_issue_args[@]}" 2>&1) || {
   log "ERROR: gh issue create failed: $issue_create_out"
   exit 1
 }
