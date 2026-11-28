@@ -48,8 +48,11 @@ jobs:
           repo = os.environ.get('REPO')
 
           # Extract detection time from issue body
-          # Pattern: **Detection time:** 2026-11-22T12:00:00Z UTC
-          match = re.search(r'\*\*Detection time:\*\*\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)', issue_body)
+          # Pattern 1: **Detected:** 2026-11-22T12:00:00Z UTC (main body)
+          # Pattern 2: **Detection time:** 2026-11-22T12:00:00Z UTC (postmortem template, may be in code block)
+          match = re.search(r'\*\*Detected:\*\*\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)', issue_body)
+          if not match:
+              match = re.search(r'\*\*Detection time:\*\*\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)', issue_body)
           if not match:
               print(f"::warning::Could not find detection time in issue #{issue_number}")
               exit(0)
