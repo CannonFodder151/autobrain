@@ -21,7 +21,6 @@ on:
       - "scripts/seed-secrets.sh"
       - "scripts/test_check_compose_config.py"
       - ".github/workflows/compose-checks.yml"
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -29,8 +28,8 @@ permissions:
 jobs:
   compose-checks:
     name: compose-checks
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    runs-on: [self-hosted, linux, x64, vm2]
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
 
