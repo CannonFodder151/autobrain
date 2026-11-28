@@ -66,9 +66,16 @@ for df in PYTHON_DOCKERFILES:
         fail(f"{df} pins {pins} but the scan env pins {DIGEST_RE.search(python_pin).group(1)}")
 
 nginx_docker_pins = set(DIGEST_RE.findall(read(NGINX_DOCKERFILE)))
-if nginx_docker_pins != {DIGEST_RE.search(nginx_pin).group(1)}:
+nginx_from_pins = set()
+for line in read(NGINX_DOCKERFILE).splitlines():
+    stripped = line.strip()
+    if stripped.startswith("FROM ") and "nginxinc/nginx-unprivileged" in stripped:
+        nginx_from_pins.update(DIGEST_RE.findall(stripped))
+if not nginx_from_pins:
+    fail(f"{NGINX_DOCKERFILE} has no FROM nginxinc/nginx-unprivileged line with digest")
+if nginx_from_pins != {DIGEST_RE.search(nginx_pin).group(1)}:
     fail(
-        f"{NGINX_DOCKERFILE} builds {nginx_docker_pins} but {SCAN_WORKFLOW} scans "
+        f"{NGINX_DOCKERFILE} builds {nginx_from_pins} but {SCAN_WORKFLOW} scans "
         f"{DIGEST_RE.search(nginx_pin).group(1)} — the gate is not covering the "
         f"image we ship"
     )
