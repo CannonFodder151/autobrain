@@ -25,7 +25,7 @@ self-signup + MFA enforced. Deployed via Portainer on the Oracle Cloud VM (ARM64
 |---------|-------|------|
 | postgres | `pgvector/pgvector:pg17@sha256:cf134a76...` | Datastore + `vector` extension (pgvector), digest-pinned |
 | redis | `redis:7.2.5-alpine@sha256:6aaf3f5e...` | Cache + Celery broker/result backend, auth required |
-| minio | `minio/minio@sha256:14cea493...` | Receipts/photos S3 storage, digest-pinned |
+| minio | `minio/minio:RELEASE.2025-10-15T17-29-55Z` | Receipts/photos S3 storage |
 | backend | `autobrain-backend:hosted@sha256:161f2b4a...` | API :8000 + AI gateway :8001 + Celery worker+beat (AUT-3153), runs as `autobrain` (uid 1000) |
 | dongle-server | `autobrain-dongle-server:hosted@sha256:c5768948...` | OBD ESP32 dongle firmware + serial whitelist (AUT-1673), non-root |
 | frontend | `autobrain-frontend:hosted@sha256:9fcf4de8...` | Static nginx-unprivileged :8080, localhost-bound, runs as `nginx` |

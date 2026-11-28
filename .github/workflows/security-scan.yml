@@ -118,7 +118,7 @@ jobs:
         # a patched image, mirroring the 9router tracking pattern above.
         run: |
           set -uo pipefail
-          MINIO_IMG="minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e"
+          MINIO_IMG="minio/minio:RELEASE.2025-10-15T17-29-55Z"
           trivy image --severity CRITICAL,HIGH --exit-code 1 --format table "$MINIO_IMG"
           CODE=$?
           if [ "$CODE" -ne 0 ]; then
@@ -138,4 +138,4 @@ jobs:
           curl -s -X POST https://n8n.nathanmartina.com/webhook/discord-report \
             -H "Content-Type: application/json" \
             -d "$(jq -nc --arg c status --arg t "$TITLE" --arg col "$COLOR" --arg u "$RUN_URL" \
-              '{channel:$c,title:$t,description:"Weekly trivy scan of minio/minio pinned to RELEASE.2025-09-07T16-13-09Z digest. AUT-1737.",color:$col,author:"Security Scan",fields:[{name:"Scan",value:"trivy CRITICAL/HIGH",inline:true},{name:"Run",value:$u,inline:true}]}')"
+              '{channel:$c,title:$t,description:"Weekly trivy scan of minio/minio pinned to RELEASE.2025-10-15T17-29-55Z digest. AUT-1737.",color:$col,author:"Security Scan",fields:[{name:"Scan",value:"trivy CRITICAL/HIGH",inline:true},{name:"Run",value:$u,inline:true}]}')"
