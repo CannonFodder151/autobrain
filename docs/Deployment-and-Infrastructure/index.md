@@ -14,4 +14,15 @@ Compose stacks, hosted/prod topologies, backup, monitoring, deployment guides, C
 | [monitoring.md](./monitoring.md) | Logging and monitoring |
 | [autobrain-deploy-trigger.md](./autobrain-deploy-trigger.md) | n8n deploy trigger |
 
+## Runbooks
+
+| Runbook | Purpose |
+|---------|---------|
+| [../runbooks/deploy.md](../runbooks/deploy.md) | Deploy to Demo, Default, Hosted tiers |
+| [../runbooks/backup-restore.md](../runbooks/backup-restore.md) | Backup, restore, disaster recovery |
+| [../runbooks/database-migration.md](../runbooks/database-migration.md) | Alembic migration procedures |
+| [../runbooks/secret-rotation.md](../runbooks/secret-rotation.md) | Rotate secrets across environments |
+| [../runbooks/health-check.md](../runbooks/health-check.md) | Service health verification |
+| [../runbooks/incident-response.md](../runbooks/incident-response.md) | Incident classification & response |
+
 **Note:** Per-instance secrets and API keys live in Outline (internal-only). Do not mirror to this public repo.

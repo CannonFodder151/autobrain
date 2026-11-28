@@ -65,3 +65,75 @@ re-read whole files.
 After big code changes, refresh the graph with `graft build` (deterministic,
 no API key, $0).
 <!-- graft:end -->
+
+## AutoBrain Project-Specific Patterns
+
+### Code Style
+- **Python**: FastAPI, SQLAlchemy 2.0 async, Pydantic v2, type hints mandatory
+- **Flutter/Dart**: null safety, Riverpod for state, material design
+- **TypeScript**: not used (Flutter web)
+- **SQL**: PostgreSQL 17 + pgvector, Alembic migrations
+
+### Architecture Patterns
+- **API**: REST + WebSocket, versioned at `/api/v1`
+- **Auth**: JWT (access + refresh rotation), TOTP MFA (RFC 6238), passkeys (WebAuthn)
+- **AI**: All inference via 9Router (OpenAI-compatible); deterministic rule-based fallbacks
+- **Async**: Celery (Redis broker) for background tasks, Celery Beat for scheduling
+- **Storage**: MinIO (S3-compatible) for files, PostgreSQL for relational data
+- **Frontend**: Flutter web served by nginx, proxies API/WebSocket/AI same-origin
+
+### Key Conventions
+- **Environment**: All config via `.env` (from `.env.example`), never hardcoded
+- **Secrets**: `*_FILE` suffix for file-based secrets (AUT-1533), Docker secrets in production
+- **Database**: `alembic upgrade head` on boot; `create_all` fallback only for dev
+- **Docker**: Multi-stage builds, digest-pinned base images (security)
+- **Versioning**: `scripts/bump-version.sh` updates all version files + mobile pubspec
+
+### Testing
+- **Backend**: pytest, async, fixtures in `tests/conftest.py`
+- **Frontend**: `flutter test` for unit/widget tests
+- **Integration**: Post-deploy smoke script (`scripts/post-deploy-smoke.sh`)
+- **CI**: GitHub Actions with Docker layer caching, Trivy scanning
+
+### Deployment
+- **Tiers**: Demo → Default → Hosted (mandatory promotion order)
+- **Hosted**: Oracle Cloud VM, Portainer stack, GHCR images, nightly 03:00–04:00 AEST window
+- **Health checks**: `/health` on all services, post-deploy smoke required
+- **Rollback**: Portainer stack redeploy previous image tag
+
+### AI Module Pattern
+Each AI module follows deterministic-first pattern:
+1. Rule-based fallback (always works, no external deps)
+2. 9Router enrichment (if available, adds confidence/detail)
+3. Response includes `model` field: `"9router"` or `"rule-based-fallback"`
+
+### Security
+- **CORS**: Same-origin only by default; explicit allowlist via `CORS_ALLOWED_ORIGINS`
+- **Rate limiting**: Per-user AI limits + gateway burst caps
+- **Demo accounts**: Read-only, all write endpoints + AI return 403
+- **MFA**: Enforced for non-demo accounts when `MFA_ENFORCED=true`
+- **Secrets**: Never in code/logs; Paperclip secrets API / Docker secrets
+
+### Common Commands
+```bash
+# Development
+docker compose up -d --build
+docker compose logs -f backend
+
+# Database
+docker compose exec backend alembic revision --autogenerate -m "change"
+docker compose exec backend alembic upgrade head
+
+# Testing
+docker compose exec backend pytest -xvs
+flutter test
+
+# Deployment
+./scripts/publish-images.sh <tag>
+./scripts/upgrade-instances.sh
+./scripts/post-deploy-smoke.sh <url>
+./scripts/prune-images.sh
+
+# Version bump
+./scripts/bump-version.sh [--mobile]
+```

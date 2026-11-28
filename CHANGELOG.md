@@ -10,6 +10,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed (AUT-1091)
+- fix(ci): prevent `auto-bump.sh` from modifying `CHANGELOG.md` when no unreleased changes exist
+
+### Added (AUT-743)
+- docs(secrets): add Kubernetes section and rotation procedures to secret-file-pattern.md
+
+### Fixed (AUT-1151)
+- fix(env): update `.env.example` stale backup DNS references to backup service
+
 ## [0.3.326] - 2026-11-28
 
 ### Added (AUT-1031)
@@ -61,4 +70,3 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   Docker Hub :demo exists)
 - update-compose-pins.py now supports Docker Hub (prefixless) registry and
   tier-specific frontend tags (:demo/:default)
-
