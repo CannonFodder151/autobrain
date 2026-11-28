@@ -40,13 +40,15 @@ now_iso() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 # Map a failed workflow name to the agent that should own its fix.
 owner_agent_for_workflow() {
   case "$1" in
-    "Backend tests") echo "Backend Engineer" ;;
+    "Backend tests"|"Backend — pytest smoke (model metadata + alembic heads)"|"AI tests") echo "Backend Engineer" ;;
     "PR Checks") echo "Frontend Engineer" ;;
-    "Security — PR gate (secrets, IaC, deps, flutter)"|"Security — full-resolution dependency scan"|"Security — rego-lookup-api PR dependency gate") echo "Security Officer" ;;
-    "Publish images to Docker Hub"|"Build hosted images (multi-arch)"|"Build Shop images (private registry)"|"Upgrade instance chain (AUT-4982)") echo "DevOps Engineer" ;;
+    "Security — PR gate (secrets, IaC, deps, flutter)"|"Security — full-resolution dependency scan"|"Security — rego-lookup-api PR dependency gate"|"Security — base image CVE scan (trivy)") echo "Security Officer" ;;
+    "Publish images to Docker Hub"|"Build hosted images (multi-arch)"|"Build Shop images (private registry)"|"Upgrade instance chain (AUT-4982)"|"Build rego-lookup-api arm64 (native)"|"Pipeline stages (demo -> default -> hosted)") echo "DevOps Engineer" ;;
     "Compose structural checks") echo "Platform Engineer" ;;
     "Sync mobile app") echo "Mobile Release Engineer" ;;
     "Visual regression (desktop 1280/1440/1920)") echo "Frontend Engineer" ;;
+    "CD"|"CD — Deploy to production") echo "Platform Engineer" ;;
+    "Code Review") echo "Code Reviewer" ;;
     *) echo "DevOps Engineer" ;;
   esac
 }
