@@ -36,6 +36,12 @@ if grep -nE '^(<<<<<<< |=======$|>>>>>>> )' "$CHANGELOG" >/dev/null; then
   exit 1
 fi
 
+# Only bump if [Unreleased] has at least one bullet; an empty section is not a release.
+if ! awk '/^## \[Unreleased\]/{f=1;next} /^## \[/{f=0} f && /^- /' "$CHANGELOG" | grep -q .; then
+  echo "==> no unreleased changes — nothing to bump"
+  exit 0
+fi
+
 # Collapse duplicate empty [Unreleased] headers that an earlier run stacked.
 # Keeps the FIRST [Unreleased] block (the one with content) and drops later
 # empty duplicates that the awk injector leaves behind.
@@ -58,12 +64,6 @@ text = re.sub(r'\n{3,}', '\n\n', text)
 with open(p, 'w') as f:
     f.write(text)
 PY
-
-# Only bump if [Unreleased] has at least one bullet; an empty section is not a release.
-if ! awk '/^## \[Unreleased\]/{f=1;next} /^## \[/{f=0} f && /^- /' "$CHANGELOG" | grep -q .; then
-  echo "==> no unreleased changes — nothing to bump"
-  exit 0
-fi
 
 CUR="$(grep -E 'APP_VERSION: str' backend/app/core/config.py | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/')"
 [[ "$CUR" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "FAIL: cannot parse APP_VERSION '$CUR' from backend/app/core/config.py" >&2; exit 1; }
