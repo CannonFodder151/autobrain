@@ -81,11 +81,11 @@ jobs:
           This issue was resolved. MTTR calculated from detection time by PR/CI Watchdog automation.
           """
 
-          # Write outputs for next steps
+          # Write outputs for next steps using GitHub Actions multiline format
           with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
               f.write(f"mttr_str={mttr_str}\n")
               f.write(f"resolution_str={resolution_str}\n")
-              f.write(f"comment_body={comment_body}\n")
+              f.write(f"comment_body<<EOF\n{comment_body}\nEOF\n")
 
           print(f"MTTR for issue #{issue_number}: {mttr_str}")
 
