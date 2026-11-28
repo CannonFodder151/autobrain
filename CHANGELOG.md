@@ -11,9 +11,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-### Fixed (AUT-1014)
-- fix(ci): Docker Hub publish pipeline now handles corrupted SHA256 digests in compose files; update-compose-pins.py regex accepts any hex length to replace invalid pins (41-63 chars → 64 chars)
-- fix(ci): docker-compose.demo.yml and docker-compose.default.yml pins corrected to valid 64-char SHA256 digests from latest publish-manifest output
+### Added (AUT-1031)
+- feat(deps): Configure Dependabot for automated dependency updates across all ecosystems (Docker, Python, npm, pub, GitHub Actions)
+- feat(deps): Add auto-merge workflow for Dependabot patch/minor PRs with passing CI
+
+## [0.3.325] - 2026-11-27
+
+### Security (AUT-895)
+- Pin floating base image tags to immutable digests to fix trivy scan findings (GH #1050):
+  - `docker/runner/Dockerfile`: pin `ghcr.io/actions/actions-runner:latest` to `sha256:6d0b2d80d80f143f77dcb676e50920100bbb547e39e883454d57f45ab8c31300`
+  - `docker/frontend/Dockerfile`: pin `ghcr.io/cirruslabs/flutter:3.38.2` to `sha256:f207a06162d1335cf44e4cc8ed997d605ab41dbd88fdc70e528fb32f2c663ef0`
 
 ## [0.3.324] - 2026-11-26
 
