@@ -21,5 +21,6 @@ part 'models/valuation.dart';
 part 'models/analytics.dart';
 part 'models/timeline.dart';
 part 'models/electricity.dart';
+part 'models/electric_price.dart';
 part 'models/shop_mechanic.dart';
 part 'models/vass.dart';

@@ -15,6 +15,10 @@ from app.models.receipt import Receipt, ExtractedItem
 from app.models.valuation import ValuationSnapshot
 from app.models.market_listing import MarketListingCache
 from app.models.sca_parts import SCAPartsCache
+from app.models.electric_price import (
+    ChargingStationPriceSnapshot,
+    ChargingStationPriceWatchlist,
+)
 from app.models.fuel_station import FuelStation, FuelPrice, FuelPriceArbitration
 from app.models.fuel_price import FuelPricePollState, FuelPriceSnapshot, FuelPriceWatchlist
 from app.models.notification import NotificationPreference, NotificationDelivery
@@ -54,6 +58,8 @@ __all__ = [
     "ValuationSnapshot",
     "MarketListingCache",
     "SCAPartsCache",
+    "ChargingStationPriceSnapshot",
+    "ChargingStationPriceWatchlist",
     "FuelStation",
     "FuelPrice",
     "FuelPriceArbitration",
